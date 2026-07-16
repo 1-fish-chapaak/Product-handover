@@ -134,6 +134,7 @@ interface IcfrCtx {
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
   recordRetest: (id: string, result: 'Pass' | 'Fail') => void;
   signOffException: (id: string) => void;
+  reopenException: (id: string, reason: string) => void;
   updateRemediation: (id: string, patch: Partial<Deficiency['remediation']>) => void;
   addRemediationEvidence: (id: string, fileName: string) => void;
   // create control + engagement-level sign-off
@@ -284,12 +285,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         mwIndicators: [],
         compensatingControlId: undefined,
         aggregationGroup: c.process,
-        remediation: { action: 'To be agreed with the control owner.', date: null, owner: c.owner, status: 'Open' },
-        status: 'Identified',
+        // Auto-routing (Materiality & scope rule): on ⇒ the exception lands straight
+        // in the owner's remediation lane; off ⇒ it waits at Identified for routing.
+        remediation: { action: 'To be agreed with the control owner.', date: null, owner: c.owner, status: prev.rules.autoRoute ? 'In progress' : 'Open' },
+        status: prev.rules.autoRoute ? 'Remediation' : 'Identified',
       };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track, kind: 'exception',
-        verb: `raised ${def.id} — severity to assess`, by: me, role, at: 'just now',
+        verb: `raised ${def.id} — severity to assess${prev.rules.autoRoute ? ` · auto-routed to ${c.owner}` : ''}`, by: me, role, at: 'just now',
       };
       return { ...prev, deficiencies: [def, ...prev.deficiencies], executions: [event, ...prev.executions] };
     });
@@ -841,6 +844,28 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  // A closed exception can come back — auditor or reviewer, reason required. It
+  // returns to Remediation (the fix must be re-proven); the stale retest clears.
+  const reopenException = useCallback<IcfrCtx['reopenException']>((id, reason) => {
+    if (role === 'risk-owner') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Closed' || !reason.trim()) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `reopened ${id} — ${short(reason, 80)}`, by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => d.id === id
+          ? { ...d, status: 'Remediation', signoff: undefined, retest: undefined, remediation: { ...d.remediation, status: 'In progress' } }
+          : d),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   // The only way back into a concluded control: the auditor reopens it with a
   // reason. Results stay; both tracks' conclusions clear; the trail records why.
   const reopenControl = useCallback<IcfrCtx['reopenControl']>((controlId, reason) => {
@@ -1042,11 +1067,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
+    updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

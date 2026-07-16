@@ -12,6 +12,7 @@ import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
+import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -93,10 +94,13 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 
 export default function ControlRegister() {
   const { eng, role, meOwner, openControl, requestDesignDocs, rollForward } = useIcfr();
+  const { addToast } = useToast();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   // preview-before-download for the consolidated working paper
   const [wpPreview, setWpPreview] = useState(false);
+  // roll-forward is one-way — confirm before it fires
+  const [rollConfirm, setRollConfirm] = useState(false);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -168,7 +172,7 @@ export default function ControlRegister() {
         <div className="flex items-center gap-1.5">
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
-          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
+          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setRollConfirm(true)} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
           {role === 'auditor' && !isEngagementLocked(eng) && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
@@ -250,7 +254,7 @@ export default function ControlRegister() {
               <th style={{ width: 150 }}>① Design</th>
               <th style={{ width: 168 }}>② Operating</th>
               <th style={{ width: 116 }}>Conclusion</th>
-              <th style={{ width: 116 }}>Court</th>
+              <th style={{ width: 116 }} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</th>
             </tr>
           </thead>
           <tbody>
@@ -310,7 +314,7 @@ export default function ControlRegister() {
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
-          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
+          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
@@ -322,6 +326,27 @@ export default function ControlRegister() {
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {wpPreview && <WorkingPaperModal eng={eng} onClose={() => setWpPreview(false)} />}
+
+      {/* roll-forward confirm — the move is one-way, so it never fires on a bare click */}
+      {rollConfirm && (
+        <div className="modal-backdrop" onClick={() => setRollConfirm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900">Roll forward to year-end?</h2>
+                <button onClick={() => setRollConfirm(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">This moves the engagement to the Year-end round. Design conclusions carry forward; every manual and IT-dependent control's operating tests reset to Not tested (automated controls keep their results). This is one-way — there is no way back to the Interim round.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setRollConfirm(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { rollForward(); setRollConfirm(false); addToast({ type: 'success', title: 'Rolled forward', message: 'Year-end round — operating tests reset for manual controls.' }); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Roll forward</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
