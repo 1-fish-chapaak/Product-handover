@@ -15,7 +15,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import InsightGenerator from '../shared/InsightGenerator';
 import AIRecommendsPopover from '../shared/AIRecommendsPopover';
-import { actionableWorkflowRecs } from '../../data/layeredInsights';
+import { actionableWorkflowRecs, isPricingSubject, type BuildInsightInput } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -1451,15 +1451,45 @@ export function HealthOverviewTab({
 
   const tier = healthTier(eng.health);
 
+  // The engine's multi-insight roll-up for this engagement: the escalation, its
+  // pricing risk (when the engagement carries the chargeback thread), and one
+  // insight per in-scope control — statuses map to Pass / Fail / Not tested so
+  // each card reasons distinctly. One Generate builds them all into a stack.
+  const insightSubjects = useMemo<BuildInsightInput[]>(() => {
+    const isPricing = /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`);
+    const controls = MOCK_CONTROLS[eng.id] ?? MOCK_CONTROLS.default;
+    const mapStatus = (s: string): string => (s === 'Failed' ? 'Fail' : s === 'Effective' ? 'Pass' : 'Not tested');
+    const subs: BuildInsightInput[] = [
+      { layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing },
+    ];
+    if (isPricing) {
+      subs.push(
+        { layer: 'control', subjectId: 'C-CHARGEBACK-PRICING', subjectLabel: 'Chargeback Pricing Validation', status: 'Fail', isKey: true, flagship: true },
+        { layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true },
+      );
+    } else {
+      subs.push({ layer: 'risk', subjectId: `${eng.id}-risk`, subjectLabel: `${eng.process ?? 'Process'} control risk`, priority: eng.openIssues > 0 ? 'High' : 'Low' });
+    }
+    for (const c of controls) {
+      // Skip a control whose name would re-trigger the flagship pricing card —
+      // the stack already carries that thread once.
+      if (isPricing && isPricingSubject(c.name)) continue;
+      subs.push({ layer: 'control', subjectId: c.ref, subjectLabel: c.name, status: mapStatus(c.status), isKey: c.key });
+    }
+    return subs;
+  }, [eng]);
+
   return (
     <div className="space-y-5">
-      {/* ─── AI insight · engagement altitude (generate-on-demand) ─── */}
+      {/* ─── AI insights · engagement roll-up (generate-on-demand, stacked) ─── */}
       <InsightGenerator
         layer="engagement"
         subjectId={eng.id}
         subjectLabel={eng.name}
         status={eng.status}
-        flagship={/p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`)}
+        labelOverride={eng.name}
+        subjects={insightSubjects}
+        stackScopeLabel="across this engagement"
       />
 
       {/* ─── KPI strip ─── */}
