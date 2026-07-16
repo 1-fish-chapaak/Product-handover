@@ -71,7 +71,9 @@ function Inner({ onBack }: { onBack?: () => void }) {
           {/* The switcher is a demo affordance — it previews the other persona
               without changing who is signed in, hence the "Viewing as" prefix.
               Quieted to a meta control: split off from the real actions by a
-              divider and muted at rest, rising to full strength on hover/focus. */}
+              divider and muted at rest, rising to full strength on hover/focus.
+              This whole header (and with it the switcher) is engagement-level
+              only — the control detail page renders without it. */}
           <div className="flex items-center gap-3 shrink-0 pt-1.5">
             <NotificationsBell />
             <span className="w-px h-6 bg-canvas-border" aria-hidden />
@@ -111,7 +113,9 @@ function Inner({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
-      {topBar}
+      {/* The control detail page stands alone — no engagement header, no role
+          switcher; the persona is fixed until you go back to the engagement. */}
+      {view !== 'dossier' && topBar}
       <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
         {isRoot && (
           <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
