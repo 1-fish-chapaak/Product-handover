@@ -37,7 +37,7 @@
  * those events across the grid.
  */
 
-import type { AdminUser, AuditLog, ExportFormat } from '../context/AdminDataContext';
+import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 import { GENERATED_REPORTS, CHAT_HISTORY } from './mockData';
 import { ATR_LIBRARY } from './atrLibrary';
 import { CONCIERGE_TOOLS } from './conciergeTools';
@@ -234,11 +234,6 @@ export interface UsageEntry {
   status: AuditLog['status'];
   /** The workspace the action happened in (Workspace.id). */
   workspaceId: string;
-  /** Export events: the artifact's name and format as the logger stated them.
-   *  Absent on an Export means the logger didn't declare them — the download
-   *  feed says so rather than inventing a format. */
-  artifact?: string;
-  format?: ExportFormat;
   /** Produced by this session, rather than seeded. Not the same thing as
    *  "day-offset 0": the anchor day is seeded history, and calling those events
    *  "Today" would be a lie — the page is as of the anchor, not wall-clock. */
@@ -450,7 +445,6 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
       module, hour: hourOf(l.timestamp), description: l.description,
       status: l.status,
       workspaceId: l.workspaceId,
-      artifact: l.artifact, format: l.format,
       live: key >= today,
     });
     day.actions += 1;
