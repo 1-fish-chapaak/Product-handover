@@ -58,7 +58,7 @@ test('risk owner keeps the evidence lanes but loses the testing pen', async ({ p
   await page.waitForTimeout(600);
   // person-lane: P2P-C-02 belongs to S. Iyer — wear that persona first
   await page.getByRole('button', { name: 'Owner persona' }).click();
-  await page.getByRole('button', { name: 'S. Iyer · Procurement' }).click();
+  await page.getByRole('menuitemradio', { name: 'S. Iyer · Procurement' }).click();
   await page.waitForTimeout(400);
   // open a specific in-progress control (P2P-C-02: design effective, TOE open)
   await page.locator('.sox-book-ui').getByRole('button', { name: 'Control Library', exact: true }).click();
@@ -80,7 +80,8 @@ test('engagement sign-off gates on countersigned papers', async ({ page }) => {
   test.setTimeout(120_000);
   await openSox(page);
   // auditor's overview — the gate copy and the two-count readiness line
-  await expect(page.getByText(/countersigned by the reviewer/).first()).toBeVisible();
+  // (sign-off now lives inside the year-end box; the gate copy is its explainer)
+  await expect(page.getByText(/reviewer countersigns to conclude/).first()).toBeVisible();
   await expect(page.getByText(/concluded · \d+\/\d+ countersigned/).first()).toBeVisible();
   // awaiting-review work is visible on the progress rail
   await expect(page.getByText('Awaiting review', { exact: true })).toBeVisible();

@@ -41,6 +41,9 @@ test('a pending note blocks the countersign until resolved and verified', async 
   await expect(page.getByRole('button', { name: 'Resolve with response' })).toHaveCount(0);
 
   // auditor: resolves the note with a response (and has no verify pen)
+  // (the persona is fixed inside the dossier — step back to the engagement to switch hats)
+  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Auditor', exact: true }).click();
   await page.waitForTimeout(600);
   await openControlAs(page, 'P2P-C-04');
@@ -53,6 +56,8 @@ test('a pending note blocks the countersign until resolved and verified', async 
   await expect(page.getByText('Awaiting verification').first()).toBeVisible();
 
   // reviewer: the resolved note appears in the queue for verification
+  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
   await page.locator('button', { hasText: 'Verify resolution' }).filter({ hasText: 'variant' }).first().click();

@@ -163,11 +163,21 @@ export default function ControlRegister() {
 
   return (
     <div>
-      {/* header */}
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Control library</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">{scoped.length} controls{role === 'risk-owner' ? ' in your name' : ''} · <span className="font-semibold text-mitigated-700">{testsDueNow(scoped).length} tests due now</span> · {stats.effective} effective · {stats.awaitingReview} awaiting review · {stats.waitingOnOwner} waiting on owner</p>
+      {/* header — the old title + subtitle run-on is now a KPI rail (Overview's tile language) */}
+      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <div className="flex items-stretch gap-3 flex-wrap">
+          {[
+            { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: scoped.length, t: 'text-ink-900' },
+            { k: 'Tests due now', v: testsDueNow(scoped).length, t: 'text-mitigated-700' },
+            { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
+            { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
+            { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
+          ].map(s => (
+            <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
+              <div className={cn('text-[20px] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
+              <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+            </div>
+          ))}
         </div>
         <div className="flex items-center gap-1.5">
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}

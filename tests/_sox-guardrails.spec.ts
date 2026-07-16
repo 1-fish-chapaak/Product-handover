@@ -60,6 +60,9 @@ test('exception lifecycle stamps named actors into the trail, four-eyes closes i
   await page.locator('button', { hasText: 'DEF-001' }).first().click();
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: /Close — reviewer sign-off/ }).click();
+  await page.waitForTimeout(300);
+  // the terminal close now attests first — confirm inside the modal
+  await page.locator('.modal').getByRole('button', { name: /Close — reviewer sign-off/ }).click();
   await page.waitForTimeout(400);
   await expect(page.getByText(/Closed — signed off by J. Fernandes/)).toBeVisible();
 

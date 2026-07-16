@@ -14,7 +14,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
   // auditor bell — rows awaiting review + open exceptions
-  await page.getByRole('button', { name: /Notifications —/ }).click();
+  await page.getByRole('button', { name: /To-do —/ }).click();
   await expect(page.getByText('Pending assignment & review')).toBeVisible();
   await expect(page.getByText(/RACM rows awaiting your review/)).toBeVisible();
   await page.keyboard.press('Escape');
@@ -22,7 +22,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   // risk owner bell — auditor verdicts first, then remarks and tasks
   await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
   await page.waitForTimeout(600);
-  await page.getByRole('button', { name: /Notifications —/ }).click();
+  await page.getByRole('button', { name: /To-do —/ }).click();
   await expect(page.getByText(/concluded INEFFECTIVE/).first()).toBeVisible();
   await expect(page.getByText(/is due today/).first()).toBeVisible();
   await expect(page.getByText(/control test due today|control test overdue/).first()).toBeVisible();
@@ -30,7 +30,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   // clicking an ineffective item opens that control's dossier
   await page.getByText(/concluded INEFFECTIVE/).first().click();
   await page.waitForTimeout(700);
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
   await page.waitForTimeout(500);
   // Phase 3 — the owner's SOX is a to-do list: the audit-side tabs are gone
   const soxNav = page.locator('.sox-book-ui');
@@ -52,11 +52,11 @@ test('risk owner overview task opens the control', async ({ page }) => {
   await page.waitForTimeout(600);
   // regular testing: every control carries a due date; today's tests lead the inbox
   // (D1 — the owner's move on a due test is attesting & evidencing, not running it)
-  await expect(page.getByText('Control tests due today')).toBeVisible();
+  await expect(page.getByText('Control tests due', { exact: true })).toBeVisible();
   await page.getByText('Attest & evidence').first().click();
   await page.waitForTimeout(700);
   await expect(page.getByText('Test of Design', { exact: false }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
   await page.waitForTimeout(500);
   // document-request tasks still deep-link the same way
   await expect(page.getByText('Due today').first()).toBeVisible();

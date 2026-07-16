@@ -29,13 +29,13 @@ test('owner mode is a scoped to-do list, not the workspace', async ({ page }) =>
   // register is the persona's own controls — S. Iyer's P2P-C-02 is not M. Nair's
   await page.locator('.sox-book-ui').getByRole('button', { name: 'Control Library', exact: true }).click();
   await page.waitForTimeout(700);
-  await expect(page.getByText(/controls in your name/)).toBeVisible();
+  await expect(page.getByText(/in your name/)).toBeVisible();
   await page.getByPlaceholder(/Search controls/).fill('P2P-C-02');
   await page.waitForTimeout(500);
   await expect(page.locator('.ac-card')).toHaveCount(0);
   // ...until the picker wears the S. Iyer persona
   await page.getByRole('button', { name: 'Owner persona' }).click();
-  await page.getByRole('button', { name: 'S. Iyer · Procurement' }).click();
+  await page.getByRole('menuitemradio', { name: 'S. Iyer · Procurement' }).click();
   await page.waitForTimeout(500);
   await expect(page.locator('.ac-card')).toHaveCount(1);
 });
