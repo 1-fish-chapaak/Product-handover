@@ -61,20 +61,42 @@ function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; ti
 
 function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // The menu portals to <body> with a fixed position — the track cards clip
+  // overflow (rounded corners + collapse animation), so an in-place absolute
+  // menu gets cut off. Fixed + portal floats it above everything.
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    }
+    setOpen(o => !o);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+  }, [open]);
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
-      <AnimatePresence>
-        {open && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 mt-1.5 z-20 w-56 max-h-64 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
-              {children(() => setOpen(false))}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
+    <>
+      <button ref={btnRef} onClick={toggle} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} style={{ top: pos.top, right: pos.right }} className="fixed z-50 w-56 max-h-64 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+                {children(() => setOpen(false))}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </>
   );
 }
 const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] text-ink-700 hover:bg-paper-50 cursor-pointer flex items-center gap-2';
@@ -559,6 +581,11 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
   const [testing, setTesting] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
+  // IPE validation is a guided attestation, not a bare click — the auditor ticks
+  // the three checks the stamp stands for (completeness · accuracy · parameters).
+  const [ipeModal, setIpeModal] = useState(false);
+  const [ipeChecks, setIpeChecks] = useState<Set<number>>(new Set());
+  const toggleIpeCheck = (i: number) => setIpeChecks(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
@@ -604,7 +631,7 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
                 ) : (
                   <div className="mt-1.5">
                     <div className="text-[10.5px] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> IPE not validated — confirm the report's completeness &amp; accuracy before relying on it.</div>
-                    {canEdit && <button onClick={() => validateIpe(control.id)} className="mt-1 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1"><ShieldCheck size={11} /> Validate IPE</button>}
+                    {canEdit && <button onClick={() => { setIpeChecks(new Set()); setIpeModal(true); }} className="mt-1 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1"><ShieldCheck size={11} /> Validate IPE</button>}
                   </div>
                 )}
               </div>
@@ -631,6 +658,51 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
                 </>
               )
             ) : <span className="text-[11.5px] text-ink-400">Not drawn</span>}
+          </div>
+        </div>
+      )}
+
+      {/* IPE validation — a guided attestation: the stamp records that these three
+          checks were done, so each must be ticked before the name goes on it */}
+      {ipeModal && o.population && (
+        <div className="modal-backdrop" onClick={() => setIpeModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><ShieldCheck size={15} className="text-brand-600" /> Validate the population (IPE)</h2>
+                <button onClick={() => setIpeModal(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">This report is the ground your sample stands on — the stamp records that you checked it. Confirm each:</p>
+              <div className="mt-3 space-y-1.5">
+                {[
+                  { t: 'Completeness', d: `Row count ties to the source — ${o.population.count.toLocaleString()} rows agree with ${o.population.source} (${o.population.tieOut}); first & last entries sit at the period edges.` },
+                  { t: 'Accuracy', d: 'A handful of rows traced back to the source records — dates, amounts and references match.' },
+                  { t: 'Report parameters', d: 'The filters the report was run with (date range, scope) cover the full period — nothing silently excluded.' },
+                ].map((c, i) => {
+                  const on = ipeChecks.has(i);
+                  return (
+                    <button key={c.t} onClick={() => toggleIpeCheck(i)} aria-pressed={on}
+                      className={cn('w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-compliant-200 bg-compliant-50/40' : 'border-canvas-border hover:border-ink-300')}>
+                      <span className={cn('w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 mt-0.5', on ? 'bg-compliant-600 border-compliant-600 text-white' : 'border-ink-300')}>{on && <Check size={12} strokeWidth={3} />}</span>
+                      <span className="min-w-0">
+                        <span className="block text-[12.5px] font-semibold text-ink-900">{c.t}</span>
+                        <span className="block text-[11.5px] text-ink-500 mt-0.5 leading-snug">{c.d}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setIpeModal(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button disabled={ipeChecks.size < 3} onClick={() => { validateIpe(control.id); setIpeModal(false); }}
+                  title={ipeChecks.size < 3 ? 'Confirm all three checks first' : 'Stamp the validation under your name'}
+                  className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5">
+                  <ShieldCheck size={13} /> Validate & stamp
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1077,22 +1149,21 @@ export default function ControlDossier() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 {control.isKey && <Pill tone="mitigated">Key control</Pill>}
-                <NatureChip nature={control.nature} /><Pill tone="draft">{control.type}</Pill><Pill tone="draft">{control.frequency}</Pill>
+                <NatureChip nature={control.nature} />{control.assertions.map(a => <Pill key={a} tone="draft">{a}</Pill>)}<Pill tone="draft">{control.frequency}</Pill>
                 <span className="text-[11px] text-ink-400 font-mono">{control.id}</span>
               </div>
-              <h1 className="leadsheet-title text-[20px] text-ink-900 leading-snug max-w-[640px]">{control.description}</h1>
+              <h1 className="leadsheet-title text-[20px] text-ink-900 leading-snug line-clamp-2" title={control.description}>{control.description}</h1>
               <p className="text-[12.5px] text-ink-500 mt-1.5 max-w-[680px]"><b className="text-ink-700 font-semibold">Precision —</b> {control.precision}</p>
               <MrcLine control={control} canEdit={canEdit} pm={eng.performanceMateriality} revealPm={role !== 'risk-owner'} />
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[11.5px] text-ink-500">
                 <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
                 <span><span className="text-ink-400">Risk {control.riskId}</span> · {control.riskDescription}</span>
-                <span><span className="text-ink-400">Assertions</span> · {control.assertions.join(', ')}</span>
               </div>
             </div>
-            <div className="shrink-0 flex flex-col items-end gap-2">
-              <div className="leadsheet-stamp">W/P<br />{control.wpRef}</div>
+            <div className="shrink-0 flex items-center gap-2.5">
               <CourtBadge court={courtFor(control, eng.tasks, eng.reviewNotes)} fromRole={role} />
+              <div className="leadsheet-stamp whitespace-nowrap">W/P {control.wpRef}</div>
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3.5 pt-3 border-t border-canvas-border flex-wrap">
