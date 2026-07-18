@@ -590,6 +590,11 @@ function AppInner() {
                     status: 'draft',
                     pages: 1,
                     queries: 1,
+                    // A chat result isn't built from a template — it borrows
+                    // rt-001 only as a stand-in id. Declaring no sections keeps
+                    // the report from inheriting that template's structure,
+                    // which a report *actually* built from it does render.
+                    templateSections: [],
                     // Render the added result as a query card (carries the
                     // severity chosen in the Add-to-Report form).
                     generatedQueries: payload.generatedQuery ? [payload.generatedQuery] : undefined,

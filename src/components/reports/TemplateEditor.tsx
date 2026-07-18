@@ -21,10 +21,15 @@ import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
   ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH, TEMPLATE_THEME_ACCENT,
-  sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
+  sectionBlurb, sectionSummary, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
   type EditableTemplate, type WatermarkConfig,
   type TemplateSection, type SignatorySlot,
+  type RatingScale, type WritingStyle,
+  catalogIdForContentType, type CatalogId,
 } from './reportShared';
+import { matchHeading } from './sectionSynonyms';
+import { catalogIdFor, contentTypeForSection } from './reportContentModel';
+import { pickableCatalog, type CatalogEntry } from './sectionCatalog';
 import { extractReportStructure, type ReportStructure } from './extractPdfHeaderFooter';
 import SectionReviewCanvas from './SectionReviewCanvas';
 import { RowDeleteButton } from './RowDeleteButton';
@@ -222,8 +227,92 @@ function ExtractionCard({
   );
 }
 
+// Full-bleed scan overlay shown over the editor while a report is being imported —
+// a real report page (purple letterhead, section headings, body, footer) with a
+// brand scan-line sweeping top→bottom, so the wait reads as the document being read.
+// Minimize hands off to the background ExtractionCard (extraction keeps running).
+function ImportScanOverlay({ filename, messages = IMPORT_SCAN_MESSAGES, onMinimize }: { filename: string; messages?: string[]; onMinimize?: () => void }) {
+  const [msgIdx, setMsgIdx] = useState(0);
+  useEffect(() => {
+    const step = Math.max(300, Math.floor(IMPORT_MIN_MS / messages.length));
+    const t = setInterval(() => setMsgIdx(i => Math.min(i + 1, messages.length - 1)), step);
+    return () => clearInterval(t);
+  }, [messages]);
+  return (
+    <motion.div
+      role="status"
+      aria-label={`Reading ${filename}`}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className="absolute inset-0 z-30 bg-canvas-elevated/96 backdrop-blur-[2px] flex items-center justify-center px-8"
+    >
+      <div className="w-[440px] max-w-full">
+        <div className="flex items-center gap-2 text-[0.875rem]">
+          <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Loader2 size={15} className="animate-spin motion-reduce:animate-none" /></span>
+          <span className="font-semibold text-ink-900 truncate">Reading {filename}</span>
+          {onMinimize && (
+            <button onClick={onMinimize} className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] text-[0.75rem] font-semibold text-ink-700 border border-canvas-border bg-white hover:bg-paper-50 cursor-pointer transition-colors shrink-0">
+              <Minimize2 size={13} /> Minimize
+            </button>
+          )}
+        </div>
+        {/* progress bar — eases toward full over the minimum scan time */}
+        <div className="mt-3 h-1 w-full rounded-full bg-paper-100 overflow-hidden">
+          <motion.div className="h-full rounded-full bg-brand-500" initial={{ width: '6%' }} animate={{ width: '94%' }} transition={{ duration: IMPORT_MIN_MS / 1000, ease: [0.2, 0, 0, 1] }} />
+        </div>
+        {/* A real report page being scanned — purple letterhead, section headings,
+            body text and a footer, with a brand scan-line sweeping top→bottom. */}
+        <div className="relative mt-4 h-[224px] rounded-[12px] border border-canvas-border bg-paper-50 overflow-hidden flex justify-center pt-3.5">
+          <div className="relative w-[208px] rounded-[7px] bg-white shadow-[0_8px_24px_-8px_rgba(15,8,30,0.28)] overflow-hidden">
+            {/* letterhead */}
+            <div className="px-3 py-2.5" style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72, #6a12cd)' }}>
+              <div className="h-1.5 w-2/3 rounded-full bg-white/45" />
+              <div className="h-1 w-2/5 rounded-full bg-white/25 mt-1.5" />
+            </div>
+            {/* body — section headings (darker) + paragraph lines */}
+            <div className="px-3 py-2.5 space-y-1.5">
+              <div className="h-1.5 w-2/5 rounded-full bg-ink-900/30" />
+              <div className="h-1 w-full rounded-full bg-ink-900/10" />
+              <div className="h-1 w-11/12 rounded-full bg-ink-900/10" />
+              <div className="h-1.5 w-1/3 rounded-full bg-ink-900/30 mt-2.5" />
+              <div className="h-1 w-full rounded-full bg-ink-900/10" />
+              <div className="h-1 w-3/4 rounded-full bg-ink-900/10" />
+            </div>
+            {/* footer */}
+            <div className="px-3 py-1.5 border-t border-canvas-border flex items-center justify-between">
+              <div className="h-1 w-1/3 rounded-full bg-ink-900/15" />
+              <div className="h-1 w-5 rounded-full bg-ink-900/10" />
+            </div>
+            {/* scan line sweeping the page */}
+            <motion.div
+              className="pointer-events-none absolute inset-x-0 h-10 motion-reduce:hidden"
+              initial={{ top: '-2.5rem' }} animate={{ top: ['-2.5rem', '100%'] }}
+              transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="h-10 w-full bg-gradient-to-b from-brand-500/20 to-transparent" />
+              <div className="h-[2px] w-full -mt-px bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_14px_3px_rgba(106,18,205,0.45)]" />
+            </motion.div>
+          </div>
+        </div>
+        {/* cycling status line */}
+        <div className="mt-3.5 flex items-center gap-2 text-[0.8125rem] text-ink-600">
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={msgIdx}
+              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+            >
+              {messages[msgIdx]}
+            </motion.span>
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Apply Template Dropdown ───
-export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose, onSaveAsTemplate }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void; onSaveAsTemplate?: () => void }) {
+export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose, onSaveAsTemplate, onCreateTemplate }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void; onSaveAsTemplate?: () => void; onCreateTemplate?: () => void }) {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -293,21 +382,30 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
           );
         })}
       </div>
-      {onSaveAsTemplate && (
+      {(onCreateTemplate || onSaveAsTemplate) && (
+        // Compact single-line actions, pinned below the scrolling list — the
+        // footer stays short no matter how many templates the list holds.
         <div className="border-t border-canvas-border p-1.5">
-          <button
-            onClick={() => { onSaveAsTemplate(); onClose(); }}
-            title="Save this report's structure as a reusable custom template"
-            className="w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 hover:bg-brand-50 group/save"
-          >
-            <div className="p-1.5 rounded-[8px] text-ink-500 bg-paper-50 group-hover/save:text-brand-600">
-              <BookOpen size={12} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[0.75rem] font-medium text-ink-800 group-hover/save:text-brand-600">Save current as template…</div>
-              <div className="text-[0.75rem] text-ink-400">Reuse this report's structure</div>
-            </div>
-          </button>
+          {onCreateTemplate && (
+            <button
+              onClick={() => { onCreateTemplate(); onClose(); }}
+              title="Start a new custom template"
+              className="w-full text-left px-3 h-9 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2 text-[0.75rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 group/new"
+            >
+              <Plus size={14} strokeWidth={2.25} className="shrink-0 text-ink-400 group-hover/new:text-brand-600" />
+              Create template
+            </button>
+          )}
+          {onSaveAsTemplate && (
+            <button
+              onClick={() => { onSaveAsTemplate(); onClose(); }}
+              title="Save this report's structure as a reusable custom template"
+              className="w-full text-left px-3 h-9 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2 text-[0.75rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 group/save"
+            >
+              <BookOpen size={14} strokeWidth={2.25} className="shrink-0 text-ink-400 group-hover/save:text-brand-600" />
+              Save current as template…
+            </button>
+          )}
         </div>
       )}
     </motion.div>
@@ -332,9 +430,6 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   onRename: (name: string) => void;
   onDescribe: (description: string) => void;
 }) {
-  const kind = section.kind ?? 'text';
-  const metric = section.metric?.trim();
-  const typeLabel = kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : kind === 'chart' ? 'Chart' : null;
   const controls = useDragControls();
   // Inline rename — a local draft keeps the field stable while typing (the parent
   // only hears the new name on commit), then Enter/blur saves and Escape reverts.
@@ -350,7 +445,10 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   // The description (body blurb) is editable too: it falls back to the auto blurb
   // until the author types their own, then persists on the section. Same inline
   // draft-then-commit pattern as the name.
-  const fallbackDesc = sectionBlurb(section.name);
+  // A recognised heading shows its one-line summary; an unrecognised one has no
+  // real description, so we show an add-a-description prompt (N2/AC8) rather than
+  // the generic "Explains what this section covers…" placeholder copy.
+  const fallbackDesc = sectionSummary(section.name) ?? '';
   const shownDesc = section.description ?? fallbackDesc;
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState(shownDesc);
@@ -449,43 +547,15 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
             <h2 onDoubleClick={startEdit} title="Double-click to rename" className="min-w-0 truncate text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] cursor-text">{section.name}</h2>
           )}
         </div>
-        {typeLabel && (
-          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{typeLabel}</span>
-        )}
       </div>
       <span className="mt-3 block h-[2px] w-8 rounded-full" style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }} aria-hidden="true" />
 
-      {/* Body placeholder — the shape of the content this section will hold. */}
+      {/* Body — the description this section holds. A section is a description plus
+          its own data blocks (bound to queries at generation), not a single whole-
+          section source, so there is no per-section "fills from" picker (removed per
+          PRD). Data blocks keep their own per-block "Pick a query". */}
       <div className="mt-4 pl-[1.9rem]">
-        {kind === 'kpi' ? (
-          <div className="flex items-center gap-4">
-            <div className="shrink-0">
-              <div className="text-[1.75rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
-              <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1.5">{metric || 'Metric'}</div>
-            </div>
-            <p className="text-[0.75rem] text-ink-400 leading-relaxed">KPI filled from query data at generation.</p>
-          </div>
-        ) : kind === 'chart' ? (
-          <div className="max-w-[75%]">
-            <div className="flex items-end gap-1.5 h-14">
-              {(section.chartType ?? 'bar') === 'bar'
-                ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-canvas-border" style={{ height: `${h}%` }} />)
-                : <svg viewBox="0 0 120 40" className="w-full h-full text-canvas-border" preserveAspectRatio="none"><polyline points="0,32 24,20 48,26 72,10 96,16 120,6" fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
-            </div>
-            <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart</p>
-          </div>
-        ) : kind === 'table' ? (
-          <div className="max-w-[90%] rounded-[6px] overflow-hidden border border-canvas-border">
-            <div className="grid grid-cols-4 bg-canvas">
-              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
-            </div>
-            {Array.from({ length: 3 }).map((_, r) => (
-              <div key={r} className="grid grid-cols-4 border-t border-canvas-border">
-                {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
-              </div>
-            ))}
-          </div>
-        ) : editingDesc ? (
+        {editingDesc ? (
           <textarea
             ref={descRef}
             value={descDraft}
@@ -500,7 +570,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
             aria-label="Section description"
             className="w-full max-w-[80ch] resize-none rounded-[6px] bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
           />
-        ) : (
+        ) : shownDesc ? (
           <p
             onDoubleClick={startDescEdit}
             title="Double-click to edit this description"
@@ -508,27 +578,46 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           >
             {shownDesc}
           </p>
+        ) : (
+          <button
+            type="button"
+            onClick={startDescEdit}
+            title="Add a one-line description"
+            className="max-w-[80ch] text-left text-[0.875rem] leading-relaxed text-ink-400 italic cursor-text rounded-[4px] -mx-1 px-1 hover:bg-canvas/60 hover:text-ink-500 transition-colors"
+          >
+            Add a one-line description…
+          </button>
         )}
       </div>
     </motion.div>
   );
 }
 
-// The sections a report commonly carries — offered as click-to-add suggestion
-// chips under the composer so a blank template fills in fast. A static set, not
-// tied to any report type.
-const SUGGESTED_SECTIONS: { name: string; icon: string }[] = [
-  { name: 'Executive Summary', icon: 'file-text' },
-  { name: 'Scope & Objectives', icon: 'file-text' },
-  { name: 'Testing Methodology', icon: 'file-text' },
-  { name: 'Findings / Observations', icon: 'check-circle' },
-  { name: 'Recommendations', icon: 'trending-up' },
-  { name: 'Management Response', icon: 'book-open' },
-  { name: 'Conclusion', icon: 'shield' },
-  { name: 'Sign-off', icon: 'shield' },
-];
+// The sections a report commonly carries, offered as click-to-add chips and used
+// to seed a Word/PowerPoint import. Read from the Internal Audit template so the
+// chips are the sections that template actually produces, rather than a second
+// hand-kept list that drifts from it.
+const SUGGESTED_SECTIONS: { name: string; icon: string }[] =
+  REPORT_TEMPLATES.find(t => t.id === 'rt-internal-audit')?.sections ?? [];
 
-export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string }) {
+// Default outline offered to confirm or replace when a file can't be read into
+// sections (Word / PowerPoint) or reads but detects nothing (E1 / AC4). Every row
+// is unconfirmed, so the review gate still forces the auditor through each before
+// save — we offer a starting point, we never silently apply our sections.
+function seedDefaultSections(): CanvasSection[] {
+  return SUGGESTED_SECTIONS.map((s, i) => ({
+    id: `seed-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
+    name: s.name,
+    evidence: 'added',
+    match: matchHeading(s.name),
+    // N7 / AC18 — a suggested default carries an EMPTY description, never our generic
+    // blurb. The blurb would read as our content imposed on their report; the auditor
+    // writes (or replaces) the description themselves.
+    description: '',
+  }));
+}
+
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName, autoImport = false }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string; autoImport?: boolean }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -608,15 +697,25 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Suggested sections that aren't in the outline yet — a static set of the
   // sections a report commonly carries, offered as click-to-add chips under the
   // composer. Not tied to any report type.
-  const recommendations = SUGGESTED_SECTIONS.filter(
-    rec => !sections.some(s => s.name.toLowerCase() === rec.name.toLowerCase()),
-  );
-
+  //
+  // Coverage is by DATA SOURCE, not by literal name: an imported format that maps a
+  // differently-named heading to a standard source ("Summary of Recommendations" →
+  // Recommendations, "Findings by area" → Findings, "Appendix A" → Appendix) already
+  // covers that suggested section, so it isn't flagged as missing. A same-name match
+  // still counts too (for a suggested section with no query-driven type).
   // ── Import from a report ──────────────────────────────────────────────────
   // Reads an existing PDF report and pre-fills the outline + letterhead, so the
   // author starts from the real document instead of a blank page. This is the
   // merged "Upload template" path, folded into the editor (one creation surface).
   const importInputRef = useRef<HTMLInputElement>(null);
+  // Opened via "Import a report" — jump straight to the file picker once mounted, so
+  // the flow starts on the import. Falls back to the in-editor import control if the
+  // browser blocks the programmatic open (no user gesture).
+  useEffect(() => {
+    if (!autoImport) return;
+    const t = requestAnimationFrame(() => importInputRef.current?.click());
+    return () => cancelAnimationFrame(t);
+  }, [autoImport]);
   const [importing, setImporting] = useState(false);
   const [scanningName, setScanningName] = useState<string | null>(null);
   // Whether the in-progress scan is a Word/PowerPoint seed (vs a real PDF parse) —
@@ -627,6 +726,24 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // running (this component stays mounted) with the app fully usable behind it.
   const [minimized, setMinimized] = useState(false);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // Suggested sections (missing from the outline) — offered as click-to-add chips and
+  // a save-time nag. Create-FROM-SCRATCH only: an IMPORTED format is the customer's
+  // authoritative layout, so we never audit it against our generic section map or
+  // tell them it's "missing" a section they didn't put in their own report. Coverage
+  // is by DATA SOURCE, not literal name ("Summary of Recommendations" → Recommendations).
+  const coveredTypes = new Set(
+    sections.map(s => contentTypeForSection(s)).filter(t => t !== 'narrative'),
+  );
+  const recommendations = importedFrom ? [] : SUGGESTED_SECTIONS.filter(rec => {
+    const byName = sections.some(s => s.name.toLowerCase() === rec.name.toLowerCase());
+    const type = contentTypeForSection({ name: rec.name });
+    const byType = type !== 'narrative' && coveredTypes.has(type);
+    return !byName && !byType;
+  });
+  // Gap 3 — the assurance scale and writing style read from an imported PDF, kept
+  // as template constraints and shown in the review canvas for the auditor to confirm.
+  const [detectedScale, setDetectedScale] = useState<RatingScale | undefined>(template.ratingScale);
+  const [detectedStyle, setDetectedStyle] = useState<WritingStyle | undefined>(template.writingStyle);
   // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
   // counter avoids the flicker that dragenter/dragleave cause over child nodes.
   const [dragActive, setDragActive] = useState(false);
@@ -650,6 +767,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   >(null);
   // The state as it was just before the import applied, so Undo is exact.
   const preImportRef = useRef<ImportSnapshot | null>(null);
+  // Whether the current import's sections have all been reviewed and confirmed.
+  // Detected sections apply optimistically for the preview, but the template can't
+  // be saved until the auditor has confirmed every one (PRD "the user confirms
+  // every one before save. Nothing auto-applies"). Reset on each new import.
+  const [importConfirmed, setImportConfirmed] = useState(false);
 
   // Apply a section list + captured letterhead to the editor. Shared by the
   // initial optimistic import and the on-demand Review confirm. Empty-named rows
@@ -682,17 +804,35 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // reads as a failure. Suffix "(2)", "(3)"… until unique.
     const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
     if (copyName === defaultName) {
-      const candidate = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
+      const raw = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
+      // A template is a reusable FORMAT, so name it as one — drop a trailing
+      // "Report" / "Review" and add "Format" ("…Internal Audit Report" → "…Internal
+      // Audit Format"). Already a "Format"/"Template" name is left as-is.
+      const candidate = /\b(format|template)\b/i.test(raw)
+        ? raw
+        : `${raw.replace(/\s*[-–—:]?\s*(report|review)\s*$/i, '').trim()} Format`;
       setCopyName(uniqueTemplateName(candidate));
     }
     const kept = secs.filter(s => s.name.trim());
-    setSections(kept.map(s => ({
-      name: s.name.trim(),
-      icon: 'file-text',
-      ...(s.description ? { description: s.description } : {}),
-      ...(s.kind && s.kind !== 'text' ? { kind: s.kind } : {}),
-      ...(s.metric ? { metric: s.metric } : {}),
-    })));
+    // Map each heading to its data source (one of the four) or Narrative, enforcing
+    // uniqueness on the once-sources: the first heading to claim a source keeps it.
+    // A confirmed content-type override (set in review, without renaming) decides the
+    // source; absent one, infer from the verbatim name. A Narrative override owns no
+    // catalog id, so it renders as prose even over a query-driven name.
+    const usedIds = new Set<CatalogId>();
+    setSections(kept.map(s => {
+      const cid = s.contentType ? (catalogIdForContentType(s.contentType) ?? null) : catalogIdFor(s.name);
+      const takeId = !!cid && !usedIds.has(cid);
+      if (takeId && cid) usedIds.add(cid);
+      return {
+        name: s.name.trim(),
+        icon: 'file-text',
+        ...(s.description ? { description: s.description } : {}),
+        ...(takeId && cid ? { catalogId: cid } : {}),
+        ...(s.contentType ? { contentType: s.contentType } : {}),
+        ...(s.dataBlocks?.length ? { dataBlocks: s.dataBlocks } : {}),
+      };
+    }));
     setImportedFrom(fileName);
     return { count: kept.length, gotLetterhead: !!hf };
   };
@@ -701,6 +841,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     const kind = classifyImport(file.name);
     if (!kind) {
       addToast({ type: 'error', message: 'Import reads PDF, Word or PowerPoint files.' });
+      return;
+    }
+    // E13 / AC19 / N8 — an old-format .doc is a binary file we cannot read. Tell the
+    // user plainly what it is and what to upload instead; never silently drop them
+    // into our default outline (which would read as our format imposed on theirs).
+    if (/\.doc$/i.test(file.name)) {
+      addToast({ type: 'error', message: `“${file.name}” is an old Word format (.doc) we can’t read. Save it as .docx or PDF and upload again.` });
       return;
     }
 
@@ -717,14 +864,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       await new Promise(resolve => setTimeout(resolve, IMPORT_MIN_MS));
       setImporting(false);
       setScanningName(null);
-      const seeded: CanvasSection[] = SUGGESTED_SECTIONS.map((s, i) => ({
-        id: `seed-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
-        name: s.name,
-        evidence: 'added',
-      }));
+      const seeded: CanvasSection[] = seedDefaultSections();
       preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom };
       const { count } = applyToOutline(seeded, null, file.name);
+      setImportConfirmed(false);
       setImportBanner({ fileName: file.name, kind, result: null, detected: seeded, count, gotLetterhead: false });
+      // Open the review straight away — every section passes through the user before
+      // the template is saved (PRD "extract, review, confirm"). Confirm or adjust each.
+      setReviewSections(seeded);
+      setPendingImport({ fileName: file.name, kind, result: null });
       addToast({ type: 'info', message: `${IMPORT_KIND_LABEL[kind]} layout can’t be read yet, so we started you with a suggested outline. Refine it below.` });
       return;
     }
@@ -747,21 +895,49 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned or image-only.` });
       return;
     }
-    const detected: CanvasSection[] = result.sections.map((s, i) => ({
-      id: `imp-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
-      name: stripLeadingEnumerator(s.name),
-      evidence: s.evidence,
-      kind: s.kind,
-      metric: s.metric,
-      // Only text sections carry a source preview; kpi/chart/table are empty
-      // placeholders, so they show on the right with a type chip, not the left.
-      source: s.kind === 'text' ? s.body : undefined,
-    }));
+    // Gap 3 — capture the assurance scale + writing style read from the document.
+    if (result.scale) setDetectedScale(result.scale);
+    if (result.style) setDetectedStyle(result.style);
+    const detected: CanvasSection[] = result.sections.map((s, i) => {
+      const cleanName = stripLeadingEnumerator(s.name);
+      // The section's description is the prose read directly under its heading in the
+      // uploaded report (PRD §5 "Section description → the prose directly under a
+      // confirmed heading → Matched"). Captured here so the template — and every report
+      // generated from it — renders the company's own words, not a composed blurb.
+      const description = (s.body ?? []).join(' ').replace(/\s+/g, ' ').trim();
+      return {
+        id: `imp-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
+        name: cleanName,
+        evidence: s.evidence,
+        match: matchHeading(cleanName),
+        source: s.body,
+        ...(description ? { description } : {}),
+        // A section = heading + description + its own data blocks (Table / Graph /
+        // KPI). The blocks are placeholders here; each binds to a query at generation.
+        ...(s.dataBlocks?.length ? { dataBlocks: s.dataBlocks } : {}),
+      };
+    });
+
+    // AC4 / E1 — the PDF read but no section headings were detected. Never hand
+    // back a blank template: seed the default outline into TO-BE for the auditor to
+    // confirm or replace (the AS-IS panel still shows its "nothing detected"
+    // message). Every seeded row is unconfirmed, so the save gate still applies.
+    const noneDetected = detected.length === 0;
+    const review = noneDetected ? seedDefaultSections() : detected;
 
     // Snapshot pre-import state, then apply optimistically and raise the banner.
     preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom };
-    const { count, gotLetterhead } = applyToOutline(detected, result, file.name);
-    setImportBanner({ fileName: file.name, kind, result, detected, count, gotLetterhead });
+    const { count, gotLetterhead } = applyToOutline(review, result, file.name);
+    setImportConfirmed(false);
+    setImportBanner({ fileName: file.name, kind, result, detected: review, count, gotLetterhead });
+    // Open the review straight away once extraction is done — every detected section
+    // passes through the user before the template is saved (PRD "extract, review,
+    // confirm"). The user confirms or adjusts each section, then applies.
+    setReviewSections(review);
+    setPendingImport({ fileName: file.name, kind, result });
+    if (noneDetected) {
+      addToast({ type: 'info', message: `No section headings were detected in “${file.name}”. Started you with default sections — confirm or replace them below.` });
+    }
 
     // §4.5 — headings with no content beneath aren't auto-added, but never silently
     // dropped: tell the user and offer a one-tap add-back.
@@ -798,6 +974,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setImportBanner(null);
     setPendingImport(null);
     setReviewSections([]);
+    setImportConfirmed(false);
     addToast({ type: 'info', message: 'Imported file removed.' });
   };
   // Review — open the curation canvas, seeded from the detected sections.
@@ -812,10 +989,21 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // its one-tap Undo, still pointing at the pre-import snapshot) in sync.
   const applyImport = () => {
     if (!pendingImport) return;
+    // Every named section must be confirmed before the import is accepted.
+    const named = reviewSections.filter(s => s.name.trim());
+    if (named.length === 0 || !named.every(s => s.confirmed)) {
+      addToast({ type: 'error', message: 'Confirm every section before using them.' });
+      return;
+    }
     const { count, gotLetterhead } = applyToOutline(reviewSections, pendingImport.result, pendingImport.fileName);
     setImportBanner(b => (b ? { ...b, detected: reviewSections, count, gotLetterhead } : b));
+    setImportConfirmed(true);
     setPendingImport(null);
   };
+  // Confirm all detected sections at once — the fast path for a clean import where
+  // the mappings all read right at a glance.
+  const confirmAllReview = () =>
+    setReviewSections(prev => prev.map(s => (s.name.trim() ? { ...s, confirmed: true } : s)));
 
   const [newSectionName, setNewSectionName] = useState('');
   const addSection = () => {
@@ -985,6 +1173,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       });
       return;
     }
+    // Confirm gate — an imported format can't be saved until the auditor has
+    // reviewed and confirmed every detected section (nothing auto-applies). Opens
+    // the review canvas so the decision is one tap away.
+    if (importBanner && !importConfirmed) {
+      addToast({ type: 'error', message: `Review and confirm the ${importBanner.count} imported section${importBanner.count === 1 ? '' : 's'} before saving.` });
+      openReview();
+      return;
+    }
     // Missing suggested sections (non-blocking): warn once, then proceed on confirm.
     // New templates only, and only when some suggested sections are still absent.
     if (isNew && !skipSuggested && recommendations.length > 0) {
@@ -1022,6 +1218,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           pageNumbers,
           signoffEnabled,
           signatories: cleanSignatories,
+          ...(detectedScale ? { ratingScale: detectedScale } : {}),
+          ...(detectedStyle ? { writingStyle: detectedStyle } : {}),
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
@@ -1050,6 +1248,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             pageNumbers,
             signoffEnabled,
             signatories: cleanSignatories,
+            ...(detectedScale ? { ratingScale: detectedScale } : {}),
+            ...(detectedStyle ? { writingStyle: detectedStyle } : {}),
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
@@ -1081,17 +1281,27 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
-      <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
+    <>
+      {/* Dim backdrop — the editor is a centered modal, not a full-page takeover.
+          Clicking the backdrop routes through the same unsaved-changes guard as X. */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px]"
+        onClick={attemptClose}
+        aria-hidden="true"
+      />
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-none">
       <motion.div
         ref={containerRef}
-        initial={{ opacity: 0, scale: 0.97, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 12 }}
-        transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
-        role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        role="dialog" aria-modal="true" aria-label={isNew ? 'Create template' : 'Edit template'}
+        // A large modal; the import review canvas widens to an extra-large modal for
+        // its two columns while that step is up.
+        className={`pointer-events-auto relative w-full ${pendingImport ? 'max-w-[1320px]' : 'max-w-[1060px]'} max-h-[92vh] bg-canvas rounded-2xl border border-canvas-border shadow-xl flex flex-col overflow-hidden transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]`}
         onDragEnter={e => {
           // Only react to file drags, and not while a scan/review is already up.
           if (importing || pendingImport || !Array.from(e.dataTransfer.types).includes('Files')) return;
@@ -1416,72 +1626,84 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               template renders as the report page it will produce: gradient
               letterhead cover, editorial numbered sections, footer strip. */}
           <div className="relative flex-1 min-w-0 flex flex-col bg-canvas min-h-0">
-            {/* Post-import banner — the sections below are ALREADY applied. This is
-                the whole "flow": pick a file, it lands, and this offers to Review
-                (curate in the canvas) or Undo (revert the entire import). */}
-            <AnimatePresence>
-              {importBanner && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                  className="shrink-0 px-6 pt-4"
-                >
-                  <div className="flex items-center gap-3 rounded-[12px] border border-brand-200 bg-brand-50/70 px-4 py-2.5">
-                    <span className="w-7 h-7 rounded-full bg-compliant-500 text-white flex items-center justify-center shrink-0"><Check size={15} strokeWidth={2.5} /></span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
-                        {importBanner.kind === 'pdf'
-                          ? <>Imported {importBanner.count} section{importBanner.count === 1 ? '' : 's'}{importBanner.gotLetterhead ? ' + letterhead' : ''}</>
-                          : <>Started a suggested outline ({importBanner.count} section{importBanner.count === 1 ? '' : 's'})</>}
-                      </p>
-                      <p className="text-[0.75rem] text-ink-500 leading-tight truncate">
-                        {importBanner.kind === 'pdf'
-                          ? <>from {importBanner.fileName} · edit inline below</>
-                          : <>{importBanner.fileName} · {IMPORT_KIND_LABEL[importBanner.kind]} layout isn’t read yet · edit inline below</>}
-                      </p>
-                    </div>
-                    <button
-                      type="button" onClick={openReview}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-white border border-brand-200 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-                    ><Pencil size={13} /> Review</button>
-                    <button
-                      type="button" onClick={() => setConfirmRemoveImport(true)} aria-label="Remove imported file"
-                      title="Remove imported file"
-                      className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-700 hover:bg-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                    ><X size={15} /></button>
+            {/* Uploaded file — the post-import summary lives here, at the top of the
+                preview section: file name, what was read, quick Review / remove. */}
+            {importedFrom && !importing && (
+              <div className="shrink-0 px-6 pt-5">
+                <div className="flex items-center gap-3 rounded-[12px] border border-canvas-border bg-canvas-elevated px-3.5 py-3">
+                  <span className="w-10 h-10 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={18} /></span>
+                  <div className="min-w-0 flex-1 flex flex-col leading-tight">
+                    <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{importedFrom}</span>
+                    <span className="text-[0.75rem] text-ink-500 truncate mt-0.5">
+                      {(() => {
+                        const c = importBanner?.count ?? sections.length;
+                        const lh = importBanner?.gotLetterhead ? ' · letterhead captured' : '';
+                        // Not yet reviewed → a clear call to review; reviewed → a calm
+                        // "confirmed" state, so the editor reads as "name it + create",
+                        // not "review again".
+                        if (importBanner && !importConfirmed) {
+                          return <>{c} section{c === 1 ? '' : 's'} read{lh} · <span className="text-high-700 font-semibold">confirm before saving</span></>;
+                        }
+                        return <span className="inline-flex items-center gap-1"><Check size={12} className="text-compliant-600" /> {c} section{c === 1 ? '' : 's'} confirmed{lh}</span>;
+                      })()}
+                    </span>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <button
+                    type="button" onClick={openReview}
+                    className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] border text-[0.75rem] font-semibold transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
+                      importBanner && !importConfirmed
+                        ? 'border-high-300 bg-high-50 text-high-700 hover:bg-high-100'
+                        : 'border-canvas-border bg-white text-ink-700 hover:bg-paper-50 hover:border-ink-300'
+                    }`}
+                  ><Pencil size={13} /> {importBanner && !importConfirmed ? 'Review & confirm' : 'Edit sections'}</button>
+                  <button
+                    type="button" onClick={() => setConfirmRemoveImport(true)} aria-label="Remove imported file" title="Remove imported file"
+                    className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-700 hover:bg-canvas flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                  ><X size={15} /></button>
+                </div>
+              </div>
+            )}
             {/* The report page — a white sheet on the canvas desk. Sections and the
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
               <div className="relative mx-auto w-full max-w-3xl rounded-[12px] shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
+                {/* Same cover as the standard template preview / review canvas:
+                    a mono report-id eyebrow, the Generate ATR slot (hidden for
+                    ATR / SOX), and the Author / Date / N queries byline as the
+                    placeholder slots a generated report fills. */}
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
                   className="rounded-t-[12px]"
                   gradient={coverGradient}
-                  headerText={headerText}
+                  eyebrow={<span className="font-mono text-[0.75rem] tracking-[0.04em] text-white/65">GR-000000</span>}
+                  actions={
+                    /\batr\b|action taken/i.test(copyName || '') || /\bsox\b/i.test(copyName || '')
+                      ? undefined
+                      : (
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white/70 bg-brand-700/60 border border-white/20 rounded-[8px]"
+                        >
+                          <FileText size={14} /> Generate ATR
+                        </span>
+                      )
+                  }
                   footer={
-                    /* All report facts live in the letterhead as one full-width
-                       strip — no duplicated meta panel below. */
-                    <div className="grid grid-cols-3 gap-6">
-                      {[
-                        { label: 'Brand', value: brand || 'Irame' },
-                        { label: 'Generated On', value: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
-                        { label: 'Sections', value: `${sections.length}` },
-                      ].map(f => (
-                        <div key={f.label} className="min-w-0">
-                          <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50">{f.label}</div>
-                          <div className="text-[0.875rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
-                        </div>
+                    /* Placeholder slots, matching the preview / review canvas — the
+                       cells a generated report fills: first cell bold, the rest muted. */
+                    <div className="flex items-center gap-2.5 text-[0.875rem] flex-wrap">
+                      {['Author', 'Date', 'N queries'].map((p, i) => (
+                        <span key={i} className="inline-flex items-center gap-2.5">
+                          {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                          <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                        </span>
                       ))}
                     </div>
                   }
                 >
-                  <p className="text-[0.875rem] text-white/75">{template.desc || 'Custom report template'}</p>
+                  <p className="text-[0.875rem] text-white/75">{template.desc || 'Custom template'}</p>
                 </ReportBrandBanner>
 
                 {/* Sections — each drag-reorderable and removable on hover. */}
@@ -1623,30 +1845,37 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         </div>
 
         <div className="px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2 shrink-0">
-          {/* Left — import from a report (the merged "Upload template" path). A PDF
-              is read for its outline + letterhead; Word/PowerPoint seed a suggested
-              outline. Drop a file anywhere on the editor, or click to browse. */}
+          {/* Left — import from a report. A PDF is read for its outline + letterhead;
+              Word/PowerPoint seed a suggested outline. Drop a file anywhere on the
+              editor, or click. Same height as the confirm actions on the right. The
+              uploaded file itself shows in the right (preview) column once imported. */}
           <div className="min-w-0 flex items-center gap-2.5">
             <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
+            {/* Before a file is imported this is the primary "get started" action
+                (brand fill). Once a file is in, it becomes a quiet secondary action —
+                swap the uploaded FILE for a different one — so it doesn't compete with
+                "Create template". "Replace file" (not "report") — there's no report
+                here, only the uploaded source being turned into a format. */}
             <motion.button
               type="button"
               onClick={() => importInputRef.current?.click()}
               disabled={isSaving || importing}
               whileTap={isSaving || importing ? undefined : { scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              title="Start from an existing report — a PDF's outline + letterhead are detected; Word/PowerPoint seed a suggested outline"
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+              title={importedFrom
+                ? 'Swap the uploaded file for a different one — its sections and letterhead replace the current ones'
+                : "Start from an existing report — a PDF's outline + letterhead are detected; Word/PowerPoint seed a suggested outline"}
+              className={`inline-flex items-center gap-2 h-9 px-4 rounded-[8px] text-[0.875rem] font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
+                importedFrom
+                  ? 'bg-white border border-canvas-border text-ink-700 hover:bg-paper-50 hover:border-ink-300'
+                  : 'bg-brand-600 text-white shadow-[0_4px_12px_-4px_rgba(106,18,205,0.5)] hover:bg-brand-500'
+              }`}
             >
               {importing
                 ? <><Loader2 size={15} className="animate-spin shrink-0" /> Reading the report…</>
-                : importedFrom
-                  ? <><FileText size={15} className="shrink-0" /> <span className="truncate">Imported · {importedFrom}</span> <Upload size={13} className="shrink-0 opacity-70" /></>
-                  : <><Upload size={15} className="shrink-0" /> Import from a report</>}
+                : <><Upload size={15} className="shrink-0" /> {importedFrom ? 'Replace file' : 'Import from a report'}</>}
             </motion.button>
-            {!importing && !importedFrom && (
-              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Word &amp; PowerPoint seed an outline.</span>
-            )}
           </div>
           {/* Right — primary actions. */}
           <div className="flex items-center gap-2 shrink-0">
@@ -1707,10 +1936,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           )}
         </AnimatePresence>
 
-        {/* Import-from-a-report extraction theatre — covers the editor while the
-            PDF is read, then dismisses as the fields populate. */}
+        {/* Import-from-a-report extraction theatre — the full-bleed scan animation
+            (a report page with a sweeping scan-line) covers the editor while the PDF
+            is read, then dismisses as the fields populate. Minimize hands off to the
+            background ExtractionCard so extraction keeps running with the app usable. */}
         <AnimatePresence>
-          {importing && <ExtractionCard filename={scanningName ?? 'your report'} messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES} onMinimize={() => setMinimized(true)} />}
+          {importing && <ImportScanOverlay filename={scanningName ?? 'your report'} messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES} onMinimize={() => setMinimized(true)} />}
         </AnimatePresence>
 
         {/* Import review step — the shared "AI proposes, the human curates" canvas.
@@ -1718,7 +1949,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             so importing behaves exactly like the format-check upload flow (§4). */}
         <AnimatePresence>
           {pendingImport && (() => {
-            const namedCount = reviewSections.filter(s => s.name.trim()).length;
+            const named = reviewSections.filter(s => s.name.trim());
+            const namedCount = named.length;
+            const confirmedCount = named.filter(s => s.confirmed).length;
+            const allConfirmed = namedCount > 0 && confirmedCount === namedCount;
             const hasLetterhead = !!pendingImport.result?.headerFooter;
             const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
             return (
@@ -1736,7 +1970,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 text-ink-500 text-[0.625rem] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5">{kindLabel}</span>
                       </div>
                       <p className="text-[0.75rem] text-ink-500 leading-snug truncate">
-                        From {pendingImport.fileName} — already in your outline. Refine here, then apply.
+                        From {pendingImport.fileName} — confirm each section’s mapping, then apply.
                       </p>
                     </div>
                   </div>
@@ -1746,6 +1980,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <SectionReviewCanvas
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
+                    scale={pendingImport.result?.scale}
+                    style={pendingImport.result?.style}
+                    letterheadCaptured={hasLetterhead}
                     reportChrome={{
                       title: copyName || 'Untitled Template',
                       desc: template.desc,
@@ -1757,13 +1994,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     }}
                   />
                 </div>
-                <footer className="shrink-0 px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2">
-                  <span className="text-[0.75rem] text-ink-500">
-                    {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
-                  </span>
+                <footer className="shrink-0 px-7 py-2.5 border-t border-canvas-border flex items-center justify-end gap-2">
                   <div className="flex items-center gap-2">
                     <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer">Discard</motion.button>
-                    <motion.button whileTap={namedCount === 0 ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-[8px] enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                    {!allConfirmed && (
+                      <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={confirmAllReview} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-[8px] transition-colors enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        Confirm all
+                      </motion.button>
+                    )}
+                    <motion.button whileTap={!allConfirmed ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={!allConfirmed} title={!allConfirmed ? 'Confirm every section first' : undefined} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-[8px] enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                       Use these sections
                     </motion.button>
                   </div>
@@ -1772,8 +2011,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             );
           })()}
         </AnimatePresence>
-
       </motion.div>
+      </div>
+
       <ConfirmDialog
         open={showAbandonConfirm}
         onClose={() => setShowAbandonConfirm(false)}
@@ -1818,7 +2058,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         confirmLabel="Remove"
         destructive
       />
-    </motion.div>
+    </>
   );
 }
 

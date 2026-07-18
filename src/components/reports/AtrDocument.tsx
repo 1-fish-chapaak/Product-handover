@@ -10,7 +10,7 @@ import type {
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
 import { ReportNumberedHeading, ReportBrandBanner, ReportKpiTiles } from './ReportDocumentChrome';
-import { ATR_SECTION_ORDER, type AtrSectionKey } from './atrSections';
+import { ATR_SECTION_ORDER, ATR_SECTION_SUBTITLE, type AtrSectionKey } from './atrSections';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -153,7 +153,7 @@ export default function AtrDocument({
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
     summary: n => (
       <>
-        <ReportNumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
+        <ReportNumberedHeading n={n} title="Executive Summary" subtitle={ATR_SECTION_SUBTITLE.summary} />
         {/* KPI tiles — the single shared ReportKpiTiles, so the ATR exec summary
             stays identical to every other report type by construction. */}
         <ReportKpiTiles
@@ -163,7 +163,7 @@ export default function AtrDocument({
     ),
     process: n => (
       <>
-        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
+        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle={ATR_SECTION_SUBTITLE.process} />
         <div className="overflow-hidden rounded-[10px] border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
@@ -205,7 +205,7 @@ export default function AtrDocument({
     ),
     details: n => (
       <>
-        <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
+        <ReportNumberedHeading n={n} title="Observation Details" subtitle={ATR_SECTION_SUBTITLE.details} />
         <div className="space-y-5">
           {observations.map((o, i) => (
             <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} actions={renderObservationActions?.(i)} />
@@ -215,7 +215,7 @@ export default function AtrDocument({
     ),
     insights: n => (
       <>
-        <ReportNumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
+        <ReportNumberedHeading n={n} title="Key Insights & Recommendations" subtitle={ATR_SECTION_SUBTITLE.insights} />
         <div className="space-y-3">
           {insights.map((ins, i) => (
             <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-[10px] p-4 hover:border-brand-200 transition-colors">
@@ -231,7 +231,7 @@ export default function AtrDocument({
     ),
     signoff: n => (
       <>
-        <ReportNumberedHeading n={n} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
+        <ReportNumberedHeading n={n} title="Approvals & Sign-Off" subtitle={ATR_SECTION_SUBTITLE.signoff} />
         <div className="grid grid-cols-2 gap-4">
           {[
             { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },

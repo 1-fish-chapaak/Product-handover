@@ -14,7 +14,7 @@ import {
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
-  Layers, Check, RefreshCw, Lock, Sparkles,
+  Layers, Check, RefreshCw, Lock, Sparkles, Info, Pencil,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { ManageExceptionsLaunchButton } from './ManageExceptionsLaunchButton';
@@ -31,12 +31,17 @@ import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
-  computeQueryKpis, reportKind,
+  computeQueryKpis, reportKind, parseNumeric, sectionBlurb, sectionSummary,
   type WorkflowResult,
   CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
-  type SignatorySlot, type Signoff,
+  type SignatorySlot, type Signoff, type TemplateSection,
+  type ReportData, readReportData, writeReportData,
+  catalogIdForContentType, type EmptyState as SectionEmptyState,
+  type DataBlock, type DataBinding,
 } from './reportShared';
+import { auditorValueField } from './sectionSynonyms';
+import { SectionBindingControl } from './sectionBindingControls';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
@@ -44,7 +49,8 @@ import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
-import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
+import { composeExecSummary, composeSectionContent, workflowToQueryDef, defForKey, DEMO_REPORT_QUERY_KEYS, groupFindingsByScope, resolveBinding, type GeneratedQueryDef, type ReportFinding } from './templateQueryPool';
+import { buildContentModel, catalogIdFor, contentTypeForSection, type Recommendation } from './reportContentModel';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -1096,8 +1102,9 @@ function ContentsRow({
       ) : (
         <button
           onClick={onScroll}
+          title={section.title}
           aria-current={active ? 'true' : undefined}
-          className={`flex-1 min-w-0 text-left text-[0.8125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
+          className={`flex-1 min-w-0 text-left text-[0.8125rem] leading-tight line-clamp-2 transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {section.title}
         </button>
@@ -1804,10 +1811,418 @@ function DraggableQuerySection({
   );
 }
 
+// ─── Section data blocks — Table / Graph / KPI, each bound to a query ───────────
+//
+// A section = heading + description + its own data blocks (PRD "Custom Internal
+// Audit Report Formats"). Each block is a placeholder detected in the upload; at
+// GENERATION it binds to one query via "Pick a query" and renders that query's real
+// output. Unbound → Pending (prompt, never blank). Bound-but-empty → Nil. Errored →
+// the error. Never a zero — numbers come from the query, never the upload.
+
+const DATA_BLOCK_LABEL: Record<DataBlock['kind'], string> = { table: 'Table', graph: 'Graph', kpi: 'KPI' };
+// A section-kind for the shared binding controls / resolver ('graph' → 'chart').
+const bindKind = (k: DataBlock['kind']): 'kpi' | 'chart' | 'table' => (k === 'graph' ? 'chart' : k);
+
+function DataBlockView({ block, binding, queries, onBind, readOnly }: {
+  block: DataBlock;
+  binding?: DataBinding;
+  queries: GeneratedQueryDef[];
+  onBind: (b: DataBinding | undefined) => void;
+  readOnly: boolean;
+}) {
+  const kind = bindKind(block.kind);
+  const resolved = resolveBinding(kind, binding, queries);
+  const title = block.label && block.label.toLowerCase() !== DATA_BLOCK_LABEL[block.kind].toLowerCase()
+    ? block.label : DATA_BLOCK_LABEL[block.kind];
+  return (
+    <div className="rounded-[10px] border border-canvas-border bg-canvas/40 px-4 py-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">{DATA_BLOCK_LABEL[block.kind]}</span>
+        <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{title}</span>
+      </div>
+      {/* Bind at generation — the block shows real query output, never scraped data. */}
+      {!readOnly && (
+        <SectionBindingControl kind={kind} binding={binding} onBind={onBind} queries={queries} dense />
+      )}
+      <div className="mt-2">
+        {resolved.status === 'unbound' && (
+          <p className="text-[0.8125rem] text-high-700 bg-high-50/60 border border-high-200 rounded-[8px] px-3 py-2">
+            Pending — pick a query to fill this {DATA_BLOCK_LABEL[block.kind].toLowerCase()}.
+          </p>
+        )}
+        {resolved.status === 'missing' && (
+          <p className="text-[0.8125rem] text-high-700">Bound query {resolved.queryKey} isn’t in this report — pick one of its queries.</p>
+        )}
+        {resolved.status === 'empty' && (
+          <p className="text-[0.8125rem] text-ink-600">No data was returned for this {DATA_BLOCK_LABEL[block.kind].toLowerCase()}.</p>
+        )}
+        {resolved.status === 'errored' && (
+          <p className="text-[0.8125rem] text-risk-700">The query failed: {resolved.error}</p>
+        )}
+        {resolved.status === 'kpi' && (
+          <div className="inline-flex flex-col rounded-[10px] border border-canvas-border bg-white px-4 py-2.5">
+            <span className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{resolved.value}</span>
+            <span className="text-[0.75rem] text-ink-500 mt-1">{resolved.label}</span>
+          </div>
+        )}
+        {resolved.status === 'chart' && (
+          <div className="flex items-end gap-1.5 h-20 pt-2">
+            {resolved.data.slice(0, 12).map((v, idx) => {
+              const max = Math.max(...resolved.data, 1);
+              return <span key={idx} title={String(v)} className="flex-1 rounded-t-[3px] bg-brand-500/70 min-w-[6px]" style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />;
+            })}
+          </div>
+        )}
+        {resolved.status === 'table' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[0.8125rem] border-collapse">
+              <thead>
+                <tr>{resolved.columns.map((c, ci) => <th key={ci} className="text-left font-semibold text-ink-700 border-b border-canvas-border px-2 py-1.5">{c}</th>)}</tr>
+              </thead>
+              <tbody>
+                {resolved.rows.slice(0, 8).map((row, ri) => (
+                  <tr key={ri}>{row.map((cell, cj) => <td key={cj} className="text-ink-700 border-b border-canvas-border/60 px-2 py-1.5 tabular-nums">{cell}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionDataBlocks({ blocks, queries, bindings, onBind, readOnly }: {
+  blocks: DataBlock[];
+  queries: GeneratedQueryDef[];
+  bindings: Record<string, DataBinding>;
+  onBind: (blockId: string, b: DataBinding | undefined) => void;
+  readOnly: boolean;
+}) {
+  if (!blocks.length) return null;
+  return (
+    <div className="mt-4 space-y-3">
+      {blocks.map(b => (
+        <DataBlockView
+          key={b.id}
+          block={b}
+          binding={bindings[b.id] ?? b.dataBinding}
+          queries={queries}
+          onBind={next => onBind(b.id, next)}
+          readOnly={readOnly}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
+// A narrative section the auditor must state themselves (objective / opinion /
+// limitations). No query fills it, so instead of composed prose the report prompts
+// once and stores the value on reports.data. Empty reads as an open task (amber);
+// filled reads as prose with an inline edit. Read-only reports show the value only.
+function AuditorValueSection({ label, value, readOnly, onSave, ratingWords, draftText, promptText, standingText, draftLabel }: {
+  label: string;
+  value?: string;
+  readOnly?: boolean;
+  onSave: (v: string) => void;
+  /** The company's own assurance / rating words (from the uploaded format's rating
+   *  scale). When present on an opinion section, offered as quick-insert chips so the
+   *  auditor states the verdict in the company's vocabulary, never ours (AC9). */
+  ratingWords?: string[];
+  /** A composed starting draft (the query rollup, or an Ask IRA draft). Offered as a
+   *  button that seeds the editor — an editable starting point the auditor reviews and
+   *  edits, NEVER shown as final auto-prose (AC20/AC22). */
+  draftText?: string;
+  /** Overrides the empty-state prompt copy (a summary invites a draft; an opinion does not). */
+  promptText?: string;
+  /** Boilerplate carried on the TEMPLATE for this section (a standard Scope wording, a
+   *  fixed Sign-off block). It pre-fills the section as an editable starting point; the
+   *  auditor's per-report edit saves on the report and never changes the template (AC22/AC23). */
+  standingText?: string;
+  /** Label for the draft button ("Draft with IRA" for a narrative, "Generate a draft"
+   *  for the summary). */
+  draftLabel?: string;
+}) {
+  // The draft is seeded when the editor opens (startEdit), so the displayed value
+  // always reads from the `value` prop — no effect syncing prop → state.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  // What shows under the heading: the auditor's saved text if any, else the template's
+  // standing text (pre-filled, editable). Editing either saves on the report.
+  const standing = standingText && standingText.trim() ? standingText.trim() : undefined;
+  const shown = value ?? standing;
+  const fromStanding = value == null && !!standing;
+  const startEdit = (seed?: string) => { setDraft(seed ?? shown ?? ''); setEditing(true); };
+  const commit = () => { const v = draft.trim(); setEditing(false); if (v !== (value ?? '')) onSave(v); };
+  const canDraft = !!draftText && !!draftText.trim();
+  const draftBtn = draftLabel ?? 'Generate a draft';
+
+  if (editing) {
+    return (
+      <div className="max-w-[80ch]">
+        <textarea
+          autoFocus
+          value={draft}
+          rows={4}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setDraft(value ?? ''); setEditing(false); } }}
+          placeholder={`State the ${label.toLowerCase()} in your own words…`}
+          className="w-full resize-y rounded-[8px] border border-brand-400 bg-white px-3 py-2 text-[0.9375rem] text-ink-800 leading-[1.7] focus:outline-none focus:ring-2 focus:ring-brand-600/25"
+        />
+        {canDraft && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={() => setDraft(draftText!)} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 cursor-pointer transition-colors">
+              <Sparkles size={12} /> {draftBtn}
+            </button>
+            <span className="text-[0.6875rem] text-ink-400">A draft from the report data — review and edit before you save.</span>
+          </div>
+        )}
+        {ratingWords && ratingWords.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mr-0.5">Rating words</span>
+            {ratingWords.map(w => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setDraft(d => (d.trim() ? `${w} — ${d.trim()}` : w))}
+                className="inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-medium text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 cursor-pointer transition-colors"
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="mt-2 flex items-center gap-2">
+          <button onClick={commit} className="h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">Save</button>
+          <button onClick={() => { setDraft(value ?? ''); setEditing(false); }} className="h-8 px-3 rounded-[8px] text-[0.75rem] font-semibold text-ink-600 hover:bg-canvas cursor-pointer transition-colors">Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (shown) {
+    return (
+      <div className="group/av max-w-[80ch]">
+        <p className="text-[0.9375rem] text-ink-700 leading-[1.8] whitespace-pre-wrap">{shown}</p>
+        <div className="mt-1.5 flex items-center gap-2.5">
+          {fromStanding && (
+            <span className="inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-semibold uppercase tracking-wide text-ink-500 bg-canvas border border-canvas-border" title="Boilerplate from your template — edit it here and the edit saves on this report only.">Standing text</span>
+          )}
+          {!readOnly && (
+            <button onClick={() => startEdit()} className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 opacity-0 group-hover/av:opacity-100 transition-opacity cursor-pointer">
+              <Edit3 size={12} /> Edit {label.toLowerCase()}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Empty — prompt the auditor once. Read-only reports state the gap plainly.
+  return readOnly ? (
+    <div className="flex items-start gap-2.5 max-w-[80ch] rounded-[10px] border border-dashed border-high-300 bg-high-50/40 px-4 py-3">
+      <Info size={15} className="mt-0.5 shrink-0 text-high-600" />
+      <p className="text-[0.8125rem] text-high-700 leading-relaxed">The {label.toLowerCase()} has not been stated on this report.</p>
+    </div>
+  ) : (
+    <div className="max-w-[80ch]">
+      <button
+        onClick={() => startEdit()}
+        className="flex items-start gap-2.5 w-full text-left rounded-[10px] border border-dashed border-high-300 bg-high-50/40 px-4 py-3 hover:border-brand-400 hover:bg-brand-50/40 transition-colors cursor-pointer"
+      >
+        <Info size={15} className="mt-0.5 shrink-0 text-high-600" />
+        <span className="text-[0.8125rem] text-high-700 leading-relaxed">{promptText ?? `This section needs your input. Add the ${label.toLowerCase()} — it is stated by the auditor, not generated.`}</span>
+      </button>
+      {canDraft && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => startEdit(draftText!)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 cursor-pointer transition-colors"
+          >
+            <Sparkles size={14} /> {draftBtn} to edit
+          </button>
+        </div>
+      )}
+      {ratingWords && ratingWords.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mr-0.5">Your rating words</span>
+          {ratingWords.map(w => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => onSave(w)}
+              className="inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-medium text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 cursor-pointer transition-colors"
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The findings section — the pool of findings gathered from every query feeding
+// the report, grouped by scope area (Cumberland 7.1, 7.2…). A query is a data
+// source; a finding is the unit. Many queries feed one section; one query yields
+// many findings. This is why 8 queries into a 5-section format make a 5-section
+// report, not 8 query blocks.
+function ReportFindingsSection({ findings, error }: { findings: ReportFinding[]; error?: string }) {
+  // Empty findings is not one state. Errored (a feeding query failed) surfaces the
+  // error; otherwise it is a genuine Nil-result — an affirmative audit statement,
+  // never a blank heading and never a zero.
+  if (findings.length === 0 && error) {
+    return (
+      <div className="flex items-start gap-2.5 max-w-[80ch] rounded-[10px] border border-risk-200 bg-risk-50/50 px-4 py-3">
+        <AlertTriangle size={15} className="mt-0.5 shrink-0 text-risk-600" />
+        <div>
+          <p className="text-[0.8125rem] font-semibold text-risk-700">A query could not be run, so findings could not be gathered.</p>
+          <p className="mt-0.5 text-[0.75rem] text-risk-600 leading-relaxed">{error}</p>
+        </div>
+      </div>
+    );
+  }
+  if (findings.length === 0) {
+    return <p className="max-w-[80ch] text-[0.9375rem] text-ink-500 leading-[1.8]">No observations were noted during this assignment.</p>;
+  }
+  const groups = groupFindingsByScope(findings);
+  const sevTone = (sev: string) => /high/i.test(sev)
+    ? 'bg-risk-50 text-risk-700'
+    : /med/i.test(sev) ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700';
+  return (
+    <div className="space-y-6">
+      {groups.map(g => (
+        <div key={g.scopeArea}>
+          {/* Scope-area subheading — the customer's grouping (risk bucket today). */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500">{g.scopeArea}</span>
+            <span className="text-[0.6875rem] text-ink-400">· {g.findings.length} finding{g.findings.length === 1 ? '' : 's'}</span>
+            <span className="flex-1 h-px bg-canvas-border" />
+          </div>
+          <div className="space-y-3">
+            {g.findings.map((f, idx) => (
+              <div key={f.id} className="rounded-[10px] border border-canvas-border bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-baseline gap-2.5 min-w-0">
+                    <span className="shrink-0 text-[0.75rem] font-semibold tabular-nums" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(idx + 1).padStart(2, '0')}</span>
+                    <h4 className="text-[0.9375rem] font-semibold text-ink-900 leading-snug">{f.title}</h4>
+                  </div>
+                  <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide ${sevTone(f.severity)}`}>{f.severity}</span>
+                </div>
+                {/* The five parts of a real audit finding — criteria (the rule),
+                    condition (what was seen), cause, effect, recommendation. Each
+                    renders only when the query supplied it. */}
+                <div className="mt-2.5 pl-[1.9rem] space-y-2.5">
+                  {([
+                    ['Criteria', f.criteria],
+                    ['Condition', f.condition],
+                    ['Cause', f.cause],
+                    ['Effect', f.effect],
+                    ['Recommendation', f.recommendation],
+                  ] as const).filter(([, v]) => !!v).map(([label, v]) => (
+                    <div key={label}>
+                      <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">{label}</span>
+                      <p className={`mt-0.5 max-w-[80ch] text-[0.875rem] leading-relaxed ${label === 'Recommendation' ? 'text-ink-600' : 'text-ink-700'}`}>{v}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2.5 pl-[1.9rem] text-[0.6875rem] text-ink-400">Source: {f.queryId}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The recommendations node — the recommendations paired to findings, rolled up
+// from every query, grouped by scope area so they read alongside their findings.
+function RecommendationsSection({ recommendations }: { recommendations: Recommendation[] }) {
+  if (recommendations.length === 0) {
+    return <p className="max-w-[80ch] text-[0.9375rem] text-ink-500 leading-[1.8]">No recommendations arise from this review.</p>;
+  }
+  // Preserve first-seen scope order.
+  const order: string[] = [];
+  const byScope = new Map<string, Recommendation[]>();
+  recommendations.forEach(r => {
+    if (!byScope.has(r.scopeArea)) { byScope.set(r.scopeArea, []); order.push(r.scopeArea); }
+    byScope.get(r.scopeArea)!.push(r);
+  });
+  return (
+    <div className="space-y-5">
+      {order.map(scope => (
+        <div key={scope}>
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500">{scope}</span>
+            <span className="flex-1 h-px bg-canvas-border" />
+          </div>
+          <ul className="space-y-2">
+            {byScope.get(scope)!.map((r, i) => (
+              <li key={r.id} className="flex items-baseline gap-2.5 max-w-[80ch]">
+                <span className="shrink-0 text-[0.75rem] font-semibold tabular-nums" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(i + 1).padStart(2, '0')}</span>
+                <p className="text-[0.9375rem] text-ink-700 leading-relaxed">{r.text}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// A section heading you can edit in place from the document itself: hover reveals
+// Rename + Delete, so structure edits no longer live only in the outline rail. The
+// pencil opens an inline title input; Delete routes through the shared confirm. On a
+// read-only report it falls back to the plain numbered heading, no controls.
+function EditableSectionHeading({ n, title, editable, onRename, onDelete }: {
+  n: number; title: string; editable: boolean; onRename: (t: string) => void; onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const start = () => { setDraft(title); setEditing(true); };
+  const commit = () => { const t = draft.trim(); setEditing(false); if (t && t !== title) onRename(t); };
+  if (!editable) return <ReportNumberedHeading n={n} title={title} />;
+  if (editing) {
+    return (
+      <div className="mb-5 flex items-center gap-3.5">
+        <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(n).padStart(2, '0')}</span>
+        <input
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); } }}
+          onBlur={commit}
+          className="flex-1 min-w-0 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] bg-white border border-brand-400 rounded-[8px] px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        />
+      </div>
+    );
+  }
+  return (
+    <ReportNumberedHeading
+      n={n}
+      title={title}
+      right={
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 opacity-0 group-hover/sec:opacity-100 focus-within:opacity-100 transition-opacity">
+            <button onClick={start} aria-label="Rename section" title="Rename section" className="p-1.5 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer">
+              <Edit3 size={14} />
+            </button>
+            <button onClick={onDelete} aria-label="Delete section" title="Delete section" className="p-1.5 rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onUpdateData, onUpdateBlockBindings, onSaveAsTemplate, onCreateTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1818,7 +2233,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   onUpdateDescription?: (reportId: string, description: string) => void;
   /** Persist manual sign / sign-off state on the report. */
   onUpdateSignoffs?: (reportId: string, signoffs: Record<string, Signoff>) => void;
+  /** Persist an auditor-supplied value for a text section that needs one
+   *  (objective / opinion / limitations) onto the report's data store. */
+  onUpdateData?: (reportId: string, data: ReportData) => void;
+  /** Persist per-data-block query bindings ("Pick a query") onto the report, so a
+   *  bound block survives a reload. */
+  onUpdateBlockBindings?: (reportId: string, bindings: Record<string, DataBinding>) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
+  /** Open the template editor to create a new custom template (from the Select
+   *  Template dropdown), mirroring the Templates tab's "New template". */
+  onCreateTemplate?: () => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
@@ -1906,7 +2330,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     CUSTOM_TEMPLATES.find(t => t.id === report.templateId) ??
     null;
 
+  // The company's own assurance / rating words, read from the format driving the
+  // report (an applied template wins, else the report's own). Offered on the opinion
+  // section so the verdict is stated in the company's vocabulary, never ours (AC9).
+  const ratingScaleSource =
+    (appliedTemplate as { ratingScale?: { levels?: { label: string }[] } } | null)?.ratingScale ??
+    (reportTemplate as { ratingScale?: { levels?: { label: string }[] } } | null)?.ratingScale ??
+    (report as { ratingScale?: { levels?: { label: string }[] } }).ratingScale;
+  const reportRatingWords: string[] = (ratingScaleSource?.levels ?? [])
+    .map(l => l.label?.trim())
+    .filter((l): l is string => !!l);
+
   const displayDescription = report.description ?? reportTemplate?.desc ?? '';
+  // The organisation shown on the report letterhead (the "Brand name" from the
+  // template). A custom format carries the customer's own entity; everything else
+  // falls back to the platform default, so the cover always reads as a letterhead.
+  const orgBrand = (report.brand
+    ?? (reportTemplate as { brand?: string } | null)?.brand
+    ?? 'Irame').trim();
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState(displayDescription);
 
@@ -2117,9 +2558,38 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     ],
   };
 
-  const activeQueries = appliedTemplate && TEMPLATE_QUERIES[appliedTemplate.id]
-    ? TEMPLATE_QUERIES[appliedTemplate.id]
-    : DEFAULT_QUERIES;
+  const isBulkAudit = report.tag === 'Bulk Audit';
+  const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+  // The section-driven catalog + findings-pool model is reserved for a report
+  // generated from a CUSTOM / imported format (a ct- template). A standard or
+  // default-format report renders the original query cards + stat tiles — the
+  // report reader wasn't part of the format work's scope.
+  const isCustomFormat = (report.templateId ?? '').startsWith('ct-');
+
+  // The queries this report actually renders — the single source the cover count,
+  // the executive-summary tiles, and the body all read from, so they agree.
+  // A wizard report carries its own; a seeded demo report resolves its keys; a
+  // workflow-only report has none; only an unknown report falls back to the demo
+  // default pair.
+  const demoQueries = (DEMO_REPORT_QUERY_KEYS[report.id ?? ''] ?? [])
+    .map(k => defForKey(k, report.generatedBy))
+    .filter((d): d is GeneratedQueryDef => !!d);
+  const seededQueries: typeof DEFAULT_QUERIES = report.generatedQueries?.length
+    ? report.generatedQueries
+    : demoQueries.length
+      ? demoQueries
+      : reportWorkflows.length
+        ? []
+        : DEFAULT_QUERIES;
+
+  // Applying a template KEEPS the report's queries (AC5): a report that carries its
+  // own queries renders them under whatever format is applied. The template-specific
+  // demo query sets are only a fallback for a seeded report that has none of its own.
+  const activeQueries = report.generatedQueries?.length
+    ? seededQueries
+    : appliedTemplate && TEMPLATE_QUERIES[appliedTemplate.id]
+      ? TEMPLATE_QUERIES[appliedTemplate.id]
+      : seededQueries;
 
   const activeStats = (() => {
     if (appliedTemplate && TEMPLATE_STATS[appliedTemplate.id]) return TEMPLATE_STATS[appliedTemplate.id];
@@ -2135,22 +2605,56 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         { label: 'Medium Severity', value: String(mediumCount), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
       ];
     }
+    const qs = activeQueries;
+    // Standard / default report — the ORIGINAL stat tiles (Total Exceptions /
+    // Closed / High Risk / Report Health), now derived from the report's own
+    // queries rather than the old hardcoded 187 / 38 / 12 / 78%. The section-driven
+    // Queries / Findings tiles are only for custom formats.
+    if (!isCustomFormat) {
+      const per = qs.map(q => computeQueryKpis(q as unknown as QueryShape));
+      const sumAt = (i: number) => per.reduce((s, p) => s + parseNumeric(p[i].value), 0);
+      const totalExc = sumAt(0);
+      const closed = sumAt(2);
+      const highRisk = qs.filter(q => /high/i.test(String(q.severity))).length;
+      const health = totalExc > 0 ? `${Math.round((closed / totalExc) * 100)}%` : '—';
+      return [
+        { label: 'Total Exceptions', value: totalExc.toLocaleString(), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+        { label: 'Closed', value: closed.toLocaleString(), icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+        { label: 'High Risk', value: String(highRisk), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+        { label: 'Report Health', value: health, icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+      ];
+    }
+    // Custom format — the section-driven content-model tiles.
+    const high = qs.filter(q => /high/i.test(String(q.severity))).length;
+    // Count structured findings (findingsDetailed) when present, else the prose
+    // findings — so the tile matches the content model, not the empty prose array.
+    const findings = qs.reduce((n, q) => n + ((q as { findingsDetailed?: unknown[] }).findingsDetailed?.length ?? q.findings?.length ?? 0), 0);
+    const recommendations = qs.reduce((n, q) => {
+      const detailed = (q as { findingsDetailed?: { recommendation?: string }[] }).findingsDetailed;
+      return n + (detailed ? detailed.filter(d => d.recommendation).length : (q.observations?.length ?? 0));
+    }, 0);
+    // A query whose run failed makes the derived counts unknown, not 0 — never
+    // render a zero for missing data (empty-state taxonomy). Show "—" instead.
+    const anyErrored = qs.some(q => !!(q as { executionError?: string }).executionError);
+    const countLabel = (n: number) => (n === 0 && anyErrored ? '—' : String(n));
     return [
-      { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
-      { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
-      { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
-      { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+      { label: 'Queries', value: String(qs.length), icon: Layers, color: 'text-brand-700 bg-brand-50' },
+      { label: 'High Severity', value: String(high), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+      { label: 'Findings', value: countLabel(findings), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+      { label: 'Recommendations', value: countLabel(recommendations), icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
     ];
   })();
 
   // Sections — reorderable / add / remove
   type SectionItem =
     | { id: string; kind: 'cover'; title: string }
-    | { id: string; kind: 'summary'; title: string; content: string }
+    | { id: string; kind: 'summary'; title: string; content: string; dataBlocks?: DataBlock[] }
     | { id: string; kind: 'stats'; title: string }
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
     | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
-    | { id: string; kind: 'note'; title: string; content: string }
+    | { id: string; kind: 'note'; title: string; content: string; emptyState?: SectionEmptyState; dataBlocks?: DataBlock[]; standingText?: string }
+    | { id: string; kind: 'findings'; title: string; findings: ReportFinding[]; error?: string; emptyState?: SectionEmptyState; dataBlocks?: DataBlock[] }
+    | { id: string; kind: 'recommendations'; title: string; recommendations: Recommendation[]; emptyState?: SectionEmptyState; dataBlocks?: DataBlock[] }
     | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
 
   type ObservationItem = {
@@ -2163,21 +2667,19 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     attachmentHidden?: boolean;
   };
 
-  const isBulkAudit = report.tag === 'Bulk Audit';
-  const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
-
   const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => {
-    const head: SectionItem[] = [
-      { id: 'sec-cover', kind: 'cover', title: 'Cover' },
-      {
-        id: 'sec-summary',
-        kind: 'summary',
-        title: 'Executive Summary',
-        content: report.execSummary ?? (isBulkAudit
-          ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
-          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.'),
-      },
-    ];
+    const coverBlock: SectionItem = { id: 'sec-cover', kind: 'cover', title: 'Cover' };
+    // The summary rolls up the report's own queries rather than a hardcoded
+    // "87 controls / 89% / 2 material weaknesses" blurb that was identical on
+    // every report and contradicted the tiles and body.
+    const summaryContent = report.execSummary ?? (isBulkAudit
+      ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
+      : composeExecSummary(report.name, [...queries, ...reportWorkflows.map(workflowToQueryDef)]));
+    const makeSummaryBlock = (title: string, dataBlocks?: DataBlock[]): SectionItem => ({ id: 'sec-summary', kind: 'summary', title, content: summaryContent, ...(dataBlocks?.length ? { dataBlocks } : {}) });
+    // Standard + bulk reports always carry an Executive Summary. A custom imported
+    // format only gets one when the template declares a summary section (handled in
+    // the custom branch below) — the format is respected exactly, nothing added.
+    const head: SectionItem[] = [coverBlock, makeSummaryBlock('Executive Summary')];
     if (isBulkAudit) {
       return [
         ...head,
@@ -2189,64 +2691,159 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         })),
       ];
     }
-    const queryBlocks: SectionItem[] = queries.map(q => ({
-      id: `sec-query-${q.id}`,
-      kind: 'query' as const,
-      title: `Query · ${q.id}`,
-      query: q,
-    }));
-
-    // Bulk Audit sources contribute workflow result blocks — rendered with the
-    // same WorkflowResultCard the Bulk Audit report uses — after the queries.
-    const workflowBlocks: SectionItem[] = reportWorkflows.map(w => ({
-      id: `sec-workflow-${w.id}`,
-      kind: 'workflow' as const,
-      title: `Workflow · ${w.workflowId}`,
-      workflow: w,
-    }));
-    const bodyBlocks = [...queryBlocks, ...workflowBlocks];
-
-    // Composed prose (template note sections) counts both queries and the
-    // query-shaped projection of the workflow runs, so a workflow-driven
-    // generation reads correctly even with zero queries.
-    const evidence = [...queries, ...reportWorkflows.map(workflowToQueryDef)];
-
-    // Wizard-generated reports bake the template's advertised sections into
-    // the block stream as editable note blocks, so the generated report
-    // delivers the structure the template card promises. The "anchor" section
-    // (queries / testing results) heads the body; sections before it render
-    // above the body, the rest below.
-    const tmpl = (report.generatedQueries?.length || reportWorkflows.length) ? (report.templateSections ?? []) : [];
-    if (tmpl.length > 0) {
-      const anchorIdx = tmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
-      const pre: SectionItem[] = [];
-      const post: SectionItem[] = [];
-      tmpl.forEach((s, i) => {
-        if (/executive summary/i.test(s.name)) return; // covered by the summary block
-        const block: SectionItem = {
-          id: `sec-tmpl-${i}`,
-          kind: 'note',
-          title: s.name,
-          content: composeSectionContent(s.name, evidence),
-        };
-        if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
-        else post.push(block);
-      });
-      return [...head, ...pre, ...bodyBlocks, ...post];
+    // Standard / default report — the ORIGINAL query-card body: one card per query
+    // (Q01, Q02… with KPIs, charts, tables, Manage Exceptions), with the template's
+    // note sections composed around them. No findings pool — that model is reserved
+    // for custom imported formats (the report reader wasn't in the format work).
+    if (!isCustomFormat) {
+      const queryBlocks: SectionItem[] = queries.map(q => ({
+        id: `sec-query-${q.id}`, kind: 'query' as const, title: `Query · ${q.id}`, query: q,
+      }));
+      const workflowBlocks: SectionItem[] = reportWorkflows.map(w => ({
+        id: `sec-workflow-${w.id}`, kind: 'workflow' as const, title: `Workflow · ${w.workflowId}`, workflow: w,
+      }));
+      const bodyBlocks = [...queryBlocks, ...workflowBlocks];
+      const std = [...queries, ...reportWorkflows.map(workflowToQueryDef)];
+      const declared: TemplateSection[] | undefined = report.templateSections
+        ?? REPORT_TEMPLATES.find(t => t.id === report.templateId)?.sections;
+      const stdTmpl: TemplateSection[] = (queries.length || reportWorkflows.length) ? (declared ?? []) : [];
+      if (stdTmpl.length > 0) {
+        const anchorIdx = stdTmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+        const pre: SectionItem[] = [];
+        const post: SectionItem[] = [];
+        stdTmpl.forEach((s, i) => {
+          if (/executive summary/i.test(s.name)) return;
+          // Prefer the section's own description — the prose extracted from the
+          // uploaded report at import (or authored on the template) — over composed
+          // starter text, so an imported format renders its real body, not a blurb.
+          const content = s.description?.trim() || composeSectionContent(s.name, std);
+          // A narrative auditor-value section carries the template's boilerplate as
+          // standing text — it pre-fills the section, editable, saved on the report (AC22/AC23).
+          const standing = auditorValueField(s.name) && s.description?.trim() ? { standingText: s.description!.trim() } : {};
+          const block: SectionItem = { id: `sec-tmpl-${i}`, kind: 'note', title: s.name, content, ...standing };
+          if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
+          else post.push(block);
+        });
+        return [...head, ...pre, ...bodyBlocks, ...post];
+      }
+      return [...head, ...bodyBlocks];
     }
 
-    return [...head, ...bodyBlocks];
+    // Custom / imported format — queries fill one stable content model; the format
+    // is a pure skin over it. Each section maps to a content node (findings /
+    // recommendations / objective / conclusion…), never to raw queries.
+    const evidence = [...queries, ...reportWorkflows.map(workflowToQueryDef)];
+    const contentModel = buildContentModel(evidence, report.data);
+    const findingsPool = contentModel.findings;
+    // When findings are empty because a feeding query's run failed, the Findings
+    // section is Errored (surface the error), not Nil-result — a distinction the
+    // empty-state taxonomy requires (never a zero, never a false "nothing found").
+    const findingsError = (evidence as GeneratedQueryDef[]).find(q => q.executionError)?.executionError;
+
+    // Sections drive the shape. A wizard report bakes the list in at creation
+    // (`templateSections`); a seeded report carries a templateId; anything else
+    // falls back to the standard Internal Audit outline so findings still land.
+    const iaDefault = REPORT_TEMPLATES.find(t => t.id === 'rt-internal-audit')?.sections ?? [];
+    const declaredSections: TemplateSection[] = report.templateSections
+      ?? REPORT_TEMPLATES.find(t => t.id === report.templateId)?.sections
+      ?? iaDefault;
+
+    // Map each section to its content node. A confirmed content-type override wins
+    // (a Narrative override renders prose even over a query-driven name); absent an
+    // override, the explicit catalog id, else the name via the synonym list, else a
+    // light regex for findings.
+    const nodeFor = (s: TemplateSection) => {
+      if (s.contentType) return catalogIdForContentType(s.contentType) ?? null;
+      return s.catalogId
+        ?? catalogIdFor(s.name)
+        ?? (/finding|observation|matters arising|audit quer|testing results/i.test(s.name) ? 'findings' as const : null);
+    };
+
+    // Respect the format exactly: the Executive Summary appears ONLY when the template
+    // declares a summary section, rendered under that section's verbatim name. A format
+    // with no summary section (e.g. a Cumberland layout) never gets one auto-added.
+    const summarySection = declaredSections.find(s => nodeFor(s) === 'summary');
+    const customHead: SectionItem[] = summarySection ? [coverBlock, makeSummaryBlock(summarySection.name, summarySection.dataBlocks)] : [coverBlock];
+
+    const tmpl = (queries.length || reportWorkflows.length) ? declaredSections : [];
+    if (tmpl.length === 0) return customHead;
+
+    // Findings are *distributed*, not duplicated: scope-filtered sections claim
+    // their area; an unfiltered findings section gets the remainder (whatever no
+    // scoped section claimed). This lets a Cumberland-style format group findings
+    // into 7.1 / 7.2 / … while a plain format shows one pool.
+    const claimedScopes = new Set(
+      tmpl.filter(s => nodeFor(s) === 'findings' && s.scopeFilter).map(s => s.scopeFilter!),
+    );
+    let hasFindingsSection = false;
+    const blocks: SectionItem[] = [];
+    tmpl.forEach((s, i) => {
+      const node = nodeFor(s);
+      // A section = description + its own data blocks (Table / Graph / KPI). The
+      // blocks travel onto the rendered SectionItem and bind to queries at read time.
+      const db = s.dataBlocks?.length ? { dataBlocks: s.dataBlocks } : {};
+      // The summary section is folded into the summary head block (its blocks were
+      // attached there); never rendered twice.
+      if (node === 'summary') return;
+      if (node === 'findings') {
+        hasFindingsSection = true;
+        const scoped = s.scopeFilter
+          ? findingsPool.filter(f => f.scopeArea === s.scopeFilter)
+          : findingsPool.filter(f => !claimedScopes.has(f.scopeArea));
+        // Empty-state taxonomy: a feeding query that errored → Errored (surface it);
+        // ran and found nothing → Nil ("No issues"); otherwise Filled. Never a zero.
+        const emptyState: SectionEmptyState = scoped.length ? 'filled' : findingsError ? 'errored' : 'nil';
+        blocks.push({ id: `sec-tmpl-${i}`, kind: 'findings', title: s.name, findings: scoped, emptyState, ...(scoped.length === 0 && findingsError ? { error: findingsError } : {}), ...db });
+        return;
+      }
+      if (node === 'recommendations') {
+        blocks.push({ id: `sec-tmpl-${i}`, kind: 'recommendations', title: s.name, recommendations: contentModel.recommendations, emptyState: contentModel.recommendations.length ? 'filled' : 'nil', ...db });
+        return;
+      }
+      if (node === 'methodology') {
+        // Query + engagement — the procedures run. Nil-result (no queries) → the
+        // standard limited-procedures statement, never a blank heading.
+        const content = evidence.length
+          ? `The following analyses were performed: ${evidence.map(q => q.title).filter(Boolean).join('; ')}. Samples were selected on a risk basis and corroborated against source records.`
+          : (s.description?.trim() || 'Procedures were limited to review and enquiry; no data analysis was performed for this assignment.');
+        blocks.push({ id: `sec-tmpl-${i}`, kind: 'note', title: s.name, content, emptyState: evidence.length ? 'filled' : 'nil', ...db });
+        return;
+      }
+      // Narrative — objective / conclusion / limitations render an auditor value (the
+      // note branch detects it by name); scope / background / everything else render
+      // prose. Empty-state: a required auditor judgement with no value is Pending
+      // (blocks issue, prompts by name); everything else is Filled.
+      const field = auditorValueField(s.name);
+      const requiredBlank = !!field && (field.key === 'objective' || field.key === 'conclusion') && !readReportData(report.data, field.key);
+      // A section carrying its own description (extracted from the uploaded report at
+      // import, or authored on the template) renders that prose; only a section with
+      // no description falls to composed starter text.
+      const noteContent = !field && s.description?.trim() ? s.description.trim() : composeSectionContent(s.name, evidence);
+      // Standing text — the template's boilerplate for a narrative section pre-fills it
+      // as an editable starting point (AC22/AC23).
+      const standing = field && s.description?.trim() ? { standingText: s.description.trim() } : {};
+      blocks.push({ id: `sec-tmpl-${i}`, kind: 'note', title: s.name, content: noteContent, emptyState: requiredBlank ? 'pending' : 'filled', ...db, ...standing });
+    });
+    // A finding must land somewhere — if the format has no findings section at all,
+    // append one so the pool is never silently dropped.
+    if (!hasFindingsSection && findingsPool.length > 0) {
+      blocks.push({ id: 'sec-findings-auto', kind: 'findings', title: 'Findings', findings: findingsPool });
+    }
+    return [...customHead, ...blocks];
   };
 
-  // Wizard-generated reports carry their own query blocks; demo reports keep
-  // the seeded defaults. A wizard report built from workflows only (no queries)
-  // has an empty query set — don't fall back to the demo queries for it.
-  const seededQueries: typeof DEFAULT_QUERIES = report.generatedQueries?.length
-    ? report.generatedQueries
-    : reportWorkflows.length
-      ? []
-      : DEFAULT_QUERIES;
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));
+  // Pending sections (empty-state taxonomy): a required auditor judgement
+  // (Objective, Conclusion) with no value blocks issue. We name them so the author
+  // knows exactly which section needs input — never a silent gap.
+  const pendingSections = isCustomFormat ? sections.flatMap(s => {
+    if (s.kind !== 'note') return [];
+    const field = auditorValueField(s.title);
+    if (!field) return [];
+    const required = field.key === 'objective' || field.key === 'conclusion';
+    if (!required) return [];
+    return readReportData(report.data, field.key) ? [] : [s.title];
+  }) : [];
   // Structure signature → drives the "report changed" gate. The baseline is
   // (re)captured whenever the report is freshly built/templated; once the user
   // reorders, adds, or removes sections the signature diverges and the
@@ -2256,17 +2853,48 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const structureChanged = sectionsBaselineRef.current !== null && structureSig(sections) !== sectionsBaselineRef.current;
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
-  // Summary lifecycle — "Generate Summary" (header) and "Regenerate" (section)
-  // are the same control at two stages, so only one shows at a time: Generate
-  // first, then Regenerate once a summary exists.
+  // Per-data-block query bindings, chosen at read time ("Pick a query"). Keyed by
+  // block id; overrides any binding baked on the block. Seeded from the report so a
+  // bound block survives a reload, and persisted back on every change.
+  const [blockBindings, setBlockBindings] = useState<Record<string, DataBinding>>(() => report.blockBindings ?? {});
+  const bindBlock = (blockId: string, b: DataBinding | undefined) =>
+    setBlockBindings(prev => {
+      const next = { ...prev };
+      if (!b) delete next[blockId]; else next[blockId] = b;
+      onUpdateBlockBindings?.(report.id, next);
+      return next;
+    });
+  // Whether a section's issued content would be empty — a narrative with no text, or
+  // a data slot with no query bound. These are what the issue-gate names.
+  const sectionIsEmpty = (s: SectionItem): boolean => {
+    const pendingSlot = ('dataBlocks' in s ? (s as { dataBlocks?: DataBlock[] }).dataBlocks ?? [] : [])
+      .some(b => !(blockBindings[b.id] ?? b.dataBinding)?.queryKey);
+    if (pendingSlot) return true;
+    if (s.kind === 'note') {
+      const field = auditorValueField(s.title);
+      // A narrative section is filled by a saved value OR the template's standing text
+      // (boilerplate that pre-fills it); only a truly blank one blocks issuing.
+      if (field) return !readReportData(report.data, field.key) && !(s.standingText && s.standingText.trim());
+      // Empty only when the report would render the add-a-description prompt: an
+      // unrecognised heading with no real content. A recognised heading shows its
+      // one-line summary as content, so it is not treated as empty.
+      const c = (s.content ?? '').trim();
+      return (!c || c === sectionBlurb(s.title)) && !sectionSummary(s.title);
+    }
+    return false;
+  };
+  // Required empty sections block issuing — named so the auditor fills or removes them.
+  const blockingSectionTitles = [...new Set(
+    sections.filter(s => sectionIsEmpty(s)).map(s => s.title),
+  )];
+
+  // Summary lifecycle — used ONLY by the default (non-custom) Auditify format, which
+  // keeps its original Generate / Regenerate rollup. A custom imported format instead
+  // renders the Executive Summary as an editable auditor draft (AC20), scoped below.
   const [summaryGenerated, setSummaryGenerated] = useState(false);
-  // Regenerate summary mock — overrides the summary section's content with an
-  // alternative blurb after a short simulated delay so the action feels real.
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
-  // Initial-generation loading flag: the summary prose is gated behind it so
-  // "Generate Summary" produces a visible empty → loading → content transition.
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
   const generateSummary = () => {
     if (isGeneratingSummary || summaryGenerated) return;
@@ -2280,9 +2908,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   useEffect(() => {
-    const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
-      ? TEMPLATE_QUERIES[appliedTemplateId]
-      : seededQueries;
+    const queries = report.generatedQueries?.length
+      ? seededQueries
+      : appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
+        ? TEMPLATE_QUERIES[appliedTemplateId]
+        : seededQueries;
     const fresh = buildInitialSections(queries);
     setSections(fresh);
     sectionsBaselineRef.current = structureSig(fresh);
@@ -2299,9 +2929,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     ));
   };
 
-  const removeSection = (id: string) => {
-    setSections(prev => prev.filter(s => s.id !== id));
-  };
 
   // Capture the report's current block stream as a reusable custom template.
   // Cover is implicit on every report, so it isn't stored as a section.
@@ -2310,9 +2937,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       .filter(s => s.kind !== 'cover')
       .map(s => ({
         name: s.title,
-        icon: s.kind === 'query' ? 'check-circle'
+        icon: s.kind === 'query' || s.kind === 'findings' ? 'check-circle'
           : s.kind === 'stats' || s.kind === 'workflow' ? 'bar-chart'
           : s.kind === 'observation' ? 'alert-triangle'
+          : s.kind === 'recommendations' ? 'lightbulb'
           : 'file-text',
       }));
     onSaveAsTemplate?.({
@@ -2698,6 +3326,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   onSelect={handleApplyTemplate}
                   onClose={() => setShowApplyTemplate(false)}
                   onSaveAsTemplate={onSaveAsTemplate && structureChanged ? handleSaveAsTemplate : undefined}
+                  onCreateTemplate={onCreateTemplate}
                 />
               </>
             )}
@@ -2802,6 +3431,21 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         <div className="flex items-center gap-2">{coverActions}</div>
       </div>
 
+      {/* Issue-gate (empty-state taxonomy — Pending): a required auditor judgement
+          with no value blocks issue. Name the sections so the author knows exactly
+          what to complete. */}
+      {pendingSections.length > 0 && (
+        <div className="px-6 lg:px-12 xl:px-[124px] pt-3 print:hidden">
+          <div className="flex items-start gap-3 rounded-[12px] border border-high-300 bg-high-50/60 px-4 py-3">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-high-700" />
+            <div className="min-w-0">
+              <p className="text-[0.8125rem] font-semibold text-high-800">This report can’t be issued yet — {pendingSections.length} section{pendingSections.length === 1 ? '' : 's'} need{pendingSections.length === 1 ? 's' : ''} your input.</p>
+              <p className="mt-0.5 text-[0.75rem] text-high-700 leading-relaxed">Add the required value in {pendingSections.join(', ')}. These are auditor judgements, never generated.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reader workspace — a persistent outline rail plus a constrained,
           centered document column. The rail tracks scroll position and jumps
           between sections; the document keeps a comfortable reading measure
@@ -2824,6 +3468,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               <ReportBrandBanner
                 title={reportDisplayName(report.name)}
                 gradient={reportGradient(report.theme, report.brandColor)}
+                eyebrow={orgBrand && (
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-white/70">{orgBrand}</span>
+                )}
                 actions={
                   <>
                     {canGenerateAtr && (
@@ -2884,9 +3531,17 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       {tmplSections.map((s, i) => {
                         const Icon = SECTION_ICONS[s.icon] || FileText;
                         const isExec = /executive summary/i.test(s.name);
-                        const content = isExec
+                        const isQuerySection = /quer(y|ies)|testing results|findings/i.test(s.name);
+                        // A section shows its saved description, or the real composed
+                        // content, or an add-description prompt — NEVER the instructional
+                        // blurb as body (PRD live-bug). A query section is where the query
+                        // cards go (rendered at the anchor), so its body stays empty.
+                        const savedDesc = (s as TemplateSection).description?.trim();
+                        const realDesc = savedDesc && savedDesc !== sectionBlurb(s.name);
+                        const composed = isExec
                           ? composeExecSummary(appliedTemplate.name, activeQueries)
                           : composeSectionContent(s.name, activeQueries);
+                        const isBlurb = !isExec && composed === sectionBlurb(s.name);
                         return (
                           <div key={`${s.name}-${i}`} className="space-y-4">
                             <motion.div
@@ -2899,7 +3554,27 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
                                 <Icon size={14} className="text-brand-600" /> {s.name}
                               </h3>
-                              <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                              {(() => {
+                                // A query section is where the query cards go (rendered at
+                                // the anchor below), so its own body stays empty.
+                                if (isQuerySection && !isExec) {
+                                  return activeQueries.length > 0 ? null : (
+                                    <div className="rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3 flex items-center gap-2 text-[0.8125rem] text-ink-500">
+                                      <Pencil size={14} className="text-ink-400 shrink-0" /> This section has no description yet — add one and it appears here.
+                                    </div>
+                                  );
+                                }
+                                if (realDesc) return <p className="text-[0.875rem] text-ink-700 leading-relaxed">{savedDesc}</p>;
+                                // Real composed content, or a recognised heading's summary
+                                // (the matched blurb), renders as prose; only an
+                                // unrecognised heading falls to the add-description prompt.
+                                if (isExec || !isBlurb || sectionSummary(s.name)) return <p className="text-[0.875rem] text-ink-700 leading-relaxed">{composed}</p>;
+                                return (
+                                  <div className="rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3 flex items-center gap-2 text-[0.8125rem] text-ink-500">
+                                    <Pencil size={14} className="text-ink-400 shrink-0" /> This section has no description yet — add one and it appears here.
+                                  </div>
+                                );
+                              })()}
                             </motion.div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
                           </div>
@@ -2960,17 +3635,25 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   };
 
                   if (section.kind === 'cover') {
+                    // A query is a data source, not a block — so the cover counts the
+                    // queries feeding the report (activeQueries), not query blocks
+                    // (there are none now). Findings are counted alongside.
                     const scopeLabel = isBulkAudit
                       ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
-                      : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
+                      : (() => {
+                          const nq = activeQueries.length;
+                          const nf = sections.filter(s => s.kind === 'findings').reduce((sum, s) => sum + (s.kind === 'findings' ? s.findings.length : 0), 0);
+                          const q = `${nq} ${nq === 1 ? 'query' : 'queries'}`;
+                          return nf > 0 ? `${q} · ${nf} finding${nf === 1 ? '' : 's'}` : q;
+                        })();
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
                                     className="rounded-t-[12px]"
                           gradient={reportGradient(report.theme, report.brandColor)}
-                          eyebrow={report.id && (
-                            <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
+                          eyebrow={orgBrand && (
+                            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-white/70">{orgBrand}</span>
                           )}
                           actions={
                             <>
@@ -3006,19 +3689,27 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           <EditableDescription onDark />
                         </ReportBrandBanner>
                       </Reorder.Item>,
+                      // AC15 — on a custom (imported) format the default stat strip is
+                      // hidden: their format is what shows, and any summary/KPIs are a
+                      // section in their template filled by a query, never our fixed band.
                     ];
                   }
 
                   if (section.kind === 'summary') {
-                    const hasQueries = sections.some(s => s.kind === 'query');
+                    // A query is a data source now, not a block — gate on the report
+                    // having any queries feeding it, not on query blocks existing.
+                    const hasQueries = activeQueries.length > 0 || sections.some(s => s.kind === 'findings' && s.findings.length > 0);
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                        <div className="group/sec border-x border-canvas-border bg-white px-9 pt-6 pb-6">
                           <ReportNumberedHeading
                             n={sectionNumber(section.id)}
                             title={section.title}
                             subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
-                            right={summaryGenerated ? (hasQueries && (
+                            // The default Auditify format keeps its Generate / Regenerate
+                            // rollup control; the custom-format editable draft (AC20) needs no
+                            // header control (its Generate-a-draft lives inline).
+                            right={isCustomFormat ? undefined : (summaryGenerated ? (hasQueries && (
                               <button
                                 onClick={() => {
                                   if (isRegeneratingSummary) return;
@@ -3034,11 +3725,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 title="Regenerate this summary with the latest queries"
                                 className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                {isRegeneratingSummary ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                  <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />
-                                )}
+                                {isRegeneratingSummary ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
                                 {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )) : (
@@ -3051,12 +3738,28 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 {isGeneratingSummary ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                                 {isGeneratingSummary ? 'Generating…' : 'Generate Summary'}
                               </button>
-                            )}
+                            ))}
                           />
-                          <div className={(summaryGenerated || isGeneratingSummary) ? 'pb-6 border-b border-canvas-border mb-6' : ''}>
-                            <ReportKpiTiles stats={activeStats} animate />
-                          </div>
-                          {summaryGenerated ? (
+                          {/* AC15 — our default stat strip is chrome, hidden on a custom
+                              format; there any summary/KPIs are the company's own section. */}
+                          {!isCustomFormat && (
+                            <div className={(summaryGenerated || isGeneratingSummary) ? 'pb-6 border-b border-canvas-border mb-6' : ''}>
+                              <ReportKpiTiles stats={activeStats} animate />
+                            </div>
+                          )}
+                          {isCustomFormat ? (
+                            // AC20 / N9 — on a custom format the Executive Summary is an
+                            // editable auditor draft in the company's voice, never our rollup
+                            // shown as final. The composed rollup only seeds "Generate a draft".
+                            <AuditorValueSection
+                              label="Executive Summary"
+                              value={readReportData(report.data, 'execSummary')}
+                              draftText={section.content}
+                              promptText="The executive summary is written by you. Type it, or generate a draft from the report data and edit it."
+                              readOnly={report.isReadOnly || !onUpdateData}
+                              onSave={v => onUpdateData?.(report.id, writeReportData(report.data, 'execSummary', v))}
+                            />
+                          ) : summaryGenerated ? (
                             <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? section.content}</p>
                           ) : isGeneratingSummary ? (
                             <div className="max-w-[80ch] space-y-2.5" aria-live="polite">
@@ -3064,6 +3767,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <div className="h-3.5 w-[92%] rounded bg-canvas-border/70 animate-pulse" />
                               <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
                             </div>
+                          ) : null}
+                          {section.dataBlocks?.length ? (
+                            <SectionDataBlocks blocks={section.dataBlocks} queries={activeQueries} bindings={blockBindings} onBind={bindBlock} readOnly={!!report.isReadOnly} />
                           ) : null}
                         </div>
                       </Reorder.Item>
@@ -3125,18 +3831,97 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           casesPhase={casesPhases[section.workflow.id] ?? 'idle'}
                           onCasesPhaseChange={(p) => setCasesPhase(section.workflow.id, p)}
                           onUpdateRiskOwner={(owner) => updateWorkflowRiskOwner(section.workflow.id, owner)}
-                          onDelete={() => removeSection(section.id)}
+                          onDelete={() => setSectionPendingDelete(section)}
                         />
                       </Reorder.Item>
                     );
                   }
 
-                  if (section.kind === 'note') {
+                  if (section.kind === 'findings') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
-                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
-                          <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{section.content}</p>
+                        <div className="group/sec border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <EditableSectionHeading n={sectionNumber(section.id)} title={section.title} editable={!isReadOnly} onRename={t => renameSection(section.id, t)} onDelete={() => setSectionPendingDelete(section)} />
+                          <div className="mt-4">
+                            <ReportFindingsSection findings={section.findings} error={section.error} />
+                          </div>
+                          {section.dataBlocks?.length ? (
+                            <SectionDataBlocks blocks={section.dataBlocks} queries={activeQueries} bindings={blockBindings} onBind={bindBlock} readOnly={!!report.isReadOnly} />
+                          ) : null}
+                        </div>
+                      </Reorder.Item>
+                    );
+                  }
+
+                  if (section.kind === 'recommendations') {
+                    return (
+                      <Reorder.Item key={section.id} {...sectionProps}>
+                        <div className="group/sec border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <EditableSectionHeading n={sectionNumber(section.id)} title={section.title} editable={!isReadOnly} onRename={t => renameSection(section.id, t)} onDelete={() => setSectionPendingDelete(section)} />
+                          <div className="mt-4">
+                            <RecommendationsSection recommendations={section.recommendations} />
+                          </div>
+                          {section.dataBlocks?.length ? (
+                            <SectionDataBlocks blocks={section.dataBlocks} queries={activeQueries} bindings={blockBindings} onBind={bindBlock} readOnly={!!report.isReadOnly} />
+                          ) : null}
+                        </div>
+                      </Reorder.Item>
+                    );
+                  }
+
+                  if (section.kind === 'note') {
+                    // A narrative section the auditor must state (objective / opinion /
+                    // limitations) shows an auditor-value prompt backed by reports.data
+                    // instead of composed prose — the report never invents an opinion.
+                    const field = auditorValueField(section.title);
+                    return (
+                      <Reorder.Item key={section.id} {...sectionProps}>
+                        <div className="group/sec border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <EditableSectionHeading n={sectionNumber(section.id)} title={section.title} editable={!isReadOnly} onRename={t => renameSection(section.id, t)} onDelete={() => setSectionPendingDelete(section)} />
+                          {field ? (
+                            <AuditorValueSection
+                              label={field.label}
+                              value={readReportData(report.data, field.key)}
+                              standingText={section.standingText}
+                              draftText={section.content}
+                              draftLabel="Draft with IRA"
+                              readOnly={report.isReadOnly || !onUpdateData}
+                              onSave={v => onUpdateData?.(report.id, writeReportData(report.data, field.key, v))}
+                              ratingWords={field.key === 'conclusion' ? reportRatingWords : undefined}
+                            />
+                          ) : (() => {
+                            // A query-driven section IS where the queries go — never prose
+                            // about them. Its query cards render as their own blocks below;
+                            // here we only show a placeholder when the report has no queries
+                            // yet ("just show the queries as a placeholder").
+                            const isQuerySection = /quer(y|ies)|testing results|findings/i.test(section.title);
+                            if (isQuerySection) {
+                              return activeQueries.length > 0 ? null : (
+                                <div className="max-w-[80ch] rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3 flex items-center gap-2 text-[0.8125rem] text-ink-500">
+                                  <Pencil size={14} className="text-ink-400 shrink-0" />
+                                  This section has no description yet — add one and it appears here.
+                                </div>
+                              );
+                            }
+                            // When the body is the auto blurb: a recognised heading shows
+                            // its one-line summary of what it holds; an unrecognised one
+                            // shows an add-description prompt — never the generic
+                            // instructional placeholder as report content (PRD live-bug).
+                            if (section.content === sectionBlurb(section.title)) {
+                              return sectionSummary(section.title)
+                                ? <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{section.content}</p>
+                                : (
+                                  <div className="max-w-[80ch] rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3 flex items-center gap-2 text-[0.8125rem] text-ink-500">
+                                    <Pencil size={14} className="text-ink-400 shrink-0" />
+                                    This section has no description yet — add one and it appears here.
+                                  </div>
+                                );
+                            }
+                            return <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{section.content}</p>;
+                          })()}
+                          {section.dataBlocks?.length ? (
+                            <SectionDataBlocks blocks={section.dataBlocks} queries={activeQueries} bindings={blockBindings} onBind={bindBlock} readOnly={!!report.isReadOnly} />
+                          ) : null}
                         </div>
                       </Reorder.Item>
                     );
@@ -3203,6 +3988,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             reportName={report.name}
             reportTag={report.tag}
             reportId={report.id?.toUpperCase()}
+            orgBrand={orgBrand}
             templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
@@ -3210,6 +3996,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             brandColor={report.brandColor}
             signatories={report.signoffEnabled ? report.signatories : undefined}
             signoffs={report.signoffs}
+            blockingSections={blockingSectionTitles}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
@@ -3259,13 +4046,41 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 };
               }
               if (s.kind === 'note') {
-                return { id: s.id, kind: 'note', title: s.title, content: s.content };
+                // A narrative section the auditor states (Objective, Scope, Opinion,
+                // Conclusion, Limitations) exports its stored value, NEVER the composed
+                // starter prose — the document must not ship a generated opinion (AC7).
+                // A section with no real description exports blank, never the generic
+                // placeholder blurb (AC11) — the issue-gate blocks a required blank.
+                const field = auditorValueField(s.title);
+                const content = field
+                  ? (readReportData(report.data, field.key) ?? s.standingText ?? '')
+                  : (s.content === sectionBlurb(s.title) && !sectionSummary(s.title) ? '' : s.content);
+                return { id: s.id, kind: 'note', title: s.title, content };
+              }
+              // The findings pool exports as a note listing each finding under its
+              // scope area, so the export mirrors the section-driven document.
+              if (s.kind === 'findings') {
+                const content = s.findings.length === 0
+                  ? 'No observations were noted.'
+                  : groupFindingsByScope(s.findings)
+                      .map(g => `${g.scopeArea}\n${g.findings.map(f => `• [${f.severity}] ${f.title}${f.recommendation ? ` — ${f.recommendation}` : ''}`).join('\n')}`)
+                      .join('\n\n');
+                return { id: s.id, kind: 'note', title: s.title, content };
+              }
+              if (s.kind === 'recommendations') {
+                const content = s.recommendations.length === 0
+                  ? 'No recommendations arise from this review.'
+                  : s.recommendations.map((r, i) => `${i + 1}. ${r.text}`).join('\n');
+                return { id: s.id, kind: 'note', title: s.title, content };
               }
               // Exec summary + stats sections carry the KPI tiles so exports can
               // render the same ATR-style tile grid as the on-screen document.
               const statTiles = activeStats.map(st => ({ label: st.label, value: st.value, accent: statTone(st.color).hex }));
               if (s.kind === 'summary') {
-                return { id: s.id, kind: 'summary', title: s.title, content: summaryOverride ?? s.content, stats: statTiles };
+                // The issued report ships the auditor's saved Executive Summary, not the
+                // composed rollup shown as final (AC20). Falls back to the draft content
+                // only when no summary has been written yet.
+                return { id: s.id, kind: 'summary', title: s.title, content: readReportData(report.data, 'execSummary') ?? summaryOverride ?? s.content, stats: statTiles };
               }
               if (s.kind === 'stats') {
                 return { id: s.id, kind: 'stats', title: s.title, stats: statTiles };

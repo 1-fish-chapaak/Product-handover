@@ -4,21 +4,20 @@ import FloatingLines from '../shared/FloatingLines';
 import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
-import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
+import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, CloudUpload,
+  WifiOff, FileCheck2, FolderArchive, CloudUpload, Upload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
-import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
 import { consumeAtrResume, clearAtrDraft } from './atrDraft';
-import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
+import type { AtrReportData } from './atrTypes';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import { exportAtrWord } from './atrTemplate';
@@ -26,6 +25,7 @@ import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
+import TemplatePreviewPage from './TemplatePreviewPage';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   templateKind, reportKind, startReportDownload,
@@ -36,8 +36,7 @@ import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { BulkAuditVariantView } from './BulkAuditVariants';
-import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
-import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type PickableQuery } from './templateQueryPool';
+import { defForKey, type GeneratedQueryDef } from './templateQueryPool';
 import ReportView from './ReportView';
 // CUSTOM_TEMPLATES now lives in the shared keystone; re-exported so existing
 // importers (App.tsx) keep working.
@@ -253,7 +252,6 @@ export default function ReportsView({
   }, []);
   useEffect(() => () => { if (openReportTimer.current) window.clearTimeout(openReportTimer.current); }, []);
   // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
-  const [atrWizardOpen, setAtrWizardOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   // Multi-select for the My Reports list — checkbox-on-tile + floating bulk bar,
   // mirroring the Knowledge Hub data-source selection pattern.
@@ -269,6 +267,35 @@ export default function ReportsView({
   // Drop any selection when the user leaves the current report list.
   useEffect(() => { setSelectedReportIds(new Set()); }, [reportType, activeTab, viewMode]);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // When the editor is opened via "Import a report", it jumps straight to the file
+  // picker on mount instead of showing the blank outline first.
+  const [editorAutoImport, setEditorAutoImport] = useState(false);
+  const openBlankTemplate = (autoImport: boolean) => { setEditorAutoImport(autoImport); setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); };
+  // The template editor overlay — rendered both on the Templates tab and over an
+  // open report (so "Create template" in the Select Template dropdown works there).
+  const renderTemplateEditor = () => (
+    <AnimatePresence>
+      {editingTemplate && (
+        <TemplateEditor
+          key={editingTemplate.id}
+          template={editingTemplate}
+          initialName={editingTemplate.id === 'ct-blank' ? '' : undefined}
+          autoImport={editorAutoImport}
+          onClose={() => { setEditingTemplate(null); setEditorAutoImport(false); }}
+          onCancel={() => { setEditingTemplate(null); setEditorAutoImport(false); }}
+          onSaveNew={(created) => addCustomTemplate(created)}
+          onSaveEdit={(updated) => updateCustomTemplate(updated)}
+          existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
+          existingStructures={customTemplates
+            .filter(t => t.id !== editingTemplate!.id)
+            .map(t => ({ name: t.name, sectionNames: (t.sections ?? []).map(s => s.name) }))}
+        />
+      )}
+    </AnimatePresence>
+  );
+  // Standard templates are read-only — clicking one previews the report it
+  // produces rather than starting a generate flow.
+  const [previewTemplate, setPreviewTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
   // app, App.tsx owns the canonical list, so this branch stays empty to avoid
@@ -737,10 +764,10 @@ export default function ReportsView({
 
   const updateReportDescription = (reportId: string, description: string) => {
     setGeneratedReports(prev => prev.map(r =>
-      r.id === reportId ? { ...r, description } : r
+      r.id === reportId ? { ...r, description } as GeneratedReport : r
     ));
     setViewingReport(prev =>
-      prev && prev.id === reportId ? { ...prev, description } : prev
+      prev && prev.id === reportId ? { ...prev, description } as GeneratedReport : prev
     );
   };
   // Persist a report's manual sign-off state (sign / sign-off actions).
@@ -748,103 +775,17 @@ export default function ReportsView({
     setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, signoffs } : r)));
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, signoffs } : prev));
   };
-
-  // Generate-from-template wizard — non-ATR templates pick queries here.
-  const [wizardTemplate, setWizardTemplate] = useState<EditableTemplate | null>(null);
-  // The wizard's entire pickable pool, derived from the user's live reports
-  // (newest first). Reports carry their own query content via generatedQueries
-  // / workflowResults; seeded demo reports without baked content are backfilled
-  // from DEMO_REPORT_QUERY_KEYS. ATR reports have no pickable queries.
-  const wizardSources = useMemo<PickableQuery[]>(() => {
-    return generatedReports.flatMap<PickableQuery>(r => {
-      if (r.atrData) return [];
-      const rows: PickableQuery[] = [];
-      const queryDef = (q: GeneratedQueryDef) => rows.push({
-        uid: `${r.id}:q:${q.id}`,
-        // Dedupe key = the query's own identity (not report-scoped), so the SAME
-        // underlying query appearing in two reports is recognised as one unit.
-        // That's what powers the picker's "Selected in <report> — click to swap"
-        // affordance: pick the query once, then move the selection between the
-        // reports it lives in. Genuinely different queries have different ids, so
-        // they stay independently selectable.
-        key: q.id,
-        label: q.title,
-        source: 'report',
-        sourceLabel: r.name,
-        risk: q.risk,
-        severity: (q.severity as 'High' | 'Medium' | 'Low'),
-        kind: 'query',
-        def: q,
-      });
-      if (r.generatedQueries?.length) {
-        r.generatedQueries.forEach(queryDef);
-      } else {
-        // Seeded demo report — backfill from its curated rich-content keys.
-        (DEMO_REPORT_QUERY_KEYS[r.id] ?? []).forEach(key => {
-          const def = defForKey(key);
-          if (def) queryDef(def);
-        });
-      }
-      // Failed/skipped runs produce no result block, so they aren't offerable.
-      (r.workflowResults ?? []).filter(w => w.runStatus !== 'failed').forEach(w => {
-        const n = w.outputTable?.rows.length ?? 0;
-        rows.push({
-          uid: `${r.id}:wf:${w.workflowId}`,
-          key: `wf:${w.workflowId}`,
-          label: w.name,
-          source: 'report',
-          sourceLabel: r.name,
-          risk: w.businessProcess ?? 'Workflow',
-          severity: w.severity,
-          kind: 'workflow',
-          workflow: w,
-          wfMeta: `${w.workflowId} · ${w.businessProcess ?? '—'} · ${n} flagged ${n === 1 ? 'record' : 'records'}`,
-        });
-      });
-      return rows;
-    });
-  }, [generatedReports]);
-  const createReportFromWizard = (rt: EditableTemplate, payload: WizardCreatePayload) => {
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const blockCount = payload.queries.length + payload.workflows.length;
-    const newReport: GeneratedReport = {
-      id: `gr-gen-${Date.now()}`,
-      templateId: rt.id,
-      kind: templateKind(rt),
-      name: uniqueReportName(payload.reportName?.trim() || `${payload.reportPeriod} ${rt.name}`),
-      tag: 'Internal Audit',
-      generatedBy: 'You',
-      generatedAt: today,
-      status: 'draft',
-      pages: blockCount + 2,
-      queries: payload.queries.length,
-      generatedQueries: payload.queries,
-      workflowResults: payload.workflows.length ? payload.workflows : undefined,
-      execSummary: payload.execSummary,
-      reportPeriod: payload.reportPeriod,
-      templateSections: rt.sections,
-      // Carry the template's Customize branding onto the report chrome.
-      brand: rt.brand,
-      theme: rt.theme,
-      brandColor: (rt as EditableTemplate).brandColor,
-      headerText: rt.headerText,
-      footerText: rt.footerText,
-      pageNumbers: (rt as EditableTemplate).pageNumbers,
-      signoffEnabled: (rt as EditableTemplate).signoffEnabled,
-      signatories: (rt as EditableTemplate).signatories,
-    };
-    setGeneratedReports(prev => [newReport, ...prev]);
-    setWizardTemplate(null);
-    setViewingReport(newReport);
-    const parts = [
-      payload.queries.length ? `${payload.queries.length} ${payload.queries.length === 1 ? 'query' : 'queries'}` : '',
-      payload.workflows.length ? `${payload.workflows.length} ${payload.workflows.length === 1 ? 'workflow' : 'workflows'}` : '',
-    ].filter(Boolean);
-    addToast({
-      type: 'success',
-      message: `Report generated from ${parts.join(' and ')}.`,
-    });
+  // Persist an auditor-supplied value for a text section that needs one
+  // (objective / opinion / limitations) onto the report's data store.
+  const updateReportData = (reportId: string, data: import('./reportShared').ReportData) => {
+    setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, data } as GeneratedReport : r)));
+    setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, data } as GeneratedReport : prev));
   };
+  const updateReportBlockBindings = (reportId: string, blockBindings: Record<string, import('./reportShared').DataBinding>) => {
+    setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, blockBindings } : r)));
+    setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, blockBindings } : prev));
+  };
+
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
     // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
@@ -931,6 +872,26 @@ export default function ReportsView({
   // Muted placeholder for the Type column when a row has no special type.
 
 
+  // A standard template previews as a full page, not a modal: the reader gives
+  // the document a ~900px column, and a modal capped it at 606px — the preview
+  // would have shown the document at a width no report ever uses.
+  if (previewTemplate) {
+    // Custom templates can edit their cover description inline (persisted); the
+    // shipped standard templates keep their canonical description read-only.
+    const isCustomPreview = !REPORT_TEMPLATES.some(t => t.id === previewTemplate.id);
+    return (
+      <TemplatePreviewPage
+        template={previewTemplate}
+        onClose={() => setPreviewTemplate(null)}
+        onDescriptionChange={isCustomPreview ? (desc) => {
+          const next = { ...previewTemplate, desc };
+          setPreviewTemplate(next);
+          updateCustomTemplate(next as EditableTemplate);
+        } : undefined}
+      />
+    );
+  }
+
   if (viewingReport) {
     // Brief branded skeleton while the report "opens", before the real reader
     // mounts. Gives the click immediate feedback instead of a hard cut.
@@ -964,18 +925,24 @@ export default function ReportsView({
       );
     }
     return (
-      <ReportView
-        report={viewingReport}
-        onBack={() => setViewingReport(null)}
-        onShare={onShare ? () => onShare(viewingReport.id) : undefined}
-        onManageExceptions={onManageExceptions}
-        onOpenQuery={onOpenQuery}
-        customTemplates={customTemplates}
-        onUpdateDescription={updateReportDescription}
-        onUpdateSignoffs={updateReportSignoffs}
-        onSaveAsTemplate={addCustomTemplateUnique}
-        onSaveAtrVersion={saveAtrVersion}
-      />
+      <>
+        <ReportView
+          report={viewingReport}
+          onBack={() => setViewingReport(null)}
+          onShare={onShare ? () => onShare(viewingReport.id) : undefined}
+          onManageExceptions={onManageExceptions}
+          onOpenQuery={onOpenQuery}
+          customTemplates={customTemplates}
+          onUpdateDescription={updateReportDescription}
+          onUpdateSignoffs={updateReportSignoffs}
+          onUpdateData={updateReportData}
+          onUpdateBlockBindings={updateReportBlockBindings}
+          onSaveAsTemplate={addCustomTemplateUnique}
+          onCreateTemplate={() => openBlankTemplate(false)}
+          onSaveAtrVersion={saveAtrVersion}
+        />
+        {renderTemplateEditor()}
+      </>
     );
   }
 
@@ -1420,33 +1387,21 @@ export default function ReportsView({
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
             setEditingTemplate(rt);
           };
-          // SOX reports are produced from a SOX/ICFR engagement (control testing
-          // → working paper → report), never generated standalone from a
-          // template. Picking the SOX template routes the user to that area.
-          const openSoxFromEngagement = () => {
-            addToast({ type: 'info', message: 'Open a SOX / ICFR engagement to generate its report.' });
-            onOpenSox?.();
-          };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
-            const sectionNames = rt.sections?.map(s => s.name) ?? [];
             return (
               <motion.div
                 key={rt.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-                className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
+                className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group flex flex-col min-h-[164px] cursor-pointer hover:border-brand-200"
                 onClick={() => {
-                  // Whole card = the primary action. Each report type generates
-                  // its own way: ATR via upload/observations, SOX from a SOX/ICFR
-                  // engagement, IA/Bulk by assembling from existing report queries.
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
+                  // Every template previews the report it produces. Edit /
+                  // Rename / Delete on a custom card stay on their own buttons.
+                  setPreviewTemplate(rt);
                 }}
               >
                 <div className="flex items-start justify-between gap-3 mb-3.5">
@@ -1492,21 +1447,7 @@ export default function ReportsView({
                     {(rt as EditableTemplate).tags!.length > 3 && <span className="text-[0.625rem] text-ink-400">+{(rt as EditableTemplate).tags!.length - 3}</span>}
                   </div>
                 )}
-                <div className="mt-auto pt-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {sectionNames.length > 0 ? (
-                      <>
-                        <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
-                          {sectionNames.length} {sectionNames.length === 1 ? 'section' : 'sections'}
-                        </span>
-                        <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-400 whitespace-nowrap shrink-0">
-                        No sections
-                      </span>
-                    )}
-                  </div>
+                <div className="mt-auto pt-4 flex items-center justify-end gap-3">
                   <div className="flex items-center gap-1 shrink-0">
                     {isCustom && (
                       // Single Edit action — renames inline in the editor (or double-
@@ -1544,19 +1485,13 @@ export default function ReportsView({
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
-            const sectionCount = rt.sections?.length ?? 0;
             return (
               <motion.div
                 key={rt.id}
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
-                className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
-                onClick={() => {
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
-                }}
+                className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 transition-colors cursor-pointer hover:bg-canvas"
+                onClick={() => setPreviewTemplate(rt)}
               >
                 <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-[8px] ${tintBg}`}>
                   <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
@@ -1587,9 +1522,6 @@ export default function ReportsView({
                 {/* Meta + actions — always visible (no hover fade). */}
                 <div className="shrink-0 flex items-center gap-3">
                   <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
-                  <span className="hidden sm:inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap">
-                    {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
-                  </span>
                   <div className="flex items-center gap-0.5 pl-1">
                     {isCustom && (
                       // Single Edit action — renames inline in the editor (or double-
@@ -1622,6 +1554,17 @@ export default function ReportsView({
           };
 
           // Galleries switch between a 3-up card grid and a flat row list.
+          /**
+           * The "Custom format" entry — learn a format from the customer's own
+           * reports. Deliberately NOT a member of REPORT_TEMPLATES: that array
+           * feeds templateKind(), mergeTemplateOptions(), the Apply Template
+           * dropdown and the duplicate-name check, and a sentinel row would leak
+           * into every one of them. It is a sibling card instead.
+           *
+           * Styled apart from the template cards on purpose (dashed hairline, no
+           * filled icon tile, no category eyebrow): it does not describe a report
+           * that exists, it starts a read of reports the customer brings.
+           */
           const renderGallery = (rows: typeof REPORT_TEMPLATES[number][], isCustom: boolean) =>
             viewMode === 'grid' ? (
               <div className="grid grid-cols-3 gap-4">
@@ -1637,17 +1580,24 @@ export default function ReportsView({
           const filteredCustom = q
             ? customTemplates.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q) || ((t as EditableTemplate).tags ?? []).some(tag => tag.toLowerCase().includes(q)))
             : customTemplates;
+          // Standard templates render in their declared order (Internal Audit,
+          // SOX, ATR).
           const filteredStandard = q
             ? REPORT_TEMPLATES.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q))
             : REPORT_TEMPLATES;
 
-          // Single creation entry — "New template" opens the editor directly. The
-          // editor already hosts "Import from a report" and one-tap recommended
-          // Internal Audit sections, so no separate start-chooser step is needed.
+          // Two ways to start a template: import an existing report (the fast path to
+          // a custom format — opens the editor straight to the file picker), or build
+          // a new one from scratch. Both land in the same editor.
           const templateToolbarActions = (
-            <button type="button" className={BTN_CTA_PRIMARY} onClick={() => setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number])}>
-              <Plus size={14} /> New template
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" className={BTN_CTA_OUTLINE} onClick={() => openBlankTemplate(true)}>
+                <Upload size={14} /> Import a report
+              </button>
+              <button type="button" className={BTN_CTA_PRIMARY} onClick={() => openBlankTemplate(false)}>
+                <Plus size={14} /> New template
+              </button>
+            </div>
           );
 
           const noSearchMatch = (
@@ -1747,74 +1697,8 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
-      {/* Generate-from-template wizard */}
-      <AnimatePresence>
-        {wizardTemplate && (
-          <GenerateReportWizard
-            template={wizardTemplate}
-            sources={wizardSources}
-            onClose={() => setWizardTemplate(null)}
-            onCreate={(payload) => createReportFromWizard(wizardTemplate, payload)}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Template Editor Modal */}
-      <AnimatePresence>
-        {editingTemplate && (
-          <TemplateEditor
-            // Key by identity so switching templates (or opening the blank "new"
-            // template) remounts the editor fresh instead of reusing the previous
-            // template's seeded state.
-            key={editingTemplate.id}
-            template={editingTemplate}
-            // New templates open with an empty name field so the author must name
-            // it — a shared "Untitled Template" default collided for everyone.
-            initialName={editingTemplate.id === 'ct-blank' ? '' : undefined}
-            // Save dismisses everything (terminal); Cancel just closes the
-            // editor so the still-mounted wizard reappears with its selections.
-            onClose={() => { setEditingTemplate(null); setWizardTemplate(null); }}
-            onCancel={() => { setEditingTemplate(null); }}
-            onSaveNew={(created) => addCustomTemplate(created)}
-            onSaveEdit={(updated) => updateCustomTemplate(updated)}
-            existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
-            existingStructures={customTemplates
-              .filter(t => t.id !== editingTemplate!.id)
-              .map(t => ({ name: t.name, sectionNames: (t.sections ?? []).map(s => s.name) }))}
-          />
-        )}
-      </AnimatePresence>
-
-
-
-      {/* Generate ATR from Observations — opened by the ATR template "Generate".
-          The review step's "Add to Report" saves the ATR into My Reports. */}
-      {atrWizardOpen && (
-        <UploadReportModal
-          onClose={() => setAtrWizardOpen(false)}
-          onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
-            const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
-            const newReport: GeneratedReport = {
-              id: `gr-atr-${Date.now()}`,
-              templateId: 'rt-007',
-              kind: 'atr',
-              name,
-              tag: 'Internal Audit',
-              generatedBy: 'You',
-              generatedAt: today,
-              status: 'draft',
-              pages: Math.max(1, observations.length),
-              queries: observations.length,
-              atrData: { meta, observations, insights },
-            };
-            setGeneratedReports(prev => [newReport, ...prev]);
-            setViewingReport(newReport);
-            setAtrWizardOpen(false);
-            addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
-          }}
-        />
-      )}
+      {renderTemplateEditor()}
 
       <ConfirmDialog
         open={!!templateToDelete}

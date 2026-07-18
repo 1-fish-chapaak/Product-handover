@@ -10,6 +10,8 @@
 // page 1, which usually differs.
 
 import { getPdfjs } from '../data-sources/datasetFiles';
+import type { RatingScale, RatingScaleLevel, WritingStyle, DataBlock, DataBlockKind } from './reportShared';
+import { knownSectionFor } from './sectionSynonyms';
 
 /** Running header / footer read out of an uploaded PDF. The lines are the
  *  de-duplicated running text; `fields` are best-effort metadata candidates. */
@@ -63,6 +65,11 @@ const ENTITY_RE = /\b(ltd|limited|llp|inc\.?|pvt|private|corp(oration)?|gmbh|plc
 const HEADING_NUM_RE = /^(?:section|part|chapter|step|phase)?\s*\d+(?:\.\d+)*[.):]?\s+\p{L}[\p{L} ]/iu;
 // A lettered appendix / annexure heading: "Appendix A", "Annexure II — Evidence".
 const HEADING_ALPHA_RE = /^(?:appendix|annex(?:ure)?|schedule|exhibit)\s+[A-Z0-9]{1,3}\b/i;
+// A "Contents" / "Table of Contents" heading — navigation, never a section (AC27).
+const CONTENTS_RE = /^(?:table of )?contents$/i;
+// A table-of-contents ENTRY row: a section name that ends in a page number, or
+// carries dotted / mid-dot leaders ("Findings …… 7"). Used to skip the TOC block.
+const TOC_ENTRY_RE = /\.{3,}|…|·{2,}|\s+\d{1,4}$/;
 // ALL-CAPS heading: at least two capital letters, no lowercase, reasonably short.
 // "EXECUTIVE SUMMARY", "BACKGROUND & SCOPE". A body line is rarely fully upper-case.
 const isAllCapsHeading = (t: string) => /[A-Z]{2}/.test(t) && !/\p{Ll}/u.test(t) && t.length <= 64;
@@ -72,6 +79,19 @@ interface Line { y: number; text: string; size: number }
 /** Normalize a line for the repetition test: lowercase, collapse whitespace, and
  *  replace digit runs with "#" so "Page 3 of 12" and "Page 4 of 12" match. */
 const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/\d+/g, '#').trim();
+
+/** A comparable section key: drop a leading enumerator ("1.", "7.2", "Appendix A"),
+ *  and any trailing dotted-leader + page number (a table-of-contents entry), then
+ *  lowercase. Lets a TOC entry ("Executive Summary …… 2") match its body heading
+ *  ("7 Executive Summary") so the TOC can drive the real section list (AC27). */
+const sectionKey = (s: string) =>
+  s
+    .replace(/^\s*(?:(?:section|part|chapter|appendix|annex(?:ure)?|schedule|exhibit)\s+)?[0-9ivxlcm]+(?:[.)][0-9]+)*[.)]?\s+/i, '')
+    .replace(/\s*(?:\.{2,}|·{2,}|…).*$/, '')
+    .replace(/\s+\d{1,4}$/, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
 /** Remove an embedded page-number token from a line, returning the cleaned text
  *  and the pattern found (if any). */
@@ -296,6 +316,10 @@ export interface DetectedSection {
   body: string[];
   /** For KPI/table placeholders — the label the block carried in the document. */
   metric?: string;
+  /** The data blocks (Table / Graph / KPI) detected INSIDE this text section, in
+   *  reading order (PRD: a section = heading + description + data blocks). Empty /
+   *  absent = a pure prose section. */
+  dataBlocks?: DataBlock[];
 }
 
 /** A report's full importable structure: its letterhead plus the section
@@ -307,6 +331,86 @@ export interface ReportStructure {
   /** Headings that had no body text beneath them — not auto-added (§4.5), but
    *  surfaced so the user can add them back if they're real sections. */
   skipped: string[];
+  /** The customer's assurance / rating scale, read from their appendix (Gap 3). */
+  scale?: RatingScale;
+  /** The writing style measured from the body prose, kept as generation
+   *  constraints so generated prose matches how they write (Gap 3). */
+  style?: WritingStyle;
+}
+
+// ─── Gap 3: reading meaning, not just structure ──────────────────────────────
+
+// The assurance / rating words real reports grade against. A scale line reads
+// "<level> [assurance/rating] <separator> <definition>" — a level term, an
+// optional qualifier, then a dash/colon and the definition. Two or more of these
+// (usually in an appendix) is the customer's scale.
+const RATING_HEADING_RE = /\b((assurance|rating|grading|opinion|risk|priority)\s+(scale|levels?|definitions?|categories|framework|key)|scale of assurance|basis of (our )?(opinion|assurance)|rating (definitions|key))\b/i;
+const RATING_LEVEL_RE = /^\s*(substantial|reasonable|moderate|limited|minimal|no|high|medium|low|satisfactory|adequate|partially satisfactory|needs improvement|unsatisfactory|significant|critical|major|minor|priority\s*\d|category\s*[a-e]|grade\s*[a-e]|red|amber|green)\b\s*(assurance|rating|risk|priority|control)?\s*[:\-–—]\s*(.+)$/i;
+
+const titleCase = (s: string) => s.replace(/\b\w/g, c => c.toUpperCase());
+
+/** Read the customer's assurance / rating scale from the report body — the level
+ *  words and their definitions, usually in an appendix. Returns undefined unless
+ *  at least two levels are found (a heading anchor or two defined levels guards
+ *  against a stray sentence matching). Exported for testing. */
+export function detectRatingScale(lines: string[]): RatingScale | undefined {
+  const levels: RatingScaleLevel[] = [];
+  let heading: string | undefined;
+  for (const raw of lines) {
+    const line = (raw ?? '').trim();
+    if (!line) continue;
+    if (!heading && RATING_HEADING_RE.test(line)) heading = line;
+    const m = line.match(RATING_LEVEL_RE);
+    if (m) {
+      const label = titleCase([m[1], m[2]].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim());
+      const definition = m[3]?.trim();
+      if (label && !levels.some(l => l.label.toLowerCase() === label.toLowerCase())) {
+        levels.push({ label, ...(definition ? { definition } : {}) });
+      }
+    }
+  }
+  const defined = levels.filter(l => l.definition).length;
+  if (levels.length >= 2 && (heading || defined >= 2)) {
+    return { levels: levels.slice(0, 6), ...(heading ? { heading } : {}) };
+  }
+  return undefined;
+}
+
+/** Measure how the report is written, as generation constraints: voice, tense,
+ *  numbering scheme, how samples are stated, and whether people are named by role
+ *  or name. Heuristic counts over the body prose. Exported for testing. */
+export function measureWritingStyle(corpus: string, sectionNames: string[]): WritingStyle | undefined {
+  if (!corpus || corpus.length < 200) return undefined; // too little text to measure
+  const text = corpus.toLowerCase();
+  const count = (re: RegExp) => (corpus.match(re) ?? []).length;
+  const countL = (re: RegExp) => (text.match(re) ?? []).length;
+
+  const firstPlural = countL(/\b(we|our|us)\b/g);
+  const thirdPerson = countL(/\b(the auditor|the review|the team|it was found|management (has|have|is|are))\b/g);
+  const past = countL(/\b(was|were|had|found|identified|noted|observed|reviewed|tested|reported|assessed)\b/g);
+  const present = countL(/\b(is|are|has|have|finds|identifies|notes|observes|reviews|tests|assesses)\b/g);
+  const countOf = count(/\b\d+\s+of\s+\d+\b/gi);
+  const pct = count(/\b\d+(?:\.\d+)?\s?%/g);
+  const roles = countL(/\b(manager|head of|director|officer|controller|committee|the board|department|function|team lead)\b/g);
+  const names = count(/\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/g);
+
+  // Heading numbering depth, from the detected section names ("7.3.1 …").
+  const depths = sectionNames
+    .map(n => n.match(/^\s*(\d+(?:\.\d+)*)/)?.[1])
+    .filter((n): n is string => !!n)
+    .map(n => n.split('.').length);
+  const maxDepth = depths.length ? Math.max(...depths) : 0;
+
+  const style: WritingStyle = {
+    voice: firstPlural > 0 && firstPlural >= thirdPerson ? 'first-plural' : 'third-person',
+    tense: past >= present ? 'past' : 'present',
+    personNaming: roles >= names ? 'roles' : 'names',
+  };
+  if (maxDepth >= 3) style.numbering = '7.3.1';
+  else if (maxDepth === 2) style.numbering = '7.3';
+  else if (maxDepth === 1) style.numbering = '1.';
+  if (countOf > 0 || pct > 0) style.sampleFormat = countOf >= pct ? 'count-of-total' : 'percentage';
+  return style;
 }
 
 // A body line is a section heading when it's set noticeably larger than the
@@ -508,6 +612,14 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       if (t.length < 2 || t.length > 90) return null;
       if (/[.,:;]$/.test(t)) return null;    // headings don't end in sentence punctuation
       if (PAGE_NUM_RE.test(t)) return null;
+      // Never a section (AC28 — never a dump): a print/page marker ("PAGE 1",
+      // "PAGE 2 — Overview") is navigation, not a report section.
+      if (/^page\s+\d+\b/i.test(t)) return null;
+      // Never a section: a dash / bullet sub-item ("— Create a template", "• Key
+      // definitions") is a nested list entry under a real heading, not a top-level
+      // section. Covers every dash variant (hyphen, en/em/figure/bar dash, minus) and
+      // common bullets. An em-dash INSIDE a title ("Scope — Objectives") is unaffected.
+      if (/^\s*[\p{Pd}\u2022\u00b7\u2219\u25cf\u25cb\u25e6\u25aa\u2212*]\s/u.test(t)) return null;
       if (runningSet.has(normalize(t))) return null;
       // Reject data-like rows: long digit runs (IDs, amounts) or digit-heavy text
       // are table/figure data that leaked past cell-splitting, not section titles.
@@ -558,28 +670,60 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
     // lines are added to coverSet so the walk skips them (no phantom sections).
     const coverSet = new Set<string>();
     const coverLines: { text: string; size: number }[] = [];
+    // Whether the cover block ended at a real section heading (a known section name,
+    // a numbered/appendix heading, or an ALL-CAPS heading). When it does, the whole
+    // leading block before it is cover front-matter — title + subtitle + report
+    // period + "Prepared by" + date — and none of it is a section (AC26 / E16).
+    let coverEndedOnSection = false;
     if (pageBody.length > 0) {
       for (const r of toRows(pageBody[0])) {
-        if (r.cells.length !== 1) break;                 // a columned row → block ended
+        // A columned row AFTER the title ends the block (body/table begins). The title
+        // row itself often shares its baseline with a logo, a doc number, or a date, so
+        // it can read as multi-cell — don't let that abort the whole cover block and
+        // dump the title + subtitle into the sections (AC26 / E16).
+        if (coverLines.length > 0 && r.cells.length !== 1) break;
         const t = r.text;
         if (!t || PAGE_NUM_RE.test(t)) continue;
         if (t.length > 90 || /[.,:;]$/.test(t)) break;   // sentence-like → body prose begins
-        // First genuine section heading (numbered / appendix / ALL-CAPS that isn't
-        // the confidentiality line) ends the letterhead block.
-        if (HEADING_NUM_RE.test(t) || HEADING_ALPHA_RE.test(t) || (isAllCapsHeading(t) && !CONFIDENTIALITY_RE.test(t))) break;
+        // A "Contents" page ends the cover block so the section walk handles the table
+        // of contents (AC27) — otherwise the cover loop would swallow "Contents" and its
+        // entries, and the walk would never see them as the section list.
+        if (CONTENTS_RE.test(normalize(t))) { coverEndedOnSection = true; break; }
+        // A recognised section name after the title ("Executive Summary", "Scope")
+        // is the FIRST real section, so it ends the cover block whatever its case
+        // (AC26: the first section is the first heading after the cover front-matter).
+        if (coverLines.length > 0 && knownSectionFor(t)) { coverEndedOnSection = true; break; }
+        // A numbered / appendix heading ("1 Introduction", "Appendix A") is a real
+        // body section, never a title — it ends the letterhead block.
+        if (HEADING_NUM_RE.test(t) || HEADING_ALPHA_RE.test(t)) { coverEndedOnSection = true; break; }
+        // An ALL-CAPS heading ends the block too — EXCEPT the report TITLE, which is
+        // often ALL-CAPS and sits first ("AUDIT OF FINANCIAL CONTROLS"). A title is
+        // never a section (PRD: sections are read only from the body), so the first
+        // ALL-CAPS line is captured as the title unless it's a recognised section
+        // name (e.g. "EXECUTIVE SUMMARY"), which is a real section and ends the block.
+        if (isAllCapsHeading(t) && !CONFIDENTIALITY_RE.test(t) && (coverLines.length > 0 || knownSectionFor(t))) { coverEndedOnSection = true; break; }
         coverLines.push({ text: t, size: r.size });
         coverSet.add(normalize(t));
         if (coverLines.length >= 8) break;               // a letterhead block is short
       }
     }
-    // Only trust it as a letterhead when it actually reads like one — an oversized
-    // title line, an entity, a confidentiality tag, or a reporting-period line.
-    // Otherwise it's just short body lines: leave them to the section walk.
+    // Only trust it as a full letterhead when it reads like one — an oversized title
+    // line, an entity, a confidentiality tag, or a reporting-period line.
     const coverMedian = bodySizes.length ? median : 0;
     const looksLikeLetterhead = coverLines.some(l =>
       (coverMedian > 0 && l.size >= coverMedian * HEADING_SIZE_RATIO) ||
       ENTITY_RE.test(l.text) || CONFIDENTIALITY_RE.test(l.text));
-    if (!looksLikeLetterhead) { coverSet.clear(); coverLines.length = 0; }
+    // Keep the whole leading block as cover front-matter when it cleanly transitioned
+    // into a real section (title + subtitle + byline all belong to the cover, never a
+    // section — AC26 / E16). Only when the block ended ambiguously (prose, a columned
+    // row) AND it doesn't read like a letterhead do we fall back to keeping just the
+    // title, letting the rest go to the section walk.
+    if (!looksLikeLetterhead && !coverEndedOnSection) {
+      const title = coverLines[0];
+      coverSet.clear();
+      coverLines.length = 0;
+      if (title) { coverLines.push(title); coverSet.add(normalize(title.text)); }
+    }
 
     // One ordered stream of body elements across all pages, in reading order:
     // text rows interleaved with figure markers by vertical position. Rows inside a
@@ -604,13 +748,32 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
 
     const seen = new Set<string>();       // text-heading dedup
     const seenSkip = new Set<string>();
+    // The section keys listed in a table of contents. When non-empty it is the
+    // authoritative list of the report's real sections — the body scan is filtered to
+    // it, so a Contents page + nested sub-headings yields the real ~5–12, not a dump (AC27).
+    const tocSections = new Set<string>();
     const sections: DetectedSection[] = [];
     const skipped: string[] = [];
     const consumed = new Set<number>();   // caption rows absorbed by an adjacent image
     const emittedBands = new Set<string>(); // table bands already turned into a placeholder
-    let figCount = 0, tableCount = 0;
+    let figCount = 0, tableCount = 0, blockCount = 0;
     const push = (s: DetectedSection) => { if (sections.length < MAX_BLOCKS) sections.push(s); };
     const rowAt = (i: number): Row | null => (i >= 0 && i < els.length && els[i].kind === 'row' ? (els[i] as { row: Row }).row : null);
+    // A data block (Table / Graph / KPI) belongs INSIDE the section it sits under —
+    // it attaches to the current text section's dataBlocks, not as its own section
+    // (PRD: a section = heading + description + data blocks). A block seen before any
+    // heading (rare) falls back to its own placeholder section so nothing is lost.
+    const MAX_BLOCKS_PER_SECTION = 12;
+    let currentText: DetectedSection | null = null;
+    const addBlock = (kind: DataBlockKind, label?: string, chartType?: 'bar' | 'line') => {
+      if (currentText) {
+        const blocks = (currentText.dataBlocks ??= []);
+        if (blocks.length >= MAX_BLOCKS_PER_SECTION) return;
+        blocks.push({ id: `blk-${blockCount++}`, kind, ...(label ? { label } : {}), ...(chartType ? { chartType } : {}) });
+      } else {
+        push({ name: label || (kind === 'graph' ? 'Chart' : kind === 'kpi' ? 'KPI' : 'Table'), evidence: 'inferred', kind: kind === 'graph' ? 'chart' : kind, body: [] });
+      }
+    };
 
     for (let i = 0; i < els.length; i++) {
       const el = els[i];
@@ -623,7 +786,7 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         let name = '';
         if (below && FIGURE_CAP_RE.test(below.text)) { name = cleanCaption(below.text); consumed.add(i + 1); }
         else if (above && FIGURE_CAP_RE.test(above.text)) { name = cleanCaption(above.text); consumed.add(i - 1); }
-        push({ name: name || `Figure ${figCount}`, evidence: 'explicit', kind: 'chart', body: [] });
+        addBlock('graph', name || undefined);
         continue;
       }
 
@@ -634,7 +797,7 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         if (!emittedBands.has(el.band)) {
           emittedBands.add(el.band);
           tableCount++;
-          push({ name: `Table ${tableCount}`, evidence: 'inferred', kind: 'table', body: [] });
+          addBlock('table', `Table ${tableCount}`);
         }
         continue;
       }
@@ -647,13 +810,13 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       if (coverSet.has(normalize(t))) continue;
 
       // Figure/chart caption with no adjacent image (e.g. a vector chart).
-      if (FIGURE_CAP_RE.test(t)) { figCount++; push({ name: cleanCaption(t), evidence: 'explicit', kind: 'chart', body: [] }); continue; }
+      if (FIGURE_CAP_RE.test(t)) { figCount++; addBlock('graph', cleanCaption(t)); continue; }
 
       // Table caption → a table placeholder. Absorb the body below it — gap-split
       // rows and/or a column-aligned band — so the same table isn't emitted twice.
       if (TABLE_CAP_RE.test(t)) {
         tableCount++;
-        push({ name: cleanCaption(t), evidence: 'explicit', kind: 'table', body: [], metric: cleanCaption(t) });
+        addBlock('table', cleanCaption(t));
         let j = i + 1;
         while (j < els.length) {
           const e = els[j];
@@ -680,7 +843,7 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
           const nt = next.text;
           if (nt && nt.length <= 40 && !KPI_VALUE_RE.test(nt) && !FIGURE_CAP_RE.test(nt) && !TABLE_CAP_RE.test(nt)) { label = nt; i++; }
         }
-        push({ name: label || t, evidence: 'explicit', kind: 'kpi', body: [], metric: label || t });
+        addBlock('kpi', label || t);
         continue;
       }
 
@@ -690,7 +853,7 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         while (rowAt(j) && rowAt(j)!.cells.length >= TABLE_MIN_COLS) { run++; j++; }
         if (run >= TABLE_MIN_ROWS) {
           tableCount++;
-          push({ name: `Table ${tableCount}`, evidence: 'inferred', kind: 'table', body: [] });
+          addBlock('table', `Table ${tableCount}`);
           i = j - 1;
           continue;
         }
@@ -702,6 +865,28 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       if (sig) {
         const key = normalize(t);
         if (seen.has(key)) continue;
+        // AC27 / E17 — a table of contents is navigation, never a section. Skip the
+        // "Contents" heading and the TOC entry rows beneath it (name + page number /
+        // dotted leader) so the list of pages isn't emitted as sections.
+        if (CONTENTS_RE.test(key)) {
+          let j = i + 1;
+          while (j < els.length) {
+            const nr = rowAt(j);
+            if (!nr || !TOC_ENTRY_RE.test(nr.text)) break;
+            // Record the entry's section name — this list is the authoritative set
+            // of real sections the body scan is filtered against.
+            const k = sectionKey(nr.text);
+            if (k && k.length >= 3) tocSections.add(k);
+            j++;
+          }
+          i = j - 1;
+          continue;
+        }
+        // AC27 / E17 — skip deep sub-headings (three or more numbering levels, e.g.
+        // "7.2.1"); a report's real sections are its top-level headings, not every
+        // nested point, so a normal report yields about 5–12, not a 22-heading dump.
+        const numGroup = t.match(/^(?:section|part|chapter|step|phase)?\s*(\d+(?:\.\d+)+)/i)?.[1];
+        if (numGroup && numGroup.split('.').length >= 3) continue;
         const body: string[] = [];
         for (let j = i + 1; j < els.length && body.length < 2; j++) {
           const nr = rowAt(j);
@@ -715,13 +900,43 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         // a stray line. Weak size-only headings still need body to avoid noise.
         if (body.length > 0 || sig.strong) {
           seen.add(key);
-          push({ name: t, evidence: sig.evidence, kind: 'text', body });
+          const sec: DetectedSection = { name: t, evidence: sig.evidence, kind: 'text', body };
+          push(sec);
+          currentText = sec;
         } else if (!seenSkip.has(key)) {
           seenSkip.add(key);
           skipped.push(t);
         }
       }
     }
+    // AC27 — when a table of contents is present, it is the authoritative section
+    // list: keep only the body headings that the TOC names, dropping stray bold lines
+    // and nested sub-headings the TOC doesn't list. Guarded — if the TOC wording
+    // doesn't match the body (so almost nothing survives), fall back to the full scan
+    // rather than emit an empty template.
+    if (tocSections.size > 0) {
+      const kept = sections.filter(s => tocSections.has(sectionKey(s.name)));
+      if (kept.length >= Math.min(3, tocSections.size)) {
+        sections.splice(0, sections.length, ...kept);
+      }
+    } else {
+      // AC28 / §5 — no table of contents, so the real sections are the TOP-LEVEL
+      // numbered headings. The shallowest numbering depth present is the section
+      // level; anything deeper is a sub-point ("7.1 nested under 7"), never a section.
+      // Unnumbered headings (Executive Summary, Findings…) are unaffected. Keeps the
+      // output to the real sections instead of a dump the auditor has to trim.
+      const depthOf = (name: string): number => {
+        const m = name.match(/^\s*(?:section|part|chapter)?\s*(\d+(?:\.\d+)*)/i);
+        return m ? m[1].split('.').length : 0;
+      };
+      const numberedDepths = sections.map(s => depthOf(s.name)).filter(d => d > 0);
+      if (numberedDepths.length > 0) {
+        const topLevel = Math.min(...numberedDepths);
+        const kept = sections.filter(s => { const d = depthOf(s.name); return d === 0 || d <= topLevel; });
+        if (kept.length > 0) sections.splice(0, sections.length, ...kept);
+      }
+    }
+
     // A heading that appears empty once but has content elsewhere is a real section.
     const finalSkipped = skipped.filter(s => !seen.has(normalize(s)));
 
@@ -732,14 +947,15 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
     const confidentiality = [...header, ...footer, ...coverTexts]
       .map(l => l.match(CONFIDENTIALITY_RE)?.[0]).find(Boolean);
     const fields = deriveFields([...header, ...coverTexts], footer);
-    // Prefer the cover's most prominent line as the title when the running header
-    // didn't yield one (deriveFields ranks by length; the cover ranks by font size).
-    if (!fields.auditTitle) {
-      const coverTitle = [...coverLines]
-        .filter(l => !CONFIDENTIALITY_RE.test(l.text) && !ENTITY_RE.test(l.text) && !PAGE_NUM_RE.test(l.text) && l.text.length >= 4)
-        .sort((a, b) => b.size - a.size)[0]?.text;
-      if (coverTitle) fields.auditTitle = coverTitle;
-    }
+    // The report title is the cover's most prominent (largest) line — the template
+    // name. This RANKS BY FONT SIZE, which beats deriveFields' length ranking: a title
+    // ("Internal Audit Report") is shorter than its subtitle ("Revenue Recognition &
+    // Financial Controls Review"), so length would wrongly name the report after the
+    // subtitle. The largest cover line wins whenever the cover yielded one.
+    const coverTitle = [...coverLines]
+      .filter(l => !CONFIDENTIALITY_RE.test(l.text) && !ENTITY_RE.test(l.text) && !PAGE_NUM_RE.test(l.text) && l.text.length >= 4)
+      .sort((a, b) => b.size - a.size)[0]?.text;
+    if (coverTitle) fields.auditTitle = coverTitle;
     // The header field is the letterhead strip — the confidentiality line if present,
     // otherwise the running header lines (cover title/entity go to name/brand, not here).
     const headerFooter: ExtractedHeaderFooter | null = (header.length || footer.length || coverLines.length)
@@ -752,7 +968,17 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         }
       : null;
 
-    return { headerFooter, sections, skipped: finalSkipped };
+    // Gap 3 — read meaning, not just structure: the assurance scale (from the
+    // appendix) and the writing style (from the body prose), captured as template
+    // constraints. Both operate on the full body text gathered above.
+    const allBodyLines = pageBody.flat().map(l => l.text);
+    const scale = detectRatingScale(allBodyLines);
+    const style = measureWritingStyle(
+      allBodyLines.join(' '),
+      sections.filter(s => s.kind === 'text').map(s => s.name),
+    );
+
+    return { headerFooter, sections, skipped: finalSkipped, ...(scale ? { scale } : {}), ...(style ? { style } : {}) };
   } catch {
     return null;
   }

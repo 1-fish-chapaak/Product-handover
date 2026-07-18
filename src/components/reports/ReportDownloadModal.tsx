@@ -53,6 +53,8 @@ interface Props {
   reportName: string;
   reportTag?: string;
   reportId?: string;
+  /** The organisation shown on the letterhead (the template's "Brand name"). */
+  orgBrand?: string;
   templateName?: string;
   generatedBy: string;
   generatedAt: string;
@@ -69,6 +71,10 @@ interface Props {
    *  Download action delegates to this callback (the report owns the .xlsx
    *  composer — e.g. ATR / bulk-audit tabular exports). */
   onExcelExport?: () => void;
+  /** Required sections still empty (no description, or a Pending data slot). While
+   *  any are listed the report cannot be issued: Download is blocked and they are
+   *  named, so the issued file never ships an editing prompt (AC11 / N5 / E9). */
+  blockingSections?: string[];
   onClose: () => void;
 }
 
@@ -93,6 +99,7 @@ export default function ReportDownloadModal({
   reportName,
   reportTag,
   reportId,
+  orgBrand,
   templateName,
   generatedBy,
   generatedAt,
@@ -102,9 +109,11 @@ export default function ReportDownloadModal({
   signoffs,
   sections,
   onExcelExport,
+  blockingSections = [],
   onClose,
 }: Props) {
   const { addToast } = useToast();
+  const isBlocked = blockingSections.length > 0;
   const FORMATS = useMemo(() => (onExcelExport ? [...BASE_FORMATS, EXCEL_FORMAT] : BASE_FORMATS), [onExcelExport]);
   const [format, setFormat] = useState<Format>('pdf');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -138,12 +147,12 @@ export default function ReportDownloadModal({
   );
 
   const handleDownload = () => {
-    if (isDownloading) return;
+    if (isDownloading || isBlocked) return;
     setIsDownloading(true);
     // Brief preparing window so the in-place spinner registers visually
     // before the export fires and the modal closes.
     window.setTimeout(() => {
-      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, signoffs };
+      const ctx = { reportName, reportTag, reportId, orgBrand, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, signoffs };
       if (format === 'xlsx') {
         onExcelExport?.();
         addToast({ type: 'success', message: `${reportName}.xlsx downloaded.` });
@@ -251,6 +260,7 @@ export default function ReportDownloadModal({
                   <PdfPreview
                     reportName={reportName}
                     reportTag={reportTag}
+                    orgBrand={orgBrand}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
                     showPageNo={pageNumbers ?? true}
@@ -261,6 +271,7 @@ export default function ReportDownloadModal({
                   <PptPreview
                     reportName={reportName}
                     reportTag={reportTag}
+                    orgBrand={orgBrand}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
                     showPageNo={pageNumbers ?? true}
@@ -271,6 +282,7 @@ export default function ReportDownloadModal({
                   <DocxPreview
                     reportName={reportName}
                     reportTag={reportTag}
+                    orgBrand={orgBrand}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
                     showPageNo={pageNumbers ?? true}
@@ -282,17 +294,37 @@ export default function ReportDownloadModal({
             </AnimatePresence>
           </div>
 
+          {/* Issue gate (AC11 / N5 / E9) — the report cannot be downloaded while a
+              required section is empty; the empties are named so the auditor knows
+              exactly what to fill or remove, and the issued file never ships a prompt. */}
+          {isBlocked && (
+            <div className="shrink-0 px-7 py-3 border-t border-high-200 bg-high-50/60">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0 text-high-600" />
+                <div className="min-w-0">
+                  <p className="text-[0.8125rem] font-semibold text-high-800">
+                    {blockingSections.length} section{blockingSections.length === 1 ? '' : 's'} {blockingSections.length === 1 ? 'needs' : 'need'} content before this report can be issued
+                  </p>
+                  <p className="text-[0.75rem] text-high-700 mt-0.5 leading-relaxed">
+                    Fill or remove: {blockingSections.join(', ')}. An issued report never shows an “add a description” or Pending prompt.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Footer — primary Download action */}
           <div className="shrink-0 px-7 py-3 border-t border-canvas-border bg-canvas-elevated flex items-center justify-end">
             <Gated permission="rp_edit" mode="disable" title="You don't have permission to export reports">
             <button
               onClick={handleDownload}
-              disabled={isDownloading}
+              disabled={isDownloading || isBlocked}
               aria-busy={isDownloading || undefined}
-              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              title={isBlocked ? 'Fill or remove the empty sections first' : undefined}
+              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {isDownloading ? 'Preparing…' : 'Download'}
+              {isDownloading ? 'Preparing…' : isBlocked ? 'Fill sections to download' : 'Download'}
             </button>
             </Gated>
           </div>
@@ -309,10 +341,11 @@ export default function ReportDownloadModal({
 // printed-document feel.
 
 function PdfPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
+  reportName, reportTag, orgBrand, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
+  orgBrand?: string;
   generatedBy: string;
   generatedAt: string;
   showPageNo?: boolean;
@@ -328,6 +361,9 @@ function PdfPreview({
       {/* Cover page — chrome carries the tag + Irame mark, body shows title + meta */}
       <PdfPage pageNo={1} totalPages={totalPages} variant="cover" reportName={reportName} reportTag={reportTag}>
         <div className="h-full flex flex-col justify-center text-center">
+          {orgBrand?.trim() && (
+            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-500 mb-2">{orgBrand.trim()}</div>
+          )}
           <h1 className="text-[1.75rem] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
             {reportName}
           </h1>
@@ -350,7 +386,7 @@ function PdfPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages — one PdfPage per block */}
@@ -393,7 +429,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
   );
 }
 
-function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
+function PdfContents({ sections, showPageNo = true }: { sections: DownloadPreviewSection[]; showPageNo?: boolean }) {
   return (
     <div>
       <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
@@ -553,10 +589,11 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, showPag
 // number bottom right. Primary-colored title bar.
 
 function PptPreview({
-  reportName, generatedBy, generatedAt, sections, showPageNo = true,
+  reportName, orgBrand, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
+  orgBrand?: string;
   generatedBy: string;
   generatedAt: string;
   showPageNo?: boolean;
@@ -568,6 +605,9 @@ function PptPreview({
       {/* Title slide */}
       <PptSlide slideNo={1} total={total} reportName={reportName} showPageNo={showPageNo}>
         <div className="h-full flex flex-col justify-center">
+          {orgBrand?.trim() && (
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-500 mb-2">{orgBrand.trim()}</div>
+          )}
           <h1 className="text-[2.125rem] leading-[1.1] font-semibold text-ink-900 tracking-tight mb-3">
             {reportName}
           </h1>
@@ -582,7 +622,7 @@ function PptPreview({
 
       {/* Contents slide */}
       <PptSlide slideNo={2} total={total} reportName={reportName} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PptSlide>
 
       {/* Content slides — one section per slide, widgets included.
@@ -720,10 +760,11 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
 // No page breaks visible — flows like a Word doc.
 
 function DocxPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
+  reportName, reportTag, orgBrand, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
+  orgBrand?: string;
   generatedBy: string;
   generatedAt: string;
   showPageNo?: boolean;
@@ -738,6 +779,9 @@ function DocxPreview({
       {/* Cover-style title page */}
       <PdfPage pageNo={1} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
         <div className="pt-2">
+          {orgBrand?.trim() && (
+            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1.5">{orgBrand.trim()}</div>
+          )}
           <h1 className="text-[1.625rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">
             {reportName}
           </h1>
@@ -750,7 +794,7 @@ function DocxPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages */}

@@ -135,11 +135,20 @@ export const WORKFLOWS = [
 
 // ─── Report Templates ───
 export const REPORT_TEMPLATES = [
-  { id: "rt-internal-audit", name: "Internal Audit Report", desc: "End-to-end audit report with executive summary, audit queries, findings, and recommendations", category: "Audit", icon: "file-text", sections: [
+  { id: "rt-internal-audit", name: "Internal Audit Report", desc: "End-to-end audit report with executive summary, findings, and recommendations", category: "Audit", icon: "file-text", sections: [
     { name: 'Executive Summary', icon: 'file-text' },
-    { name: 'Audit Queries', icon: 'check-circle' },
     { name: 'Recommendations', icon: 'trending-up' },
     { name: 'Appendix', icon: 'file-text' },
+  ]},
+  // Sections mirror ATR_SECTION_LABEL / ATR_SECTION_ORDER in reports/atrSections.ts —
+  // the ATR document is rendered by AtrReportView, so the template must describe
+  // the sections that report actually carries, not an invented list.
+  { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with observation-wise summary, observation details, key insights, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
+    { name: 'Executive Summary', icon: 'file-text' },
+    { name: 'Observation Wise Summary', icon: 'check-circle' },
+    { name: 'Observation Details', icon: 'bar-chart' },
+    { name: 'Key Insights & Recommendations', icon: 'lightbulb' },
+    { name: 'Approvals & Sign-Off', icon: 'shield' },
   ]},
   { id: "rt-001", name: "SOX Compliance Report", desc: "Comprehensive SOX compliance status with control testing results", category: "Compliance", icon: "shield", sections: [
     { name: 'Executive Summary', icon: 'file-text' },
@@ -148,14 +157,6 @@ export const REPORT_TEMPLATES = [
     { name: 'Control Testing Results', icon: 'check-circle' },
     { name: 'Detailed Description', icon: 'alert-triangle' },
     { name: 'Appendix', icon: 'file-text' },
-  ]},
-  { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
-    { name: 'Report Information', icon: 'file-text' },
-    { name: 'Query-wise Summary', icon: 'check-circle' },
-    { name: 'Summary of Closure Status', icon: 'bar-chart' },
-    { name: 'Key Insights & Recommendations', icon: 'lightbulb' },
-    { name: 'Auditor Comments', icon: 'book-open' },
-    { name: 'Approvals & Sign-Off', icon: 'shield' },
   ]},
   // { id: "rt-002", name: "Risk Assessment Summary", desc: "Overview of all identified risks, their ratings, and mitigation status", category: "Risk", icon: "alert-triangle", sections: [
   //   { name: 'Executive Summary', icon: 'file-text' },
@@ -311,7 +312,7 @@ export const GENERATED_REPORTS = [
   { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 Financial Reporting Controls Review", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
   { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
   { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
-  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
+  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 8 },
   { id: "gr-005", templateId: "rt-001", name: "Quarter-End Reconciliation Variance Review — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 16, 2026", status: "final", pages: 16, queries: 5 },
   { id: "gr-006", templateId: "rt-001", name: "Segregation of Duties Assessment — Finance", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 12, 2026", status: "draft", pages: 11, queries: 4 },
   { id: "gr-007", templateId: "rt-001", name: "IT General Controls Effectiveness — FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 8, 2026", status: "final", pages: 19, queries: 7 },
