@@ -79,7 +79,7 @@ export default function Dialog({
                     <h2 className="text-base font-semibold text-ink-800 leading-tight">{title}</h2>
                   )}
                   {description && (
-                    <p className="mt-1 text-[13px] text-ink-500 leading-relaxed">{description}</p>
+                    <p className="mt-1 text-[0.8125rem] text-ink-500 leading-relaxed">{description}</p>
                   )}
                 </div>
                 {!hideCloseButton && (

@@ -14,6 +14,7 @@ import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
@@ -40,7 +41,7 @@ const STATUS_CLS: Record<EngStatus, string> = {
   Review: 'bg-mitigated-50 text-mitigated-700',
   Planned: 'bg-brand-50 text-brand-700',
   Draft: 'bg-draft-50 text-draft-700',
-  Closed: 'bg-gray-100 text-gray-600',
+  Closed: 'bg-canvas text-ink-600',
 };
 
 const STATUS_DOT: Record<EngStatus, string> = {
@@ -48,8 +49,8 @@ const STATUS_DOT: Record<EngStatus, string> = {
   'In Progress': 'bg-evidence-600',
   Review: 'bg-mitigated-600',
   Planned: 'bg-brand-500',
-  Draft: 'bg-gray-400',
-  Closed: 'bg-gray-400',
+  Draft: 'bg-ink-400',
+  Closed: 'bg-ink-400',
 };
 
 const TYPE_CLS: Record<EngType, string> = {
@@ -90,6 +91,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
   // onto the list view, pre-filtered to that type. When routed to create an
@@ -186,6 +188,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
     if (newOwner === eng.owner) return;
     patchEngagement(eng.id, { owner: newOwner });
     addToast({ message: `"${eng.name}" reassigned to ${newOwner}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Reassigned "${eng.name}" to ${newOwner}`, module: 'Engagements', entity: 'Engagement' });
   };
 
   /** Confirmed delete — removes from the session list with an undo toast. */
@@ -195,6 +198,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
     const idx = all.findIndex(e => e.id === eng.id);
     setAll(prev => prev.filter(e => e.id !== eng.id));
     setDeleteTarget(null);
+    logEvent({ action: 'Delete', description: `Deleted engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
     addToast({
       message: `"${eng.name}" deleted`,
       type: 'success',
@@ -226,9 +230,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         {/* Header */}
         <div className="flex items-end justify-between mb-5">
           <div>
-            <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-            <h1 className="text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
+            <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
+            <h1 className="text-[2rem] font-bold text-text leading-tight">Engagement Library</h1>
+            <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
               {mode === 'overview'
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
                 : mode === 'approval-flow'
@@ -239,7 +243,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onOpenAuditPlanning}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
               title="See engagements laid out on the FY timeline"
             >
               <Calendar size={13} />
@@ -249,7 +253,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             {can('eng_create') && (
               <button
                 onClick={() => setWizardOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Plus size={14} />New Engagement
               </button>
@@ -280,7 +284,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               placeholder="Search engagement, owner, framework, or code..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-full pl-10 pr-3.5 py-2 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
           <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
@@ -289,7 +293,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           {anyFilterActive && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1 text-[12px] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
             >
               <X size={12} /> Clear
             </button>
@@ -300,13 +304,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         {filtered.length === 0 ? (
           <div className="border border-border-light rounded-xl p-14 text-center bg-white">
             <ClipboardCheck size={32} className="text-text-muted mx-auto mb-3" />
-            <p className="text-[14px] font-semibold text-text mb-1">No engagements match your filters</p>
-            <p className="text-[12px] text-text-muted">Try clearing the type, status, process, or search filter.</p>
+            <p className="text-[0.875rem] font-semibold text-text mb-1">No engagements match your filters</p>
+            <p className="text-[0.75rem] text-text-muted">Try clearing the type, status, process, or search filter.</p>
           </div>
         ) : (
           <div>
             {/* Column headers — label row above the cards */}
-            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80">
+            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[0.65625rem] uppercase tracking-wider font-semibold text-text-muted/80">
               <div>Engagement</div>
               <div>Type</div>
               <div>Health</div>
@@ -325,13 +329,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.025 }}
                   onClick={() => onOpenEngagement(eng.id)}
-                  className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border border-border-light bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer group items-start"
+                  className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border border-border-light bg-white hover:border-primary/50 hover: transition-all cursor-pointer group items-start"
                 >
                   {/* Engagement column */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[14.5px] font-semibold text-text leading-snug">{eng.name}</h3>
-                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_CLS[eng.status]}`}>
+                      <h3 className="text-[0.90625rem] font-semibold text-text leading-snug">{eng.name}</h3>
+                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status]}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
                         {eng.status}
                       </span>
@@ -345,10 +349,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                         </span>
                       )}
                     </div>
-                    <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
+                    <p className="text-[0.75rem] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
                       {eng.description}
                     </p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
+                    <div className="flex items-center gap-3 mt-2 text-[0.6875rem] text-text-muted flex-wrap">
                       <span className="font-mono tracking-tight">{eng.code}</span>
                       <span className="text-border">·</span>
                       <span>{eng.owner}</span>
@@ -357,10 +361,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     </div>
                     {/* Inline tag badges */}
                     <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                         {eng.process}
                       </span>
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-medium bg-white text-text-muted border border-border-light">
                         {eng.framework}
                       </span>
                     </div>
@@ -368,11 +372,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
                   {/* Type column */}
                   <div className="flex flex-col items-start gap-1.5">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${TYPE_CLS[eng.type]}`}>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
                       {TYPE_LABEL[eng.type]}
                     </span>
                     {eng.type === 'Automation' && eng.subtype && (
-                      <span className="inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
+                      <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
                         {SUBTYPE_LABEL[eng.subtype]}
                       </span>
                     )}
@@ -381,15 +385,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   {/* Health column */}
                   <div className="flex flex-col gap-1.5 min-w-0">
                     {notStarted ? (
-                      <div className="text-[11px] text-text-muted italic">
+                      <div className="text-[0.6875rem] text-text-muted italic">
                         {eng.controls} controls · not started
                       </div>
                     ) : (
                       <>
                         <div className="flex items-baseline justify-between gap-2">
                           <div className="flex items-baseline gap-2 min-w-0">
-                            <span className={`text-[15px] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
-                            <span className="text-[11px] text-text-secondary tabular-nums truncate">
+                            <span className={`text-[0.9375rem] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
+                            <span className="text-[0.6875rem] text-text-secondary tabular-nums truncate">
                               <span className="font-semibold text-text">{effective}</span>
                               <span className="text-text-muted">/{eng.controls}</span>
                               <span className="text-text-muted ml-1">controls effective</span>
@@ -404,8 +408,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     {eng.openIssues > 0 && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <AlertTriangle size={11} className="text-risk-700" />
-                        <span className="text-[11px] font-semibold text-risk-700">{eng.openIssues}</span>
-                        <span className="text-[11px] text-text-muted">open</span>
+                        <span className="text-[0.6875rem] font-semibold text-risk-700">{eng.openIssues}</span>
+                        <span className="text-[0.6875rem] text-text-muted">open</span>
                       </div>
                     )}
                   </div>
@@ -422,7 +426,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     {can('eng_edit') && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditTarget(eng); setWizardOpen(true); }}
-                        className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-canvas transition-colors cursor-pointer"
                         title="Edit"
                       >
                         <Pencil size={14} />
@@ -448,12 +452,12 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                               className="absolute right-0 top-full mt-1 z-30 w-48 rounded-lg border border-border bg-white shadow-lg py-1"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <div className="px-3 py-1.5 text-[11px] font-bold text-text-muted uppercase tracking-wider">Assign owner</div>
+                              <div className="px-3 py-1.5 text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Assign owner</div>
                               {OWNER_NAMES.map(n => (
                                 <button
                                   key={n}
                                   onClick={(e) => { e.stopPropagation(); handleAssignOwner(eng, n); }}
-                                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-[12px] transition-colors cursor-pointer ${n === eng.owner ? 'text-primary font-semibold bg-primary/5' : 'text-text-secondary hover:bg-primary/5 hover:text-text'}`}
+                                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-[0.75rem] transition-colors cursor-pointer ${n === eng.owner ? 'text-primary font-semibold bg-primary/5' : 'text-text-secondary hover:bg-primary/5 hover:text-text'}`}
                                 >
                                   {n}
                                   {n === eng.owner && <CheckCircle2 size={12} className="shrink-0" />}
@@ -489,7 +493,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-2.5 mt-2 text-[11px] text-text-muted">
+            <div className="px-6 py-2.5 mt-2 text-[0.6875rem] text-text-muted">
               {filtered.length} of {all.length} engagements
             </div>
           </div>
@@ -498,7 +502,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
         {mode === 'approval-flow' && (
           <div>
-            <p className="text-[12.5px] text-text-secondary mb-4 max-w-[620px]">
+            <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
               Define reusable approval chains that apply wherever exceptions are sent for approval. Switch sides to manage Risk Owner or Auditor flows.
             </p>
             <WorkflowConfigurator role={flowRole} onRoleChange={setFlowRole} currentUserId={flowRole === 'auditor' ? 'u-au-owner' : 'u-ro-owner'} />
@@ -559,7 +563,7 @@ function ViewToggle({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(id)}
-            className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-3 text-[0.875rem] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
               active
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-text hover:border-border'
@@ -568,7 +572,7 @@ function ViewToggle({
             <Icon size={16} />
             {label}
             {badge != null && (
-              <span className={`tabular-nums text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`tabular-nums text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${
                 active ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-text-muted'
               }`}>{badge}</span>
             )}
@@ -596,7 +600,7 @@ function MinimalFilter<T extends string>({
       value={value}
       onChange={e => onChange(e.target.value as T)}
       aria-label={`Filter by ${label}`}
-      className={`py-2 px-3 rounded-lg border text-[12.5px] font-semibold outline-none cursor-pointer transition-colors focus:ring-2 focus:ring-primary/10 ${
+      className={`py-2 px-3 rounded-lg border text-[0.78125rem] font-semibold outline-none cursor-pointer transition-colors focus:ring-2 focus:ring-primary/10 ${
         active
           ? 'border-primary/40 text-primary bg-primary-xlight/30'
           : 'border-border bg-white text-text-secondary hover:border-primary/30'

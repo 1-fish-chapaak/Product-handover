@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   ChevronLeft, ChevronRight, Search, ChevronDown, ArrowUpDown,
-  FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
+  FileText, FolderOpen, Database, MessageSquare,
   Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
   Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, List,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import {
 } from './datasetFiles';
 import { TODAY } from './sources';
 
-type SourceType = 'file' | 'database' | 'api' | 'cloud' | 'session';
+type SourceType = 'file' | 'database' | 'session';
 
 interface DataSource {
   id: string;
@@ -46,8 +46,10 @@ interface Props {
   onStartRenamingConsumed?: () => void;
 }
 
+// SourceType no longer carries 'api' or 'cloud' — the Hub connects files,
+// databases and chat-session uploads.
 const TYPE_ICON: Record<SourceType, React.ElementType> = {
-  file: FileText, database: Database, api: Globe, cloud: Cloud, session: MessageSquare,
+  file: FileText, database: Database, session: MessageSquare,
 };
 
 // Status → label. Tone is owned by StatusPillFlat (the sole consumer); the
@@ -1436,7 +1438,7 @@ function PdfCanvasViewer({ source, fileName, bare = false, fill = false }: { sou
               aria-label={`Page ${i}`}
               aria-current={i === page}
             >
-              <div className={`rounded-[2px] border bg-white overflow-hidden transition-shadow ${i === page ? 'border-brand-400 ring-2 ring-brand-200 shadow-sm' : 'border-canvas-border group-hover:border-brand-300'}`}>
+              <div className={`rounded-xs border bg-white overflow-hidden transition-shadow ${i === page ? 'border-brand-400 ring-2 ring-brand-200 shadow-sm' : 'border-canvas-border group-hover:border-brand-300'}`}>
                 <PdfCanvas doc={doc} pageNumber={i} targetWidth={92} />
               </div>
               <div className={`mt-1 text-center text-[0.625rem] tabular-nums ${i === page ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>{i}</div>
@@ -1936,7 +1938,7 @@ function IntegratedSourceBody({ config, sourceName }: IntegratedSourceBodyProps)
 
   if (!config) {
     return (
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-6 py-12 text-center">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-6 py-12 text-center">
         <Database size={28} className="mx-auto text-ink-400 mb-3" />
         <p className="text-[0.875rem] text-ink-700 font-medium">No configuration available for this source.</p>
         <p className="text-[0.75rem] text-ink-500 mt-1">Contact IT to set up the integration.</p>

@@ -6,9 +6,9 @@ const DEFAULT_GRID = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6'
 /** Placeholder that mirrors ReportCard's footprint while the next batch loads. */
 function SkeletonCard() {
   return (
-    <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 min-h-[176px] flex flex-col animate-pulse">
+    <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 min-h-[176px] flex flex-col animate-pulse">
       <div className="flex items-start justify-between mb-4">
-        <div className="w-9 h-9 rounded-[10px] bg-paper-50" />
+        <div className="w-9 h-9 rounded-lg bg-paper-50" />
         <div className="h-3 w-12 rounded bg-paper-50" />
       </div>
       <div className="h-4 w-3/4 rounded bg-paper-50 mb-2" />
@@ -68,7 +68,7 @@ export default function InfiniteCardGrid<T>({
           aria-hidden="true"
         >
           {loading && (
-            <span className="inline-flex items-center gap-2 text-[12px] text-ink-400">
+            <span className="inline-flex items-center gap-2 text-[0.75rem] text-ink-400">
               <span className="w-3.5 h-3.5 rounded-full border-2 border-ink-300 border-t-transparent animate-spin" />
               Loading more…
             </span>
@@ -76,7 +76,7 @@ export default function InfiniteCardGrid<T>({
         </div>
       ) : (
         total > pageSize && (
-          <div className="pb-2 text-center text-[11px] text-ink-400 tabular-nums">
+          <div className="pb-2 text-center text-[0.6875rem] text-ink-400 tabular-nums">
             Showing all {shown} of {total}
           </div>
         )

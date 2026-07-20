@@ -52,7 +52,7 @@ export const SETUP_MODE_LABELS: Record<SetupMode, string> = {
   QA_ADHOC_ANALYSIS: 'Ask Questions / Ad-hoc Analysis', UPLOAD_DATA_FIRST_DECIDE_LATER: 'Upload Data First, Decide Later',
 };
 export const SETUP_STATUS_CLS: Record<SetupStatus, string> = {
-  NOT_CONFIGURED: 'bg-gray-100 text-gray-600', DRAFT: 'bg-blue-50 text-blue-700', NEEDS_INPUT: 'bg-amber-50 text-amber-700',
+  NOT_CONFIGURED: 'bg-canvas text-ink-600', DRAFT: 'bg-blue-50 text-blue-700', NEEDS_INPUT: 'bg-amber-50 text-amber-700',
   NEEDS_WORKFLOW: 'bg-amber-50 text-amber-700', READY_FOR_RUN: 'bg-emerald-50 text-emerald-700',
 };
 export const STEP_TYPES: StepType[] = ['DATA_VALIDATION', 'RECONCILIATION', 'DOCUMENT_EXTRACTION', 'EXCEPTION_DETECTION', 'REPORT_GENERATION', 'CASE_CREATION', 'OTHER'];

@@ -25,7 +25,7 @@ export default function Checkbox({ checked, onChange, disabled, ariaLabel }: Che
       tabIndex={interactive ? 0 : -1}
       onClick={interactive ? () => onChange!(!checked) : undefined}
       className={[
-        'w-4 h-4 rounded-[5px] flex items-center justify-center shrink-0 transition-colors',
+        'w-4 h-4 rounded-sm flex items-center justify-center shrink-0 transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30',
         interactive ? 'cursor-pointer' : 'pointer-events-none',
         checked ? 'bg-brand-600 border border-brand-600' : 'border border-canvas-border bg-canvas-elevated',

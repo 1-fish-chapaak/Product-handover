@@ -20,7 +20,7 @@ export interface AutomationReportsState {
 }
 
 export const REPORT_STATUS_CLS: Record<ReportStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600', DRAFT: 'bg-blue-50 text-blue-700', READY: 'bg-purple-50 text-purple-700', FINAL: 'bg-emerald-50 text-emerald-700',
+  NOT_STARTED: 'bg-canvas text-ink-600', DRAFT: 'bg-blue-50 text-blue-700', READY: 'bg-purple-50 text-purple-700', FINAL: 'bg-emerald-50 text-emerald-700',
 };
 
 // ─── Report Generation ────────────────────────────────────────────────────

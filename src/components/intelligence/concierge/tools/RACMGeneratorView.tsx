@@ -10,6 +10,7 @@ import type { PickedFile, HistoryJob, JobState } from '../types';
 import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Button } from '../../../shared/Button';
 import { Pill, type Tone } from '../../../shared/StatusBadge';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
 import ConfirmationModal from '../../../shared/ConfirmationModal';
 
@@ -332,7 +333,7 @@ function RacmPreview() {
   return (
     <div>
       <h2 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400 mb-3">What you'll get</h2>
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <p className="font-display text-[1.0625rem] text-ink-900 leading-snug">A full Risk &amp; Control Matrix</p>
         <p className="mt-1 text-[0.8125rem] text-ink-500 leading-relaxed">25 fields per control — risks, controls, CEAVOP assertions, and governance, ready for your working papers.</p>
 
@@ -547,12 +548,12 @@ function RacmCreateChooser({
         action={
           <div className="w-full max-w-2xl mx-auto space-y-5">
             <div className="grid grid-cols-2 gap-3 text-left">
-              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
+              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-lg border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
                 <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
                 <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
                 <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
               </button>
-              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
+              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-lg border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
                 <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
                 <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
                 <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). Ira reads and drafts it.</div>
@@ -648,7 +649,7 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
     <>
     <div className="h-full max-w-6xl flex flex-col min-h-0">
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1 min-h-0 lg:items-stretch">
-      <div className="lg:col-span-3 flex flex-col min-h-0 rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+      <div className="lg:col-span-3 flex flex-col min-h-0 rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={16} className="text-brand-600 animate-pulse shrink-0" />
           <span className="text-[0.875rem] font-semibold text-ink-800">
@@ -727,7 +728,7 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
             )}
           </div>
         </div>
-        <div className="flex-1 min-h-0 rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+        <div className="flex-1 min-h-0 rounded-lg border border-canvas-border bg-canvas-elevated p-5">
           <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-3">What we're checking</div>
           <div className="space-y-2.5">
             {checking.map((c) => (
@@ -958,6 +959,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: () => void; onOpenEditor: (name: string, sourceFiles: string[]) => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<Result>
       title="RACM Generator"
@@ -1001,12 +1003,20 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
       renderProgress={(api) => <RacmLoader {...api} />}
       buildResult={buildResult}
       renderResult={() => null}
-      onComplete={(r) => onOpenEditor(
-        r.sourceFiles.length > 1
-          ? `Consolidated RACM · ${r.sourceFiles.length} sources`
-          : `RACM · ${r.sourceFiles[0] ?? r.fileName}`,
-        r.sourceFiles,
-      )}
+      onComplete={(r) => {
+        logEvent({
+          action: 'Create',
+          description: 'Generated RACM with AI Concierge',
+          module: 'AI Concierge',
+          entity: 'RACM',
+        });
+        onOpenEditor(
+          r.sourceFiles.length > 1
+            ? `Consolidated RACM · ${r.sourceFiles.length} sources`
+            : `RACM · ${r.sourceFiles[0] ?? r.fileName}`,
+          r.sourceFiles,
+        );
+      }}
       historyMeta={(result) => `${result.entries.length} controls`}
       historyAsDrawer
       historySeed={HISTORY_SEED}

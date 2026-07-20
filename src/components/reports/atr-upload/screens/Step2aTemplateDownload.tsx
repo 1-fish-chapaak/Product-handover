@@ -32,22 +32,22 @@ function FormatCard({ icon: Icon, tint, title, ext, blurb, desc, recommended, do
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: EASE, delay }}
-      className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-5 transition-colors ${downloaded ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
+      className={`relative flex flex-col rounded-lg border bg-canvas-elevated p-5 transition-colors ${downloaded ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
       title={hint}
     >
       {recommended && (
-        <span className="absolute top-4 right-4 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5">
+        <span className="absolute top-4 right-4 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5">
           <Sparkles size={10} aria-hidden="true" /> Recommended
         </span>
       )}
       <div className="flex items-center gap-3 mb-3">
-        <span className={`w-11 h-11 rounded-[12px] flex items-center justify-center shrink-0 ${tint}`}><Icon size={21} aria-hidden="true" /></span>
+        <span className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${tint}`}><Icon size={21} aria-hidden="true" /></span>
         <div className="min-w-0">
-          <h3 className="text-[14.5px] font-semibold text-ink-900 leading-tight">{title}</h3>
-          <p className="text-[11.5px] text-ink-400 mt-0.5">{blurb}</p>
+          <h3 className="text-[0.90625rem] font-semibold text-ink-900 leading-tight">{title}</h3>
+          <p className="text-[0.71875rem] text-ink-400 mt-0.5">{blurb}</p>
         </div>
       </div>
-      <p className="text-[12.5px] text-ink-500 leading-relaxed mb-4 flex-1">{desc}</p>
+      <p className="text-[0.78125rem] text-ink-500 leading-relaxed mb-4 flex-1">{desc}</p>
       <Button
         variant={downloaded || !recommended ? 'outline' : 'primary'}
         size="md"
@@ -83,25 +83,25 @@ function TemplateGuide() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: EASE }}
-      className="flex flex-col h-full min-h-0 overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-5"
+      className="flex flex-col h-full min-h-0 overflow-hidden rounded-lg border border-canvas-border bg-canvas-elevated p-5"
     >
-      <h3 className="text-[13.5px] font-semibold text-ink-900">How to fill it in</h3>
-      <p className="text-[11.5px] text-ink-500 leading-snug">One observation per row in Excel, or one table per observation in Word.</p>
+      <h3 className="text-[0.84375rem] font-semibold text-ink-900">How to fill it in</h3>
+      <p className="text-[0.71875rem] text-ink-500 leading-snug">One observation per row in Excel, or one table per observation in Word.</p>
 
       <div className="flex items-center justify-between mt-5 mb-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Columns to complete</p>
-        <span className="text-[10.5px] font-semibold text-ink-400 tabular-nums">{REQUIRED_FIELDS.length}</span>
+        <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">Columns to complete</p>
+        <span className="text-[0.65625rem] font-semibold text-ink-400 tabular-nums">{REQUIRED_FIELDS.length}</span>
       </div>
 
       <div className="flex-1 flex flex-col justify-between gap-y-3 pt-1">
         {GUIDE_GROUPS.map(g => (
           <div key={g.label}>
-            <div className="text-[11.5px] font-semibold text-ink-500 mb-2">{g.label}</div>
+            <div className="text-[0.71875rem] font-semibold text-ink-500 mb-2">{g.label}</div>
             <ul className="space-y-2">
               {g.keys.map(k => {
                 const Icon = FIELD_ICON[k] ?? Check;
                 return (
-                  <li key={k} className="flex items-start gap-3 text-[12.5px] text-ink-700 leading-relaxed">
+                  <li key={k} className="flex items-start gap-3 text-[0.78125rem] text-ink-700 leading-relaxed">
                     <Icon size={14} className="text-ink-400 shrink-0 mt-0.5" aria-hidden="true" />
                     {FIELD_BY_KEY[k]}
                   </li>
@@ -185,19 +185,19 @@ export default function Step2aTemplateDownload({ onUpload }: {
           className="grid sm:grid-cols-2 gap-4 items-start"
         >
           {/* Filled template (required) */}
-          <div className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${templateFile ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
-            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 bg-risk-50 text-risk-700">Required</span>
+          <div className={`relative flex flex-col rounded-lg border bg-canvas-elevated p-4 transition-colors ${templateFile ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 bg-risk-50 text-risk-700">Required</span>
             <div className="flex items-center gap-3 mb-3 pr-20">
-              <span className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><FileText size={19} aria-hidden="true" /></span>
+              <span className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><FileText size={19} aria-hidden="true" /></span>
               <div className="min-w-0">
-                <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">Filled template</h3>
-                <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">The IRAME .xlsx / .doc you filled in</p>
+                <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Filled template</h3>
+                <p className="text-[0.71875rem] text-ink-400 mt-0.5 truncate">The IRAME .xlsx / .doc you filled in</p>
               </div>
             </div>
             {templateFile && (
-              <div className="mb-3 flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
-                <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
-                <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{templateFile.name}</span>
+              <div className="mb-3 flex items-center gap-2.5 rounded-md border border-canvas-border bg-canvas px-2.5 py-1.5">
+                <span className="w-6 h-6 rounded-sm bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
+                <span className="text-[0.75rem] font-medium text-ink-800 truncate flex-1">{templateFile.name}</span>
                 <button type="button" onClick={() => setTemplateFile(null)} aria-label="Remove template" className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
               </div>
             )}
@@ -207,21 +207,21 @@ export default function Step2aTemplateDownload({ onUpload }: {
           </div>
 
           {/* Annexures (optional) */}
-          <div className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${annexures.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
-            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 bg-paper-100 text-ink-500">Optional</span>
+          <div className={`relative flex flex-col rounded-lg border bg-canvas-elevated p-4 transition-colors ${annexures.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 bg-paper-100 text-ink-500">Optional</span>
             <div className="flex items-center gap-3 mb-3 pr-20">
-              <span className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-evidence-50 text-evidence-700"><FileSpreadsheet size={19} aria-hidden="true" /></span>
+              <span className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-evidence-50 text-evidence-700"><FileSpreadsheet size={19} aria-hidden="true" /></span>
               <div className="min-w-0">
-                <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">Annexures</h3>
-                <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">.xlsx workbooks · power Manage Exceptions</p>
+                <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Annexures</h3>
+                <p className="text-[0.71875rem] text-ink-400 mt-0.5 truncate">.xlsx workbooks · power Manage Exceptions</p>
               </div>
             </div>
             {annexures.length > 0 && (
               <ul className="mb-3 space-y-1.5 max-h-[92px] overflow-y-auto pr-1 -mr-1">
                 {annexures.map((f, i) => (
-                  <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
-                    <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileSpreadsheet size={13} aria-hidden="true" /></span>
-                    <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-md border border-canvas-border bg-canvas px-2.5 py-1.5">
+                    <span className="w-6 h-6 rounded-sm bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileSpreadsheet size={13} aria-hidden="true" /></span>
+                    <span className="text-[0.75rem] font-medium text-ink-800 truncate flex-1">{f.name}</span>
                     <button type="button" onClick={() => setAnnexures(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
                   </li>
                 ))}
@@ -236,7 +236,7 @@ export default function Step2aTemplateDownload({ onUpload }: {
 
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
-          <p className="text-[12px] text-ink-500">
+          <p className="text-[0.75rem] text-ink-500">
             {templateFile
               ? <span className="text-compliant-700 font-medium">Ready to extract.</span>
               : 'Upload your filled template to continue.'}

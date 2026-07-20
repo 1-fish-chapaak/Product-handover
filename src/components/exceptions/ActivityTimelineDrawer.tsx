@@ -119,7 +119,7 @@ export default function ActivityTimelineDrawer({ onClose }: { onClose: () => voi
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[760px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] flex flex-col z-50"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[760px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-xl flex flex-col z-50"
         role="dialog"
         aria-label="Activity timeline"
       >

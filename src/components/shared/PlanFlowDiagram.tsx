@@ -77,7 +77,7 @@ export function PlanViewToggle({ value, onChange }: {
             role="tab"
             aria-selected={on}
             onClick={() => onChange(o.id)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.71875rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
               on ? 'bg-canvas-elevated text-ink-900 shadow-[0_1px_2px_rgba(15,8,30,0.06)]' : 'text-ink-500 hover:text-ink-800'
             }`}
           >
@@ -317,29 +317,29 @@ export function PlanFlowGraph({
                 >
                   {/* header — step number · plain-English name */}
                   <span className="flex items-center gap-2">
-                    <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center tabular-nums" aria-hidden>
+                    <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold flex items-center justify-center tabular-nums" aria-hidden>
                       {idx + 1}
                     </span>
-                    <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-tight truncate">{s.name}</span>
+                    <span className="min-w-0 flex-1 text-[0.78125rem] font-semibold text-ink-900 leading-tight truncate">{s.name}</span>
                   </span>
 
                   {/* what this step did, in plain words */}
-                  <span className="block text-[11.5px] text-ink-500 leading-snug mt-1 pl-7">{s.description}</span>
+                  <span className="block text-[0.71875rem] text-ink-500 leading-snug mt-1 pl-7">{s.description}</span>
 
                   {/* the specifics — what it did next, the datasets used, the count */}
                   {s.operation && (
-                    <span className="block text-[11px] text-ink-700 leading-snug mt-1.5 pl-7">{s.operation}</span>
+                    <span className="block text-[0.6875rem] text-ink-700 leading-snug mt-1.5 pl-7">{s.operation}</span>
                   )}
                   {(tables.length > 0 || hasFunnel) && (
                     <span className="flex flex-wrap items-center gap-1.5 mt-2 pl-7">
                       {tables.map((t) => (
-                        <span key={t.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas/50 px-1.5 py-0.5 text-[10.5px] font-medium text-ink-700">
+                        <span key={t.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas/50 px-1.5 py-0.5 text-[0.65625rem] font-medium text-ink-700">
                           <FileText size={10} className="text-ink-400 shrink-0" />
                           <span className="truncate max-w-[11rem]">{t.name}</span>
                         </span>
                       ))}
                       {hasFunnel && (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-brand-100 bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold text-brand-700 tabular-nums" title="checked vs kept">
+                        <span className="inline-flex items-center gap-1 rounded-md border border-brand-100 bg-brand-50 px-2 py-0.5 text-[0.65625rem] font-semibold text-brand-700 tabular-nums" title="checked vs kept">
                           {fmt(s.rowsIn!)} checked
                           <ArrowRight size={10} className="text-brand-600" />
                           {fmt(s.rowsOut!)} risks
@@ -359,7 +359,7 @@ export function PlanFlowGraph({
                       <span className="shrink-0 mt-px inline-flex size-[18px] items-center justify-center rounded-full bg-brand-50" aria-hidden>
                         <ArrowDown size={11} className="text-brand-500" />
                       </span>
-                      <span className="text-[11.5px] font-medium text-ink-600 leading-snug">{s.output}</span>
+                      <span className="text-[0.71875rem] font-medium text-ink-600 leading-snug">{s.output}</span>
                     </div>
                   </div>
                 )}
@@ -506,7 +506,7 @@ export default function PlanFlowDiagram({
     <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
       {/* Header — mirrors QueryExecutionPlanCard so the toggle reads as one card. */}
       <div className="flex items-center px-4 py-3">
-        <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
+        <div className="flex-1 flex items-center gap-2 text-[0.875rem] font-semibold tracking-tight text-ink-900">
           <ListChecks size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">{FLOW_TITLE}</span>
         </div>
@@ -592,7 +592,7 @@ function NodeDetail({ active, steps, inputs, outputLabel }: {
     return (
       <div className="flex items-start gap-2">
         <CornerDownRight size={13} className="text-ink-400 mt-0.5 shrink-0" />
-        <p className="text-[11.5px] text-ink-600 leading-relaxed">
+        <p className="text-[0.71875rem] text-ink-600 leading-relaxed">
           <span className="font-semibold text-ink-800">{outputLabel}</span> — the formatted result the steps above produce.
         </p>
       </div>
@@ -605,9 +605,9 @@ function NodeDetail({ active, steps, inputs, outputLabel }: {
     return (
       <div>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-[12px] font-semibold text-ink-900">{step.name}</span>
+          <span className="text-[0.75rem] font-semibold text-ink-900">{step.name}</span>
         </div>
-        <p className="text-[11.5px] text-ink-600 leading-relaxed mt-1">{step.description}</p>
+        <p className="text-[0.71875rem] text-ink-600 leading-relaxed mt-1">{step.description}</p>
         {(step.sources?.length ?? 0) > 0 && (
           <div className="mt-2">
             <StepFilesAndColumns sources={step.sources!} />
@@ -625,10 +625,10 @@ function NodeDetail({ active, steps, inputs, outputLabel }: {
     <div>
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-ink-400 shrink-0" />
-        <span className="text-[12px] font-semibold text-ink-900 truncate">{src.name}</span>
-        <span className={`text-[9px] font-bold uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${typeColor(src.type)}`}>{src.type}</span>
+        <span className="text-[0.75rem] font-semibold text-ink-900 truncate">{src.name}</span>
+        <span className={`text-[0.5625rem] font-bold uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${typeColor(src.type)}`}>{src.type}</span>
       </div>
-      <p className="text-[11.5px] text-ink-500 leading-relaxed mt-1">
+      <p className="text-[0.71875rem] text-ink-500 leading-relaxed mt-1">
         Feeds {feeds.length} step{feeds.length === 1 ? '' : 's'}: {feeds.map((f) => f.name).join(' · ')}
       </p>
       {(src.columns?.length ?? 0) > 0 && (

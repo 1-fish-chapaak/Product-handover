@@ -21,7 +21,7 @@ function EvidenceRow({ item, onOpenSource }: { item: EvidenceItem; onOpenSource:
   const Icon = t.icon;
   return (
     <div className="group flex items-center gap-3.5 px-4 py-3 hover:bg-paper-50/70 transition-colors">
-      <div className={`w-9 h-9 rounded-[9px] ${t.bg} ${t.fg} flex items-center justify-center shrink-0`}><Icon size={16} /></div>
+      <div className={`w-9 h-9 rounded-md ${t.bg} ${t.fg} flex items-center justify-center shrink-0`}><Icon size={16} /></div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{item.name}</span>
@@ -39,11 +39,11 @@ function EvidenceRow({ item, onOpenSource }: { item: EvidenceItem; onOpenSource:
         <button
           onClick={() => onOpenSource(item.atrId)}
           title="Open the source ATR report"
-          className="inline-flex items-center gap-1 h-8 px-2.5 text-[0.75rem] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
+          className="inline-flex items-center gap-1 h-8 px-2.5 text-[0.75rem] font-semibold text-brand-600 bg-white border border-canvas-border rounded-md hover:border-brand-600/30 cursor-pointer transition-colors"
         >
           View source <ExternalLink size={11} />
         </button>
-        <button title="Download" className="w-8 h-8 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer">
+        <button title="Download" className="w-8 h-8 rounded-md flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer">
           <Download size={14} />
         </button>
       </div>
@@ -55,10 +55,10 @@ function AreaGroup({ area, items, onOpenSource }: { area: string; items: Evidenc
   const [open, setOpen] = useState(true);
   const atrName = items[0]?.atrName;
   return (
-    <section className="bg-white border border-canvas-border rounded-[12px] overflow-hidden mb-4">
+    <section className="bg-white border border-canvas-border rounded-lg overflow-hidden mb-4">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer text-left">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-[9px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><ShieldCheck size={16} /></div>
+          <div className="w-9 h-9 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><ShieldCheck size={16} /></div>
           <div className="min-w-0">
             <h3 className="text-[0.875rem] font-semibold text-ink-900 truncate">{area}</h3>
             <p className="text-[0.75rem] text-ink-500 truncate">{atrName}</p>
@@ -131,7 +131,7 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
 
       {groups.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-          <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
+          <div className="w-12 h-12 rounded-lg bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
           <div className="text-[0.8125rem] font-medium text-ink-700">No evidence matches your filters.</div>
         </div>
       ) : view === 'grid' ? (
@@ -151,7 +151,7 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
                 footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{item.uploadedAt}</span>}
                 onClick={() => onOpenSource(item.atrId)}
                 actions={
-                  <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer" aria-label="Download"><Download size={14} /></button>
+                  <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-md flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer" aria-label="Download"><Download size={14} /></button>
                 }
               />
             );

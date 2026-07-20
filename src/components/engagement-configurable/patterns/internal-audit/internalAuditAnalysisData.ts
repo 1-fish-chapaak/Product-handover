@@ -56,10 +56,10 @@ export const RUN_TYPE_LABELS: Record<AnalysisRunType, string> = {
   WORKFLOW: 'Workflow Run', QA_ANALYSIS: 'Q&A Analysis', DOCUMENT_REVIEW: 'Document Review', DATA_REVIEW: 'Data Review',
 };
 export const SEVERITY_CLS: Record<ExceptionSeverity, string> = {
-  LOW: 'bg-gray-100 text-gray-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
+  LOW: 'bg-canvas text-ink-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
 };
 export const EX_STATUS_CLS: Record<ExceptionStatus, string> = {
-  OPEN: 'bg-amber-50 text-amber-700', REVIEWED: 'bg-blue-50 text-blue-700', DISMISSED: 'bg-gray-100 text-gray-500', CONVERTED_TO_OBSERVATION: 'bg-emerald-50 text-emerald-700',
+  OPEN: 'bg-amber-50 text-amber-700', REVIEWED: 'bg-blue-50 text-blue-700', DISMISSED: 'bg-canvas text-ink-500', CONVERTED_TO_OBSERVATION: 'bg-emerald-50 text-emerald-700',
 };
 
 // ─── Mock Run Simulation ──────────────────────────────────────────────────

@@ -380,19 +380,10 @@ export default function AIAssistantPanel({
                         transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
                         className="w-2 h-2 rounded-full bg-brand-500"
                       />
-                      <span
-                        className="text-[0.75rem] font-medium leading-[1.65] bg-clip-text text-transparent"
-                        style={{
-                          backgroundImage:
-                            'linear-gradient(90deg, rgba(31,28,46,0.35) 0%, rgba(31,28,46,0.95) 50%, rgba(31,28,46,0.35) 100%)',
-                          backgroundSize: '200% 100%',
-                          animation: 'ira-shimmer 1.6s linear infinite',
-                        }}
-                      >
+                      <span className="text-[0.75rem] font-medium leading-[1.65] text-ink-700">
                         {m.text || 'Working…'}
                       </span>
                     </div>
-                    <style>{`@keyframes ira-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
                   </div>
                 </motion.div>
               );
@@ -592,7 +583,7 @@ export default function AIAssistantPanel({
           </div>
         )}
         <div className="ai-border">
-          <div className="relative bg-white rounded-[12px]">
+          <div className="relative bg-white rounded-lg">
             <textarea
               ref={textareaRef}
               value={input}
@@ -608,7 +599,7 @@ export default function AIAssistantPanel({
               }}
               rows={1}
               placeholder={placeholder ?? 'Describe what you need…'}
-              className="w-full bg-transparent border-none outline-none resize-none pt-3 pb-10 px-3 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[140px] rounded-[12px]"
+              className="w-full bg-transparent border-none outline-none resize-none pt-3 pb-10 px-3 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[140px] rounded-lg"
             />
             <div className="absolute left-2 bottom-2 flex items-center gap-1">
               <button

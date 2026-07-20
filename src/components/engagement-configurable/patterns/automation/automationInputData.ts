@@ -51,7 +51,7 @@ export const SOURCE_TYPE_LABELS: Record<DataSourceType, string> = {
   EXCEL_CSV: 'Excel / CSV', PDF: 'PDF', SQL: 'SQL', IMAGE: 'Image', HYBRID: 'Hybrid', EMAIL_ATTACHMENT: 'Email', OTHER: 'Other',
 };
 export const SOURCE_STATUS_CLS: Record<DataSourceStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600', UPLOADED: 'bg-blue-50 text-blue-700', CONNECTED: 'bg-purple-50 text-purple-700',
+  DRAFT: 'bg-canvas text-ink-600', UPLOADED: 'bg-blue-50 text-blue-700', CONNECTED: 'bg-purple-50 text-purple-700',
   NEEDS_MAPPING: 'bg-amber-50 text-amber-700', READY: 'bg-emerald-50 text-emerald-700', FAILED: 'bg-red-50 text-red-700',
 };
 

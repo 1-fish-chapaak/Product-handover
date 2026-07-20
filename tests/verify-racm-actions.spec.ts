@@ -25,21 +25,24 @@ async function gotoRACMTab(page: Page) {
   await page.goto('/');
   await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
-  await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
-  await page.getByText('Procure to Pay').first().click();
-  // BP detail (Overview) loaded — open the RACM section via its tab-bar control.
+  const card = page.getByText('Procure to Pay').first();
+  await card.waitFor({ state: 'visible' });
+  await page.waitForTimeout(700); // let the card entrance cascade settle before clicking
+  await card.click();
+  // BP detail loaded (lands on the first section) — open the RACM section via its tab-bar control.
   const racmTab = page.getByRole('button', { name: 'Switch to RACMs' });
   await expect(racmTab).toBeVisible({ timeout: 8000 });
   await racmTab.click();
-  // The RACM list is up once the per-card "Open in editor" actions render.
-  await expect(page.getByRole('button', { name: 'Open in editor' }).first()).toBeVisible({ timeout: 8000 });
+  // The RACM list is up once the per-card cards render (each card is a
+  // role="button" labelled "Open <name> in editor").
+  await expect(openInEditorButtons(page).first()).toBeVisible({ timeout: 8000 });
   await page.waitForTimeout(400);
 }
 
-// Stable per-card proxy: exactly one "Open in editor" action exists per RACM card,
-// so its count is the live RACM-card count.
+// Stable per-card proxy: each RACM card is a role="button" whose accessible name
+// is "Open <name> in editor", so its count is the live RACM-card count.
 function openInEditorButtons(page: Page) {
-  return page.getByRole('button', { name: 'Open in editor' });
+  return page.getByRole('button', { name: /^Open .+ in editor$/ });
 }
 
 test.beforeEach(async ({ page }) => {

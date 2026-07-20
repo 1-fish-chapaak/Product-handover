@@ -8,6 +8,7 @@ import { StatusBadge, SeverityBadge, FrameworkBadge, Avatar } from '../shared/St
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onAskAboutControl?: (controlId: string) => void;
@@ -28,6 +29,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
   const [selectedEngId, setSelectedEngId] = useState(ENGAGEMENTS[0].id);
   const [activeTab, setActiveTab] = useState<'controls' | 'deficiencies'>('controls');
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   const eng = ENGAGEMENTS.find(e => e.id === selectedEngId)!;
   const controls = ENGAGEMENT_CONTROLS.filter(c => c.engId === selectedEngId);
@@ -65,7 +67,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
         </div>
 
         {/* Engagement overview */}
-        <div className="bg-white rounded-xl border border-border-light p-6 mb-6">
+        <div className="bg-white rounded-lg border border-border-light p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold text-text">{eng.name}</h2>
@@ -73,7 +75,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
                 {eng.start} — {eng.end} · Owner: {eng.owner}
               </p>
             </div>
-            <button onClick={() => addToast({ message: 'Running control tests for selected engagement...', type: 'success' })} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
+            <button onClick={() => { addToast({ message: 'Running control tests for selected engagement...', type: 'success' }); logEvent({ action: 'Run', description: `Ran control tests for "${eng.name}"`, module: 'Engagements', entity: 'Control' }); }} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Play size={14} />
               Run Tests
             </button>

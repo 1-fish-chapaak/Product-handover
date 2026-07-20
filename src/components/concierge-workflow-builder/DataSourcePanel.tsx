@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import type { JourneyFiles, RunResult, WorkflowDraft } from './types';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   type ComposerContext,
   editPlanContext,
@@ -603,7 +604,7 @@ export default function DataSourcePanel({
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                 title={t.label}
-                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[13px] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[0.8125rem] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                   active
                     ? 'text-brand-700 font-semibold'
                     : 'text-ink-500 font-medium hover:text-brand-700 hover:bg-brand-50'
@@ -625,7 +626,7 @@ export default function DataSourcePanel({
                 </span>
                 {t.badge && (
                   <span
-                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-mono tabular-nums leading-none transition-colors ${
+                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[0.65625rem] font-mono tabular-nums leading-none transition-colors ${
                       active
                         ? 'bg-brand-100 text-brand-700'
                         : 'bg-paper-100 text-ink-500 group-hover:bg-brand-100 group-hover:text-brand-700'
@@ -662,10 +663,10 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <FolderClosed size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
+              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
                 Folders
               </span>
-              <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[0.75rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {INPUT_FILE_FOLDERS.length} folder{INPUT_FILE_FOLDERS.length === 1 ? '' : 's'}
               </span>
               <ChevronDown size={16} className={`text-ink-400 shrink-0 transition-transform duration-150 ${foldersOpen ? '' : '-rotate-90'}`} />
@@ -697,14 +698,14 @@ export default function DataSourcePanel({
                         {expanded ? <FolderOpen size={16} /> : <FolderClosed size={16} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-ink-900 truncate">{folder.name}</div>
-                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                        <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{folder.name}</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
                           PDF · <span className="text-ink-400">{folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[0.6875rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass('pdf'),
                         ].join(' ')}
                       >
@@ -714,10 +715,10 @@ export default function DataSourcePanel({
 
                     {/* Footer row */}
                     <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
-                      <span className="text-[11px] text-ink-500 shrink-0">
+                      <span className="text-[0.6875rem] text-ink-500 shrink-0">
                         <span className="font-mono tabular-nums text-ink-700">{folder.fileCount}</span> file{folder.fileCount === 1 ? '' : 's'}:
                       </span>
-                      <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={folder.files.map(f => f.name).join(', ')}>
+                      <span className="text-[0.6875rem] font-mono text-ink-700 truncate flex-1" title={folder.files.map(f => f.name).join(', ')}>
                         {folder.files.map(f => f.name).join(', ') || '(empty)'}
                       </span>
                       <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
@@ -726,7 +727,7 @@ export default function DataSourcePanel({
                           onClick={() => toggleInputFolderExpansion(folder.id)}
                           aria-label={expanded ? `Hide files in ${folder.name}` : `Show files in ${folder.name}`}
                           title={expanded ? 'Hide files' : 'Show files'}
-                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           {expanded ? <ChevronDown size={11} strokeWidth={2.25} /> : <ChevronRight size={11} strokeWidth={2.25} />}
                           {expanded ? 'Hide' : 'Show'}
@@ -740,7 +741,7 @@ export default function DataSourcePanel({
                           }))}
                           aria-label={`Discuss ${folder.name} in chat`}
                           title="Describe in chat"
-                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           <MessageSquare size={11} strokeWidth={2.25} />
                           Chat
@@ -762,7 +763,7 @@ export default function DataSourcePanel({
                                 <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(f.type)}`}>
                                   <Icon size={10} />
                                 </div>
-                                <span className="text-[12px] font-medium text-ink-800 truncate flex-1">
+                                <span className="text-[0.75rem] font-medium text-ink-800 truncate flex-1">
                                   {f.name}
                                 </span>
                               </li>
@@ -771,7 +772,7 @@ export default function DataSourcePanel({
                         </ul>
                       ) : (
                         <div className="border-t border-canvas-border/70 px-4 py-3">
-                          <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[12px] text-ink-400">
+                          <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[0.75rem] text-ink-400">
                             Empty folder
                           </div>
                         </div>
@@ -793,10 +794,10 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <Database size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
+              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
                 Files
               </span>
-              <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[0.75rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'}
               </span>
               <ChevronDown size={16} className={`text-ink-400 shrink-0 transition-transform duration-150 ${filesOpen ? '' : '-rotate-90'}`} />
@@ -828,14 +829,14 @@ export default function DataSourcePanel({
                         <Database size={16} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-ink-900 truncate">{input.name}</div>
-                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                        <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{input.name}</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
                           {input.type.toUpperCase()} · <span className="text-ink-400">{input.description || 'Data source'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[0.6875rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass(input.type),
                         ].join(' ')}
                       >
@@ -846,11 +847,11 @@ export default function DataSourcePanel({
                     {/* Columns footer */}
                     {cols.length > 0 && (
                       <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
-                        <span className="text-[11px] text-ink-500 shrink-0">
+                        <span className="text-[0.6875rem] text-ink-500 shrink-0">
                           Using <span className="font-mono tabular-nums text-ink-700">{cols.length}</span> of{' '}
                           <span className="font-mono tabular-nums text-ink-700">{cols.length}</span>:
                         </span>
-                        <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={cols.join(', ')}>
+                        <span className="text-[0.6875rem] font-mono text-ink-700 truncate flex-1" title={cols.join(', ')}>
                           {cols.join(', ')}
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
@@ -868,7 +869,7 @@ export default function DataSourcePanel({
                             }
                             aria-label={`Pick columns from ${input.name}`}
                             title="Pick columns"
-                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             <ListChecks size={11} strokeWidth={2.25} />
                             Pick
@@ -882,7 +883,7 @@ export default function DataSourcePanel({
                             }))}
                             aria-label={`Describe column change for ${input.name} in chat`}
                             title="Describe in chat"
-                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             <MessageSquare size={11} strokeWidth={2.25} />
                             Chat
@@ -899,10 +900,10 @@ export default function DataSourcePanel({
                             key={col}
                             className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
                           >
-                            <div className="text-[12px] font-mono font-semibold text-ink-800 truncate">
+                            <div className="text-[0.75rem] font-mono font-semibold text-ink-800 truncate">
                               {col}
                             </div>
-                            <div className="text-[12px] text-ink-500 leading-snug mt-0.5">
+                            <div className="text-[0.75rem] text-ink-500 leading-snug mt-0.5">
                               {describeColumn(col)}
                             </div>
                           </li>
@@ -922,7 +923,7 @@ export default function DataSourcePanel({
             {running && !result ? (
               <div className="flex flex-col items-center justify-center text-center py-12 px-4">
                 <Loader2 size={20} className="animate-spin text-brand-600 mb-2" />
-                <div className="text-[13px] font-semibold text-ink-800">
+                <div className="text-[0.8125rem] font-semibold text-ink-800">
                   Running {workflow.name}…
                 </div>
               </div>
@@ -931,10 +932,10 @@ export default function DataSourcePanel({
                 <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
                   <FileOutput size={18} />
                 </div>
-                <div className="text-[13px] font-semibold text-ink-800 mb-1">
+                <div className="text-[0.8125rem] font-semibold text-ink-800 mb-1">
                   No output yet
                 </div>
-                <div className="text-[12px] text-ink-500 max-w-[220px] leading-snug">
+                <div className="text-[0.75rem] text-ink-500 max-w-[220px] leading-snug">
                   Run the workflow to see KPIs and the audit report here.
                 </div>
               </div>
@@ -946,19 +947,19 @@ export default function DataSourcePanel({
                     <Zap size={16} className="text-brand-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-semibold text-ink-900 leading-tight truncate">
+                    <div className="text-[0.9375rem] font-semibold text-ink-900 leading-tight truncate">
                       {workflow.name}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-1">
-                      <span className="inline-flex items-center gap-1 text-[12px] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
+                      <span className="inline-flex items-center gap-1 text-[0.75rem] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
                         <CheckCircle2 size={10} />
                         RUN SUCCESSFUL
                       </span>
-                      <span className="text-[12px] text-ink-400">
+                      <span className="text-[0.75rem] text-ink-400">
                         RUN ID: RWF-4407-B
                       </span>
                     </div>
-                    <div className="text-[12px] text-ink-400 mt-0.5">
+                    <div className="text-[0.75rem] text-ink-400 mt-0.5">
                       {(28_345_840).toLocaleString()} records
                     </div>
                   </div>
@@ -1003,21 +1004,21 @@ export default function DataSourcePanel({
 
                 {/* Audit Report */}
                 <div className="mt-1">
-                  <h2 className="text-[13px] font-semibold text-ink-900 mb-2 px-1">
+                  <h2 className="text-[0.8125rem] font-semibold text-ink-900 mb-2 px-1">
                     Audit Report
                   </h2>
 
                   <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
                     <div className="flex items-baseline justify-between gap-2 px-3 pt-2.5 pb-1.5">
-                      <div className="text-[13px] font-semibold text-ink-800 truncate">
+                      <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                         {result.title}
                       </div>
-                      <span className="text-[12px] text-ink-400 font-bold uppercase tracking-wider shrink-0">
+                      <span className="text-[0.75rem] text-ink-400 font-bold uppercase tracking-wider shrink-0">
                         {result.outputType}
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-[12px]">
+                      <table className="w-full text-[0.75rem]">
                         <thead className="bg-canvas text-ink-500 border-y border-canvas-border">
                           <tr>
                             <th className="w-6"></th>
@@ -1097,11 +1098,11 @@ export default function DataSourcePanel({
                   type="button"
                   onClick={() => setReferencesOpen((v) => !v)}
                   aria-expanded={referencesOpen}
-                  className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="flex-1 flex items-center gap-2 text-[0.875rem] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <FileText size={14} className="text-primary shrink-0" />
                   <span className="flex-1 text-left">References</span>
-                  <span className="text-[12px] font-normal text-ink-500">
+                  <span className="text-[0.75rem] font-normal text-ink-500">
                     {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'}
                   </span>
                 </button>
@@ -1128,10 +1129,10 @@ export default function DataSourcePanel({
                             >
                               <Icon size={10} />
                             </div>
-                            <span className="text-[13px] font-semibold text-ink-800 truncate">
+                            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                               {input.name}
                             </span>
-                            <span className="text-[12px] text-ink-400 truncate">
+                            <span className="text-[0.75rem] text-ink-400 truncate">
                               {inputMeta(input)}
                             </span>
                           </div>
@@ -1140,7 +1141,7 @@ export default function DataSourcePanel({
                               {input.columns!.map((col) => (
                                 <span
                                   key={col}
-                                  className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[12px] text-brand-700 font-mono"
+                                  className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[0.75rem] text-brand-700 font-mono"
                                 >
                                   {col}
                                 </span>
@@ -1207,7 +1208,7 @@ function PlanRegenerateSkeleton() {
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <ListChecks size={14} className="text-brand-400 shrink-0" />
-        <span className="text-[13px] font-medium text-ink-500">Regenerating plan…</span>
+        <span className="text-[0.8125rem] font-medium text-ink-500">Regenerating plan…</span>
       </div>
       <ul className="flex flex-col border-t border-canvas-border">
         {[0, 1, 2].map((i) => (
@@ -1250,6 +1251,7 @@ const PY_KEYWORDS = new Set([
 // code block with Copy / Download icon buttons anchored top-right.
 
 function CodeSection({ code, filename, onEdit }: { code: string; filename: string; onEdit?: () => void }) {
+  const logEvent = useAuditLog();
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
@@ -1270,6 +1272,12 @@ function CodeSection({ code, filename, onEdit }: { code: string; filename: strin
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      logEvent({
+        action: 'Export',
+        description: 'Downloaded data source script',
+        module: 'Workflows',
+        entity: 'Data Source',
+      });
     } catch { /* download failed — silent */ }
   };
   return (
@@ -1279,7 +1287,7 @@ function CodeSection({ code, filename, onEdit }: { code: string; filename: strin
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="flex-1 flex items-center gap-2 text-[0.875rem] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <FileCode size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">Generated Code</span>
@@ -1287,7 +1295,7 @@ function CodeSection({ code, filename, onEdit }: { code: string; filename: strin
         <button
           type="button"
           onClick={onEdit}
-          className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
+          className="ml-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
         >
           Edit
         </button>
@@ -1304,7 +1312,7 @@ function CodeSection({ code, filename, onEdit }: { code: string; filename: strin
       {open && (
         <div className="px-4 pb-4 border-t border-canvas-border">
           <div className="mt-3 relative">
-            <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[12px] font-mono overflow-x-auto leading-relaxed">
+            <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[0.75rem] font-mono overflow-x-auto leading-relaxed">
               <code>{code}</code>
             </pre>
             <div className="absolute top-2 right-2 flex items-center gap-1">
@@ -1386,14 +1394,14 @@ function OutputKPICard({
         : 'text-ink-500 bg-canvas';
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-2.5">
-      <div className="text-[12px] font-bold text-ink-400 tracking-wider">{label}</div>
+      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider">{label}</div>
       <div className="flex items-baseline gap-1.5 mt-0.5">
-        <div className={`text-[18px] font-bold ${valueColor} leading-none tabular-nums`}>
+        <div className={`text-[1.125rem] font-bold ${valueColor} leading-none tabular-nums`}>
           {value}
         </div>
         {delta && (
           <span
-            className={`text-[12px] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
+            className={`text-[0.75rem] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
           >
             {delta}
           </span>
@@ -1416,7 +1424,7 @@ function FlagDistributionCard() {
   let offsetAccum = 0;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[12px] font-bold text-ink-400 tracking-wider mb-2">
+      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider mb-2">
         FLAG DISTRIBUTION
       </div>
       <div className="flex items-center gap-3">
@@ -1450,7 +1458,7 @@ function FlagDistributionCard() {
         </svg>
         <ul className="flex flex-col gap-1.5 min-w-0 flex-1">
           {FLAG_DISTRIBUTION.map((seg) => (
-            <li key={seg.label} className="flex items-center gap-2 text-[12px]">
+            <li key={seg.label} className="flex items-center gap-2 text-[0.75rem]">
               <span
                 className="w-3 h-3 rounded-sm shrink-0"
                 style={{ background: seg.color }}
@@ -1479,7 +1487,7 @@ function MonthlyInvoiceVolumeCard() {
   const chartHeight = 56;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[13px] font-semibold text-ink-900 mb-3">
+      <div className="text-[0.8125rem] font-semibold text-ink-900 mb-3">
         Monthly Invoice Volume
       </div>
       <div className="grid grid-cols-6 gap-2 items-end" style={{ height: chartHeight + 32 }}>
@@ -1487,7 +1495,7 @@ function MonthlyInvoiceVolumeCard() {
           const h = Math.max(4, (m.value / max) * chartHeight);
           return (
             <div key={m.month} className="flex flex-col items-center gap-1 min-w-0">
-              <div className="text-[12px] font-semibold text-ink-500 tabular-nums">
+              <div className="text-[0.75rem] font-semibold text-ink-500 tabular-nums">
                 {m.label}
               </div>
               <div
@@ -1495,7 +1503,7 @@ function MonthlyInvoiceVolumeCard() {
                 style={{ height: `${h}px` }}
                 aria-label={`${m.month}: ${m.label}`}
               />
-              <div className="text-[12px] text-ink-400">{m.month}</div>
+              <div className="text-[0.75rem] text-ink-400">{m.month}</div>
             </div>
           );
         })}

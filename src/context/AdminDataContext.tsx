@@ -8,7 +8,10 @@
  */
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { useCurrentUser } from './CurrentUserContext';
+import { useCurrentUser, DEMO_USERS } from './CurrentUserContext';
+import { SEED_LOGS, lastActiveByName } from '../data/audit-history';
+
+export { SEED_LOGS };
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Users & Teams — session-persistent admin records
@@ -35,20 +38,59 @@ export interface AdminTeam {
   owner?: string;
 }
 
+/**
+ * Last sign-in, read off the seeded audit history rather than typed in by hand.
+ * A member who has never appeared in the log has never signed in — which is
+ * exactly what an unaccepted invite looks like.
+ *
+ * This is what keeps Platform Usage honest: "no sign-in for 30+ days" is
+ * measured against the same events the rest of the page counts, so a member
+ * can't read as dormant on one card and busy on the next.
+ */
+const LAST_ACTIVE = lastActiveByName();
+const lastLoginOf = (name: string) => LAST_ACTIVE[name] ?? 'Never';
+
 const SEED_USERS: AdminUser[] = [
-  { name: 'Abhinav Sharma', initials: 'AS', email: 'abhinav@irame.ai', roleId: 'role-admin', team: 'SOX Audit', status: 'Active', lastLogin: 'Today, 09:14' },
-  { name: 'Aditya Thakur', initials: 'AT', email: 'aditya.thakur@irame.ai', roleId: 'role-auditor', team: 'SOX Audit', status: 'Active', lastLogin: 'Today, 08:30' },
-  { name: 'AI', initials: 'AI', email: 'ai@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: 'Yesterday' },
-  { name: 'Ajay 14110008', initials: 'AJ', email: 'ajay.aj@btech2014.iitgn.ac.in', roleId: 'role-enabler', team: 'IFC Team', status: 'Invited', lastLogin: 'Never' },
-  { name: 'ajay mudhai', initials: 'AM', email: 'ajay@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Active', lastLogin: 'Apr 20' },
-  { name: 'Ajay Mudhai', initials: 'AM', email: 'ajaym@irame.ai', roleId: 'role-admin', team: 'Management', status: 'Active', lastLogin: 'Apr 19' },
-  { name: 'Ayushi Narang', initials: 'AN', email: 'ayushi.narang@irame.ai', roleId: 'role-enabler', team: 'SOX Audit', status: 'Active', lastLogin: 'Apr 21' },
-  { name: 'Chulbul Pandey', initials: 'CP', email: 'kuldeep.msvm@gmail.com', roleId: 'role-enabler', team: 'Management', status: 'Suspended', lastLogin: 'Mar 28' },
-  { name: 'CS', initials: 'CS', email: 'cs@irame.ai', roleId: 'role-enabler', team: 'Engineering', status: 'Active', lastLogin: 'Today, 10:02' },
-  { name: 'Kuldeep Pandey', initials: 'KP', email: 'kuldeep2.msvm@gmail.com', roleId: 'role-reviewer', team: '—', status: 'Inactive', lastLogin: 'Feb 14' },
-  { name: 'Rahul Verma', initials: 'RV', email: 'rahul@irame.ai', roleId: 'role-viewer', team: 'IFC Team', status: 'Locked', lastLogin: 'Mar 05' },
-  { name: 'Priya Singh', initials: 'PS', email: 'priya@irame.ai', roleId: 'role-risk', team: 'SOX Audit', status: 'Invited', lastLogin: 'Never' },
+  { name: 'Abhinav Sharma', initials: 'AS', email: 'abhinav@irame.ai', roleId: 'role-admin', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Abhinav Sharma') },
+  { name: 'Aditya Thakur', initials: 'AT', email: 'aditya.thakur@irame.ai', roleId: 'role-auditor', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Aditya Thakur') },
+  { name: 'Ishaan Verma', initials: 'IV', email: 'ishaan.verma@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Ishaan Verma') },
+  { name: 'Ajay Prasad', initials: 'AP', email: 'ajay.prasad@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Invited', lastLogin: lastLoginOf('Ajay Prasad') },
+  { name: 'Meera Nair', initials: 'MN', email: 'meera.nair@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Active', lastLogin: lastLoginOf('Meera Nair') },
+  { name: 'Ajay Mudhai', initials: 'AM', email: 'ajaym@irame.ai', roleId: 'role-admin', team: 'Management', status: 'Active', lastLogin: lastLoginOf('Ajay Mudhai') },
+  { name: 'Ayushi Narang', initials: 'AN', email: 'ayushi.narang@irame.ai', roleId: 'role-enabler', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Ayushi Narang') },
+  { name: 'Farah Khan', initials: 'FK', email: 'farah.khan@irame.ai', roleId: 'role-enabler', team: 'Management', status: 'Suspended', lastLogin: lastLoginOf('Farah Khan') },
+  { name: 'Rohan Desai', initials: 'RD', email: 'rohan.desai@irame.ai', roleId: 'role-enabler', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Rohan Desai') },
+  { name: 'Sameer Joshi', initials: 'SJ', email: 'sameer.joshi@irame.ai', roleId: 'role-reviewer', team: '—', status: 'Inactive', lastLogin: lastLoginOf('Sameer Joshi') },
+  // The signed-in identity (CurrentUserContext `u-admin`). Name and email must
+  // match it exactly: the audit log stamps `currentUser.name`, and Platform
+  // Usage attributes activity to a member by that name.
+  { name: 'Nilesh Anand', initials: 'NA', email: 'nilesh.anand@irame.ai', roleId: 'role-admin', team: 'Management', status: 'Active', lastLogin: lastLoginOf('Nilesh Anand') },
+  { name: 'Rahul Verma', initials: 'RV', email: 'rahul@irame.ai', roleId: 'role-viewer', team: 'IFC Team', status: 'Locked', lastLogin: lastLoginOf('Rahul Verma') },
+  { name: 'Priya Singh', initials: 'PS', email: 'priya@irame.ai', roleId: 'role-risk', team: 'SOX Audit', status: 'Invited', lastLogin: lastLoginOf('Priya Singh') },
+  // The remaining sign-in personas (CurrentUserContext DEMO_USERS). They belong
+  // on the People list for the same reason Nilesh does: whoever you sign in as
+  // stamps the audit log with their name, and an actor who isn't a member can
+  // never be attributed — their usage would just vanish off this page.
+  { name: 'Karan Mehta', initials: 'KM', email: 'karan.mehta@irame.ai', roleId: 'role-enabler', team: 'Management', status: 'Active', lastLogin: lastLoginOf('Karan Mehta') },
+  { name: 'Tushar Goel', initials: 'TG', email: 'tushar.goel@irame.ai', roleId: 'role-auditor', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Tushar Goel') },
+  { name: 'Vijay Reddy', initials: 'VR', email: 'vijay.reddy@irame.ai', roleId: 'role-reviewer', team: 'IFC Team', status: 'Active', lastLogin: lastLoginOf('Vijay Reddy') },
+  { name: 'Sana Kapoor', initials: 'SK', email: 'sana.kapoor@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Sana Kapoor') },
 ];
+
+// Two identity lists exist: DEMO_USERS (who you can sign in as) and SEED_USERS
+// (who appears in Admin › People). An identity missing from the member list
+// still writes audit events under its name, but nothing can attribute them —
+// its usage silently vanishes from Platform Usage. Fail loudly in dev.
+if (import.meta.env.DEV) {
+  const members = new Set(SEED_USERS.map(u => u.name));
+  const orphans = DEMO_USERS.filter(u => !members.has(u.name)).map(u => u.name);
+  if (orphans.length > 0) {
+    console.error(
+      `[AdminData] Signed-in identities absent from Admin › People: ${orphans.join(', ')}. ` +
+      'Their activity will never attribute to a member. Add them to SEED_USERS.',
+    );
+  }
+}
 
 function deriveTeams(users: AdminUser[]): AdminTeam[] {
   const map: Record<string, AdminUser[]> = {};
@@ -71,11 +113,15 @@ export interface AuditLog {
   id: string;
   timestamp: string;
   user: string;
-  action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export';
+  action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export' | 'Run' | 'Upload' | 'Share';
   description: string;
   module: string;
   entity: string;
   status: 'Success' | 'Failed';
+  /** The workspace the action happened in (Workspace.id). Stamped from whichever
+   *  workspace the actor had open — the same one the sidebar switcher shows. This
+   *  is what makes usage answerable per workspace rather than only platform-wide. */
+  workspaceId: string;
 }
 
 /** Collision-proof id (crypto.randomUUID when available, else a random fallback). */
@@ -84,33 +130,21 @@ function uid(prefix = 'id'): string {
   return `${prefix}-${rnd ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
 }
 
-/** Seed history shown before the session produces its own entries. Ids are
- *  assigned at provider init so every row has a stable, unique key. */
-export const SEED_LOGS: Omit<AuditLog, 'id'>[] = [
-  { timestamp: '2026-04-19 10:30:50', user: 'Abhinav Sharma', action: 'Update', description: 'Updated business process "Procure to Pay" status to Active', module: 'Process Hub', entity: 'Business Process', status: 'Success' },
-  { timestamp: '2026-04-19 09:14:22', user: 'Abhinav Sharma', action: 'Login', description: 'User logged in via SSO', module: 'Admin', entity: 'Session', status: 'Success' },
-  { timestamp: '2026-04-18 14:22:11', user: 'Tushar Goel', action: 'Create', description: 'Created new role "test manik role" with 8 permissions', module: 'Admin', entity: 'Role', status: 'Success' },
-  { timestamp: '2026-04-18 09:15:33', user: 'Aditya Thakur', action: 'Delete', description: 'Deleted workflow "Legacy Invoice Check" from P2P', module: 'Workflow Library', entity: 'Workflow', status: 'Success' },
-  { timestamp: '2026-04-17 16:45:02', user: 'Tushar Goel', action: 'Update', description: 'Updated control "SOD Violation Detector" effectiveness to 92%', module: 'Control Library', entity: 'Control', status: 'Success' },
-  { timestamp: '2026-04-17 11:08:19', user: 'Aditya Thakur', action: 'Create', description: 'Created risk "Vendor master unauthorized change" in P2P register', module: 'Risk Register', entity: 'Risk', status: 'Success' },
-  { timestamp: '2026-04-17 08:30:00', user: 'Ayushi Narang', action: 'Export', description: 'Exported SOX Compliance Report as PDF', module: 'Report', entity: 'Report', status: 'Success' },
-  { timestamp: '2026-04-16 15:20:41', user: 'Tushar Goel', action: 'Update', description: 'Changed user "Chulbul Pandey" status from Active to Suspended', module: 'Admin', entity: 'User', status: 'Success' },
-  { timestamp: '2026-04-16 10:05:33', user: 'Unknown', action: 'Login', description: 'Failed login attempt with email admin@irame.ai', module: 'Admin', entity: 'Session', status: 'Failed' },
-  { timestamp: '2026-04-15 14:12:09', user: 'Ajay Mudhai', action: 'Create', description: 'Connected new data source "SAP ERP Production"', module: 'Knowledge Hub', entity: 'Data Source', status: 'Success' },
-  { timestamp: '2026-04-15 11:47:55', user: 'Ayushi Narang', action: 'Update', description: 'Updated RACM mapping for "Order to Cash" — linked 3 controls', module: 'RACM', entity: 'RACM Mapping', status: 'Success' },
-  { timestamp: '2026-04-15 09:02:14', user: 'Karan Mehta', action: 'Login', description: 'User logged in via SSO', module: 'Admin', entity: 'Session', status: 'Success' },
-  { timestamp: '2026-04-14 17:33:48', user: 'Aditya Thakur', action: 'Create', description: 'Created engagement "FY26 Q1 SOX Walkthrough"', module: 'Engagements', entity: 'Engagement', status: 'Success' },
-  { timestamp: '2026-04-14 13:19:27', user: 'Tushar Goel', action: 'Update', description: 'Reassigned exception "Duplicate vendor payment" to Risk Owner', module: 'Exceptions', entity: 'Exception', status: 'Success' },
-  { timestamp: '2026-04-14 08:51:06', user: 'Unknown', action: 'Login', description: 'Failed login attempt with email contractor@external.com', module: 'Admin', entity: 'Session', status: 'Failed' },
-  { timestamp: '2026-04-13 16:08:39', user: 'Ayushi Narang', action: 'Export', description: 'Exported audit log as CSV (142 events)', module: 'Admin', entity: 'Audit Log', status: 'Success' },
-  { timestamp: '2026-04-13 12:40:11', user: 'Abhinav Sharma', action: 'Update', description: 'Edited working paper "P2P-WP-007" and marked for review', module: 'Engagement Execution', entity: 'Working Paper', status: 'Success' },
-  { timestamp: '2026-04-13 10:22:53', user: 'Ajay Mudhai', action: 'Delete', description: 'Removed data source "Legacy Oracle EBS"', module: 'Knowledge Hub', entity: 'Data Source', status: 'Success' },
-  { timestamp: '2026-04-12 15:55:30', user: 'Tushar Goel', action: 'Create', description: 'Added control "Three-way match enforcement" to P2P library', module: 'Control Library', entity: 'Control', status: 'Success' },
-  { timestamp: '2026-04-12 09:37:18', user: 'Karan Mehta', action: 'Update', description: 'Updated dashboard "Risk Heatmap" layout and shared with team', module: 'Dashboard', entity: 'Dashboard', status: 'Success' },
-  { timestamp: '2026-04-11 14:48:02', user: 'Aditya Thakur', action: 'Export', description: 'Exported RACM matrix for "Procure to Pay" as XLSX', module: 'RACM', entity: 'RACM Matrix', status: 'Success' },
-  { timestamp: '2026-04-11 11:14:44', user: 'Abhinav Sharma', action: 'Create', description: 'Invited user "priya.singh@irame.ai" as Risk Owner', module: 'Admin', entity: 'Invitation', status: 'Success' },
-  { timestamp: '2026-04-10 16:29:57', user: 'Ayushi Narang', action: 'Update', description: 'Closed exception "Missing PO approval" with remediation note', module: 'Exceptions', entity: 'Exception', status: 'Success' },
-];
+// The seeded history (src/data/audit-history.ts) is generated from one persona
+// per member, so an event can't be written by someone who isn't on the People
+// list. Assert it anyway — this is the failure that silently deletes a member's
+// activity from Platform Usage, and it's invisible until someone goes looking.
+if (import.meta.env.DEV) {
+  const members = new Set(SEED_USERS.map(u => u.name));
+  const ghosts = [...new Set(SEED_LOGS.map(l => l.user))]
+    .filter(name => name !== 'Unknown' && !members.has(name));
+  if (ghosts.length > 0) {
+    console.error(
+      `[AdminData] Audit events by non-members: ${ghosts.join(', ')}. ` +
+      'Their usage will never attribute to anyone. Add them to SEED_USERS or fix the persona name.',
+    );
+  }
+}
 
 /** Fields a caller supplies; actor + timestamp are filled in automatically. */
 export interface LogInput {
@@ -159,7 +193,7 @@ function nowStamp(): string {
 }
 
 export function AdminDataProvider({ children }: { children: ReactNode }) {
-  const { currentUser } = useCurrentUser();
+  const { currentUser, activeWorkspaceId } = useCurrentUser();
   const [logs, setLogs] = useState<AuditLog[]>(() => SEED_LOGS.map(l => ({ ...l, id: uid('log') })));
   const [users, setUsers] = useState<AdminUser[]>(() => SEED_USERS.map(u => ({ ...u })));
   const [teamsBase, setTeamsBase] = useState<TeamBase[]>(
@@ -192,10 +226,13 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         module: input.module,
         entity: input.entity,
         status: input.status ?? 'Success',
+        // Whichever workspace the actor has open. Not caller-supplied: an event
+        // must be attributed to where it actually happened.
+        workspaceId: activeWorkspaceId,
       },
       ...prev,
     ]);
-  }, [currentUser]);
+  }, [currentUser, activeWorkspaceId]);
 
   // ── Users ── (membership lives here: AdminUser.team is the single source)
   const inviteUser = useCallback((user: AdminUser) => {

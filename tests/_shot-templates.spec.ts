@@ -18,7 +18,7 @@ test('templates tab — standard + custom galleries on one page', async ({ page 
         { id: 's3', name: 'Appendix' },
       ],
     }];
-    try { localStorage.setItem('irame.reports.customTemplates.v1', JSON.stringify(t)); } catch { /* ignore */ }
+    try { localStorage.setItem('irame.reports.customTemplates.v2', JSON.stringify(t)); } catch { /* ignore */ }
   });
 
   await page.goto('/?view=reports&tab=templates');
@@ -26,8 +26,8 @@ test('templates tab — standard + custom galleries on one page', async ({ page 
 
   // Both galleries render together (no toggle).
   await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Standard' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Custom' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Standard', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Custom', exact: true })).toBeVisible();
   await expect(page.getByText('Quarterly Controls Pack', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'tests/__screenshots__/templates-galleries.png', fullPage: true });
 

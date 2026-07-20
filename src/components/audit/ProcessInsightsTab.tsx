@@ -122,7 +122,7 @@ function ConfidencePill({ insight }: { insight: MemoryInsight }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[11px] font-semibold text-ink-800 hover:border-brand-300 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[0.6875rem] font-semibold text-ink-800 hover:border-brand-300 transition-colors cursor-pointer"
         title="How this confidence was scored"
       >
         <span className="size-1.5 rounded-full" style={{ background: confDot(pct) }} />
@@ -137,7 +137,7 @@ function ConfidencePill({ insight }: { insight: MemoryInsight }) {
             className="absolute right-0 z-30 mt-2 w-[300px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-3.5"
           >
             <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[12px] font-bold text-ink-800">Confidence breakdown</span>
+              <span className="text-[0.75rem] font-bold text-ink-800">Confidence breakdown</span>
               <button type="button" onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-700 cursor-pointer"><X size={13} /></button>
             </div>
             <div className="space-y-2.5">
@@ -145,21 +145,21 @@ function ConfidencePill({ insight }: { insight: MemoryInsight }) {
                 const v = Math.round(insight.factors[m.key] * 100);
                 return (
                   <div key={m.key}>
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-[0.6875rem]">
                       <span className="font-semibold text-ink-800">{m.label}</span>
                       <span className="font-bold tabular-nums text-ink-800">{v}%</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
                       <div className={`h-full rounded-full ${confBar(v)}`} style={{ width: `${v}%` }} />
                     </div>
-                    <p className="text-[10px] text-ink-400 mt-0.5">{m.hint}</p>
+                    <p className="text-[0.625rem] text-ink-400 mt-0.5">{m.hint}</p>
                   </div>
                 );
               })}
             </div>
             <div className="mt-3 pt-2.5 border-t border-canvas-border flex items-center justify-between">
-              <span className="text-[10px] text-ink-400 font-mono">freq × diversity × recency × impact</span>
-              <span className={`text-[11px] font-bold ${isCandidate ? 'text-compliant-700' : 'text-ink-400'}`}>
+              <span className="text-[0.625rem] text-ink-400 font-mono">freq × diversity × recency × impact</span>
+              <span className={`text-[0.6875rem] font-bold ${isCandidate ? 'text-compliant-700' : 'text-ink-400'}`}>
                 {pct}% {isCandidate ? '· candidate' : '· below gate'}
               </span>
             </div>
@@ -176,7 +176,7 @@ function EvidenceRow({ icon, label, children }: { icon: React.ReactNode; label: 
   return (
     <div className="flex items-start gap-2">
       <span className="text-ink-400 mt-0.5 shrink-0">{icon}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 w-[64px] shrink-0 mt-0.5">{label}</span>
+      <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 w-[64px] shrink-0 mt-0.5">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
@@ -193,8 +193,8 @@ function EvidenceBundleView({ insight }: { insight: MemoryInsight }) {
         className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer hover:bg-canvas transition-colors"
       >
         <ScrollText size={13} className="text-ink-400" />
-        <span className="text-[11px] font-semibold text-ink-800">Evidence</span>
-        <span className="text-[10px] text-ink-400">{ev.runsAnalysed} runs · {ev.timeWindow}</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-800">Evidence</span>
+        <span className="text-[0.625rem] text-ink-400">{ev.runsAnalysed} runs · {ev.timeWindow}</span>
         <ChevronDown size={13} className={`ml-auto text-ink-400 transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
       <AnimatePresence initial={false}>
@@ -207,14 +207,14 @@ function EvidenceBundleView({ insight }: { insight: MemoryInsight }) {
               <EvidenceRow icon={<Layers size={12} />} label="Workflows">
                 <div className="flex flex-wrap gap-1">
                   {ev.workflows.map(w => (
-                    <span key={w} className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10px] font-semibold">{w}</span>
+                    <span key={w} className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[0.625rem] font-semibold">{w}</span>
                   ))}
                 </div>
               </EvidenceRow>
               <EvidenceRow icon={<Database size={12} />} label="Entities">
                 <div className="flex flex-wrap gap-1">
                   {ev.entities.map(e => (
-                    <span key={e} className="inline-flex items-center rounded-md bg-canvas text-ink-700 px-1.5 py-0.5 text-[10px] font-mono">{e}</span>
+                    <span key={e} className="inline-flex items-center rounded-md bg-canvas text-ink-700 px-1.5 py-0.5 text-[0.625rem] font-mono">{e}</span>
                   ))}
                 </div>
               </EvidenceRow>
@@ -222,7 +222,7 @@ function EvidenceBundleView({ insight }: { insight: MemoryInsight }) {
                 <EvidenceRow icon={<TrendingUp size={12} />} label="KPI values">
                   <div className="flex flex-wrap gap-2">
                     {ev.kpiValues.map(k => (
-                      <span key={k.label} className="text-[11px] text-ink-700">
+                      <span key={k.label} className="text-[0.6875rem] text-ink-700">
                         {k.label}: <span className="font-bold tabular-nums">{k.value}</span>
                         {k.delta && <span className="text-risk font-semibold ml-1">{k.delta}</span>}
                       </span>
@@ -234,7 +234,7 @@ function EvidenceBundleView({ insight }: { insight: MemoryInsight }) {
                 <EvidenceRow icon={<Clock size={12} />} label="Source runs">
                   <div className="flex flex-col gap-1">
                     {ev.runRefs.map(r => (
-                      <div key={r.id} className="flex items-center gap-2 text-[11px]">
+                      <div key={r.id} className="flex items-center gap-2 text-[0.6875rem]">
                         <span className="text-ink-700 font-medium">{r.label}</span>
                         <span className="text-ink-400 ml-auto tabular-nums">{r.date}</span>
                       </div>
@@ -268,9 +268,9 @@ function ApprovalGate({ decision, onApprove, onUndo }: {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-compliant-50 border border-compliant/30 px-3 py-2">
         <ShieldCheck size={14} className="text-compliant-700 shrink-0" />
-        <span className="text-[12px] font-semibold text-compliant-700">Promoted to Enterprise Context</span>
-        <span className="text-[11px] text-compliant-700/80">· {decision.scope}{decision.expiry && decision.expiry !== 'No expiry' ? ` · ${decision.expiry}` : ''}</span>
-        <button type="button" onClick={onUndo} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-compliant-700 hover:text-compliant-800 cursor-pointer">
+        <span className="text-[0.75rem] font-semibold text-compliant-700">Promoted to Enterprise Context</span>
+        <span className="text-[0.6875rem] text-compliant-700/80">· {decision.scope}{decision.expiry && decision.expiry !== 'No expiry' ? ` · ${decision.expiry}` : ''}</span>
+        <button type="button" onClick={onUndo} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-medium text-compliant-700 hover:text-compliant-800 cursor-pointer">
           <Undo2 size={11} /> Undo
         </button>
       </div>
@@ -280,8 +280,8 @@ function ApprovalGate({ decision, onApprove, onUndo }: {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-canvas border border-canvas-border px-3 py-2">
         <CircleSlash size={14} className="text-ink-400 shrink-0" />
-        <span className="text-[12px] font-medium text-ink-500">Dismissed — memory may re-surface this if the signal strengthens</span>
-        <button type="button" onClick={onUndo} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:underline cursor-pointer">
+        <span className="text-[0.75rem] font-medium text-ink-500">Dismissed — memory may re-surface this if the signal strengthens</span>
+        <button type="button" onClick={onUndo} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-medium text-brand-700 hover:underline cursor-pointer">
           <Undo2 size={11} /> Undo
         </button>
       </div>
@@ -298,20 +298,20 @@ function ApprovalGate({ decision, onApprove, onUndo }: {
           >
             <div className="rounded-lg border border-canvas-border bg-canvas/50 p-3 mb-2 space-y-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">Scope</div>
+                <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">Scope</div>
                 <div className="flex flex-wrap gap-1.5">
                   {SCOPE_PRESETS.map(s => (
                     <button key={s} type="button" onClick={() => setScope(s)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${scope === s ? 'bg-brand-600 text-white' : 'bg-canvas-elevated border border-canvas-border text-ink-500 hover:border-brand-300'}`}>{s}</button>
+                      className={`px-2.5 py-1 rounded-md text-[0.6875rem] font-medium cursor-pointer transition-colors ${scope === s ? 'bg-brand-600 text-white' : 'bg-canvas-elevated border border-canvas-border text-ink-500 hover:border-brand-300'}`}>{s}</button>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">Expiry</div>
+                <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">Expiry</div>
                 <div className="flex flex-wrap gap-1.5">
                   {EXPIRY_PRESETS.map(e => (
                     <button key={e} type="button" onClick={() => setExpiry(e)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${expiry === e ? 'bg-brand-600 text-white' : 'bg-canvas-elevated border border-canvas-border text-ink-500 hover:border-brand-300'}`}>{e}</button>
+                      className={`px-2.5 py-1 rounded-md text-[0.6875rem] font-medium cursor-pointer transition-colors ${expiry === e ? 'bg-brand-600 text-white' : 'bg-canvas-elevated border border-canvas-border text-ink-500 hover:border-brand-300'}`}>{e}</button>
                   ))}
                 </div>
               </div>
@@ -323,19 +323,19 @@ function ApprovalGate({ decision, onApprove, onUndo }: {
         <button
           type="button"
           onClick={() => onApprove(scope, expiry)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
         >
           <ShieldCheck size={13} /> Approve &amp; promote
         </button>
         <button
           type="button"
           onClick={() => setScoping(s => !s)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${scoping ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer ${scoping ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
         >
           <GitBranch size={13} /> Adjust scope
         </button>
       </div>
-      <p className="text-[10px] text-ink-400 mt-2 flex items-start gap-1.5 leading-relaxed">
+      <p className="text-[0.625rem] text-ink-400 mt-2 flex items-start gap-1.5 leading-relaxed">
         <Info size={11} className="mt-px shrink-0" /> Approving writes this to shared memory the Intent Agent, Data Scout &amp; Output Formatter all read from. Every decision is logged.
       </p>
     </div>
@@ -370,7 +370,7 @@ function LargeKpiChart({ series }: { series: KpiDriftPoint[] }) {
           const isLast = i === pts.length - 1;
           return (
             <div key={i} className="absolute" style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)' }}>
-              <span className={`absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap text-[14px] font-bold tabular-nums ${isLast ? 'text-risk' : 'text-ink-800'}`}>
+              <span className={`absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap text-[0.875rem] font-bold tabular-nums ${isLast ? 'text-risk' : 'text-ink-800'}`}>
                 {series[i].label}
               </span>
               <span className="block rounded-full" style={{ width: isLast ? 14 : 10, height: isLast ? 14 : 10, background: isLast ? 'rgb(220 38 38)' : 'rgb(255 255 255)', border: '2px solid rgb(220 38 38)' }} />
@@ -380,7 +380,7 @@ function LargeKpiChart({ series }: { series: KpiDriftPoint[] }) {
       </div>
       <div className="relative mt-4 h-5">
         {pts.map((p, i) => (
-          <span key={i} className="absolute -translate-x-1/2 text-[12px] font-medium text-ink-500" style={{ left: `${p.x}%` }}>{series[i].period}</span>
+          <span key={i} className="absolute -translate-x-1/2 text-[0.75rem] font-medium text-ink-500" style={{ left: `${p.x}%` }}>{series[i].period}</span>
         ))}
       </div>
     </div>
@@ -415,10 +415,10 @@ function KpiChartModal({ insight, onClose }: { insight: MemoryInsight; onClose: 
         <div className="flex items-start justify-between gap-4 border-b border-canvas-border px-6 py-4">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold text-ink-500">{meta.label}</span>
-              <span className="text-[11px] text-ink-400">{insight.scope}</span>
+              <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-[0.625rem] font-semibold text-ink-500">{meta.label}</span>
+              <span className="text-[0.6875rem] text-ink-400">{insight.scope}</span>
             </div>
-            <h3 className="text-[17px] font-bold leading-snug text-ink-900">{insight.title}</h3>
+            <h3 className="text-[1.0625rem] font-bold leading-snug text-ink-900">{insight.title}</h3>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-canvas hover:text-ink-700 cursor-pointer">
             <X size={18} />
@@ -432,8 +432,8 @@ function KpiChartModal({ insight, onClose }: { insight: MemoryInsight; onClose: 
         </div>
 
         <div className="space-y-2 border-t border-canvas-border px-6 py-4">
-          <p className="text-[13px] leading-relaxed text-ink-600">{insight.description}</p>
-          <div className="flex items-center gap-2 text-[11px] text-ink-400">
+          <p className="text-[0.8125rem] leading-relaxed text-ink-600">{insight.description}</p>
+          <div className="flex items-center gap-2 text-[0.6875rem] text-ink-400">
             <ScrollText size={13} />
             <span>{ev.runsAnalysed} runs · {ev.timeWindow}</span>
           </div>
@@ -462,7 +462,7 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
     <motion.div
       layout
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-200 transition-colors"
+      className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-200 transition-colors"
     >
       <div className="flex gap-3.5">
         <span className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${sev.iconWrap}`}>
@@ -472,14 +472,14 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
           {/* Title on the left; severity / type / confidence grouped on the right */}
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h4 className="text-[15px] font-bold text-ink-900 leading-snug">{insight.title}</h4>
-              <p className="text-[11px] text-ink-400 mt-1">{insight.scope}</p>
+              <h4 className="text-[0.9375rem] font-bold text-ink-900 leading-snug">{insight.title}</h4>
+              <p className="text-[0.6875rem] text-ink-400 mt-1">{insight.scope}</p>
             </div>
             <div className="flex items-center justify-end gap-3 shrink-0">
-              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold ${sev.pill}`}>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.625rem] font-bold ${sev.pill}`}>
                 <span className={`size-1.5 rounded-full ${sev.dot}`} /> {SEVERITY_LABEL[insight.severity]}
               </span>
-              <span className="inline-flex items-center gap-1.5 text-[11px] whitespace-nowrap">
+              <span className="inline-flex items-center gap-1.5 text-[0.6875rem] whitespace-nowrap">
                 <span className="font-semibold text-ink-600">{meta.label}</span>
                 <span className="text-ink-300">·</span>
                 <span className={`inline-flex items-center gap-1 font-semibold ${detected.text}`}>
@@ -497,11 +497,11 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
             <div className="grid grid-cols-2 gap-4 mt-3">
               <div className="flex flex-col justify-between gap-3 min-w-0">
                 <div className="space-y-2.5">
-                  <p className="text-[13px] text-ink-500 leading-relaxed">{insight.description}</p>
+                  <p className="text-[0.8125rem] text-ink-500 leading-relaxed">{insight.description}</p>
                   {insight.conflictsWith && (
                     <div className="flex items-start gap-2 rounded-lg border border-mitigated-200 bg-mitigated-50/50 px-3 py-2">
                       <GitCompareArrows size={13} className="text-mitigated-700 shrink-0 mt-0.5" />
-                      <span className="text-[11px] text-mitigated-700 leading-relaxed">
+                      <span className="text-[0.6875rem] text-mitigated-700 leading-relaxed">
                         Contradicts <span className="font-semibold">{insight.conflictsWith}</span>
                       </span>
                     </div>
@@ -524,8 +524,8 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
                 <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${insight.series.length}, minmax(0, 1fr))` }}>
                   {insight.series.map((p, idx) => (
                     <div key={p.period} className="text-center">
-                      <div className="text-[10px] text-ink-400">{p.period}</div>
-                      <div className={`text-[12px] font-bold tabular-nums ${idx === insight.series!.length - 1 ? 'text-risk' : 'text-ink-800'}`}>{p.label}</div>
+                      <div className="text-[0.625rem] text-ink-400">{p.period}</div>
+                      <div className={`text-[0.75rem] font-bold tabular-nums ${idx === insight.series!.length - 1 ? 'text-risk' : 'text-ink-800'}`}>{p.label}</div>
                     </div>
                   ))}
                 </div>
@@ -533,11 +533,11 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
             </div>
           ) : (
             <>
-              <p className="text-[13px] text-ink-500 leading-relaxed mt-2.5">{insight.description}</p>
+              <p className="text-[0.8125rem] text-ink-500 leading-relaxed mt-2.5">{insight.description}</p>
               {insight.conflictsWith && (
                 <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-mitigated-200 bg-mitigated-50/50 px-3 py-2">
                   <GitCompareArrows size={13} className="text-mitigated-700 shrink-0 mt-0.5" />
-                  <span className="text-[11px] text-mitigated-700 leading-relaxed">
+                  <span className="text-[0.6875rem] text-mitigated-700 leading-relaxed">
                     Contradicts <span className="font-semibold">{insight.conflictsWith}</span>
                   </span>
                 </div>
@@ -554,9 +554,9 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 mb-1">
               <ArrowRight size={12} className="text-brand-600 shrink-0" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Recommended action</span>
+              <span className="text-[0.625rem] font-bold uppercase tracking-wider text-brand-700">Recommended action</span>
             </div>
-            <p className="text-[12px] text-ink-800 leading-relaxed">{insight.recommendedAction}</p>
+            <p className="text-[0.75rem] text-ink-800 leading-relaxed">{insight.recommendedAction}</p>
           </div>
           {!decision && (
             <button
@@ -593,10 +593,10 @@ function EnterpriseContextPanel({ entries }: { entries: EnterpriseContextEntry[]
       <div className="flex items-center gap-2.5 mb-1">
         <span className="size-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center"><Brain size={16} /></span>
         <div>
-          <h3 className="text-[15px] font-bold text-ink-900 leading-tight">Enterprise Context</h3>
-          <p className="text-[11px] text-ink-500">Governed institutional memory · shared across the tenant · read by every future run</p>
+          <h3 className="text-[0.9375rem] font-bold text-ink-900 leading-tight">Enterprise Context</h3>
+          <p className="text-[0.6875rem] text-ink-500">Governed institutional memory · shared across the tenant · read by every future run</p>
         </div>
-        <span className="ml-auto inline-flex items-center rounded-full bg-canvas-elevated border border-canvas-border px-2 py-0.5 text-[11px] font-bold tabular-nums text-ink-800">{entries.length}</span>
+        <span className="ml-auto inline-flex items-center rounded-full bg-canvas-elevated border border-canvas-border px-2 py-0.5 text-[0.6875rem] font-bold tabular-nums text-ink-800">{entries.length}</span>
       </div>
       <div className="mt-3 space-y-2">
         {entries.map(e => (
@@ -605,8 +605,8 @@ function EnterpriseContextPanel({ entries }: { entries: EnterpriseContextEntry[]
             <div className="flex items-start gap-2">
               <ShieldCheck size={13} className="text-compliant-700 shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] text-ink-800 font-medium leading-snug">{e.fact}</p>
-                <div className="flex items-center gap-2 flex-wrap mt-1 text-[10px] text-ink-400">
+                <p className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{e.fact}</p>
+                <div className="flex items-center gap-2 flex-wrap mt-1 text-[0.625rem] text-ink-400">
                   <span className="inline-flex items-center rounded bg-canvas px-1.5 py-0.5 font-semibold text-ink-500">{e.scope}</span>
                   <span>{e.origin}</span>
                   <span className="ml-auto flex items-center gap-2">
@@ -640,16 +640,16 @@ function EngineExplainer() {
           initial={{ opacity: 0, y: 14, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ delay: i * 0.08, type: 'spring', stiffness: 360, damping: 22 }}
-          className="rounded-xl border border-canvas-border bg-canvas-elevated p-4"
+          className="rounded-lg border border-canvas-border bg-canvas-elevated p-4"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="flex size-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
               <p.icon size={16} strokeWidth={2} />
             </span>
-            <span className="font-mono text-[11px] font-medium tabular-nums text-ink-300">{`0${i + 1}`}</span>
+            <span className="font-mono text-[0.6875rem] font-medium tabular-nums text-ink-300">{`0${i + 1}`}</span>
           </div>
-          <h4 className="text-[13px] font-semibold tracking-tight text-ink-900">{p.title}</h4>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-500">{p.body}</p>
+          <h4 className="text-[0.8125rem] font-semibold tracking-tight text-ink-900">{p.title}</h4>
+          <p className="mt-1 text-[0.75rem] leading-relaxed text-ink-500">{p.body}</p>
         </motion.div>
       ))}
     </div>
@@ -687,11 +687,11 @@ function SeverityFilterMenu({ insights, active, onToggle, onReset }: {
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${open || !allActive ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
+        className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer ${open || !allActive ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
       >
         Severity
         {!allActive && (
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold tabular-nums text-white">{active.size}</span>
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[0.625rem] font-bold tabular-nums text-white">{active.size}</span>
         )}
         <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -703,12 +703,12 @@ function SeverityFilterMenu({ insights, active, onToggle, onReset }: {
             className="absolute right-0 z-30 mt-2 w-[224px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-2"
           >
             <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Filter by severity</span>
+              <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">Filter by severity</span>
               <button
                 type="button"
                 onClick={onReset}
                 disabled={allActive}
-                className="text-[11px] font-semibold text-brand-700 hover:underline cursor-pointer disabled:text-ink-300 disabled:no-underline disabled:cursor-not-allowed"
+                className="text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer disabled:text-ink-300 disabled:no-underline disabled:cursor-not-allowed"
               >
                 Reset
               </button>
@@ -729,8 +729,8 @@ function SeverityFilterMenu({ insights, active, onToggle, onReset }: {
                       {checked && <Check size={11} strokeWidth={3} />}
                     </span>
                     <span className={`size-1.5 rounded-full ${SEV[sev].dot}`} />
-                    <span className="flex-1 text-[12px] font-medium text-ink-800">{SEVERITY_LABEL[sev]}</span>
-                    <span className="text-[11px] tabular-nums text-ink-400">{count}</span>
+                    <span className="flex-1 text-[0.75rem] font-medium text-ink-800">{SEVERITY_LABEL[sev]}</span>
+                    <span className="text-[0.6875rem] tabular-nums text-ink-400">{count}</span>
                   </button>
                 );
               })}
@@ -801,7 +801,7 @@ export default function ProcessInsightsTab({ bpAbbr = 'P2P', bpName }: { bpAbbr?
       <div className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[13px] text-ink-500 mt-1">
+            <p className="text-[0.8125rem] text-ink-500 mt-1">
               Patterns memory learned across <span className="font-semibold text-ink-800">{runCount} runs</span> of the <span className="font-semibold text-ink-800">{bpName ?? bpAbbr}</span> process — risks and drift no single run can reveal.
             </p>
           </div>
@@ -815,7 +815,7 @@ export default function ProcessInsightsTab({ bpAbbr = 'P2P', bpName }: { bpAbbr?
             <button
               type="button"
               onClick={() => setShowExplainer(s => !s)}
-              className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${showExplainer ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
+              className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer ${showExplainer ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
             >
               <Info size={13} /> How memory works
             </button>
@@ -845,8 +845,8 @@ export default function ProcessInsightsTab({ bpAbbr = 'P2P', bpName }: { bpAbbr?
               <s.Icon size={16} />
             </span>
             <div className="min-w-0">
-              <div className={`text-[22px] font-bold tabular-nums leading-none ${s.tone}`}>{s.value}</div>
-              <div className="text-[11px] text-ink-400 mt-1 truncate">{s.label}</div>
+              <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${s.tone}`}>{s.value}</div>
+              <div className="text-[0.6875rem] text-ink-400 mt-1 truncate">{s.label}</div>
             </div>
           </div>
         ))}
@@ -856,8 +856,8 @@ export default function ProcessInsightsTab({ bpAbbr = 'P2P', bpName }: { bpAbbr?
       <div className="space-y-6">
         {visibleGroups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated py-10 text-center">
-            <p className="text-[13px] font-semibold text-ink-700">No insights match this filter</p>
-            <button type="button" onClick={() => setActiveSeverities(new Set(SEVERITY_ORDER))} className="mt-1.5 text-[12px] font-semibold text-brand-700 hover:underline cursor-pointer">Show all severities</button>
+            <p className="text-[0.8125rem] font-semibold text-ink-700">No insights match this filter</p>
+            <button type="button" onClick={() => setActiveSeverities(new Set(SEVERITY_ORDER))} className="mt-1.5 text-[0.75rem] font-semibold text-brand-700 hover:underline cursor-pointer">Show all severities</button>
           </div>
         ) : visibleGroups.map(g => (
           <div key={g.sev}>

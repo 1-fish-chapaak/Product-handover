@@ -211,7 +211,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
           { title: 'Records Processed', value: totalRecords.toLocaleString(), icon: BarChart3, color: 'text-ink-500 bg-canvas-elevated' },
         ].map((kpi, i) => (
           <motion.div key={kpi.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 + i * 0.04 }}
-            className="glass-card rounded-xl px-5 py-4 hover:border-brand-200 transition-all">
+            className="glass-card px-5 py-4 hover:border-brand-200 transition-all">
             <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-3">{kpi.title}</p>
             <p className="text-[1.625rem] font-bold text-ink-900 leading-none tabular-nums">{kpi.value}</p>
           </motion.div>
@@ -254,7 +254,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
               exit={{ opacity: 0 }}
               transition={{ delay: i * 0.04 }}
               onClick={() => onOpenProject(buildEngagementFromCard(project))}
-              className="glass-card rounded-xl p-6 cursor-pointer group relative flex flex-col hover:border-brand-200 hover:shadow-lg hover:shadow-brand-100/40 transition-all"
+              className="glass-card p-6 cursor-pointer group relative flex flex-col hover:border-brand-200 hover:shadow-lg hover:shadow-brand-100/40 transition-all"
             >
               {/* Top: icon + status */}
               <div className="flex items-start justify-between mb-4">
@@ -331,7 +331,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
       </div>
 
       {filtered.length === 0 && (
-        <div className="glass-card rounded-2xl p-16 text-center">
+        <div className="glass-card p-16 text-center">
           <Search size={32} className="text-ink-300 mx-auto mb-3" />
           <p className="text-[0.875rem] text-ink-500 font-medium">No projects match your search.</p>
           <p className="text-[0.75rem] text-ink-400 mt-1">Try adjusting your filters or search term.</p>

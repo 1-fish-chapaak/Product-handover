@@ -46,9 +46,9 @@ export default function ChatRecentWorkflows({ onPick }: Props) {
             <button
               type="button"
               onClick={() => onPick(w.name)}
-              className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] px-4 py-3 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 cursor-pointer"
+              className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-lg px-4 py-3 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 cursor-pointer"
             >
-              <div className="w-9 h-9 rounded-[10px] bg-brand-50 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                 <Workflow size={16} className="text-brand-700" />
               </div>
               <div className="flex-1 min-w-0">
@@ -91,9 +91,9 @@ export default function ChatRecentWorkflows({ onPick }: Props) {
             <button
               type="button"
               onClick={() => onPick(w.name)}
-              className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] px-4 py-3 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 cursor-pointer"
+              className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-lg px-4 py-3 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 cursor-pointer"
             >
-              <div className="w-9 h-9 rounded-[10px] bg-brand-50 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                 <FileText size={16} className="text-brand-700" />
               </div>
               <div className="flex-1 min-w-0">

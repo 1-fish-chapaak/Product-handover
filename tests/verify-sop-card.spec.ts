@@ -16,10 +16,12 @@ async function gotoSOPTab(page: Page) {
   await page.goto('/');
   await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
-  await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
-  await page.getByText('Procure to Pay').first().click();
-  await expect(page.getByText(/^RACMs?$/).first()).toBeVisible({ timeout: 5000 });
-  await page.getByText(/^SOPs?$/).first().click();
+  const card = page.getByText('Procure to Pay').first();
+  await card.waitFor({ state: 'visible' });
+  await page.waitForTimeout(700); // let the card entrance cascade settle before clicking
+  await card.click();
+  await expect(page.getByText(/^RACMs?$/).first()).toBeVisible({ timeout: 12000 });
+  await page.getByRole('button', { name: 'Switch to SOPs' }).click();
   await page.waitForTimeout(700);
 }
 
@@ -62,8 +64,8 @@ test('View SOP opens an in-app document modal headed by the SOP name', async ({ 
   // It reads like the document — outline section headings + the title are present.
   await expect(dialog.getByText('Purpose & scope').first()).toBeVisible();
   await expect(dialog.getByText(sopName).first()).toBeVisible();
-  // Download lives inside the viewer too.
-  await expect(dialog.getByRole('button', { name: /Download SOP/i })).toBeVisible();
+  // Download lives inside the viewer too (labelled by the active preview tab — PDF).
+  await expect(dialog.getByRole('button', { name: /Download PDF/i })).toBeVisible();
   await page.screenshot({ path: 'test-results/sop-view-01-modal.png' });
 
   // Escape closes it.

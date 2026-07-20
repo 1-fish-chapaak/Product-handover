@@ -567,7 +567,7 @@ function ModuleCard({ mod }: { mod: ForensicModule }) {
         : 'border-l-risk';
   return (
     <div
-      className={`rounded-[10px] border border-canvas-border border-l-[3px] ${accent} bg-canvas-elevated p-4 transition-shadow hover:shadow-[0_4px_14px_rgba(106,18,205,0.05)]`}
+      className={`rounded-lg border border-canvas-border border-l-[3px] ${accent} bg-canvas-elevated p-4 transition-shadow hover:shadow-[0_4px_14px_rgba(106,18,205,0.05)]`}
     >
       <div className="flex items-start justify-between gap-3 mb-1.5">
         <h4 className="text-[0.8125rem] font-semibold text-ink-800 leading-snug">
@@ -687,7 +687,7 @@ function ForensicReportView(result: ForensicResult): ReactNode {
   return (
     <div className="space-y-6">
       {/* Executive summary */}
-      <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-6">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-6">
         <div className="flex flex-col md:flex-row md:items-center gap-6">
           <ScoreDonut score={result.composite_score} color={risk.hex} />
 
@@ -734,7 +734,7 @@ function ForensicReportView(result: ForensicResult): ReactNode {
                 return (
                   <div
                     key={i}
-                    className="flex items-start gap-2.5 rounded-[10px] border border-risk bg-risk-50/60 p-3"
+                    className="flex items-start gap-2.5 rounded-lg border border-risk bg-risk-50/60 p-3"
                   >
                     <span className="mt-0.5 w-7 h-7 rounded-lg bg-canvas-elevated flex items-center justify-center shrink-0">
                       <Icon size={15} className="text-risk-700" />
@@ -761,7 +761,7 @@ function ForensicReportView(result: ForensicResult): ReactNode {
 
       {/* Advanced diagnostics — collapsed evidence chain */}
       {result.evidence_chain.length > 0 && (
-        <details className="group rounded-[12px] border border-canvas-border overflow-hidden">
+        <details className="group rounded-lg border border-canvas-border overflow-hidden">
           <summary className="flex items-center justify-between gap-2 bg-paper-50/70 px-4 py-3 cursor-pointer list-none select-none">
             <span className="inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-600 group-hover:text-ink-800">
               <AlertTriangle size={14} className="text-ink-400" />

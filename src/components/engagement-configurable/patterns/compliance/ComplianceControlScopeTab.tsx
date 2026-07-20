@@ -14,9 +14,10 @@ import {
   deriveScopeSummary, deriveComplianceControlReadiness, LIBRARY_CONTROLS, createImportedControls,
   type ScopeControl, type ControlReadiness,
 } from './complianceControlScopeData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const NATURE_CLS = { Preventive: 'bg-emerald-50 text-emerald-700', Detective: 'bg-blue-50 text-blue-700', Corrective: 'bg-amber-50 text-amber-700' };
-const AUTO_CLS = { Manual: 'bg-gray-100 text-gray-600', Automated: 'bg-purple-50 text-purple-700', Hybrid: 'bg-indigo-50 text-indigo-700' };
+const AUTO_CLS = { Manual: 'bg-canvas text-ink-600', Automated: 'bg-purple-50 text-purple-700', Hybrid: 'bg-indigo-50 text-indigo-700' };
 const READINESS_CLS: Record<string, string> = {
   Ready: 'bg-emerald-50 text-emerald-700',
   'Attributes Missing': 'bg-red-50 text-red-600',
@@ -34,6 +35,7 @@ interface Props {
 type ActiveModal = 'library' | 'import' | 'manual' | null;
 
 export default function ComplianceControlScopeTab({ engagement, scopeControls, onUpdateScopeControls }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const controls = scopeControls;
   const summary = deriveScopeSummary(controls);
@@ -68,7 +70,7 @@ export default function ComplianceControlScopeTab({ engagement, scopeControls, o
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{cfg.framework.replace(/_/g, ' ')}</span>
-          <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[0.6875rem] font-bold">
+          <span className="px-2 py-0.5 rounded bg-canvas text-ink-600 text-[0.6875rem] font-bold">
             {cfg.controlScopeSource.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
           </span>
         </div>
@@ -138,7 +140,7 @@ export default function ComplianceControlScopeTab({ engagement, scopeControls, o
                     className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 transition-colors ${isExpanded ? 'bg-surface-2/20' : ''}`}
                     onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}
                   >
-                    <td className="px-3 py-2.5 text-gray-400">
+                    <td className="px-3 py-2.5 text-ink-400">
                       {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     </td>
                     <td className="px-3 py-2.5">
@@ -190,7 +192,7 @@ export default function ComplianceControlScopeTab({ engagement, scopeControls, o
       {activeModal === 'library' && (
         <LibraryPickerModal
           existingIds={new Set(controls.map(c => c.id))}
-          onAdd={(picked) => appendControls(picked, `${picked.length} control${picked.length !== 1 ? 's' : ''} added from library`)}
+          onAdd={(picked) => { appendControls(picked, `${picked.length} control${picked.length !== 1 ? 's' : ''} added from library`); logEvent({ action: 'Update', description: `Added ${picked.length} control${picked.length !== 1 ? 's' : ''} to scope from library in "${engagement.name}"`, module: 'Engagements', entity: 'Control' }); }}
           onClose={() => setActiveModal(null)}
         />
       )}
@@ -210,7 +212,7 @@ export default function ComplianceControlScopeTab({ engagement, scopeControls, o
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-[0.75rem] font-medium shadow-lg">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ink-900 text-white text-[0.75rem] font-medium shadow-lg">
           <CheckCircle2 size={14} className="text-emerald-400" />{toast}
         </div>
       )}
@@ -254,7 +256,7 @@ function ScopeSourceCard({ source, racmVersionId }: { source: ControlScopeSource
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[0.8125rem] font-semibold text-text mb-0.5">{card.title}</div>
-        <div className="text-[0.75rem] text-gray-500">{card.desc}</div>
+        <div className="text-[0.75rem] text-ink-500">{card.desc}</div>
       </div>
     </div>
   );
@@ -267,14 +269,14 @@ function ModalShell({ title, subtitle, onClose, children, wide }: {
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-gray-900/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink-900/40" onClick={onClose} />
       <div className={`relative bg-white rounded-2xl shadow-xl border border-border-light w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} max-h-[85vh] overflow-y-auto`}>
         <div className="sticky top-0 bg-white px-5 py-4 border-b border-border-light flex items-start justify-between rounded-t-2xl">
           <div>
             <h4 className="text-[0.875rem] font-bold text-text">{title}</h4>
             {subtitle && <p className="text-[0.75rem] text-text-muted mt-0.5">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={16} /></button>
+          <button onClick={onClose} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -313,9 +315,9 @@ function LibraryPickerModal({ existingIds, onAdd, onClose }: {
                   {c.importance === 'Key' && <Star size={10} className="fill-amber-400 text-amber-400" />}
                   <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${NATURE_CLS[c.nature]}`}>{c.nature}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${AUTO_CLS[c.automation]}`}>{c.automation}</span>
-                  {already && <span className="text-[0.6875rem] text-gray-400 font-medium">Already in scope</span>}
+                  {already && <span className="text-[0.6875rem] text-ink-400 font-medium">Already in scope</span>}
                 </div>
-                <p className="text-[0.75rem] text-gray-500 mt-1">{c.description}</p>
+                <p className="text-[0.75rem] text-ink-500 mt-1">{c.description}</p>
                 <p className="text-[0.6875rem] text-text-muted mt-1">{c.attributes.length} attribute{c.attributes.length !== 1 ? 's' : ''} · {c.process} · Owner: {c.owner}</p>
               </div>
             </label>
@@ -340,6 +342,7 @@ function LibraryPickerModal({ existingIds, onAdd, onClose }: {
 function ImportSheetModal({ onImported, onClose }: {
   onImported: (controls: ScopeControl[]) => void; onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [phase, setPhase] = useState<'idle' | 'parsing'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -348,6 +351,7 @@ function ImportSheetModal({ onImported, onClose }: {
   const startParse = () => {
     setPhase('parsing');
     timer.current = setTimeout(() => onImported(createImportedControls()), 1500);
+    logEvent({ action: 'Upload', description: 'Parsed control scope source "controls_p2p_supplement.xlsx"', module: 'Engagements', entity: 'Control' });
   };
 
   return (
@@ -383,6 +387,7 @@ const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1';
 function ManualControlModal({ nextIndex, onCreate, onClose }: {
   nextIndex: number; onCreate: (ctrl: ScopeControl) => void; onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [name, setName] = useState('');
   const [risk, setRisk] = useState('');
   const [attrs, setAttrs] = useState<string[]>(['']);
@@ -404,6 +409,7 @@ function ManualControlModal({ nextIndex, onCreate, onClose }: {
       })),
       workflows: [],
     });
+    logEvent({ action: 'Create', description: `Created control "${name.trim()}" in compliance scope`, module: 'Engagements', entity: 'Control' });
   };
 
   return (
@@ -428,7 +434,7 @@ function ManualControlModal({ nextIndex, onCreate, onClose }: {
                   placeholder={`Attribute ${i + 1} — e.g. Reconciliation reviewed monthly`} className={inputCls} />
                 {attrs.length > 1 && (
                   <button onClick={() => setAttrs(prev => prev.filter((_, j) => j !== i))}
-                    className="p-1 rounded text-gray-400 hover:text-red-500 cursor-pointer shrink-0"><X size={13} /></button>
+                    className="p-1 rounded text-ink-400 hover:text-red-500 cursor-pointer shrink-0"><X size={13} /></button>
                 )}
               </div>
             ))}
@@ -534,7 +540,7 @@ function ControlDetail({ ctrl, readiness }: { ctrl: ScopeControl; readiness: Con
           ].map(c => (
             <span key={c.label} className="flex items-center gap-1">
               {c.ok ? <CheckCircle2 size={11} className="text-emerald-500" /> : <AlertCircle size={11} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </span>
           ))}
         </div>

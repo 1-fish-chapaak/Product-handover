@@ -36,8 +36,8 @@ const STATUS_DOT: Record<EngStatus, string> = {
   'In Progress': 'bg-evidence-600',
   Review: 'bg-mitigated',
   Planned: 'bg-brand-500',
-  Draft: 'bg-gray-400',
-  Closed: 'bg-gray-400',
+  Draft: 'bg-ink-400',
+  Closed: 'bg-ink-400',
 };
 
 function healthTier(pct: number): { bar: string; text: string } {
@@ -51,7 +51,7 @@ const SEV_DOT: Record<Severity, string> = {
   Critical: 'bg-risk',
   High: 'bg-mitigated',
   Medium: 'bg-evidence-500',
-  Low: 'bg-gray-400',
+  Low: 'bg-ink-400',
 };
 
 const TYPE_ORDER: EngType[] = ['SOX / ICFR', 'Compliance', 'Internal Audit', 'Automation'];
@@ -239,14 +239,14 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           value={String(stats.total)}
           index={0}
           onClick={() => onGoToList()}
-          footer={<span className="text-[11px] text-text-muted">Across all types · view library</span>}
+          footer={<span className="text-[0.6875rem] text-text-muted">Across all types · view library</span>}
         />
         <KpiTile
           label="Active"
           value={String(stats.activeCount)}
           index={1}
           onClick={() => onGoToList({ status: 'Active' })}
-          footer={<span className="text-[11px] text-text-muted">Currently in-flight</span>}
+          footer={<span className="text-[0.6875rem] text-text-muted">Currently in-flight</span>}
         />
         <KpiTile
           label="Portfolio Health"
@@ -254,7 +254,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           index={2}
           onClick={scrollToAttention}
           footer={
-            <span className={`text-[11px] font-semibold ${stats.atRisk > 0 ? 'text-risk-700' : 'text-text-muted'}`}>
+            <span className={`text-[0.6875rem] font-semibold ${stats.atRisk > 0 ? 'text-risk-700' : 'text-text-muted'}`}>
               {stats.atRisk > 0 ? `${stats.atRisk} at risk · review` : 'All healthy'}
             </span>
           }
@@ -265,7 +265,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           index={3}
           onClick={scrollToAttention}
           footer={
-            <span className="text-[11px] text-text-muted">
+            <span className="text-[0.6875rem] text-text-muted">
               <span className="font-semibold text-risk-700">{stats.sevCounts.Critical}</span> critical ·{' '}
               <span className="font-semibold text-mitigated-700">{stats.sevCounts.High}</span> high
             </span>
@@ -285,11 +285,11 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
               const tier = healthTier(health);
               return (
                 <BreakdownRow key={type} onClick={() => onGoToList({ type })} count={count}>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${TYPE_CLS[type]}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[0.6875rem] font-semibold border ${TYPE_CLS[type]}`}>
                     {type}
                   </span>
                   {hasStarted && (
-                    <span className={`ml-auto mr-2 text-[11px] font-bold tabular-nums ${tier.text}`}>{health}%</span>
+                    <span className={`ml-auto mr-2 text-[0.6875rem] font-bold tabular-nums ${tier.text}`}>{health}%</span>
                   )}
                 </BreakdownRow>
               );
@@ -300,7 +300,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           <BreakdownColumn label="By status">
             {stats.byStatus.map(({ status, count }) => (
               <BreakdownRow key={status} onClick={() => onGoToList({ status })} count={count} dim={count === 0}>
-                <span className="flex items-center gap-2 text-[12px] font-medium text-text">
+                <span className="flex items-center gap-2 text-[0.75rem] font-medium text-text">
                   <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} aria-hidden="true" />
                   {status}
                 </span>
@@ -312,7 +312,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           <BreakdownColumn label="By process">
             {stats.byProcess.map(({ process, count }) => (
               <BreakdownRow key={process} onClick={() => onGoToList({ process })} count={count} dim={count === 0}>
-                <span className="inline-flex items-center px-2 h-5 rounded-md text-[11px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                   {process}
                 </span>
               </BreakdownRow>
@@ -341,10 +341,10 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           {sev && <span className={`w-2 h-2 rounded-full shrink-0 ${SEV_DOT[sev]}`} title={`${sev} exception open`} aria-hidden="true" />}
-                          <span className="text-[13px] font-semibold text-text truncate">{eng.name}</span>
+                          <span className="text-[0.8125rem] font-semibold text-text truncate">{eng.name}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-[11px] text-text-muted">
-                          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-semibold border ${TYPE_CLS[eng.type]}`}>
+                        <div className="flex items-center gap-2 mt-1 text-[0.6875rem] text-text-muted">
+                          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
                             {eng.type}
                           </span>
                           <span className="font-mono">{eng.code}</span>
@@ -352,11 +352,11 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                       </div>
                       <div className="flex items-center gap-4 shrink-0">
                         {eng.openIssues > 0 && (
-                          <span className="flex items-center gap-1 text-[11px] font-semibold text-risk-700">
+                          <span className="flex items-center gap-1 text-[0.6875rem] font-semibold text-risk-700">
                             <AlertTriangle size={11} />{eng.openIssues}
                           </span>
                         )}
-                        <span className={`text-[13px] font-bold tabular-nums ${tier.text}`}>{eng.health}%</span>
+                        <span className={`text-[0.8125rem] font-bold tabular-nums ${tier.text}`}>{eng.health}%</span>
                         <ChevronRight size={14} className="text-text-muted group-hover:text-primary transition-colors" />
                       </div>
                     </Row>
@@ -380,16 +380,16 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                 return (
                   <Row key={eng.id} index={i} onClick={() => onOpenEngagement(eng.id)}>
                     <div className="min-w-0 flex-1">
-                      <span className="text-[13px] font-semibold text-text truncate block">{eng.name}</span>
-                      <span className="text-[11px] text-text-muted font-mono">{eng.code} · {eng.owner}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text truncate block">{eng.name}</span>
+                      <span className="text-[0.6875rem] text-text-muted font-mono">{eng.code} · {eng.owner}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${tone.text}`}>
+                      <span className={`inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold ${tone.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} aria-hidden="true" />
                         {next.label}
                       </span>
                       {next.date && (
-                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[11px] font-semibold tabular-nums bg-surface-2 text-text-secondary border border-border-light">
+                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold tabular-nums bg-surface-2 text-text-secondary border border-border-light">
                           {fmtMilestoneDate(next.date)}
                         </span>
                       )}
@@ -423,12 +423,12 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                     <Icon size={14} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[12.5px] text-text truncate block leading-snug">{ev.title}</span>
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-[0.78125rem] text-text truncate block leading-snug">{ev.title}</span>
+                    <span className="text-[0.6875rem] text-text-muted">
                       {ev.actor} · {engName}
                     </span>
                   </div>
-                  <span className="text-[11px] text-text-muted tabular-nums shrink-0">{formatDay(ev.dayOffset)}</span>
+                  <span className="text-[0.6875rem] text-text-muted tabular-nums shrink-0">{formatDay(ev.dayOffset)}</span>
                 </Row>
               );
             })}
@@ -455,13 +455,13 @@ function SectionCard({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="rounded-xl border border-border-light bg-white p-4"
+      className="rounded-lg border border-border-light bg-white p-4"
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
           {icon}
-          <h3 className="text-[13px] font-semibold text-text">{title}</h3>
-          {subtitle && <span className="text-[11px] text-text-muted truncate hidden sm:inline">— {subtitle}</span>}
+          <h3 className="text-[0.8125rem] font-semibold text-text">{title}</h3>
+          {subtitle && <span className="text-[0.6875rem] text-text-muted truncate hidden sm:inline">— {subtitle}</span>}
         </div>
         {action}
       </div>
@@ -474,7 +474,7 @@ function SectionLink({ label, onClick }: { label: string; onClick: () => void })
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer shrink-0"
+      className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer shrink-0"
     >
       {label}<ArrowUpRight size={12} />
     </button>
@@ -484,7 +484,7 @@ function SectionLink({ label, onClick }: { label: string; onClick: () => void })
 function BreakdownColumn({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1.5">{label}</div>
+      <div className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -504,7 +504,7 @@ function BreakdownRow({
       className={`group w-full flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-lg hover:bg-primary/5 transition-colors cursor-pointer text-left ${dim ? 'opacity-50' : ''}`}
     >
       {children}
-      <span className="ml-auto text-[12px] font-bold tabular-nums text-text">{count}</span>
+      <span className="ml-auto text-[0.75rem] font-bold tabular-nums text-text">{count}</span>
       <ChevronRight size={13} className="text-text-muted/60 group-hover:text-primary transition-colors shrink-0" />
     </button>
   );
@@ -532,7 +532,7 @@ function Row({
 
 function EmptyRow({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-2 py-6 justify-center text-[12px] text-text-muted">
+    <div className="flex items-center gap-2 py-6 justify-center text-[0.75rem] text-text-muted">
       <ClipboardCheck size={15} className="text-text-muted/70" />
       {text}
     </div>

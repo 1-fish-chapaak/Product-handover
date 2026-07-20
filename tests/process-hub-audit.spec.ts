@@ -26,9 +26,11 @@ async function drillIntoFirstProcess(page: Page) {
   // The process cards include text like "P2P" or "Procure to Pay". Click the first card.
   // Try clicking on any element that says "Procure to Pay" or contains P2P.
   const firstCard = page.getByText('Procure to Pay').first();
+  await firstCard.waitFor({ state: 'visible' });
+  await page.waitForTimeout(700); // let the card entrance cascade settle before clicking
   await firstCard.click();
-  // BP detail shows breadcrumb "Process Hub / ..." and 5 section index rows.
-  await expect(page.getByText(/SOP|RACM|Risks|Controls|Workflows/).first()).toBeVisible({ timeout: 5000 });
+  // BP detail opens directly on its first section (SOPs) with the section tab bar.
+  await expect(page.getByText(/SOP|RACM|Risks|Controls|Workflows/).first()).toBeVisible({ timeout: 12000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -37,20 +39,17 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('Process Hub UX audit fixes (P0–P3)', () => {
   // ───────────────────────────────────────────────────────────
-  // T1 — Hub landing renders + Coverage tooltip (P0)
+  // T1 — Hub landing renders + Coverage help affordance (P0)
   // ───────────────────────────────────────────────────────────
-  test('T1 — Coverage tooltip appears on hover (P0)', async ({ page }) => {
+  test('T1 — Coverage help affordance is present on the hub cards (P0)', async ({ page }) => {
     await gotoProcessHub(page);
 
-    // The HelpCircle next to Coverage carries aria-label="What is Coverage?".
-    // Hovering it triggers the parent group-hover and the tooltip opacity flips to 1.
-    const helpIcon = page.locator('[aria-label="What is Coverage?"]').first();
+    // The HelpCircle next to each card's "Coverage" stat now surfaces its
+    // explanation as a native tooltip: an accessible span (cursor-help) whose
+    // aria-label + title spell out what Coverage means.
+    const helpIcon = page.locator('[aria-label*="percent of identified risks"]').first();
     await expect(helpIcon).toBeVisible();
-    await helpIcon.hover();
-
-    // Tooltip body text becomes visible (opacity-100).
-    const tooltip = page.getByText(/percent of identified risks/i).first();
-    await expect(tooltip).toBeVisible({ timeout: 2000 });
+    await expect(helpIcon).toHaveAttribute('title', /percent of identified risks/i);
   });
 
   // ───────────────────────────────────────────────────────────
@@ -87,21 +86,20 @@ test.describe('Process Hub UX audit fixes (P0–P3)', () => {
   });
 
   // ───────────────────────────────────────────────────────────
-  // T4 — Browser back navigates back to BP index (P0)
+  // T4 — Browser back navigates back through sections (P0)
   // ───────────────────────────────────────────────────────────
-  test('T4 — Browser back from drilled section returns to BP index (P0)', async ({ page }) => {
+  test('T4 — Browser back from a drilled section returns to the first section (P0)', async ({ page }) => {
     await gotoProcessHub(page);
     await drillIntoFirstProcess(page);
     await page.getByText(/^RACMs?$/).first().click();
     await expect(page).toHaveURL(/\?section=racm/);
 
-    // Hit browser back — drill should close.
+    // Hit browser back — the process opens directly on its first section (SOPs), so
+    // back returns there (there is no section-less BP index page anymore).
     await page.goBack();
+    await expect(page).toHaveURL(/\?section=sop/, { timeout: 3000 });
 
-    // URL no longer has ?section=
-    await expect(page).not.toHaveURL(/\?section=/);
-
-    // Section index visible again — 5 sections all present.
+    // Section tab bar still present — all sections reachable.
     await expect(page.getByText(/^Risks$/).first()).toBeVisible();
   });
 
