@@ -6,7 +6,7 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
-import { OwnerPicker, RoleSwitcher } from './parts';
+import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm, { RacmLanding } from './Racm';
@@ -26,7 +26,7 @@ const SOX_TABS: TabDef[] = [
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
@@ -101,7 +101,14 @@ function Inner({ onBack }: { onBack?: () => void }) {
   }
 
   // The five tabs are the primary nav; everything else is a drill-in reached from them.
-  const isRoot = view === 'overview' || view === 'racm' || view === 'racm-list' || view === 'risks' || view === 'register' || view === 'runs';
+  // A drilled-in RACM matrix stands alone like the control page — no engagement
+  // header, no tabs; its breadcrumb carries the context and every step back up.
+  const isRacmMatrix = view === 'racm-list';
+  const isScope = view === 'scope';
+  const isDeficiencies = view === 'deficiencies';
+  // drilled-in document pages carry a breadcrumb instead of the engagement header
+  const isDrillIn = isRacmMatrix || isScope || isDeficiencies;
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
@@ -113,12 +120,49 @@ function Inner({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
-      {/* The control detail page stands alone — no engagement header, no role
-          switcher; the persona is fixed until you go back to the engagement. */}
-      {view !== 'dossier' && topBar}
+      {/* The control detail page and the RACM matrix stand alone — no engagement
+          header, no role switcher; the persona is fixed until you go back to the
+          engagement. */}
+      {view !== 'dossier' && !isDrillIn && topBar}
       <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
         {isRoot && (
           <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
+        )}
+        {isRacmMatrix && (
+          <SoxBreadcrumb onBack={() => setView('racm')} items={[
+            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            { label: eng.name, onClick: () => setTab('overview') },
+            { label: 'RACM', onClick: () => setView('racm') },
+            { label: racmProcess ?? eng.controls[0]?.process ?? 'Matrix' },
+          ]} />
+        )}
+        {isScope && (
+          /* one level up from the ground rules is the engagement itself — always
+             its Overview, not whichever tab happened to be open when it was opened */
+          <SoxBreadcrumb onBack={() => setTab('overview')} items={[
+            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            { label: eng.name, onClick: () => setTab('overview') },
+            { label: 'Materiality & scope' },
+          ]} />
+        )}
+        {isDeficiencies && (
+          /* Reached from the Overview, a control's dossier, the reviewer queue and
+             notifications — so the arrow returns to context, not a pinned page.
+             The persona switcher rides along here (it does not on the other
+             drill-ins): this page IS the three-lines handoff, walked by switching
+             hats — owner remediates, auditor retests, reviewer closes. */
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <SoxBreadcrumb onBack={back} items={[
+              ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+              { label: eng.name, onClick: () => setTab('overview') },
+              { label: role === 'risk-owner' ? 'My exceptions' : 'Exceptions' },
+            ]} />
+            <div className="flex items-center gap-2 mb-3 shrink-0 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+              <RoleSwitcher role={role} onChange={setRole} />
+              {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+            </div>
+          </div>
         )}
         <AnimatePresence mode="wait">
           <motion.div key={`${role}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>

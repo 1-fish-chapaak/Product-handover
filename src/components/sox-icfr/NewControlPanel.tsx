@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Star, X } from 'lucide-react';
 import { useIcfr } from './store';
+import { FormSelect } from '../shared/FilterSelect';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Assertion, Frequency, Nature } from './types';
@@ -127,10 +128,8 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Process">
-              <select value={process} onChange={e => setProcess(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
-                {processes.map(p => <option key={p}>{p}</option>)}
-                <option value={NEW_PROCESS}>＋ Add new process…</option>
-              </select>
+              <FormSelect value={process} onChange={setProcess} className={inputCls} ariaLabel="Process"
+                options={[...processes, { value: NEW_PROCESS, label: '＋ Add new process…' }]} />
             </Field>
             <Field label="Sub-process">
               <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Vendor master" className={inputCls} />
@@ -143,10 +142,8 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
           )}
 
           <Field label="Linked risk">
-            <select value={riskChoice} onChange={e => setRiskChoice(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
-              {riskOptions.map(r => <option key={r.id} value={r.id}>{r.id} — {r.description.length > 56 ? `${r.description.slice(0, 55)}…` : r.description}</option>)}
-              <option value={NEW_RISK}>＋ New risk ({nextRiskId})</option>
-            </select>
+            <FormSelect value={riskChoice} onChange={setRiskChoice} className={inputCls} ariaLabel="Linked risk" menuCls="w-full"
+              options={[...riskOptions.map(r => ({ value: r.id, label: `${r.id} — ${r.description.length > 56 ? `${r.description.slice(0, 55)}…` : r.description}` })), { value: NEW_RISK, label: `＋ New risk (${nextRiskId})` }]} />
           </Field>
           {riskChoice === NEW_RISK && (
             <Field label={`New risk description (${nextRiskId})`} required>
@@ -156,20 +153,14 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Nature">
-              <select value={nature} onChange={e => setNature(e.target.value as Nature)} className={cn(inputCls, 'cursor-pointer')}>
-                {NATURES.map(n => <option key={n}>{n}</option>)}
-              </select>
+              <FormSelect value={nature} onChange={v => setNature(v as Nature)} className={inputCls} ariaLabel="Nature" options={NATURES} />
             </Field>
             <Field label="Frequency">
-              <select value={frequency} onChange={e => setFrequency(e.target.value as Frequency)} className={cn(inputCls, 'cursor-pointer')}>
-                {FREQUENCIES.map(f => <option key={f}>{f}</option>)}
-              </select>
+              <FormSelect value={frequency} onChange={v => setFrequency(v as Frequency)} className={inputCls} ariaLabel="Frequency" options={FREQUENCIES} />
             </Field>
             <Field label="Owner">
-              <select value={owner} onChange={e => setOwner(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
-                {owners.map(o => <option key={o}>{o}</option>)}
-                <option value={NEW_OWNER}>＋ Add new owner…</option>
-              </select>
+              <FormSelect value={owner} onChange={setOwner} className={inputCls} ariaLabel="Owner"
+                options={[...owners, { value: NEW_OWNER, label: '＋ Add new owner…' }]} />
             </Field>
             <Field label="Key control">
               <button onClick={() => setIsKey(k => !k)} type="button"

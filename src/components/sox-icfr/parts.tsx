@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -18,7 +18,7 @@ export function NatureChip({ nature, small }: { nature: Nature; small?: boolean 
   const Icon = nature === 'Automated' ? WorkflowIcon : nature === 'IT-dependent' ? Cpu : Hand;
   const tone = nature === 'Automated' ? 'bg-evidence-50 border-evidence-100 text-evidence-700' : nature === 'IT-dependent' ? 'bg-brand-50 border-brand-100 text-brand-700' : 'bg-paper-50 border-canvas-border text-ink-600';
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold', tone, small ? 'px-1.5 h-5 text-[10px]' : 'px-2 h-[22px] text-[0.65625rem]')}>
+    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold whitespace-nowrap', tone, small ? 'px-1.5 h-5 text-[10px]' : 'px-2 h-[22px] text-[0.65625rem]')}>
       <Icon size={small ? 9 : 10} />{nature}
     </span>
   );
@@ -158,6 +158,43 @@ export function OwnerPicker({ owner, options, onChange }: { owner: string; optio
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * Breadcrumb for the SOX drill-in pages, in the Process Hub trail's language:
+ * mono, a back arrow on the first crumb only, then slash-separated steps up.
+ * With `onBack`, the arrow instead stands alone before the crumbs as a
+ * one-level-up button, and the first crumb stays a plain link.
+ * A drilled-in surface (the RACM matrix) drops the engagement header, so this
+ * line carries the whole "where am I" job and every step back out.
+ */
+export function SoxBreadcrumb({ items, onBack }: { items: { label: string; onClick?: () => void }[]; onBack?: () => void }) {
+  return (
+    <nav aria-label="Breadcrumb" className="font-mono text-[0.75rem] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
+      {onBack && (
+        <button type="button" onClick={onBack} aria-label="Back"
+          className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded-sm">
+          <ArrowLeft size={12} />
+        </button>
+      )}
+      {items.map((item, i) => {
+        const last = i === items.length - 1;
+        return (
+          <div key={i} className="flex items-center gap-1.5 min-w-0">
+            {i > 0 && <span className="text-ink-300" aria-hidden>/</span>}
+            {item.onClick && !last ? (
+              <button type="button" onClick={item.onClick}
+                className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded-sm">
+                {i === 0 && !onBack && <ArrowLeft size={12} className="shrink-0" />}{item.label}
+              </button>
+            ) : (
+              <span className="text-ink-700 truncate" aria-current={last ? 'page' : undefined}>{item.label}</span>
+            )}
+          </div>
+        );
+      })}
+    </nav>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FlaskConical, Loader2, MessageSquareWarning,
+  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FlaskConical, Loader2, MessageSquareWarning,
   Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
@@ -8,7 +8,9 @@ import { controlConclusion, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
+import { FilterSelect } from '../shared/FilterSelect';
 import BulkTestModal from './BulkTestModal';
+import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -39,104 +41,16 @@ function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<
 }
 
 /**
- * RACM tab landing — one RACM per business process, each shown as a document
- * card. Opening a card shows that process's full risks & controls matrix; the
- * spreadsheet editor stays one click away per RACM.
+ * RACM tab landing — one RACM per business process, one row per RACM in the
+ * module's register-table language. Every fact the old document cards carried
+ * survives as a column: title (icon tile, spine colour, version), matrix
+ * status, risk / control counts, the pre-testing review meter, and the row's
+ * actions. Clicking a row opens that process's full risks & controls matrix;
+ * the spreadsheet editor stays one click away per RACM.
  */
 export function RacmLanding() {
-  const { eng, openRacmMatrix } = useIcfr();
-
-  const processes = useMemo(() => {
-    const map = new Map<string, Control[]>();
-    eng.controls.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
-    return Array.from(map, ([name, rows]) => ({ name, rows }));
-  }, [eng.controls]);
-
-  return (
-    <div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {processes.map(({ name, rows }) => {
-          const status = matrixStatusOf(rows);
-          const risks = new Set(rows.map(c => c.riskId)).size;
-          const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
-          const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
-          return (
-            <div key={name} role="button" tabIndex={0} aria-label={`Open ${name} RACM`}
-              onClick={() => openRacmMatrix(name)} onKeyDown={e => { if (e.key === 'Enter') openRacmMatrix(name); }}
-              className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 cursor-pointer hover:border-brand-300 transition-colors group">
-              <div className="flex items-start gap-3.5">
-                <span className="w-11 h-11 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={20} /></span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="w-2 h-2 rounded-[3px] shrink-0" style={{ background: spineColor(name) }} />
-                    <h2 className="text-[15px] font-semibold text-ink-900 truncate" style={{ fontFamily: "'Source Serif 4', serif" }}>{name} — RACM</h2>
-                    <span className="font-mono text-[11px] text-ink-400">v1.0</span>
-                    <Pill tone={status.tone}>{status.label}</Pill>
-                  </div>
-                  <p className="text-[12.5px] text-ink-500 mt-1">{risks} risk{risks === 1 ? '' : 's'} · {rows.length} control{rows.length === 1 ? '' : 's'}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <div className="flex-1 max-w-[220px] h-2 rounded-full bg-paper-100 overflow-hidden flex">
-                      <span className="h-full bg-compliant-500" style={{ width: `${(approved / Math.max(1, rows.length)) * 100}%` }} />
-                      <span className="h-full bg-high-400" style={{ width: `${(remarks / Math.max(1, rows.length)) * 100}%` }} />
-                    </div>
-                    <span className="text-[11px] tabular-nums text-ink-400">{approved}/{rows.length} approved</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-canvas-border">
-                {/* plain hint — the whole card is the click target, so this must not look like its own link/button */}
-                <span className="text-[12px] text-ink-400">Open RACM</span>
-                <span className="flex-1" />
-                <button onClick={e => { e.stopPropagation(); openEditorTab(eng.id, name); }}
-                  title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-                  <FileSpreadsheet size={13} /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** The auditor's review status on one RACM row — approval, remark, or pending. */
-function ReviewCell({ c }: { c: Control }) {
-  const r = c.racmReview;
-  if (!r) return <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Circle size={11} /> Pending review</span>;
-  if (r.status === 'Approved') {
-    // pre-testing review pass — reads as "ready to test", NOT a tested-effective
-    // result; distinct icon + wording keep it clear of the ✓ test tickmarks.
-    return (
-      <span className="inline-flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
-        <span className="text-[10.5px] text-ink-400">Approved · {r.by} · {r.at}</span>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex flex-col gap-0.5 min-w-0">
-      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
-      <span className="text-[10.5px] text-ink-500 truncate max-w-[200px]" title={r.remark}>{r.remark}</span>
-    </span>
-  );
-}
-
-/**
- * One business process's RACM — the full risks & controls matrix, rows in W/P
- * order. Every row carries the auditor's approval / remark status; the
- * spreadsheet editor remains one click away for cell-by-cell editing.
- */
-export default function Racm() {
-  const { eng, role, racmProcess, setView, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
+  const { eng, openRacmMatrix, addRacmDoc } = useIcfr();
   const { addToast } = useToast();
-  const [q, setQ] = useState('');
-  const [review, setReview] = useState<ReviewFilter>('All');
-  const [sel, setSel] = useState<Set<string>>(new Set());
-  const [remarkFor, setRemarkFor] = useState<Control | null>(null);
-  const [remarkText, setRemarkText] = useState('');
-  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +66,123 @@ export default function Racm() {
       addToast({ type: 'success', title: 'Imported', message: `${f.name} attached to the engagement RACM — rows and test attributes read from the document.` });
     }, 1600);
   };
+
+  const processes = useMemo(() => {
+    const map = new Map<string, Control[]>();
+    eng.controls.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
+    return Array.from(map, ([name, rows]) => ({ name, rows }));
+  }, [eng.controls]);
+
+  return (
+    <>
+    <div className="flex items-center justify-end mb-3">
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
+      <button onClick={() => fileRef.current?.click()} disabled={!!importing}
+        title="Upload a RACM workbook or SOP — rows and test attributes are read from the document"
+        className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
+        {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
+      </button>
+    </div>
+    <div className="reg-wrap">
+      <table className="w-full border-collapse">
+        <thead className="reg-head">
+          <tr>
+            <th>RACM</th>
+            <th style={{ width: 118 }}>Status</th>
+            <th style={{ width: 64 }}>Risks</th>
+            <th style={{ width: 82 }}>Controls</th>
+            <th style={{ width: 236 }}>Pre-testing review</th>
+            <th style={{ width: 230 }} aria-label="Actions" />
+          </tr>
+        </thead>
+        <tbody>
+          {processes.map(({ name, rows }) => {
+            const status = matrixStatusOf(rows);
+            const risks = new Set(rows.map(c => c.riskId)).size;
+            const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
+            const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
+            return (
+              <tr key={name} className="reg-row" role="button" tabIndex={0} aria-label={`Open ${name} RACM`}
+                onClick={() => openRacmMatrix(name)} onKeyDown={e => { if (e.key === 'Enter') openRacmMatrix(name); }}>
+                <td>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
+                    <span className="w-2 h-2 rounded-[3px] shrink-0" style={{ background: spineColor(name) }} aria-hidden />
+                    <span className="text-[13.5px] font-semibold text-ink-900 truncate" style={{ fontFamily: "'Source Serif 4', serif" }}>{name} — RACM</span>
+                    <span className="font-mono text-[11px] text-ink-400 shrink-0">v1.0</span>
+                  </span>
+                </td>
+                <td><Pill tone={status.tone}>{status.label}</Pill></td>
+                <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
+                <td><span className="tabular-nums font-medium text-ink-600">{rows.length}</span></td>
+                <td>
+                  <span className="flex items-center gap-2">
+                    <span className="w-[120px] h-2 rounded-full bg-paper-100 overflow-hidden flex shrink-0">
+                      <span className="h-full bg-compliant-500" style={{ width: `${(approved / Math.max(1, rows.length)) * 100}%` }} />
+                      <span className="h-full bg-high-400" style={{ width: `${(remarks / Math.max(1, rows.length)) * 100}%` }} />
+                    </span>
+                    <span className="text-[11px] tabular-nums text-ink-400 whitespace-nowrap">{approved}/{rows.length} approved</span>
+                  </span>
+                </td>
+                <td>
+                  <span className="flex items-center justify-end">
+                    <button onClick={e => { e.stopPropagation(); openEditorTab(eng.id, name); }}
+                      title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
+                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer whitespace-nowrap">
+                      <FileSpreadsheet size={13} /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
+                    </button>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    </>
+  );
+}
+
+/** The auditor's review status on one RACM row — approval, remark, or pending. */
+function ReviewCell({ c }: { c: Control }) {
+  const r = c.racmReview;
+  if (!r) return <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Circle size={11} /> Pending review</span>;
+  if (r.status === 'Approved') {
+    // pre-testing review pass — reads as "ready to test", NOT a tested-effective
+    // result; distinct icon + wording keep it clear of the ✓ test tickmarks.
+    return (
+      <span className="inline-flex flex-col gap-0.5 min-w-0">
+        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
+        {/* who + when only — "Approved" is already said by the headline above */}
+        <span className="text-[10.5px] text-ink-400 truncate max-w-[180px]" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-col gap-0.5 min-w-0">
+      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
+      <span className="text-[10.5px] text-ink-500 truncate max-w-[180px]" title={r.remark}>{r.remark}</span>
+    </span>
+  );
+}
+
+/**
+ * One business process's RACM — the full risks & controls matrix, rows in W/P
+ * order. Every row carries the auditor's approval / remark status; the
+ * spreadsheet editor remains one click away for cell-by-cell editing.
+ */
+export default function Racm() {
+  const { eng, role, racmProcess, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs } = useIcfr();
+  const [q, setQ] = useState('');
+  const [review, setReview] = useState<ReviewFilter>('All');
+  // column filters — empty array = column unfiltered
+  const [natureF, setNatureF] = useState<string[]>([]);
+  const [designF, setDesignF] = useState<string[]>([]);
+  const [operatingF, setOperatingF] = useState<string[]>([]);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [remarkFor, setRemarkFor] = useState<Control | null>(null);
+  const [remarkText, setRemarkText] = useState('');
+  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
 
   const isAuditor = role === 'auditor';
   const proc = racmProcess ?? eng.controls[0]?.process ?? '';
@@ -171,10 +202,13 @@ export default function Racm() {
       if (review === 'Approved' && c.racmReview?.status !== 'Approved') return false;
       if (review === 'Remark' && c.racmReview?.status !== 'Remark') return false;
       if (review === 'Pending' && c.racmReview) return false;
+      if (natureF.length && !natureF.includes(c.nature)) return false;
+      if (designF.length && !designF.includes(trackResult(c.design))) return false;
+      if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     }).sort((a, b) => a.wpRef.localeCompare(b.wpRef));
-  }, [controls, q, review]);
+  }, [controls, q, review, natureF, designF, operatingF]);
 
   const allVisible = filtered.map(c => c.id);
   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
@@ -184,23 +218,13 @@ export default function Racm() {
   const openRemark = (c: Control) => { setRemarkFor(c); setRemarkText(c.racmReview?.status === 'Remark' ? (c.racmReview.remark ?? '') : ''); };
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
-  const risks = new Set(controls.map(c => c.riskId)).size;
   // the row-select column only renders for the auditor (only they have bulk actions)
   const colSpan = isAuditor ? 9 : 8;
 
-  const reviewChip = (id: ReviewFilter, label: string, n: number, Icon: typeof CheckCircle2, cls: string) => (
-    <button onClick={() => setReview(review === id ? 'All' : id)}
-      className={cn('view-chip', review === id && 'on')} title={`${n} ${label.toLowerCase()}`}>
-      <Icon size={12} className={review === id ? undefined : cls} /> {label} <span className="tabular-nums opacity-70">{n}</span>
-    </button>
-  );
-
   return (
     <div>
-      <button onClick={() => setView('racm')} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors mb-3">
-        <ArrowLeft size={14} /> RACMs
-      </button>
-      {/* header — this process's RACM */}
+      {/* header — this process's RACM. Getting back up is the breadcrumb's job
+          (rendered by the shell): Engagements / engagement / RACM / this matrix. */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
@@ -209,26 +233,34 @@ export default function Racm() {
             <span className="font-mono text-[11px] text-ink-400">v1.0</span>
             <Pill tone={matrixStatus.tone}>{matrixStatus.label}</Pill>
           </div>
-          <p className="text-[13px] text-ink-500 mt-0.5">{eng.entity} · {risks} risks · {controls.length} controls</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
-          <button onClick={() => fileRef.current?.click()} disabled={!!importing}
-            title="Upload a RACM workbook or SOP — rows and test attributes are read from the document"
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
-            {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
-          </button>
-          {isAuditor && <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
-            title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-            <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
-          </button>}
-          <button onClick={() => openEditorTab(eng.id, proc)}
-            title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-            <FileSpreadsheet size={15} /> Open spreadsheet editor <ExternalLink size={13} className="opacity-80" />
-          </button>
+      </div>
+
+      {/* toolbar — search + status filter on the left, the matrix's actions on the right */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, controls, owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
+        <FilterSelect prefix="Status" engaged={review !== 'All'} value={review}
+          options={[
+            { value: 'All', label: `All (${controls.length})` },
+            { value: 'Approved', label: `Approved (${counts.approved})` },
+            { value: 'Remark', label: `Remarks (${counts.remarks})` },
+            { value: 'Pending', label: `Pending (${counts.pending})` },
+          ]}
+          onChange={v => setReview(v as ReviewFilter)} ariaLabel="Filter by review status" />
+        <div className="flex-1" />
+        {isAuditor && <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
+          title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+          <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
+        </button>}
+        <button onClick={() => openEditorTab(eng.id, proc)}
+          title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+          <FileSpreadsheet size={15} /> Open spreadsheet editor <ExternalLink size={13} className="opacity-80" />
+        </button>
       </div>
 
       {/* source documents pinned to the matrix */}
@@ -244,47 +276,33 @@ export default function Racm() {
         </div>
       )}
 
-      {/* pre-testing review summary — rows approved as ready-to-test, at a glance */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mr-0.5" title="Approving a row means the control as documented is ready to test — it is not a testing conclusion">Pre-testing review</span>
-        {reviewChip('Approved', 'Approved', counts.approved, CheckCircle2, 'text-compliant-600')}
-        {reviewChip('Remark', 'Remarks', counts.remarks, MessageSquareWarning, 'text-high-600')}
-        {reviewChip('Pending', 'Pending', counts.pending, Circle, 'text-ink-400')}
-        <div className="flex-1 min-w-[120px] max-w-[260px] h-2 rounded-full bg-paper-100 overflow-hidden flex ml-1">
-          <span className="h-full bg-compliant-500" style={{ width: `${(counts.approved / Math.max(1, controls.length)) * 100}%` }} />
-          <span className="h-full bg-high-400" style={{ width: `${(counts.remarks / Math.max(1, controls.length)) * 100}%` }} />
-        </div>
-        <span className="text-[11px] tabular-nums text-ink-400">{counts.approved}/{controls.length} approved</span>
-        <div className="flex-1" />
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, controls, owners…" className="h-9 w-60 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-        </div>
-      </div>
-
-      {/* legend — the test marks (echoed in the ① Design / ② Operating columns) and the test sequence */}
-      <div className="flex items-center gap-x-3 gap-y-1 mb-2 flex-wrap text-[11px] text-ink-400">
-        <span className="inline-flex items-center gap-1.5"><Tickmark result="Pass" size={13} /> effective</span>
-        <span className="inline-flex items-center gap-1.5"><Tickmark result="Fail" size={13} /> ineffective</span>
-        <span className="inline-flex items-center gap-1.5"><Tickmark result="Not tested" size={13} /> not tested</span>
-        <span className="w-px h-3 bg-canvas-border mx-0.5" />
-        <span>① Design → ② Operating (the test sequence)</span>
-      </div>
-
-      {/* the matrix — flat rows in W/P order (already scoped to one process) */}
+      {/* the matrix — flat rows in W/P order (already scoped to one process).
+          No legend: the ✓ / ✗ / – marks explain themselves on hover. */}
       <div className="reg-wrap">
         <table className="w-full border-collapse">
           <thead className="reg-head">
             <tr>
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
-              <th style={{ width: 64 }} title="Working-paper reference">W/P</th>
-              <th style={{ width: 230 }}>Risk</th>
+              <th style={{ width: 56 }} title="Working-paper reference">W/P</th>
+              <th style={{ width: 200 }}>Risk</th>
               <th>Control</th>
-              <th style={{ width: 96 }}>Nature</th>
-              <th style={{ width: 84 }}>① Design</th>
-              <th style={{ width: 84 }}>② Operating</th>
-              <th style={{ width: 220 }} title="Approving a row means the control as documented is ready to test">Pre-testing review</th>
-              <th style={{ width: 76 }} />
+              <th style={{ width: 104 }}>
+                <span className="inline-flex items-center gap-1">Nature
+                  <ColumnFilter label="Nature" options={['Manual', 'Automated', 'IT-dependent']} value={natureF} onChange={setNatureF} />
+                </span>
+              </th>
+              <th style={{ width: 88 }} title="Test of design — tested first; operating unlocks after design passes">
+                <span className="inline-flex items-center gap-1">Design
+                  <ColumnFilter label="Design" options={['Effective', 'Ineffective', 'Not tested']} value={designF} onChange={setDesignF} />
+                </span>
+              </th>
+              <th style={{ width: 104 }} title="Test of operating effectiveness — tested after design">
+                <span className="inline-flex items-center gap-1">Operating
+                  <ColumnFilter label="Operating" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
+                </span>
+              </th>
+              <th style={{ width: 200 }} title="Approving a row means the control as documented is ready to test">Pre-testing review</th>
+              <th style={{ width: 88 }} />
             </tr>
           </thead>
           <tbody>
@@ -304,18 +322,18 @@ export default function Racm() {
                   <td className="tight">
                     <div className="flex items-center gap-1.5">
                       {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                      <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[340px]" title={c.description}>{c.description}</span>
+                      <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[300px]" title={c.description}>{c.description}</span>
                       {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
                       {ineffective && <Pill tone="risk">Ineffective</Pill>}
                     </div>
                     {/* the highest-value supporting facts only — identity · sub-process · owner; guarded so an empty field never leaves a dangling middot */}
-                    <div className="text-[11px] text-ink-400 mt-0.5">
+                    <div className="text-[11px] text-ink-400 mt-0.5 truncate max-w-[360px]" title={[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}>
                       {[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}
                     </div>
                   </td>
                   <td><NatureChip nature={c.nature} small /></td>
-                  <td><span className="inline-flex items-center gap-1.5"><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
-                  <td><span className="inline-flex items-center gap-1.5"><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Design — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Operating — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td><ReviewCell c={c} /></td>
                   <td onClick={e => e.stopPropagation()}>
                     {isAuditor && (
@@ -334,7 +352,7 @@ export default function Racm() {
             })}
             {filtered.length === 0 && (
               <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">
-                <Table2 size={20} className="mx-auto mb-2 opacity-40" /> No RACM rows match these filters. <button onClick={() => { setQ(''); setReview('All'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button>
+                <Table2 size={20} className="mx-auto mb-2 opacity-40" /> No RACM rows match these filters. <button onClick={() => { setQ(''); setReview('All'); setNatureF([]); setDesignF([]); setOperatingF([]); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button>
               </td></tr>
             )}
           </tbody>

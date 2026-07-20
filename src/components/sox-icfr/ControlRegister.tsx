@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
+  Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
 } from 'lucide-react';
+import { FilterSelect } from '../shared/FilterSelect';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isEngagementLocked, openDiscussionCount,
@@ -163,26 +164,36 @@ export default function ControlRegister() {
 
   return (
     <div>
-      {/* header — the old title + subtitle run-on is now a KPI rail (Overview's tile language) */}
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <div className="flex items-stretch gap-3 flex-wrap">
-          {[
-            { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: scoped.length, t: 'text-ink-900' },
-            { k: 'Tests due now', v: testsDueNow(scoped).length, t: 'text-mitigated-700' },
-            { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
-            { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
-            { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
-          ].map(s => (
-            <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
-              <div className={cn('text-[20px] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
-              <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
-            </div>
-          ))}
+      {/* toolbar — first, matching the sibling tabs (RACM, Risk Library), so the
+          filters sit directly under the tab bar. Status folds the saved views in. */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
-        <div className="flex items-center gap-1.5">
+        <FilterSelect prefix="Status" engaged={savedView !== 'all'} value={savedView}
+          options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+          onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
+        <FilterSelect value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
+        <FilterSelect value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" />
+        <div className="flex-1" />
+        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
+        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
+        {/* view toggle — icon-only, matching Reports' ToolbarViewToggle. Sized to
+            this toolbar's h-9 rhythm rather than the h-10 the Reports toolbar runs. */}
+        <div className="flex items-center gap-0.5 p-1 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('cards')} title="Card view" aria-label="Card view" aria-pressed={layout === 'cards'}
+            className={cn('p-1.5 rounded-[7px] cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={15} /></button>
+          <button onClick={() => setLayout('table')} title="Table view" aria-label="Table view" aria-pressed={layout === 'table'}
+            className={cn('p-1.5 rounded-[7px] cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><Table2 size={15} /></button>
+        </div>
+        {/* the register's actions — view controls to their left, primary CTA last */}
+        <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
-          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setRollConfirm(true)} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
+          {/* Roll forward to year-end — parked. The confirm modal and rollForward()
+              wiring below stay intact; restore this trigger to bring it back. */}
+          {/* {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setRollConfirm(true)} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>} */}
           {role === 'auditor' && !isEngagementLocked(eng) && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
@@ -191,39 +202,22 @@ export default function ControlRegister() {
             </button>
           )}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
-        </div>
       </div>
 
-      {/* toolbar — Status folds the saved views into one filter */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-        </div>
-        <div className={cn('inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border bg-canvas-elevated', savedView !== 'all' ? 'border-brand-300' : 'border-canvas-border')}>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Status</span>
-          <select value={savedView} onChange={e => setSavedView(e.target.value as SavedView)} aria-label="Filter by status" className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
-            {VIEWS.map(v => <option key={v.id} value={v.id}>{v.label} ({viewCounts[v.id]})</option>)}
-          </select>
-        </div>
-        <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <ListFilter size={13} className="text-ink-400" />
-          <select value={process} onChange={e => setProcess(e.target.value)} className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
-            {processes.map(p => <option key={p} value={p}>{p === 'All' ? 'All processes' : p}</option>)}
-          </select>
-        </div>
-        <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <select value={nature} onChange={e => setNature(e.target.value)} className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
-            {['All', 'Manual', 'Automated', 'IT-dependent'].map(p => <option key={p} value={p}>{p === 'All' ? 'All natures' : p}</option>)}
-          </select>
-        </div>
-        <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
-        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
-        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
-          <button onClick={() => setLayout('table')} title="Table view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'table' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><Table2 size={13} /> Table</button>
-        </div>
+      {/* KPI rail — the summary band above the list (Overview's tile language) */}
+      <div className="flex items-stretch gap-3 mb-4 flex-wrap">
+        {[
+          { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: scoped.length, t: 'text-ink-900' },
+          { k: 'Tests due now', v: testsDueNow(scoped).length, t: 'text-mitigated-700' },
+          { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
+          { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
+          { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
+        ].map(s => (
+          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
+            <div className={cn('text-[20px] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
+            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+          </div>
+        ))}
       </div>
 
       {/* register body — cards (default) or table */}

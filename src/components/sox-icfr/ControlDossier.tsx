@@ -565,7 +565,7 @@ function DesignSection({ control, canEdit, canContribute }: { control: Control; 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 // canAttest carries the owner's self-attestation lane through to each attribute.
 function OperatingSection({ control, canEdit, canAttest, locked }: { control: Control; canEdit: boolean; canAttest: boolean; locked: boolean }) {
-  const { eng, me, setPopulation, validateIpe, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
+  const { eng, me, setPopulation, validateIpe, setSampling, extendSample, resizeSample, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -576,6 +576,16 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
   const itgcHolds = itgcFails.length === 0;
   const guide = sampleSizeGuide(control, itgcHolds);
   const [sampleSize, setSampleSize] = useState(guide.suggested);
+  // revising an already-drawn sample — the size is editable after the draw too
+  const [resizing, setResizing] = useState(false);
+  const [resizeTo, setResizeTo] = useState(o.sampling?.size ?? guide.suggested);
+  // how many of the items about to be dropped already carry a recorded result
+  const droppedTested = useMemo(() => {
+    const s = o.sampling;
+    if (!s || resizeTo >= s.size) return 0;
+    const dropped = s.samples.slice(resizeTo).map(x => x.id);
+    return dropped.filter(id => o.steps.some(st => st.sampleResults?.[id] && st.sampleResults[id] !== 'Not tested')).length;
+  }, [o.sampling, o.steps, resizeTo]);
   const [uploading, setUploading] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -640,7 +650,37 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
           <div className="subcard p-3.5">
             <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample <span className="font-normal text-ink-400">· drawn from the population</span></div>
             {o.sampling ? (
-              <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.sampling.size} items</div><div className="text-[11px] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div></div>
+              resizing ? (
+                /* revise a drawn sample — shrinking drops the tail items, so say so before it happens */
+                <div>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={1} max={60} autoFocus value={resizeTo} onChange={e => setResizeTo(Math.max(1, +e.target.value || 1))}
+                      className="h-9 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" aria-label="Sample size" />
+                    <button onClick={() => { resizeSample(control.id, resizeTo); setResizing(false); }}
+                      className="h-9 px-3 text-[12px] font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors cursor-pointer">Save</button>
+                    <button onClick={() => setResizing(false)}
+                      className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+                  </div>
+                  <p className={cn('text-[10.5px] mt-1.5', droppedTested > 0 ? 'text-high-700' : resizeTo === guide.suggested ? 'text-ink-400' : 'text-mitigated-700')}>
+                    {droppedTested > 0
+                      ? <>Dropping to {resizeTo} discards {droppedTested} item{droppedTested === 1 ? '' : 's'} you have already tested — their results are removed from every attribute.</>
+                      : resizeTo === guide.suggested
+                        ? <>Suggested {guide.suggested} — {control.frequency.toLowerCase()} control ({guide.range}).</>
+                        : <>Deviates from the handbook's {guide.suggested} for {control.frequency.toLowerCase()} ({guide.range}) — the basis will note your judgment.</>}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-[12px] text-ink-700">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold tabular-nums text-[15px] text-ink-900">{o.sampling.size} items</span>
+                    {canEdit && (
+                      <button onClick={() => { setResizeTo(o.sampling!.size); setResizing(true); }} title="Change the sample size" aria-label="Change the sample size"
+                        className="h-6 w-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"><Pencil size={12} /></button>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div>
+                </div>
+              )
             ) : canEdit ? (
               drawing ? <div className="h-9 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-600"><Loader2 size={13} className="animate-spin" /> Processing sample…</div> : (
                 <>

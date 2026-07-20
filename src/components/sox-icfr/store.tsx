@@ -91,6 +91,7 @@ interface IcfrCtx {
   updateAccount: (id: string, patch: Partial<SignificantAccount>) => void;
   setSampling: (controlId: string, sampling: Sampling) => void;
   extendSample: (controlId: string, extra: number) => void;
+  resizeSample: (controlId: string, size: number) => void;
   setSampleResult: (controlId: string, stepId: string, sampleId: string, result: TestResult) => void;
   setStepResult: (controlId: string, stepId: string, result: TestResult) => void;
   overrideStep: (controlId: string, stepId: string, override: Override | null) => void;
@@ -394,6 +395,27 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...c, operating: { ...c.operating, sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
+  }, [patchControl, pushExec, role]);
+
+  // Revise a drawn sample up or down. Growing appends fresh refs; shrinking keeps
+  // the first N items (so results already recorded against them survive) and drops
+  // the rest — including their per-attribute results, which would otherwise linger
+  // as orphans keyed to sample ids that no longer exist.
+  const resizeSample = useCallback<IcfrCtx['resizeSample']>((controlId, size) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => {
+      const s = c.operating.sampling;
+      if (!s || size < 1 || size === s.size) return c;
+      const samples = size > s.size
+        ? [...s.samples, ...sampleRefs(c.process, size).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult }))]
+        : s.samples.slice(0, size);
+      const kept = new Set(samples.map(x => x.id));
+      const steps = c.operating.steps.map(st => st.sampleResults
+        ? { ...st, sampleResults: Object.fromEntries(Object.entries(st.sampleResults).filter(([id]) => kept.has(id))) }
+        : st);
+      return { ...c, operating: { ...c.operating, steps, sampling: { ...s, size, samples, basis: `${size} items — sample size revised by the auditor (judgment documented).` } } };
+    });
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `revised the sample size to ${size}`, target: `${size} items` }));
   }, [patchControl, pushExec, role]);
 
   const setStepResult = useCallback<IcfrCtx['setStepResult']>((controlId, stepId, result) => {
@@ -1062,7 +1084,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
-    setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
+    setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
@@ -1071,7 +1093,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
