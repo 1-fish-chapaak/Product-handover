@@ -290,23 +290,70 @@ const DETAILED: Control[] = [
 ];
 
 // ── generator — fills the register to scale ──────────────────────────────────────
-type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string };
+// Each spread carries its process's real risk register: a few risk-phrased
+// statements, each covering the controls (by title index) that answer it. Both
+// generation batches map a title to the SAME risk, so the Risk Library groups
+// base + station controls under one risk instead of minting one risk per control.
+type SpreadRisk = { id: string; text: string; covers: number[] };
+type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string; risks: SpreadRisk[] };
 const SPREADS: Spread[] = [
   { process: 'Order to Cash', prefix: 'O2C', wp: 'O', owner: 'P. Sharma · Revenue', subs: ['Credit', 'Billing', 'Collections', 'Revenue recognition'], titles: [
-    'Credit limits are approved before order release', 'Sales invoices priced from the approved price master', 'Revenue cut-off at period-end agrees to dispatch', 'Credit notes are approved before issue', 'Customer master changes are independently reviewed', 'AR ageing reviewed and provisioned monthly', 'Manual revenue journals are reviewed before posting', 'Cash receipts applied to correct customer accounts', 'Disputed receivables escalated per policy', 'Rebates accrued per contract terms' ] },
+    'Credit limits are approved before order release', 'Sales invoices priced from the approved price master', 'Revenue cut-off at period-end agrees to dispatch', 'Credit notes are approved before issue', 'Customer master changes are independently reviewed', 'AR ageing reviewed and provisioned monthly', 'Manual revenue journals are reviewed before posting', 'Cash receipts applied to correct customer accounts', 'Disputed receivables escalated per policy', 'Rebates accrued per contract terms' ],
+    risks: [
+      { id: 'R-40', text: 'Sales released to customers beyond approved credit limits.', covers: [0] },
+      { id: 'R-41', text: 'Customers billed at incorrect prices or terms.', covers: [1] },
+      { id: 'R-42', text: 'Revenue recorded in the wrong period or without basis (cut-off).', covers: [2, 6] },
+      { id: 'R-43', text: 'Revenue overstated through unapproved credit notes or unaccrued rebates.', covers: [3, 9] },
+      { id: 'R-44', text: 'Receivables overstated — uncollectable or disputed balances not provisioned.', covers: [5, 8] },
+      { id: 'R-45', text: 'Cash receipts misapplied or customer master data manipulated.', covers: [4, 7] },
+    ] },
   { process: 'Record to Report', prefix: 'R2R', wp: 'R', owner: 'D. Rao · Controller', subs: ['Journals', 'Reconciliations', 'Close', 'Consolidation'], titles: [
-    'Balance-sheet reconciliations reviewed monthly', 'Manual journals approved before posting', 'Intercompany balances agreed and eliminated', 'FX revaluation reviewed at month-end', 'Close checklist completed and signed', 'Consolidation entries reviewed', 'Accruals supported and approved', 'Suspense accounts cleared within policy', 'Trial balance mapped to FS line items', 'Management review of flux analysis' ] },
+    'Balance-sheet reconciliations reviewed monthly', 'Manual journals approved before posting', 'Intercompany balances agreed and eliminated', 'FX revaluation reviewed at month-end', 'Close checklist completed and signed', 'Consolidation entries reviewed', 'Accruals supported and approved', 'Suspense accounts cleared within policy', 'Trial balance mapped to FS line items', 'Management review of flux analysis' ],
+    risks: [
+      { id: 'R-50', text: 'Unsupported or unauthorised journals and accruals misstate the ledger.', covers: [1, 6] },
+      { id: 'R-51', text: 'Account balances unreconciled or parked in suspense unexplained.', covers: [0, 7] },
+      { id: 'R-52', text: 'Intercompany and consolidation entries misstate group results.', covers: [2, 5] },
+      { id: 'R-53', text: 'Period close performed incompletely or without review.', covers: [4, 9] },
+      { id: 'R-54', text: 'Foreign-currency balances revalued incorrectly.', covers: [3] },
+      { id: 'R-55', text: 'Trial balance mis-mapped to financial-statement lines.', covers: [8] },
+    ] },
   { process: 'Inventory', prefix: 'INV', wp: 'I', owner: 'K. Bose · Supply Chain', subs: ['Costing', 'Counts', 'Provisions'], titles: [
-    'Standard costs reviewed and approved', 'Cycle counts performed and variances investigated', 'Slow-moving provision calculated and reviewed', 'Inventory movements restricted to authorised users', 'Net realisable value assessed at period-end', 'GRN matched to physical receipt' ] },
+    'Standard costs reviewed and approved', 'Cycle counts performed and variances investigated', 'Slow-moving provision calculated and reviewed', 'Inventory movements restricted to authorised users', 'Net realisable value assessed at period-end', 'GRN matched to physical receipt' ],
+    risks: [
+      { id: 'R-60', text: 'Inventory valued incorrectly — cost, obsolescence or net realisable value.', covers: [0, 2, 4] },
+      { id: 'R-61', text: 'Recorded inventory does not exist or receipts do not match physical stock.', covers: [1, 5] },
+      { id: 'R-62', text: 'Unauthorised inventory movements misstate stock.', covers: [3] },
+    ] },
   { process: 'Treasury', prefix: 'TRY', wp: 'T', owner: 'A. Verma · Treasury', subs: ['Payments', 'Banking', 'Investments'], titles: [
-    'Payment runs approved by two authorisers', 'Bank reconciliations reviewed monthly', 'New payee setup independently verified', 'Borrowing within board-approved limits', 'FX deals confirmed independently of dealing' ] },
+    'Payment runs approved by two authorisers', 'Bank reconciliations reviewed monthly', 'New payee setup independently verified', 'Borrowing within board-approved limits', 'FX deals confirmed independently of dealing' ],
+    risks: [
+      { id: 'R-70', text: 'Payments released without dual authorisation or to unverified payees.', covers: [0, 2] },
+      { id: 'R-71', text: 'Bank balances misstated through unreconciled differences.', covers: [1] },
+      { id: 'R-72', text: 'Treasury exposures taken outside board-approved limits.', covers: [3, 4] },
+    ] },
   { process: 'Payroll', prefix: 'PAY', wp: 'Y', owner: 'N. Pillai · HR', subs: ['Masterdata', 'Processing'], titles: [
-    'Joiner/leaver changes approved before payroll run', 'Payroll reconciled to GL each cycle', 'Overtime approved before payment', 'Statutory deductions reconciled and remitted' ] },
+    'Joiner/leaver changes approved before payroll run', 'Payroll reconciled to GL each cycle', 'Overtime approved before payment', 'Statutory deductions reconciled and remitted' ],
+    risks: [
+      { id: 'R-75', text: 'Fictitious, departed or unapproved employees paid.', covers: [0] },
+      { id: 'R-76', text: 'Payroll costs unapproved or unreconciled to the ledger.', covers: [1, 2] },
+      { id: 'R-77', text: 'Statutory deductions under-remitted, exposing penalties.', covers: [3] },
+    ] },
   { process: 'Tax', prefix: 'TAX', wp: 'X', owner: 'S. Gupta · Tax', subs: ['Direct', 'Indirect'], titles: [
-    'GST returns reviewed before filing', 'Tax provision reviewed by tax lead', 'TDS reconciled to GL and remitted' ] },
+    'GST returns reviewed before filing', 'Tax provision reviewed by tax lead', 'TDS reconciled to GL and remitted' ],
+    risks: [
+      { id: 'R-80', text: 'Indirect-tax filings incorrect, late or unreconciled.', covers: [0, 2] },
+      { id: 'R-81', text: 'Tax provision materially misstated.', covers: [1] },
+    ] },
   { process: 'IT General Controls', prefix: 'ITGC', wp: 'G', owner: 'V. Menon · IT', subs: ['Access', 'Change', 'Operations'], titles: [
-    'Privileged access reviewed quarterly', 'User access granted via approved request', 'Terminated users disabled within 24h', 'Program changes tested and approved before deploy', 'Emergency changes reviewed post-implementation', 'Batch job failures monitored and resolved', 'Database backups completed and tested', 'Segregation-of-duties conflicts reviewed' ] },
+    'Privileged access reviewed quarterly', 'User access granted via approved request', 'Terminated users disabled within 24h', 'Program changes tested and approved before deploy', 'Emergency changes reviewed post-implementation', 'Batch job failures monitored and resolved', 'Database backups completed and tested', 'Segregation-of-duties conflicts reviewed' ],
+    risks: [
+      { id: 'R-85', text: 'Unauthorised or excessive access to financial systems.', covers: [0, 1, 2, 7] },
+      { id: 'R-86', text: 'Unauthorised or untested changes reach production.', covers: [3, 4] },
+      { id: 'R-87', text: 'Processing failures or data loss corrupt financial data.', covers: [5, 6] },
+    ] },
 ];
+const riskFor = (sp: Spread, titleIdx: number): SpreadRisk =>
+  sp.risks.find(r => r.covers.includes(titleIdx)) ?? sp.risks[0]!;
 
 const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
 const STATIONS = ['BOM', 'DEL', 'COK', 'BLR'];
@@ -350,7 +397,7 @@ function generate(): Control[] {
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
         isKey: i % 4 !== 0, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
-        owner: sp.owner, riskId: `R-${40 + n}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
+        owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
         assertions: ['Accuracy', 'Existence / Occurrence'],
         // review spread: fully-tested rows approved, one recurring remark pattern, rest pending
         racmReview: pat <= 1 ? approved('18 Apr') : pat === 3 ? remark('Precision statement is generic — state the threshold, the reviewer and the evidence retained.', '18 Apr') : undefined,
@@ -533,7 +580,7 @@ export function racmTemplate(process: string): Control[] {
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-    isKey: true, precision: `${title}.`, owner: sp.owner, riskId: `R-${i + 1}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
+    isKey: true, precision: `${title}.`, owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),
     operating: manualTrack('Not tested', [], undefined, 0),

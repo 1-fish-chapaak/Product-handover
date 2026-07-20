@@ -130,14 +130,7 @@ export default function Overview() {
   return (
     <div className="space-y-5">
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
-      {isOwner && (
-        <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
-          <RiskOwnerPortal />
-        </section>
-      )}
-
-      {/* Reviewer's desk — only the reviewer hat sees it; the other two get nothing extra. */}
-      {role === 'reviewer' && <ReviewerQueue />}
+      {isOwner && <RiskOwnerPortal />}
 
       {/* Owner mode stops here-ish: their controls and their exceptions, nothing engagement-wide. */}
       {isOwner && (() => {
@@ -246,6 +239,10 @@ export default function Overview() {
           <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
         </div>
       </div>}
+
+      {/* Reviewer's desk — after the engagement-wide summaries; only the reviewer
+          hat sees it, and it collapses to save the scroll. */}
+      {role === 'reviewer' && <ReviewerQueue />}
 
       {/* year-end countdown + engagement sign-off — ONE box: the work that must
           close, then the closure moment as its final step. Audit-side only. */}

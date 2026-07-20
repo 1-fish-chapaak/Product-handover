@@ -1,7 +1,10 @@
-import { ArrowRight, CheckCircle2, ClipboardCheck, PenLine, ShieldCheck, StickyNote } from 'lucide-react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, PenLine, ShieldCheck, StickyNote } from 'lucide-react';
 import { useIcfr } from './store';
 import { assessSeverity, controlConclusion, isAwaitingReview, pendingReviewNoteCount } from './helpers';
 import { SeverityPill, Stamp } from './parts';
+import { cn } from '../../lib/cn';
 
 // The reviewer's desk — everything waiting on the reviewer hat, and nothing else:
 // concluded papers to countersign, resolved notes to verify, retest-passed
@@ -14,14 +17,25 @@ export default function ReviewerQueue() {
   const so = eng.signoff;
   const readyToCountersign = !!so.preparer && !so.reviewer;
   const count = papers.length + notesToVerify.length + awaiting.length + (readyToCountersign ? 1 : 0);
+  // Collapsible to save the scroll — the header keeps the count visible, so
+  // nothing waiting on the reviewer is ever hidden without a number saying so.
+  const [expanded, setExpanded] = useState(true);
 
   return (
     <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-      <div className="flex items-center justify-between mb-3">
+      <button onClick={() => setExpanded(e => !e)} aria-expanded={expanded}
+        className="w-full flex items-center justify-between cursor-pointer group text-left">
         <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-compliant-700" /> Reviewer queue</h2>
-        <span className="text-[11px] font-semibold text-ink-400">{count} waiting on you</span>
-      </div>
+        <span className="inline-flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-ink-400">{count} waiting on you</span>
+          <ChevronDown size={15} className={cn('text-ink-400 group-hover:text-ink-600 transition-transform duration-200', !expanded && '-rotate-90')} />
+        </span>
+      </button>
 
+      <AnimatePresence initial={false}>
+      {expanded && (
+      <motion.div key="body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeInOut' }} className="overflow-hidden">
+      <div className="pt-3">
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
           <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — concluded papers land here for countersign, resolved notes for verification, exceptions when a retest passes, and the engagement countersign once the preparer signs.
@@ -35,17 +49,16 @@ export default function ReviewerQueue() {
                 className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
                 <div className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><ClipboardCheck size={16} /></div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-[11.5px] font-semibold text-ink-600">{c.wpRef}</span>
-                    <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
-                  </div>
+                  <div className="font-mono text-[11.5px] font-semibold text-ink-600">{c.wpRef}</div>
                   <div className="text-[13px] text-ink-800 truncate mt-0.5">{c.description}</div>
                   <div className="text-[11.5px] text-ink-400 mt-0.5">
                     Signed by {c.wpSignoff?.preparer?.by ?? '—'} · {c.wpSignoff?.preparer?.at ?? ''} — countersign or return
                     {noteN > 0 && <span className="text-high-700 font-semibold"> · {noteN} review note{noteN === 1 ? '' : 's'} to clear</span>}
                   </div>
                 </div>
-                <ArrowRight size={15} className="text-ink-300 shrink-0" />
+                <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
+                {/* gap-3 (12px) + ml-2 (8px) = 20px between stamp and arrow */}
+                <ArrowRight size={15} className="text-ink-300 shrink-0 ml-2" />
               </button>
             );
           })}
@@ -101,6 +114,10 @@ export default function ReviewerQueue() {
           )}
         </div>
       )}
+      </div>
+      </motion.div>
+      )}
+      </AnimatePresence>
     </section>
   );
 }
