@@ -6,7 +6,6 @@
     <div class="mid">
       <div class="badges"><span class="badge">Product Requirements Document</span><span class="badge">v1.1</span><span class="badge">Basis: BRD v1.0</span></div>
       <h1>SOX / ICFR Engagement Management</h1>
-      <p class="sub">From creating a SOX / ICFR engagement and setting materiality ground rules, to testing design &amp; operating effectiveness, to closing exceptions — the build specification for bringing this capability to the irame.ai audit platform. The feature does not exist in the product today; the working prototype demonstrates the target experience, and every screenshot is a live capture of it. Anything the prototype adds beyond the BRD is highlighted in amber.</p>
     </div>
   </div>
 
@@ -41,7 +40,7 @@
       <a href="#s3"><span>3 — Use cases</span><span class="n">§3</span></a>
       <a href="#s4"><span>4 — User journey</span><span class="n">§4</span></a>
       <a href="#s51"><span>5 — The end-to-end journey (live screens)</span><span class="n">§5</span></a>
-      <a class="sub" href="#s51"><span>5.1 Engagement Library — the portfolio</span><span class="n">§5.1</span></a>
+      <a class="sub" href="#s51"><span>5.1 Engagement Library — portfolio &amp; the creation flow</span><span class="n">§5.1</span></a>
       <a class="sub" href="#s52"><span>5.2 SOX workspace — Overview &amp; sign-off</span><span class="n">§5.2</span></a>
       <a class="sub" href="#s53"><span>5.3 The To-do bell</span><span class="n">§5.3</span></a>
       <a class="sub" href="#s54"><span>5.4 RACM — pre-testing review</span><span class="n">§5.4</span></a>
@@ -261,7 +260,7 @@
   <!-- ═════════ 5.1 ═════════ -->
   <section class="page" id="s51">
     <p class="eyebrow">Section 5 · The end-to-end journey</p>
-    <h2 class="serif">5.1 — Engagement Library: the portfolio</h2>
+    <h2 class="serif">5.1 — Engagement Library: the portfolio &amp; creating an engagement</h2>
     <p class="lede">SOX / ICFR engagements live in the same library as everything else — filter the list by type and the three ICFR engagements appear with their health and open findings.</p>
     <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>Engagements → Engagement Library → All Engagements (filtered to SOX / ICFR)</span></div><img src="@@IMG:00-engagement-library@@" alt="Engagement Library filtered to SOX / ICFR showing three engagements with health bars and open findings" /></div>
     <p class="caption">Engagement Library — the SOX / ICFR filter shows FY26 ICFR (75% effective, 3 open), O2C (89%), and a planned R2R engagement.</p>
@@ -270,7 +269,23 @@
       <ol>
         <li><b>One portfolio</b> — SOX engagements list beside Compliance, Internal Audit and Automation, each with a health bar (controls effective) and open-findings count.</li>
         <li><b>Type filter</b> — the "SOX / ICFR" filter narrows the list; each card carries code, owner, period, process and framework tags.</li>
-        <li><b>Entry</b> — clicking a card opens that engagement's SOX workspace (§5.2). New Engagement opens the typed creation flow the BRD describes (§3.1–3.3 there): pick SOX / ICFR → identity &amp; period → the materiality ground rules with a live severity ladder → team → review.</li>
+        <li><b>Entry</b> — clicking a card opens that engagement's SOX workspace (§5.2); <i>New Engagement</i> opens the four-step creation flow below.</li>
+      </ol>
+    </div>
+
+    <h3>Creating a SOX engagement — the four-step flow</h3>
+    <p><i>New Engagement</i> opens a drawer over the library — the same flow for every engagement type, which is the BRD's point: SOX is created like everything else, not in a separate tool. Step 2 changes shape with the chosen type; for SOX / ICFR it is the materiality ground rules. The progress bar is clickable backwards; a step ahead stays locked until the current one passes its checks.</p>
+    <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>Engagement Library → New Engagement → Step 1 · Type &amp; basics</span></div><img src="@@IMG:19-wizard-step1@@" alt="Create Engagement drawer, step 1 — SOX / ICFR type tile selected with a check, engagement name, auto-generated code, entity, process P2P, period start and end date pickers" /></div>
+    <p class="caption">Step 1 — Type &amp; basics: pick <b>SOX / ICFR</b>, name the engagement, set entity, process and period. Next stays off until type, name, code and a valid period (end after start) are in.</p>
+    <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>New Engagement → Step 2 · Scope (SOX / ICFR)</span></div><img src="@@IMG:20-wizard-step2@@" alt="Create Engagement drawer, step 2 — SOX scoping and materiality: fixed COSO 2013 / SOX 404(b) framework, key-controls-only toggle, overall materiality, performance materiality and clearly-trivial percentages with computed amounts, and the exception severity ladder computed live beneath" /></div>
+    <p class="caption">Step 2 — Scope: the three thresholds, with the severity ladder <b>computed live</b> beneath as the numbers change — the same ladder that will grade every exception in testing (§5.12, §6).</p>
+    <div class="callout">
+      <span class="c-label">The four steps &amp; their gates</span>
+      <ol>
+        <li><b>Type &amp; basics</b> — engagement type · name · auto-generated code (editable if the team uses its own scheme) · entity · process · period · owner. Gate: type, name and code present; period end after start.</li>
+        <li><b>Scope (SOX / ICFR)</b> — the framework is fixed to COSO 2013 / SOX 404(b); a <b>key-controls-only</b> toggle (default on); overall materiality, with performance materiality and clearly-trivial as % of overall (defaults 75% / 5%; the significant-deficiency band sits at 20%). These are set once here and <b>sealed</b> — changing them later goes through the reasoned, previewed edit of §5.12. <b>Draft with AI</b> can prefill the step from an uploaded engagement letter or prior-year scope; the result is banner-flagged "Drafted by AI — review before continuing".</li>
+        <li><b>Team &amp; timeline</b> — reviewer (required, and <b>must differ from the owner</b> — four-eyes starts at creation), auditors, risk owners; 2–4 dated milestones prefilled from the period (Kickoff · Fieldwork complete · Sign-off) that feed the portfolio timeline.</li>
+        <li><b>Review</b> — everything read back in collapsible sections. <b>Create as Draft</b> parks it in the library; <b>Create &amp; Activate</b> opens it live. Either way, the full configuration is carried onto the engagement.</li>
       </ol>
     </div>
     <div class="callout delta"><span class="c-label">Deviations from the BRD in the creation flow</span>
@@ -330,7 +345,7 @@
     <p class="lede">The Risk &amp; Control Matrix is where the auditor reviews each documented control <b>before testing begins</b> — approving a row means "the control as documented is ready to test", never a testing result.</p>
     <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>SOX workspace → RACM (landing)</span></div><img src="@@IMG:05-racm-landing@@" alt="RACM landing with one card per process showing approval progress and a spreadsheet editor button" /></div>
     <p class="caption">RACM landing — one card per process with its approval progress; "Spreadsheet editor" opens the full matrix in a new tab (marked with an external-link icon).</p>
-    <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>RACM → Procure to Pay (matrix)</span></div><img src="@@IMG:06-racm-matrix@@" alt="RACM matrix with risk and control rows, design and operating tickmarks with a legend, ready-to-test review states and per-row remark actions" /></div>
+    <div class="shot"><div class="chrome"><i></i><i></i><i></i><span>RACM → Procure to Pay (standalone matrix — breadcrumb, no engagement shell)</span></div><img src="@@IMG:06-racm-matrix@@" alt="Standalone RACM matrix page with a breadcrumb trail, risk and control rows, design and operating tickmarks with a legend, ready-to-test review states and per-row remark actions" /></div>
     <p class="caption">The matrix — risk ↔ control rows with a tickmark legend (✓ effective · ✗ ineffective · – not tested) and the ①② test sequence explained inline.</p>
     <div class="callout">
       <span class="c-label">Behaviour &amp; rules</span>
@@ -338,6 +353,7 @@
         <li><b>Row anatomy</b> — risk (with description on hover) · control (ID · sub-process · owner) · ① Design and ② Operating tickmarks · the pre-testing review state.</li>
         <li><b>Review states</b> — <span class="pill ok">Ready to test</span> (approved · by · when) or a <b>remark</b> sent to the risk owner to fix the documentation first. Only the auditor approves; only the auditor sees bulk actions.</li>
         <li><b>Wide by design</b> — the matrix scrolls horizontally rather than clipping; the spreadsheet editor offers the full-screen editing surface.</li>
+        <li><b>The drilled-in matrix stands alone</b> — opening a process leaves the engagement shell: no engagement header, no tabs; a breadcrumb (Engagements / engagement / RACM / process) carries the context and every step back up — the same pattern as the control page.</li>
       </ol>
     </div>
     <div class="callout delta"><span class="c-label">Beyond the BRD</span><p style="margin:0">The RACM tab is new. The BRD defines RACM only as a glossary term; the prototype gives it a surface — and a job: the pre-testing review ("ready to test") that catches documentation gaps before any testing effort is spent.</p></div>
@@ -354,12 +370,50 @@
     <div class="callout">
       <span class="c-label">Behaviour &amp; rules</span>
       <ol>
-        <li><b>Heatmaps filter</b> — clicking a cell filters the register to that Likelihood × Impact band; the filter pill reads in the same L × I order as the score badges.</li>
+        <li><b>Two filter layers</b> — the toolbar above the maps (search · process · status · an <i>Identified between</i> date window, bounded to the engagement period and defaulting to all of it) scopes <b>both heatmaps and the register together</b>; clicking a heatmap cell then narrows the register alone to that Likelihood × Impact, shown as a clearable chip. The count line stays honest: "Showing n of m risks".</li>
         <li><b>Register row</b> — risk ID · description (full text on hover) · process · inherent and residual scores · "↓ reduced by controls" where testing moved the number · controls as <i>effective / total</i> · status.</li>
         <li><b>Drill-through</b> — a risk opens its mapped controls; a control opens its page (§5.7).</li>
       </ol>
     </div>
-    <div class="callout delta"><span class="c-label">Beyond the BRD</span><p style="margin:0">The Risk Library tab is new — the BRD's journey has no risk view. It answers the question the register alone can't: how far has control testing actually pulled the risk exposure down?</p></div>
+    <p><b>The idea, in one line:</b> <b>inherent</b> is the risk's nature — how often it would bite and how hard <i>if no control existed at all</i> — so it never moves during the year. <b>Residual</b> is what remains after controls, and the product takes a deliberate stance on it: <b>a control that merely exists on paper earns nothing; only a control proven effective in testing moves the number.</b> That is why the two maps sit side by side — the left one never changes, the right one moves as testing progresses, and the gap between them is exactly what the testing effort has bought.</p>
+    <div class="callout">
+      <span class="c-label">How the scores work</span>
+      <ol>
+        <li><b>One row per risk</b> — every unique risk in the RACM becomes one register row, with the controls that answer it bundled onto it and the date it was <b>identified</b> on the row (this is what the date filter reads). The Risk Library has no data entry of its own; it reads the engagement.</li>
+        <li><b>A score is Likelihood × Impact</b> — each rated 1 to 5 (Rare → Almost certain, Minimal → Severe), so scores run 1–25. Every badge shows its working, e.g. <b>12</b> = L4 × I3.</li>
+        <li><b>Inherent is set with the engagement</b> — and a risk answered by a <b>key control</b> never rates below Moderate impact. <b>Residual starts equal to inherent</b>: a brand-new engagement shows two identical maps, and they separate only as test conclusions land — by the table below.</li>
+      </ol>
+    </div>
+
+    <p style="margin:0.9rem 0 0.35rem"><b>How residual moves.</b> Look at where the risk's mapped controls stand — that one fact fixes both the score movement and the status chip:</p>
+    <div class="table-scroll"><table>
+      <tr><th style="width:26%">Where the risk's controls stand</th><th style="width:26%">What residual does</th><th>Why</th><th style="width:13%">Status</th></tr>
+      <tr><td>Nothing tested yet</td><td>Stays exactly at inherent.</td><td>No evidence yet — no credit.</td><td><span class="pill neutral">Untested</span></td></tr>
+      <tr><td>Some testing done, nothing failed</td><td>Likelihood drops 1.</td><td>Partial credit for progress — the risk fires less often, but its size hasn't been earned down yet.</td><td><span class="pill info">In testing</span></td></tr>
+      <tr><td>Every mapped control concluded effective</td><td>Likelihood drops 2, impact drops 1 — never below 1.</td><td>The full reduction, with a floor: no score ever reaches zero — some residual always remains.</td><td><span class="pill ok">Mitigated</span></td></tr>
+      <tr><td><b>Any control ineffective</b> — an exception is open</td><td><b>No relief at all</b> — holds at inherent until the retest passes and the exception closes.</td><td>One failed control blocks the whole risk's relief, whatever the other controls did — the same "caps, never clears" stance as §6.</td><td><span class="pill mw">Exception</span></td></tr>
+    </table></div>
+
+    <div class="callout">
+      <span class="c-label">Worked example — one risk through the engagement</span>
+      <ol>
+        <li>R-04 enters the year at inherent <b>L4 × I4 = 16 — Critical</b>: a red cell on the left map, top of the register. Two controls answer it.</li>
+        <li>The first control concludes effective → residual <b>L3 × I4 = 12 — High</b>. Status: In testing.</li>
+        <li>The second concludes effective too → residual <b>L2 × I3 = 6 — Moderate</b>; the row now carries <i>"↓ reduced by controls"</i>. Status: Mitigated.</li>
+        <li>A later retest finds the second control failing → an exception opens and residual snaps <b>straight back to 16</b>. R-04 returns to the top of the register — and stays there until the retest passes and the exception closes.</li>
+      </ol>
+    </div>
+
+    <p style="margin:0.9rem 0 0.35rem"><b>What the colours mean.</b> One band scale colours both the score badges and the heatmap cells (a cell shows the count of risks sitting at exactly that Likelihood × Impact):</p>
+    <div class="table-scroll"><table>
+      <tr><th style="width:30%">Score (L × I)</th><th>Band</th></tr>
+      <tr><td>15 – 25</td><td><span class="pill mw">Critical</span></td></tr>
+      <tr><td>10 – 14</td><td><span class="pill sd">High</span></td></tr>
+      <tr><td>5 – 9</td><td><span class="pill warn">Moderate</span></td></tr>
+      <tr><td>1 – 4</td><td><span class="pill ok">Low</span></td></tr>
+    </table></div>
+    <p>The register sorts by residual score, highest first — the top of the list is always what still hurts.</p>
+    <div class="callout delta"><span class="c-label">Beyond the BRD</span><p style="margin:0">The Risk Library tab is new — the BRD's journey has no risk view. It answers the question the register alone can't: how far has control testing actually pulled the risk exposure down?</p><p style="margin:0.4rem 0 0">One honest prototype note: the <b>inherent</b> ratings and the <b>identified</b> dates are seeded with the engagement's demo data — there is no assessment-entry screen yet. In production both come from the risk assessment on the RACM. The residual movement rules above are the specification either way.</p></div>
     <div class="pagefoot"><span>irame.ai — SOX / ICFR Engagement Management</span><span>§5.5</span></div>
   </section>
 
@@ -659,27 +713,28 @@
   <section class="page" id="s9">
     <p class="eyebrow">Section 9</p>
     <h2 class="serif">Functional requirements &amp; acceptance criteria</h2>
-    <p class="lede" style="font-size:0.8125rem">The <b>Basis</b> column traces each requirement to the BRD's own FR list — anything marked <span class="pill warn">Beyond BRD</span> is a prototype addition needing its own approval.</p>
+    <p class="lede" style="font-size:0.8125rem">The <b>Status</b> column shows where each requirement stands today: <span class="pill ok">Built</span> — working end-to-end in the prototype — or <span class="pill neutral">Planned</span> — specified here, to be built.</p>
     <div class="table-scroll"><table>
-      <tr><th style="width:8%">ID</th><th style="width:38%">Requirement</th><th>Acceptance criteria</th><th style="width:13%">Basis</th></tr>
-      <tr><td>FR-1</td><td>SOX / ICFR is a selectable engagement type; engagements list in the shared portfolio.</td><td>Type tile in creation; SOX engagements appear with health % and open findings; multiple SOX engagements coexist with fully separate state.</td><td><span class="pill neutral">BRD FR-1,2,4</span></td></tr>
-      <tr><td>FR-2</td><td>Creation captures identity, period, scope and materiality with validation gates.</td><td>Next gated per step; materiality &gt; 0, performance ∈ (0,100], CTT ∈ [0,100); reviewer required and ≠ owner; ≥ 2 dated milestones. Four steps; no audit-committee step.</td><td><span class="pill neutral">BRD FR-3</span> <span class="pill warn">deviates</span></td></tr>
-      <tr><td>FR-3</td><td>The workspace header matches the platform engagement pages.</td><td>Back to Engagements · initials tile · name · Active/Concluded pill · SOX/ICFR pill · code; tabs beneath; header and role switch absent inside a control page.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-4</td><td>Overview folds the year-end checklist and engagement sign-off into one box.</td><td>One row per outstanding item, each deep-linking; the sign-off block is the final step; the open-exceptions count appears exactly once; concluded state shows the signed summary.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-5</td><td>Engagement sign-off is gated, honest, and two-person.</td><td>Locked until every control is concluded and countersigned; preparer first, reviewer concludes; attest confirms on both; open MW flips the wording to "not effective" — never blocks.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-6</td><td>The Control Library reads as a KPI rail + register.</td><td>Five tiles (owner persona re-worded); honest Status filter labels; cards/table with per-track status and court; "Showing n of m".</td><td><span class="pill neutral">BRD FR-5</span> <span class="pill warn">+ rail</span></td></tr>
-      <tr><td>FR-7</td><td>Test of Design gates Operating Effectiveness.</td><td>② locked with the reason until ① concludes effective; documents tracked per provider; considerations validated per row; overrides demand recorded rationale.</td><td><span class="pill neutral">BRD FR-6</span></td></tr>
-      <tr><td>FR-8</td><td>IPE validation gates sampling.</td><td>Draw disabled until the three-check attestation (completeness · accuracy · parameters) is stamped with name + time; the trail records it.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-9</td><td>Per-attribute evidence with a named conclusion of record.</td><td>AI validation / mapped workflow / self-attestation per attribute; the attribute names its conclusion; disagreeing stale verdicts read "superseded"; sample status is a compact count.</td><td><span class="pill neutral">BRD FR-7</span> <span class="pill warn">+ record</span></td></tr>
-      <tr><td>FR-10</td><td>Failure handling is never silent.</td><td>A failed attribute prompts extend-the-sample; ineffective conclusions raise exceptions sized on the ladder; failed ITGC invalidates test-of-one.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-11</td><td>The working paper preview equals the export, and carries the per-paper sign-off.</td><td>Blocks and order identical; dates identical on screen and in file; sign/countersign attest-confirmed; person-based four-eyes; open notes block countersign with the reason.</td><td><span class="pill neutral">BRD FR-10</span> <span class="pill warn">+ sign-off</span></td></tr>
-      <tr><td>FR-12</td><td>Review notes cycle.</td><td>Reviewer raises; auditor resolves with a response; reviewer verifies &amp; closes or reopens; open notes block the paper's countersign.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-13</td><td>Exception lifecycle with live severity and four-eyes close.</td><td>Five stages incl. Awaiting reviewer; evidence-gated retest submission; reviewer close attest-confirmed and person-checked; reopen with reason returns to Remediation.</td><td><span class="pill neutral">BRD FR-9</span> <span class="pill warn">+ stage 5</span></td></tr>
-      <tr><td>FR-14</td><td>Ground rules are sealed.</td><td>Threshold edits: draft → reason → regrade preview → visible history; MW indicators force MW; compensating caps, never clears.</td><td><span class="pill neutral">BRD FR-8</span> <span class="pill warn">+ sealing</span></td></tr>
-      <tr><td>FR-15</td><td>The To-do bell is a per-persona live worklist.</td><td>Items recompute from state; each row = event + next step; owner wording says attest &amp; evidence; count badge on the bell.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-16</td><td>Role views are scoped surfaces, not hidden buttons.</td><td>Owner: two tabs, person-scoped lists, no engagement-wide data; Reviewer: the four-queue desk; persona fixed inside a control page.</td><td><span class="pill neutral">BRD FR-11</span> <span class="pill warn">+ portals</span></td></tr>
-      <tr><td>FR-17</td><td>Test runs log every execution.</td><td>Bulk/control/workflow/AI runs with actor + hat + time; Type + date filters with a matched count.</td><td><span class="pill warn">Beyond BRD</span></td></tr>
-      <tr><td>FR-18</td><td>Roll-forward and working-paper export.</td><td>Roll-forward confirm explains the one-way reset (design carries; manual/IT-dependent operating resets; automated keeps); Excel export at engagement and control level.</td><td><span class="pill neutral">BRD FR-12</span></td></tr>
+      <tr><th style="width:8%">ID</th><th style="width:38%">Requirement</th><th>Acceptance criteria</th><th style="width:11%">Status</th></tr>
+      <tr><td>FR-1</td><td>SOX / ICFR is a selectable engagement type; engagements list in the shared portfolio.</td><td>Type tile in creation; SOX engagements appear with health % and open findings; multiple SOX engagements coexist with fully separate state.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-2</td><td>Creation captures identity, period, scope and materiality with validation gates.</td><td>Next gated per step; materiality &gt; 0, performance ∈ (0,100], CTT ∈ [0,100); the severity ladder previews live from the thresholds; reviewer required and ≠ owner; ≥ 2 dated milestones; Create as Draft or Create &amp; Activate. Four steps; no audit-committee step.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-3</td><td>The workspace header matches the platform engagement pages.</td><td>Back to Engagements · initials tile · name · Active/Concluded pill · SOX/ICFR pill · code; tabs beneath; header and role switch absent inside a control page and the drilled-in RACM matrix — there a breadcrumb carries every step back up.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-4</td><td>Overview folds the year-end checklist and engagement sign-off into one box.</td><td>One row per outstanding item, each deep-linking; the sign-off block is the final step; the open-exceptions count appears exactly once; concluded state shows the signed summary.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-5</td><td>Engagement sign-off is gated, honest, and two-person.</td><td>Locked until every control is concluded and countersigned; preparer first, reviewer concludes; attest confirms on both; open MW flips the wording to "not effective" — never blocks.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-6</td><td>The Control Library reads as a KPI rail + register.</td><td>Five tiles (owner persona re-worded); honest Status filter labels; cards/table with per-track status and court; "Showing n of m".</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-7</td><td>Test of Design gates Operating Effectiveness.</td><td>② locked with the reason until ① concludes effective; documents tracked per provider; considerations validated per row; overrides demand recorded rationale.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-8</td><td>IPE validation gates sampling.</td><td>Draw disabled until the three-check attestation (completeness · accuracy · parameters) is stamped with name + time; the trail records it.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-9</td><td>Per-attribute evidence with a named conclusion of record.</td><td>AI validation / mapped workflow / self-attestation per attribute; the attribute names its conclusion; disagreeing stale verdicts read "superseded"; sample status is a compact count.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-10</td><td>Failure handling is never silent.</td><td>A failed attribute prompts extend-the-sample; ineffective conclusions raise exceptions sized on the ladder; failed ITGC invalidates test-of-one.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-11</td><td>The working paper preview equals the export, and carries the per-paper sign-off.</td><td>Blocks and order identical; dates identical on screen and in file; sign/countersign attest-confirmed; person-based four-eyes; open notes block countersign with the reason.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-12</td><td>Review notes cycle.</td><td>Reviewer raises; auditor resolves with a response; reviewer verifies &amp; closes or reopens; open notes block the paper's countersign.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-13</td><td>Exception lifecycle with live severity and four-eyes close.</td><td>Five stages incl. Awaiting reviewer; evidence-gated retest submission; reviewer close attest-confirmed and person-checked; reopen with reason returns to Remediation.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-14</td><td>Ground rules are sealed.</td><td>Threshold edits: draft → reason → regrade preview → visible history; MW indicators force MW; compensating caps, never clears.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-15</td><td>The To-do bell is a per-persona live worklist.</td><td>Items recompute from state; each row = event + next step; owner wording says attest &amp; evidence; count badge on the bell.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-16</td><td>Role views are scoped surfaces, not hidden buttons.</td><td>Owner: two tabs, person-scoped lists, no engagement-wide data; Reviewer: the four-queue desk; persona fixed inside a control page.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-17</td><td>Test runs log every execution.</td><td>Bulk/control/workflow/AI runs with actor + hat + time; Type + date filters with a matched count.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-18</td><td>Roll-forward and working-paper export.</td><td>Roll-forward confirm explains the one-way reset (design carries; manual/IT-dependent operating resets; automated keeps); Excel export at engagement and control level.</td><td><span class="pill ok">Built</span></td></tr>
+      <tr><td>FR-19</td><td>Risk Library scores move with test results, by rule.</td><td>One row per RACM risk, carrying its identified date; residual moves only per the §5.5 table — full drop when all controls prove effective, partial credit for progress, <b>no relief while an exception is open</b>; cells band by L × I; register sorts residual-first; toolbar filters (search · process · status · identified-date window bounded to the period) scope heatmaps + register together, a cell click narrows the register only.</td><td><span class="pill ok">Built</span></td></tr>
     </table></div>
     <div class="pagefoot"><span>irame.ai — SOX / ICFR Engagement Management</span><span>§9</span></div>
   </section>
