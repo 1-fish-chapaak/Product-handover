@@ -134,6 +134,12 @@ const MOCK_CONTROLS: Record<string, { id: string; ref: string; name: string; sta
     { id: 'c4', ref: 'P2P-C-04', name: 'Duplicate invoice prevention check on AP posting', status: 'Failed', key: false },
     { id: 'c5', ref: 'P2P-C-05', name: 'Segregation of duties between PO creator and approver', status: 'Effective', key: true },
     { id: 'c6', ref: 'P2P-C-06', name: 'Payment release dual sign-off above ₹10L threshold', status: 'Pending', key: true },
+    { id: 'c7', ref: 'P2P-C-07', name: 'Bank account change call-back verification', status: 'Effective', key: true },
+    { id: 'c8', ref: 'P2P-C-08', name: 'GRN quantity tolerance check at receipt', status: 'Effective', key: false },
+    { id: 'c9', ref: 'P2P-C-09', name: 'Non-PO spend coding review before posting', status: 'Failed', key: false },
+    { id: 'c10', ref: 'P2P-C-10', name: 'Month-end AP accrual completeness review', status: 'In Test', key: false },
+    { id: 'c11', ref: 'P2P-C-11', name: 'One-time vendor usage monitoring', status: 'Effective', key: false },
+    { id: 'c12', ref: 'P2P-C-12', name: 'Credit note matched to original before refund', status: 'Pending', key: false },
   ],
 };
 

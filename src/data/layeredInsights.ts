@@ -43,8 +43,6 @@ export interface LayerVerdict {
 export interface LikelyCause {
   label: string;
   detail: string;
-  /** true → render the "Likely cause · confirm first" badge. */
-  confirmFirst: boolean;
 }
 
 /** A follow-up the auditor can run without leaving the card — the "check more"
@@ -64,13 +62,11 @@ export interface LayerEvidenceItem {
   tone?: VerdictTone;
 }
 
-/** Readiness metrics — engagement altitude only (done vs remaining + a pace
- *  note). Kept separate so the card can render a progress bar honestly. */
-export interface ReadinessProgress {
-  done: number;
-  total: number;
-  note: string;
-}
+/** Lifecycle freshness — what changed since the auditor last looked. Anchored to
+ *  run identity (this run vs the previous), never wall-clock, per the
+ *  determinism rule. `escalated` outranks `new` for attention: an old finding
+ *  getting worse matters more than a fresh low one. */
+export type InsightFreshness = 'new' | 'escalated' | 'recurring' | 'resolved';
 
 // ─── AI recommendations — the forward-looking audit-quality layer ───────────
 // An insight is backward-looking (a violated baseline). A recommendation is the
@@ -151,6 +147,17 @@ export interface LayeredInsight {
   reasoning: string;
   /** Money / resource at stake, priced honestly (or an explicit "not yet sized"). */
   atStake: string;
+  /** What changed since the previous run — drives the lifecycle tag + the
+   *  stack's delta strip. Absent = unchanged since last run (no tag). */
+  freshness?: InsightFreshness;
+  /** Short provenance behind the tag, e.g. "12 new breaks since June". */
+  freshnessNote?: string;
+  /** Bulleted "what we found" — the observation, structured for scanning.
+   *  Cards without it fall back to [reasoning, atStake] as two bullets. */
+  observations?: string[];
+  /** Bulleted "what's at stake" — the consequence narrative behind the
+   *  at-stake KPI tile. Cards without it fall back to [atStake]. */
+  stakes?: string[];
 
   // ── Confidence (three axes, never one number) ──
   factors: ConfidenceFactors;
@@ -174,8 +181,6 @@ export interface LayeredInsight {
   /** Typed, methodology-grounded AI recommendations for this subject — the
    *  broader forward-looking layer the card renders when present. */
   recommendations?: AuditRecommendation[];
-  /** Engagement altitude: readiness progress. */
-  progress?: ReadinessProgress;
 }
 
 // ─── Flagship story — the MCKESSON chargeback-pricing thread ────────────────
@@ -194,12 +199,23 @@ const CONTROL_PRICING: LayeredInsight = {
     label: 'One MCKESSON price feed stopped refreshing.',
     detail:
       'Prices went missing on one contract (AMPHS2024 — “Price Not Found in master”) and went stale on another (HPG12 — WAC mismatch). Both trace to a single feed, not to scattered line-entry errors.',
-    confirmFirst: true,
   },
   reasoning:
     'June and July are the same finding, not two. The HPG12 line carried over from June is counted once — this run adds 12 new breaks and cleared 2, it is not a fresh 90.',
   atStake:
-    'One line paid $4.69 that should have been $40.97; another paid $3.75 against $27.75. 70 lines still unrecovered before settlement.',
+    'Underpayments like $4.69 paid against $40.97 due, across 70 unrecovered lines — recover before settlement.',
+  freshness: 'escalated',
+  freshnessNote: '12 new breaks since June',
+  observations: [
+    'June and July are the same finding, not two — the HPG12 carryover is counted once; this run adds 12 new breaks and cleared 2.',
+    'Sample rows 55150038201 (AMPHS2024) and 55150025110 (HPG12) both trace to the same price feed.',
+    'The break set is growing, not clearing — 12 new this run against 2 resolved.',
+  ],
+  stakes: [
+    '70 MCKESSON lines may settle on wrong prices — underpayments are unrecovered once paid.',
+    'Sample line paid $4.69 against a revised $40.97 — −$36.28 on one line alone.',
+    'The same feed priced June’s run; left unfixed it re-breaks next period.',
+  ],
   factors: { frequency: 0.4, sourceDiversity: 0.72, recency: 0.99, businessImpact: 0.95 },
   confidenceOverride: 0.84,
   evidence: [
@@ -239,12 +255,21 @@ const RISK_PRICING: LayeredInsight = {
     label: 'No control checks the price feed at its source.',
     detail:
       'Every control under this risk tests the output of the MCKESSON price feed — none tests the feed itself, so the same weakness leaks into all of them and none catches it upstream.',
-    confirmFirst: true,
   },
   reasoning:
     'The controls under this risk are flagging one feed, not separate problems. The shared MCKESSON line is counted once across them, so this is one exposure, not three.',
   atStake:
     'Combined underpayment across the affected controls, concentrated on the two MCKESSON contracts — not yet a firm total; size it before grading the deficiency.',
+  freshness: 'recurring',
+  freshnessNote: 'Unresolved for 2 periods',
+  observations: [
+    'The three controls under this risk flag the same MCKESSON feed — one exposure counted once, not three problems.',
+    'Every control tests the feed’s output; none tests the feed at its source.',
+  ],
+  stakes: [
+    'Combined underpayment across the three controls is not yet a firm total — size it before grading the deficiency.',
+    'Every downstream pass inherits the untested feed, so the assurance is weaker than it reads.',
+  ],
   factors: { frequency: 0.5, sourceDiversity: 0.68, recency: 0.95, businessImpact: 0.9 },
   confidenceOverride: 0.79,
   evidence: [
@@ -282,12 +307,21 @@ const ENGAGEMENT_PRICING: LayeredInsight = {
     label: 'One unmaintained client price master looks to be behind all three.',
     detail:
       'The chargeback, contract-compliance and vendor-master findings all resolve to a single client-side price master that stopped refreshing. One driver, not three coincidences — confirm with the client first.',
-    confirmFirst: true,
   },
   reasoning:
     'One vendor, one broken feed, three workflows, one total at stake — counted once. Rolling the three findings up as one escalation, not three line items.',
   atStake:
     'Combined underpayment across the engagement, concentrated on MCKESSON — weigh the total against materiality before it drives the sign-off judgment.',
+  freshness: 'new',
+  freshnessNote: 'First surfaced this run',
+  observations: [
+    'One vendor, one broken feed, three workflows — rolled up as one escalation, counted once.',
+    'The chargeback, contract-compliance and vendor-master findings all resolve to the same client price master.',
+  ],
+  stakes: [
+    'Combined underpayment concentrated on MCKESSON is not yet weighed against materiality — that judgment gates sign-off.',
+    'At the current pace the sign-off milestone slips about 9 weeks if the feed fix waits.',
+  ],
   factors: { frequency: 0.55, sourceDiversity: 0.8, recency: 0.95, businessImpact: 0.92 },
   confidenceOverride: 0.81,
   evidence: [
@@ -301,7 +335,6 @@ const ENGAGEMENT_PRICING: LayeredInsight = {
   detectedOn: '07 Jul 2026',
   detectedBy: 'formula',
   rollupOf: { label: 'risks', count: 1 },
-  progress: { done: 62, total: 100, note: 'At this pace, sign-off slips about 9 weeks.' },
   checkMore: [
     { kind: 'trace', label: 'Trace to the $3.75 line', detail: 'that should have been $27.75' },
     { kind: 'split', label: 'Slice by period' },
@@ -342,9 +375,11 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
       takeaway: `${label} failed at least one attribute this period — root cause not yet confirmed.`,
       verdict: { label: 'Needs attention this period', tone: 'caution' },
       severity: 'med',
-      likelyCause: { label: 'A tested attribute did not pass.', detail: 'The failing attribute is known; the mechanism behind it is not yet confirmed. Confirm the cause before grading a deficiency.', confirmFirst: true },
+      likelyCause: { label: 'A tested attribute did not pass.', detail: 'The failing attribute is known; the mechanism behind it is not yet confirmed. Confirm the cause before grading a deficiency.' },
       reasoning: 'One control, this period’s run only. No cross-period recurrence claimed — a single run is labelled a single run.',
       atStake: 'Not yet sized. Quantify the exposure on the failing attribute before concluding.',
+      freshness: 'new',
+      freshnessNote: 'First flagged this period',
       factors: { ...NEUTRAL_FACTORS, businessImpact: 0.6 }, confidenceOverride: 0.58,
       evidence: [{ ref: label, label: 'This control’s latest run', detail: 'At least one attribute failed', tone: 'caution' }],
       evidenceNote: '1 of 1 runs · early signal, treat as directional.',
@@ -364,7 +399,7 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
       takeaway: `${label} held this period — no material exceptions in the latest run.`,
       verdict: { label: 'Effective this period', tone: 'positive' },
       severity: 'low',
-      likelyCause: { label: 'No violated baseline detected.', detail: 'The monitored baseline held this run. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.', confirmFirst: false },
+      likelyCause: { label: 'No violated baseline detected.', detail: 'The monitored baseline held this run. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.' },
       reasoning: 'One control, this period’s run. Nothing carried over, nothing new — a clean run, counted once.',
       atStake: 'Nothing at stake this period. Re-test next period to keep the assurance current.',
       factors: NEUTRAL_FACTORS,
@@ -380,7 +415,7 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
     takeaway: `${label} hasn’t concluded this period — no run to analyse yet.`,
     verdict: { label: 'Not yet concluded', tone: 'caution' },
     severity: 'low',
-    likelyCause: { label: 'No results to reason over.', detail: 'This control has no completed run this period, so there is nothing to correlate. The recommendation below is forward-looking.', confirmFirst: false },
+    likelyCause: { label: 'No results to reason over.', detail: 'This control has no completed run this period, so there is nothing to correlate. The recommendation below is forward-looking.' },
     reasoning: 'No run analysed. The engine makes no claim until this control produces output.',
     atStake: 'Unknown until tested. If this is a key control, the cost of not testing is the real exposure.',
     factors: { ...NEUTRAL_FACTORS, recency: 0.3, sourceDiversity: 0.2 },
@@ -403,8 +438,8 @@ function riskFallback(subjectId: string, label: string, priority: string): Layer
     severity: hot ? 'med' : 'low',
     severityLabel: hot ? 'Residual: Medium' : 'Residual: Low',
     likelyCause: hot
-      ? { label: 'Coverage may be incomplete.', detail: 'Not every assertion under this risk has a control concluded effective this period. Confirm the mapping before relying on it.', confirmFirst: true }
-      : { label: 'No coverage gap detected.', detail: 'The mapped controls cover this risk’s assertions and are concluding clean. This is a signed pass, not silence.', confirmFirst: false },
+      ? { label: 'Coverage may be incomplete.', detail: 'Not every assertion under this risk has a control concluded effective this period. Confirm the mapping before relying on it.' }
+      : { label: 'No coverage gap detected.', detail: 'The mapped controls cover this risk’s assertions and are concluding clean. This is a signed pass, not silence.' },
     reasoning: 'Rolled up from this risk’s mapped controls; each shared finding is counted once, not per control.',
     atStake: hot ? 'Not yet sized — quantify across the mapped controls before grading residual severity.' : 'No material exposure this period.',
     factors: hot ? { ...NEUTRAL_FACTORS, businessImpact: 0.6 } : NEUTRAL_FACTORS,
@@ -433,7 +468,7 @@ function engagementFallback(subjectId: string, label: string, status: string): L
     verdict: atRisk ? { label: 'At risk', tone: 'caution' } : { label: 'On track', tone: 'positive' },
     severity: atRisk ? 'med' : 'low',
     severityLabel: atRisk ? 'Readiness: At risk' : 'Readiness: On track',
-    likelyCause: { label: atRisk ? 'No single dominant driver identified yet.' : 'No systemic driver detected.', detail: atRisk ? 'Findings are spread across risks with no shared root cause standing out. Generate insights at the control level to find one.' : 'The engine sees no cross-risk pattern that would change sign-off this period.', confirmFirst: atRisk },
+    likelyCause: { label: atRisk ? 'No single dominant driver identified yet.' : 'No systemic driver detected.', detail: atRisk ? 'Findings are spread across risks with no shared root cause standing out. Generate insights at the control level to find one.' : 'The engine sees no cross-risk pattern that would change sign-off this period.' },
     reasoning: 'Rolled up from this engagement’s risks and controls; shared findings are counted once.',
     atStake: atRisk ? 'Not yet sized at the engagement level — drill into the risks driving it.' : 'No material engagement-level exposure this period.',
     factors: NEUTRAL_FACTORS,
