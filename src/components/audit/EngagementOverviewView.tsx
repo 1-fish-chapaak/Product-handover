@@ -54,7 +54,7 @@ import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
+type TabId = 'overview' | 'insights' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
@@ -79,6 +79,7 @@ interface Props {
  */
 const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
   overview:        { icon: LayoutDashboard, chip: 'bg-blue-50 text-blue-600' },
+  insights:        { icon: Sparkles,        chip: 'bg-purple-50 text-purple-600' },
   racm:            { icon: Table2,          chip: 'bg-violet-50 text-violet-600' },
   controls:        { icon: ShieldCheck,     chip: 'bg-emerald-50 text-emerald-600' },
   workflows:       { icon: Workflow,        chip: 'bg-cyan-50 text-cyan-600' },
@@ -93,14 +94,14 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
   const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
     case 'SOX / ICFR':
       // SOX/ICFR opens its own dedicated experience; this fallback keeps the type exhaustive.
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
 }
 
@@ -114,8 +115,10 @@ function loadTabPrefs(type: EngType): TabPrefs {
     if (raw) {
       const p = JSON.parse(raw) as Partial<TabPrefs>;
       const stored = Array.isArray(p.order) ? p.order : [];
-      // Keep stored order, drop ids no longer valid, append any newly-added tabs.
-      const order = [...stored.filter(id => canonical.includes(id)), ...canonical.filter(id => !stored.includes(id))];
+      // Keep stored order, drop ids no longer valid, and slot any newly-added
+      // tabs at their canonical position (not appended after Configuration).
+      const order = stored.filter(id => canonical.includes(id));
+      canonical.forEach((id, idx) => { if (!order.includes(id)) order.splice(Math.min(idx, order.length), 0, id); });
       // Configuration can never be hidden (it's where you re-enable the others).
       const hidden = (Array.isArray(p.hidden) ? p.hidden : []).filter(id => canonical.includes(id) && id !== 'config');
       return { order, hidden };
@@ -142,6 +145,35 @@ const MOCK_CONTROLS: Record<string, { id: string; ref: string; name: string; sta
     { id: 'c12', ref: 'P2P-C-12', name: 'Credit note matched to original before refund', status: 'Pending', key: false },
   ],
 };
+
+/** The engine's multi-insight roll-up subjects for an engagement: the
+ *  escalation, its pricing risk (when the engagement carries the chargeback
+ *  thread), and one insight per in-scope control — statuses map to Pass / Fail /
+ *  Not tested so each card reasons distinctly. Shared by the Overview preview
+ *  and the AI Insights tab so one Generate fills both (same session cache). */
+function engagementInsightSubjects(eng: Engagement): BuildInsightInput[] {
+  const isPricing = /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`);
+  const controls = MOCK_CONTROLS[eng.id] ?? MOCK_CONTROLS.default;
+  const mapStatus = (s: string): string => (s === 'Failed' ? 'Fail' : s === 'Effective' ? 'Pass' : 'Not tested');
+  const subs: BuildInsightInput[] = [
+    { layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing },
+  ];
+  if (isPricing) {
+    subs.push(
+      { layer: 'control', subjectId: 'C-CHARGEBACK-PRICING', subjectLabel: 'Chargeback Pricing Validation', status: 'Fail', isKey: true, flagship: true },
+      { layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true },
+    );
+  } else {
+    subs.push({ layer: 'risk', subjectId: `${eng.id}-risk`, subjectLabel: `${eng.process ?? 'Process'} control risk`, priority: eng.openIssues > 0 ? 'High' : 'Low' });
+  }
+  for (const c of controls) {
+    // Skip a control whose name would re-trigger the flagship pricing card —
+    // the stack already carries that thread once.
+    if (isPricing && isPricingSubject(c.name)) continue;
+    subs.push({ layer: 'control', subjectId: c.ref, subjectLabel: c.name, status: mapStatus(c.status), isKey: c.key });
+  }
+  return subs;
+}
 
 type InputSource = 'Excel' | 'PDF' | 'SQL';
 type Cadence = { kind: 'Frequency'; label: string } | { kind: 'Ad-hoc' };
@@ -520,7 +552,12 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                 onOpenWorkflow={onOpenWorkflow}
                 hideWorkflowConfig={eng.type === 'Automation'}
+                onSeeAllInsights={() => setActiveTab('insights')}
               />
+            )}
+            {/* ═══ AI INSIGHTS (all types) — the full insight stack ═══ */}
+            {activeTab === 'insights' && (
+              <AIInsightsTab eng={eng} />
             )}
             {/* ═══ RACM (Compliance / IA) ═══ */}
             {activeTab === 'racm' && (
@@ -1297,6 +1334,28 @@ function heatmapCellCls(count: number): string {
   return 'bg-risk-100 border-risk-100/80';
 }
 
+// ─── AI INSIGHTS TAB — the full stack, one card per subject ──────────────────
+// The Overview previews only the hero insight; its "See all insights" CTA lands
+// here. Same subjects + session cache as the Overview, so one Generate fills
+// both surfaces without re-billing the engine. No ledger fold on this surface —
+// the user explicitly asked for all of them.
+
+function AIInsightsTab({ eng }: { eng: Engagement }) {
+  const insightSubjects = useMemo(() => engagementInsightSubjects(eng), [eng]);
+  return (
+    <InsightGenerator
+      layer="engagement"
+      subjectId={eng.id}
+      subjectLabel={eng.name}
+      status={eng.status}
+      labelOverride={eng.name}
+      subjects={insightSubjects}
+      stackScopeLabel="across this engagement"
+      stackFoldLedger={false}
+    />
+  );
+}
+
 export function HealthOverviewTab({
   eng,
   onDrillToExceptions,
@@ -1304,6 +1363,7 @@ export function HealthOverviewTab({
   onConfigureWorkflow,
   onOpenWorkflow,
   hideWorkflowConfig,
+  onSeeAllInsights,
 }: {
   eng: Engagement;
   /** Navigate to the Exception Management sub-tab (same browser tab). */
@@ -1313,6 +1373,9 @@ export function HealthOverviewTab({
   onConfigureWorkflow: (workflowId: string) => void;
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
   hideWorkflowConfig?: boolean;
+  /** Navigate to the AI Insights sub-tab. When wired, the Overview shows only
+   *  the hero insight + a "See all" CTA; omit it to keep the full stack here. */
+  onSeeAllInsights?: () => void;
 }) {
   // ─── Type-aware copy + funnel stages ────────────────────────────────────
   const isAutomation = eng.type === 'Automation';
@@ -1457,37 +1520,13 @@ export function HealthOverviewTab({
 
   const tier = healthTier(eng.health);
 
-  // The engine's multi-insight roll-up for this engagement: the escalation, its
-  // pricing risk (when the engagement carries the chargeback thread), and one
-  // insight per in-scope control — statuses map to Pass / Fail / Not tested so
-  // each card reasons distinctly. One Generate builds them all into a stack.
-  const insightSubjects = useMemo<BuildInsightInput[]>(() => {
-    const isPricing = /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`);
-    const controls = MOCK_CONTROLS[eng.id] ?? MOCK_CONTROLS.default;
-    const mapStatus = (s: string): string => (s === 'Failed' ? 'Fail' : s === 'Effective' ? 'Pass' : 'Not tested');
-    const subs: BuildInsightInput[] = [
-      { layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing },
-    ];
-    if (isPricing) {
-      subs.push(
-        { layer: 'control', subjectId: 'C-CHARGEBACK-PRICING', subjectLabel: 'Chargeback Pricing Validation', status: 'Fail', isKey: true, flagship: true },
-        { layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true },
-      );
-    } else {
-      subs.push({ layer: 'risk', subjectId: `${eng.id}-risk`, subjectLabel: `${eng.process ?? 'Process'} control risk`, priority: eng.openIssues > 0 ? 'High' : 'Low' });
-    }
-    for (const c of controls) {
-      // Skip a control whose name would re-trigger the flagship pricing card —
-      // the stack already carries that thread once.
-      if (isPricing && isPricingSubject(c.name)) continue;
-      subs.push({ layer: 'control', subjectId: c.ref, subjectLabel: c.name, status: mapStatus(c.status), isKey: c.key });
-    }
-    return subs;
-  }, [eng]);
+  const insightSubjects = useMemo<BuildInsightInput[]>(() => engagementInsightSubjects(eng), [eng]);
 
   return (
     <div className="space-y-5">
-      {/* ─── AI insights · engagement roll-up (generate-on-demand, stacked) ─── */}
+      {/* ─── AI insights · engagement roll-up (generate-on-demand, stacked).
+          With `onSeeAllInsights` wired, only the hero shows here — the full
+          stack lives in the AI Insights tab. ─── */}
       <InsightGenerator
         layer="engagement"
         subjectId={eng.id}
@@ -1496,6 +1535,8 @@ export function HealthOverviewTab({
         labelOverride={eng.name}
         subjects={insightSubjects}
         stackScopeLabel="across this engagement"
+        previewCount={onSeeAllInsights ? 1 : undefined}
+        onSeeAll={onSeeAllInsights}
       />
 
       {/* ─── KPI strip ─── */}

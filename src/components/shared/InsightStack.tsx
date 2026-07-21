@@ -16,12 +16,17 @@
 // as do the severity chips. Recency never outranks materiality: freshness sorts
 // WITHIN a severity band, not above it.
 //
+// PREVIEW mode (`previewCount` + `onSeeAll`): a surface like the engagement
+// Overview shows only the hero and a single honest "See all N insights" CTA —
+// every other interaction (chips included) routes to the full AI Insights tab
+// instead of filtering a list the user can't see.
+//
 // Presentational only — the caller supplies the built insights (from
 // buildLayeredInsight); the stack owns open/filter state and nothing else.
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Brain, Sparkles, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { ArrowUpRight, Brain, Sparkles, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness } from '../../data/layeredInsights';
 import LayeredInsightCard from './LayeredInsightCard';
 import { FRESHNESS_META } from './insightFreshness';
@@ -57,6 +62,7 @@ type StackFilter = { kind: 'sev'; value: LayeredInsight['severity'] } | { kind: 
 
 export default function InsightStack({
   insights, scopeLabel = '', onCheckMore, initialOpen = 1,
+  previewCount, onSeeAll, foldLedger = true,
 }: {
   insights: LayeredInsight[];
   /** Trailing phrase for the header, e.g. "across this engagement". */
@@ -64,6 +70,13 @@ export default function InsightStack({
   onCheckMore?: (opt: CheckMoreOption) => void;
   /** How many top rows to open on first render (default 1 — the hero). */
   initialOpen?: number;
+  /** Preview mode: render only the top N cards + a "See all" CTA (needs `onSeeAll`). */
+  previewCount?: number;
+  /** Navigate to the surface that shows the full stack (the AI Insights tab). */
+  onSeeAll?: () => void;
+  /** Fold everything past hero+tail into the ledger (default). The dedicated
+   *  AI Insights tab turns this off — you asked for all of them, you get all. */
+  foldLedger?: boolean;
 }) {
   // Most-severe first; within a severity, escalation altitude, then what
   // changed, then finding tone, then confidence. Stable across renders.
@@ -97,8 +110,14 @@ export default function InsightStack({
   };
   const allOpen = openIds.size === sorted.length && sorted.length > 0;
 
+  // Preview only when there is actually more than the preview shows.
+  const preview = !!onSeeAll && previewCount != null && previewCount < sorted.length;
+
   const toggleFilter = (next: NonNullable<StackFilter>) =>
     setFilter(prev => (prev && prev.kind === next.kind && prev.value === next.value ? null : next));
+  // In preview a chip can't honestly filter a list that isn't shown — it takes
+  // you to the full tab instead.
+  const chipClick = (next: NonNullable<StackFilter>) => (preview ? onSeeAll!() : toggleFilter(next));
 
   const counts = {
     high: sorted.filter(i => i.severity === 'high').length,
@@ -120,8 +139,8 @@ export default function InsightStack({
   }, [sorted, filter]);
   const foldAt = 1 + TAIL_COUNT;
   // A ledger of one is sillier than one extra row — fold only when it earns it.
-  const folds = filtered.length > foldAt + 1;
-  const visible = folds ? filtered.slice(0, foldAt) : filtered;
+  const folds = !preview && foldLedger && filtered.length > foldAt + 1;
+  const visible = preview ? sorted.slice(0, previewCount) : folds ? filtered.slice(0, foldAt) : filtered;
   const ledger = folds ? filtered.slice(foldAt) : [];
   const ledgerHigh = ledger.filter(i => i.severity === 'high').length;
   const ledgerMed = ledger.filter(i => i.severity === 'med').length;
@@ -152,9 +171,9 @@ export default function InsightStack({
             {(['high', 'med', 'low'] as const).map(sev => counts[sev] > 0 && (
               <button
                 key={sev} type="button"
-                onClick={() => toggleFilter({ kind: 'sev', value: sev })}
+                onClick={() => chipClick({ kind: 'sev', value: sev })}
                 aria-pressed={filter?.kind === 'sev' && filter.value === sev}
-                title={`Show only ${SEV[sev].label}-severity insights`}
+                title={preview ? 'See all insights' : `Show only ${SEV[sev].label}-severity insights`}
                 className={`${chipBase} ${SEV[sev].pill} ${filter?.kind === 'sev' && filter.value === sev ? activeRing : ''}`}
               >
                 <span className={`size-1 rounded-full ${SEV[sev].dot}`} /> {counts[sev]} {SEV[sev].label}
@@ -173,9 +192,9 @@ export default function InsightStack({
                   return (
                     <button
                       key={f} type="button"
-                      onClick={() => toggleFilter({ kind: 'fresh', value: f })}
+                      onClick={() => chipClick({ kind: 'fresh', value: f })}
                       aria-pressed={filter?.kind === 'fresh' && filter.value === f}
-                      title={`Show only ${m.label.toLowerCase()} insights`}
+                      title={preview ? 'See all insights' : `Show only ${m.label.toLowerCase()} insights`}
                       className={`${chipBase} ${m.pill} ${filter?.kind === 'fresh' && filter.value === f ? activeRing : ''}`}
                     >
                       <span className={`size-1 rounded-full ${m.dot}`} /> {n} {m.label.toLowerCase()}
@@ -186,7 +205,7 @@ export default function InsightStack({
             )}
           </div>
         </div>
-        {sorted.length > 1 && (
+        {!preview && sorted.length > 1 && (
           <button
             type="button" onClick={() => setAll(!allOpen)}
             className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 h-8 text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
@@ -222,6 +241,22 @@ export default function InsightStack({
           </li>
         ))}
       </motion.ul>
+
+      {/* Preview CTA — the one row that replaces tail + ledger on the Overview.
+          Carries the honest severity mix of what it leads to, never a bare count. */}
+      {preview && (
+        <button
+          type="button" onClick={onSeeAll}
+          className="mt-1.5 group flex w-full items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 text-left hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer"
+        >
+          <Sparkles size={14} className="shrink-0 text-brand-600" aria-hidden="true" />
+          <span className="text-[0.78125rem] font-semibold text-brand-700">See all {sorted.length} insights</span>
+          <span className="text-[0.6875rem] text-ink-400 tabular-nums">
+            {counts.high} High · {counts.med} Medium · {counts.low} Low
+          </span>
+          <ArrowUpRight size={14} className="ml-auto shrink-0 text-brand-400 group-hover:text-brand-600 transition-colors" aria-hidden="true" />
+        </button>
+      )}
 
       {/* The ledger — everything below the fold behind an honest count. Always
           states its High count, because "10 more · 0 High" is assurance while
