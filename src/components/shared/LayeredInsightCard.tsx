@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
   Info, Crosshair, Split, GitCompareArrows, MessageCircleQuestion,
-  ScrollText, TriangleAlert, X, MessageSquare, ArrowUpRight,
+  ScrollText, X, MessageSquare, ArrowUpRight,
 } from 'lucide-react';
 import {
   displayConfidencePct, CONFIDENCE_FACTOR_META, MEMORY_CANDIDATE_THRESHOLD,
@@ -352,20 +352,6 @@ export default function LayeredInsightCard({
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              {/* Engagement readiness progress */}
-              {insight.progress && (
-                <div className="mt-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-                  <div className="flex items-center justify-between text-[11px] mb-1.5">
-                    <span className="font-semibold text-ink-700">Readiness</span>
-                    <span className="tabular-nums text-ink-800 font-bold">{insight.progress.done} of {insight.progress.total} controls concluded</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-canvas overflow-hidden">
-                    <div className={`h-full rounded-full ${vTone.dot}`} style={{ width: `${Math.round((insight.progress.done / insight.progress.total) * 100)}%` }} />
-                  </div>
-                  <p className="text-[11px] text-mitigated-700 mt-1.5 flex items-center gap-1"><TriangleAlert size={11} /> {insight.progress.note}</p>
-                </div>
-              )}
-
               {/* What we found · Root cause · What's at stake — three canvas
                   panels at equal height, echoing the recommended-actions band. */}
               <div className="grid gap-2.5 mt-3.5 lg:grid-cols-3 items-stretch">
@@ -383,15 +369,8 @@ export default function LayeredInsightCard({
                   </ul>
                 </div>
                 <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
-                  <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
-                      <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
-                    </span>
-                    {insight.likelyCause.confirmFirst && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-canvas-elevated border border-mitigated-200 px-1.5 py-0.5 text-[9px] font-bold text-mitigated-700">
-                        <Info size={9} /> Confirm first
-                      </span>
-                    )}
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
+                    <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="mt-[5px] size-1.5 rounded-full bg-brand-300 shrink-0" aria-hidden="true" />

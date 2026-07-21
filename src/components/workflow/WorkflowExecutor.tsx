@@ -1044,7 +1044,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       likelyCause: {
         label: 'Vendor-name variants are slipping past the exact-match check.',
         detail: `Each pair bills the same amount under a slightly different spelling of the same vendor — near-duplicate vendor-master records, not random keying noise. ${biggest.vendor} is the single largest exposure at ${biggest.amountLabel}, matching at ${biggest.match}%.`,
-        confirmFirst: true,
       },
       reasoning: `${RESULTS_DATA.length} flags out of 4,521 invoices checked (${((RESULTS_DATA.length / 4521) * 100).toFixed(1)}%) form ${groups.length} pairs. Each pair is one exposure counted once — the ${usd(exposure)} total is ${groups.length} amounts, not ${RESULTS_DATA.length} invoices' worth.`,
       atStake: `${usd(exposure)} could be paid twice if these clear settlement. The ${clearest.vendor} pair (${clearest.amountLabel}) is the most clear-cut at ${clearest.match}% — same vendor, same amount.`,
