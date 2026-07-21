@@ -24,7 +24,8 @@ import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
-import ReportsView, { CUSTOM_TEMPLATES } from './components/reports/ReportsView';
+import ReportsView from './components/reports/ReportsView';
+import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -288,7 +289,7 @@ function AppInner() {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
-  type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
+  type CustomTemplate = EditableTemplate;
   // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
   // dozens of test copies); new templates persist here going forward.
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
@@ -313,6 +314,25 @@ function AppInner() {
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
   const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
+
+  // "Remember for future reports" — a report reader saved a hand-typed section
+  // back onto its custom template as a default (setup that never changes:
+  // distribution lists, intro paragraphs). Future reports pre-fill it; the
+  // template's shape never moves, only the section's saved default.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ templateId?: string; sectionName?: string; content?: string }>).detail;
+      if (!detail?.templateId || !detail.sectionName) return;
+      setCustomTemplates(prev => prev.map(t => (t.id !== detail.templateId ? t : {
+        ...t,
+        sections: (t.sections ?? []).map((s: TemplateSection) =>
+          s.name === detail.sectionName ? { ...s, savedContent: detail.content || undefined } : s,
+        ) as typeof t.sections,
+      })));
+    };
+    window.addEventListener('irame:template-remember-content', handler);
+    return () => window.removeEventListener('irame:template-remember-content', handler);
+  }, []);
 
   useEffect(() => {
     if (mainScrollRef.current) {
