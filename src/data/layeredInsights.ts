@@ -72,6 +72,12 @@ export interface ReadinessProgress {
   note: string;
 }
 
+/** Lifecycle freshness — what changed since the auditor last looked. Anchored to
+ *  run identity (this run vs the previous), never wall-clock, per the
+ *  determinism rule. `escalated` outranks `new` for attention: an old finding
+ *  getting worse matters more than a fresh low one. */
+export type InsightFreshness = 'new' | 'escalated' | 'recurring' | 'resolved';
+
 // ─── AI recommendations — the forward-looking audit-quality layer ───────────
 // An insight is backward-looking (a violated baseline). A recommendation is the
 // same object read forward against a standard: the sampling table, the firm
@@ -151,6 +157,17 @@ export interface LayeredInsight {
   reasoning: string;
   /** Money / resource at stake, priced honestly (or an explicit "not yet sized"). */
   atStake: string;
+  /** What changed since the previous run — drives the lifecycle tag + the
+   *  stack's delta strip. Absent = unchanged since last run (no tag). */
+  freshness?: InsightFreshness;
+  /** Short provenance behind the tag, e.g. "12 new breaks since June". */
+  freshnessNote?: string;
+  /** Bulleted "what we found" — the observation, structured for scanning.
+   *  Cards without it fall back to [reasoning, atStake] as two bullets. */
+  observations?: string[];
+  /** Bulleted "what's at stake" — the consequence narrative behind the
+   *  at-stake KPI tile. Cards without it fall back to [atStake]. */
+  stakes?: string[];
 
   // ── Confidence (three axes, never one number) ──
   factors: ConfidenceFactors;
@@ -199,7 +216,19 @@ const CONTROL_PRICING: LayeredInsight = {
   reasoning:
     'June and July are the same finding, not two. The HPG12 line carried over from June is counted once — this run adds 12 new breaks and cleared 2, it is not a fresh 90.',
   atStake:
-    'One line paid $4.69 that should have been $40.97; another paid $3.75 against $27.75. 70 lines still unrecovered before settlement.',
+    'Underpayments like $4.69 paid against $40.97 due, across 70 unrecovered lines — recover before settlement.',
+  freshness: 'escalated',
+  freshnessNote: '12 new breaks since June',
+  observations: [
+    'June and July are the same finding, not two — the HPG12 carryover is counted once; this run adds 12 new breaks and cleared 2.',
+    'Sample rows 55150038201 (AMPHS2024) and 55150025110 (HPG12) both trace to the same price feed.',
+    'The break set is growing, not clearing — 12 new this run against 2 resolved.',
+  ],
+  stakes: [
+    '70 MCKESSON lines may settle on wrong prices — underpayments are unrecovered once paid.',
+    'Sample line paid $4.69 against a revised $40.97 — −$36.28 on one line alone.',
+    'The same feed priced June’s run; left unfixed it re-breaks next period.',
+  ],
   factors: { frequency: 0.4, sourceDiversity: 0.72, recency: 0.99, businessImpact: 0.95 },
   confidenceOverride: 0.84,
   evidence: [
@@ -245,6 +274,16 @@ const RISK_PRICING: LayeredInsight = {
     'The controls under this risk are flagging one feed, not separate problems. The shared MCKESSON line is counted once across them, so this is one exposure, not three.',
   atStake:
     'Combined underpayment across the affected controls, concentrated on the two MCKESSON contracts — not yet a firm total; size it before grading the deficiency.',
+  freshness: 'recurring',
+  freshnessNote: 'Unresolved for 2 periods',
+  observations: [
+    'The three controls under this risk flag the same MCKESSON feed — one exposure counted once, not three problems.',
+    'Every control tests the feed’s output; none tests the feed at its source.',
+  ],
+  stakes: [
+    'Combined underpayment across the three controls is not yet a firm total — size it before grading the deficiency.',
+    'Every downstream pass inherits the untested feed, so the assurance is weaker than it reads.',
+  ],
   factors: { frequency: 0.5, sourceDiversity: 0.68, recency: 0.95, businessImpact: 0.9 },
   confidenceOverride: 0.79,
   evidence: [
@@ -288,6 +327,16 @@ const ENGAGEMENT_PRICING: LayeredInsight = {
     'One vendor, one broken feed, three workflows, one total at stake — counted once. Rolling the three findings up as one escalation, not three line items.',
   atStake:
     'Combined underpayment across the engagement, concentrated on MCKESSON — weigh the total against materiality before it drives the sign-off judgment.',
+  freshness: 'new',
+  freshnessNote: 'First surfaced this run',
+  observations: [
+    'One vendor, one broken feed, three workflows — rolled up as one escalation, counted once.',
+    'The chargeback, contract-compliance and vendor-master findings all resolve to the same client price master.',
+  ],
+  stakes: [
+    'Combined underpayment concentrated on MCKESSON is not yet weighed against materiality — that judgment gates sign-off.',
+    'At the current pace the sign-off milestone slips about 9 weeks if the feed fix waits.',
+  ],
   factors: { frequency: 0.55, sourceDiversity: 0.8, recency: 0.95, businessImpact: 0.92 },
   confidenceOverride: 0.81,
   evidence: [
@@ -345,6 +394,8 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
       likelyCause: { label: 'A tested attribute did not pass.', detail: 'The failing attribute is known; the mechanism behind it is not yet confirmed. Confirm the cause before grading a deficiency.', confirmFirst: true },
       reasoning: 'One control, this period’s run only. No cross-period recurrence claimed — a single run is labelled a single run.',
       atStake: 'Not yet sized. Quantify the exposure on the failing attribute before concluding.',
+      freshness: 'new',
+      freshnessNote: 'First flagged this period',
       factors: { ...NEUTRAL_FACTORS, businessImpact: 0.6 }, confidenceOverride: 0.58,
       evidence: [{ ref: label, label: 'This control’s latest run', detail: 'At least one attribute failed', tone: 'caution' }],
       evidenceNote: '1 of 1 runs · early signal, treat as directional.',

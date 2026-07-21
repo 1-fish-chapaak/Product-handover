@@ -13,8 +13,9 @@
 // Collapsible mode: when the card lives inside a stack of many insights
 // (InsightStack), the caller drives an `open` flag. Collapsed, the card keeps a
 // calm, scannable summary (identity · verdict · confidence · takeaway) and hides
-// the heavy body; expanded, it lights up in brand and shows everything. Brand is
-// reserved for the active row so a 10-insight stack reads calm, not shouty.
+// the heavy body; expanded, it shows everything on a plain elevated surface.
+// Brand is reserved for small accents (header label, icons, chips), never the
+// container, so the card reads calm at any size.
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,10 +28,11 @@ import {
   displayConfidencePct, CONFIDENCE_FACTOR_META, MEMORY_CANDIDATE_THRESHOLD,
 } from '../../data/insightMemory';
 import {
-  LAYER_META, REC_PRIORITY_META,
+  LAYER_META,
   type LayeredInsight, type VerdictTone, type CheckMoreOption,
   type RecPriority,
 } from '../../data/layeredInsights';
+import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
@@ -46,6 +48,22 @@ const TONE: Record<VerdictTone, { pill: string; dot: string; wrap: string; text:
 
 const SEV_TONE: Record<LayeredInsight['severity'], VerdictTone> = { high: 'negative', med: 'caution', low: 'positive' };
 const SEV_LABEL: Record<LayeredInsight['severity'], string> = { high: 'High', med: 'Medium', low: 'Low' };
+
+// ─── Lifecycle tag — what changed since the auditor last looked ─────────────
+
+function FreshnessTag({ insight }: { insight: LayeredInsight }) {
+  if (!insight.freshness) return null;
+  const m = FRESHNESS_META[insight.freshness];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-bold shrink-0 ${m.pill}`}
+      title={insight.freshnessNote}
+    >
+      {insight.freshness === 'escalated' && <ArrowUpRight size={9} aria-hidden="true" />}
+      {m.label}
+    </span>
+  );
+}
 
 const CHECK_ICON: Record<CheckMoreOption['kind'], typeof Crosshair> = {
   compare: GitCompareArrows, split: Split, trace: Crosshair, ask: MessageCircleQuestion,
@@ -129,19 +147,17 @@ const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
 };
 
 // ─── Recommended-action tile (grid cell) ───────────────────────────────────
-// Pared to the essential: the imperative, and nothing else. Priority survives as
-// the subtle left colour rail (recs are also priority-sorted), so five real
-// recommendations read as a clean two-column list. The whole tile opens the step
-// in Ask IRA — where the full rationale and methodology live.
+// Pared to the essential: the imperative, and nothing else. Priority survives
+// only in the sort order, so five real recommendations read as a clean
+// two-column list. The whole tile opens the step in Ask IRA — where the full
+// rationale and methodology live.
 
 function RecTile({ r, onOpen }: { r: NonNullable<LayeredInsight['recommendations']>[number]; onOpen: () => void }) {
-  const pTone = TONE[REC_PRIORITY_META[r.priority].tone];
   return (
     <button
       type="button" onClick={onOpen}
       title="Open this recommendation in Ask IRA (new tab)"
-      style={{ borderLeftColor: pTone.accent }}
-      className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border border-l-2 bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
+      className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
     >
       <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">{r.title}</span>
       <MessageSquare size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-300 group-hover:text-brand-600 transition-colors" />
@@ -174,6 +190,11 @@ function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
   );
 }
 
+// ─── Stat band — the card leads with figures, not paragraphs ────────────────
+// One tile per headline number: big tabular value, small label, optional mini
+// meter. The prose boxes below stay short because the numbers live here.
+
+
 // ─── The card ──────────────────────────────────────────────────────────────
 
 export default function LayeredInsightCard({
@@ -199,10 +220,9 @@ export default function LayeredInsightCard({
   onRec?: (title: string) => void;
 }) {
   const meta = LAYER_META[insight.layer];
-  const deep = meta.density === 'deep';
-  // Open evidence by default only on a material control finding — a clean/on-track
-  // card has a single evidence row and reads tidier collapsed.
-  const [showEvidence, setShowEvidence] = useState(deep && insight.verdict.tone !== 'positive');
+  // Evidence starts collapsed on every card — the rows are one click away and
+  // the observation bullets already carry the sample refs.
+  const [showEvidence, setShowEvidence] = useState(false);
   const vTone = TONE[insight.verdict.tone];
   const sevTone = TONE[SEV_TONE[insight.severity]];
   // Typed recommendations, most-urgent first.
@@ -239,6 +259,7 @@ export default function LayeredInsightCard({
           <ChevronDown size={15} className="shrink-0 -rotate-90 text-ink-300 group-hover:text-ink-500 transition-colors" aria-hidden="true" />
           <span className={`size-2 rounded-full shrink-0 ${sevTone.dot}`} title={`Severity: ${SEV_LABEL[insight.severity]}`} />
           <span className="hidden sm:inline shrink-0 text-[9px] font-bold uppercase tracking-wider text-ink-400">{layerWord}</span>
+          <FreshnessTag insight={insight} />
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-800 group-hover:text-brand-700 transition-colors">
             {insight.takeaway}
           </span>
@@ -265,8 +286,10 @@ export default function LayeredInsightCard({
     );
   }
 
+  // Expanded sits on a plain elevated surface — brand lives in the small
+  // accents (header label, icons, chips), never painted across the container.
   const container = bodyShown
-    ? 'border-brand-200/70 bg-gradient-to-b from-brand-50/45 to-canvas-elevated'
+    ? 'border-canvas-border bg-canvas-elevated'
     : 'border-canvas-border bg-canvas-elevated hover:border-brand-200';
 
   return (
@@ -281,6 +304,9 @@ export default function LayeredInsightCard({
             <Sparkles size={13} aria-hidden="true" />
           </span>
           <span className={`text-[10px] font-bold uppercase tracking-wider ${bodyShown ? 'text-brand-700' : 'text-ink-500'}`}>AI insight · {headerLabel ?? meta.label}</span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${sevTone.pill}`}>
+            {insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}
+          </span>
           <span className="font-mono text-[10px] text-ink-400 hidden sm:inline">Insight Memory Engine</span>
           <div className="ml-auto flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${vTone.pill}`}>
@@ -317,21 +343,6 @@ export default function LayeredInsightCard({
           <h4 className="text-[15px] font-bold text-ink-900 leading-snug mt-2.5">{insight.takeaway}</h4>
         )}
 
-        {/* Severity + rollup meta */}
-        <div className="flex items-center gap-2 flex-wrap mt-2">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${sevTone.pill} border`}>
-            {insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}
-          </span>
-          {insight.rollupOf && insight.rollupOf.count > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10px] font-semibold">
-              <Layers size={10} aria-hidden="true" /> Rolls up {insight.rollupOf.count} {insight.rollupOf.count === 1 ? insight.rollupOf.label.replace(/s$/, '') : insight.rollupOf.label}
-            </span>
-          )}
-          {insight.evidenceNote && (
-            <span className="text-[10.5px] text-ink-400 tabular-nums">{insight.evidenceNote}</span>
-          )}
-        </div>
-
         <AnimatePresence initial={false}>
           {bodyShown && (
             <motion.div
@@ -355,23 +366,24 @@ export default function LayeredInsightCard({
                 </div>
               )}
 
-              {/* The three facts in one tight row — reasoning · money · root cause —
-                  so the block sizes to content instead of a half-empty tall box. */}
-              <div className="grid gap-2 mt-2.5 lg:grid-cols-3 items-start">
-                <div className={`rounded-xl border ${vTone.soft} p-3`}>
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1">
-                    <Layers size={12} className="text-brand-600" aria-hidden="true" /> Reasoning · counted once
+              {/* What we found · Root cause · What's at stake — three canvas
+                  panels at equal height, echoing the recommended-actions band. */}
+              <div className="grid gap-2.5 mt-3.5 lg:grid-cols-3 items-stretch">
+                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
+                    <Layers size={12} className="text-brand-600" aria-hidden="true" /> What we found
                   </div>
-                  <p className="text-[12px] text-ink-700 leading-snug">{insight.reasoning}</p>
+                  <ul className="space-y-1.5">
+                    {(insight.observations ?? [insight.reasoning]).map((o, i) => (
+                      <li key={i} className="flex items-start gap-2 text-[12px] text-ink-700 leading-snug">
+                        <span className="mt-[5px] size-1.5 rounded-full bg-brand-300 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0">{o}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">
-                    <DollarSign size={12} className="text-risk" aria-hidden="true" /> Money / resource at stake
-                  </div>
-                  <p className="text-[12px] text-ink-700 leading-snug">{insight.atStake}</p>
-                </div>
-                <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                  <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
                       <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
                     </span>
@@ -381,14 +393,33 @@ export default function LayeredInsightCard({
                       </span>
                     )}
                   </div>
-                  <p className="text-[12px] font-semibold text-ink-900 leading-snug">{insight.likelyCause.label}</p>
-                  <p className="text-[12px] text-ink-600 leading-snug mt-0.5">{insight.likelyCause.detail}</p>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-[5px] size-1.5 rounded-full bg-brand-300 shrink-0" aria-hidden="true" />
+                    <p className="text-[12px] leading-snug min-w-0">
+                      <span className="font-semibold text-ink-900">{insight.likelyCause.label}</span>{' '}
+                      <span className="text-ink-600">{insight.likelyCause.detail}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
+                    <DollarSign size={12} className="text-ink-500" aria-hidden="true" /> What&rsquo;s at stake
+                  </div>
+                  <ul className="space-y-1.5">
+                    {(insight.stakes ?? [insight.atStake]).map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-[12px] text-ink-700 leading-snug">
+                        <span className="mt-[5px] size-1.5 rounded-full bg-brand-300 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0">{s}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
 
-              {/* Toolbar — evidence toggle + check-more on one line, so neither claims a row of its own */}
+              {/* Toolbar — evidence toggle (collapsed by default) + check-more
+                  chips on one line, so neither claims a row of its own. */}
               {(insight.evidence.length > 0 || insight.checkMore.length > 0) && (
-                <div className="mt-2.5">
+                <div className="mt-3">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                     {insight.evidence.length > 0 && (
                       <button
@@ -427,18 +458,27 @@ export default function LayeredInsightCard({
                         initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden"
                       >
-                        <div className="mt-2 rounded-lg border border-canvas-border divide-y divide-canvas-border overflow-hidden">
-                          {insight.evidence.map((e, i) => {
-                            const t = e.tone ? TONE[e.tone] : null;
-                            return (
-                              <div key={i} className="flex items-center gap-3 px-3 py-2 text-[11.5px] bg-canvas-elevated">
-                                {t && <span className={`size-1.5 rounded-full shrink-0 ${t.dot}`} />}
-                                <span className="font-mono text-[10.5px] text-ink-500 shrink-0 w-[152px] truncate hidden sm:block">{e.ref}</span>
-                                <span className="font-medium text-ink-800 min-w-0 truncate flex-1">{e.label}</span>
-                                <span className={`ml-auto shrink-0 tabular-nums ${t ? t.text : 'text-ink-500'}`}>{e.detail}</span>
-                              </div>
-                            );
-                          })}
+                        {/* A calm data table — headers, plain ink, no severity paint;
+                            the tone story is already told above the fold. */}
+                        <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden bg-canvas-elevated">
+                          <table className="w-full text-[11.5px]">
+                            <thead>
+                              <tr className="bg-canvas border-b border-canvas-border text-left">
+                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500 hidden sm:table-cell w-[172px]">Source</th>
+                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Item</th>
+                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Detail</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-canvas-border">
+                              {insight.evidence.map((e, i) => (
+                                <tr key={i}>
+                                  <td className="px-3 py-2 font-mono text-[10.5px] text-ink-500 truncate hidden sm:table-cell">{e.ref}</td>
+                                  <td className="px-3 py-2 font-medium text-ink-800">{e.label}</td>
+                                  <td className="px-3 py-2 text-ink-700 tabular-nums">{e.detail}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                         {evidenceExtra}
                       </motion.div>
@@ -451,11 +491,11 @@ export default function LayeredInsightCard({
                   4–5 item set reads in a couple of rows, not a tall wall. Each tile
                   opens in Ask IRA (new tab) with the step pre-filled. */}
               {recs.length > 0 ? (
-                <div className="mt-2.5 rounded-xl bg-brand-50/60 border border-brand-100 p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-2">
+                <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
                     <Sparkles size={12} className="text-brand-600" aria-hidden="true" />
                     Recommended actions
-                    <span className="text-brand-600/70">· {recs.length}</span>
+                    <span className="text-ink-400">· {recs.length}</span>
                     <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-brand-100/70 px-2 py-0.5 text-[9px] font-semibold text-brand-700 normal-case tracking-normal">
                       <MessageSquare size={10} aria-hidden="true" /> Open one to work it in chat
                     </span>
@@ -472,8 +512,8 @@ export default function LayeredInsightCard({
                   )}
                 </div>
               ) : (
-                <div className="mt-2.5 rounded-xl bg-brand-50/60 border border-brand-100 p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-2">
+                <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
                     <ArrowRight size={12} className="text-brand-600" aria-hidden="true" /> What to do next
                   </div>
                   <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
