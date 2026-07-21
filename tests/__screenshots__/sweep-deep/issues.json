@@ -1,0 +1,52 @@
+{
+  "visited": [
+    "my-queue",
+    "process-hub",
+    "process-hub-bp-detail",
+    "risk-register",
+    "risk-detail",
+    "control-library",
+    "control-detail",
+    "reports",
+    "report-detail",
+    "dashboards",
+    "dashboard-detail",
+    "engagements",
+    "engagement-detail",
+    "workflow-library",
+    "workflow-detail",
+    "audit-planning",
+    "knowledge-hub",
+    "knowledge-hub-detail",
+    "ai-concierge",
+    "concierge-0-RACM Generator",
+    "concierge-1-Document Forensics",
+    "concierge-2-Table Extractor",
+    "concierge-3-Insights & Anomaly Report",
+    "concierge-4-Image Analytics",
+    "concierge-5-Speech Auditor",
+    "concierge-6-Medical Report Reader",
+    "admin",
+    "admin-users",
+    "admin-audit-log",
+    "chat-empty",
+    "chat-after-send"
+  ],
+  "issues": [
+    {
+      "where": "Risk Register",
+      "kind": "target-missing",
+      "detail": "no target for risk row (table tbody tr)"
+    },
+    {
+      "where": "Dashboard",
+      "kind": "target-missing",
+      "detail": "no target for dashboard card (table tbody tr | article | main [role=button])"
+    },
+    {
+      "where": "Engagements",
+      "kind": "target-missing",
+      "detail": "no target for engagement row (table tbody tr | article)"
+    }
+  ]
+}

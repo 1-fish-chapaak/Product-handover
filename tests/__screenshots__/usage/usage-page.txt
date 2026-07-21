@@ -1,0 +1,519 @@
+IRAME.AI
+Platform
+11
+Ask IRA
+Home
+Recents
+PROGRAMS
+Audit Planning
+Engagements
+My Queue
+4
+Process Hub
+GLOBAL
+Dashboard
+Report
+Risk Register
+Control Library
+Workflow Library
+AI Concierge
+SYSTEM
+Knowledge Hub
+Platform Usage
+Admin
+NA
+Nilesh Anand
+System Admin
+Platform Usage
+
+Who's using the platform, which modules they use, and what they produce.
+
+Last 30 days
+30 days up to Apr 21, 2026
+ACTIVE USERS
+12
+-14%
+different people used the platform
+12
+0
+people active in each 3 days · not a slice of 12
+Mar 23
+Apr 21
+ACTIONS
+533
++11%
+things done on the platform
+77
+0
+actions in each 3 days · adds up to 533
+Mar 23
+Apr 21
+AI ACTIVITY
+69
++41%
+questions, tool runs and chats
+15
+0
+AI actions in each 3 days · adds up to 69
+Mar 23
+Apr 21
+REPORTS
+7
++40%
+reports and ATRs generated
+2
+0
+reports in each 3 days · adds up to 7
+Mar 23
+Apr 21
+The 30 days up to Apr 21, 2026, the most recent activity on record. The % is the change vs the 30 days before that.
+latest
+average
+each chart is scaled to its own peak
+HIGHLIGHTS
+
+Ask IRA is growing fastest: +60% vs the previous period.
+
+75% of active members used AI in this range.
+
+3 members haven’t signed in for 30+ days.
+
+Top 3 members account for 42% of all activity.
+
+SECTION DEEP-DIVES
+Click a section for the full picture
+Engagements
+Details
+13
+Engagements
+251
+Controls in scope
+33
+Open findings
+The whole book of work — controls, testing and findings across every engagement
+Audit Planning
+Details
+13
+Engagements planned
+9
+In flight
+4
+Not started
+The plan — what is scheduled, what is running, and who is carrying it
+Exceptions
+Details
+33
+Open findings
+8
+Critical
+5
+Resolved
+The triage queue — what workflows flagged and whether anyone is working it
+Process Hub
+Details
+4
+Business processes
+1
+Processes with no SOP
+10
+SOPs uploaded
+The process map — SOPs, RACMs and coverage per business process
+Ask IRA
+Details
+47
+Questions asked
+5
+Conversations
+5
+Saved conversations
+The chat — questions asked and conversations held
+AI Concierge
+Details
+17
+Tool runs
+7
+Tools available
+7
+Members running tools
+The toolkit — which tools exist and how often they run
+Reports
+Details
+23
+Reports generated
+11
+SOX / ICFR
+3
+Action Taken Reports
+The report book — generated, shared and Action Taken Reports
+Workflows
+Details
+10
+Workflows in library
+167
+Total runs
+45
+Most-run workflow
+The automation library and how much it runs
+Risk & Controls
+Details
+18
+Risks on the register
+3
+Risks without a control
+14
+Controls in the library
+The control environment — risks, controls, RACMs and coverage
+Knowledge Hub
+Details
+20
+Sources connected
+17
+Added in this period
+3
+Folders indexed
+What data the platform can reach
+Dashboards
+Details
+7
+Dashboards
+27
+Dashboard actions
+1
+Untouched
+What the team watches
+Admin & access
+Details
+2
+Workspaces
+17
+Members
+0
+Failed sign-ins
+Workspaces, teams, roles — and who can change what
+Daily activity
+· How much happened each day
+All actions
+AI queries
+Compare
+Mar 23
+Mar 28
+Apr 2
+Apr 7
+Apr 12
+Apr 17
+0
+8
+16
+24
+32
+Most-used areas
+· Click one for details
+Risk & Controls
+93 · 17%
+Reports
+90 · 17%
+Engagements
+80 · 15%
+Ask IRA
+56 · 11%
+Exceptions
+40 · 8%
+Admin
+33 · 6%
+Workflows
+32 · 6%
+Knowledge Hub
+30 · 6%
+Audit Planning
+27 · 5%
+Dashboards
+27 · 5%
+AI Concierge
+17 · 3%
+Process Hub
+8 · 2%
+AI usage
+· How much the team uses Ask IRA and the AI tools
+47
+Questions asked
+17
+Tool runs
+5
+Conversations
+75%
+Members using AI
+TOP AI USERS
+AT
+Aditya Thakur
+13
+AS
+Abhinav Sharma
+11
+AN
+Ayushi Narang
+10
+Members
+Seats used this period.
+Seats
+17 · 100%
+Signed in ever
+15 · 88%
+Active this period
+9 · 53%
+Used AI this period
+9 · 53%
+Active this period
+AS
+AT
+AM
+AN
++5
+9
+No sign-in 30+ days
+A
+AM
+SK
+3
+Invited, not joined yet
+A1
+PS
+2
+Suspended or inactive
+CP
+KP
+RV
+3
+When people are active
+· Darker means more activity
+Busiest: Tuesdays around 09:00
+Mon
+Tue
+Wed
+Thu
+Fri
+Sat
+Sun
+00:00
+04:00
+08:00
+12:00
+16:00
+20:00
+Less
+More
+Worth checking
+· Based on this period's numbers
+
+2 invites still pending — those seats are paid for but unused.
+
+3 members haven't signed in for 30+ days — those seats may not be needed.
+
+What got created
+· Workflows, dashboards, RACMs, engagements and reports built in this period
+Workflows
+4
++33%
+Dashboards
+4
++33%
+RACMs
+4
++100%
+Engagements
+8
++33%
+Reports
+7
++40%
+RECENTLY CREATED
+AM
+Ajay Mudhai created IT General Controls Effectiveness — FY26Reports
+Apr 20
+AN
+Ayushi Narang created the RACM for "Order to Cash"RACMs
+Apr 18
+NA
+Nilesh Anand created Order-to-Cash Revenue Audit — Q1 FY26Reports
+Apr 17
+AS
+Abhinav Sharma created the RACM for "Procure to Pay"RACMs
+Apr 15
+AS
+Abhinav Sharma created Purchase Order Approval Threshold AuditReports
+Apr 15
+AS
+Abhinav Sharma created Privileged Access Review — FY26 H1Reports
+Apr 14
+Workflow runs
+· Executions across the platform
+58
++9%
+Runs in this period
+Workflow Library
+17
+Engagements
+41
+AI tools
+0
+RECENT RUNS
+TG
+Tushar Goel ran the Revenue Recognition Checker workflow on Procure to Pay
+Apr 21
+TG
+Tushar Goel ran the High-Value Payment Flagging workflow on Order to Cash
+Apr 21
+VR
+Vijay Reddy ran a design-effectiveness check on "Customer statement reconciliation"
+Apr 21
+AT
+Aditya Thakur ran the Cash Application Matcher workflow on Procure to Pay
+Apr 20
+AN
+Ayushi Narang ran the test for "Journal entry anomaly detector"
+Apr 20
+Sharing
+· Invites and share links sent
+29
+-12%
+Shares in this period
+Reports
+12
+Dashboards
+9
+RACMs
+6
+Workflows
+2
+RECENT SHARES
+VR
+Vijay Reddy shared the Record to Report RACM with the risk owners
+Apr 20
+AS
+Abhinav Sharma shared the Record to Report RACM with the risk owners
+Apr 16
+AM
+Ajay Mudhai shared the Procurement (P2P) dashboard with Management
+Apr 15
+VR
+Vijay Reddy shared Purchase Order Approval Threshold Audit with the audit committee
+Apr 15
+TG
+Tushar Goel shared the Revenue Recognition Checker workflow with Management
+Apr 14
+Exports & downloads
+· Every download button on the platform, and who used it
+78
++1%
+Files downloaded in this period
+PDF
+23
+XLSX
+19
+PPTX
+17
+DOCX
+11
+CSV
+8
+RECENT DOWNLOADS
+AM
+Ajay Mudhai downloaded "AI_Fare Audit"PDF
+Apr 21
+TG
+Tushar Goel downloaded RACM matrix — Record to ReportXLSX
+Apr 21
+C
+CS downloaded SOX Compliance Tracker dashboardPPTX
+Apr 20
+AN
+Ayushi Narang downloaded Payroll Controls Review — H2RDOCX
+Apr 20
+AS
+Abhinav Sharma downloaded RACM matrix — Record to ReportXLSX
+Apr 17
+NA
+Nilesh Anand downloaded Revenue Recognition Cut-Off Testing — O2CPPTX
+Apr 17
+TOP DOWNLOADERS
+AN
+Ayushi Narang
+10
+NA
+Nilesh Anand
+10
+SK
+Sana Kapoor
+10
+Users
+Teams
+All (17)
+Heavy (3)
+Regular (6)
+Light (3)
+No activity (5)
+Role
+Team
+Export CSV
+Member
+	Role
+	Team
+	Last Active
+	Actions
+	Trend	AI Queries
+	Downloads
+	Top Module
+
+
+AS
+Abhinav Sharma
+abhinav@irame.ai
+	System Admin	SOX Audit	Today, 16:34	80	+19%	11	5	Risk & Controls
+
+AT
+Aditya Thakur
+aditya.thakur@irame.ai
+	Auditor	SOX Audit	Today, 11:16	73	+30%	13	3	Engagements
+
+A
+AI
+ai@irame.ai
+	Viewer	Engineering	Apr 14	11	+83%	0	9	Reports
+
+A1
+Ajay 14110008
+ajay.aj@btech2014.iitgn.ac.in
+	Enabler	IFC Team	Never	0	—	0	0	—
+
+AM
+ajay mudhai
+ajay@irame.ai
+	Enabler	IFC Team	Mar 12	0	-100%	0	0	—
+
+AM
+Ajay Mudhai
+ajaym@irame.ai
+	System Admin	Management	Today, 16:08	41	+32%	4	9	Knowledge Hub
+
+AN
+Ayushi Narang
+ayushi.narang@irame.ai
+	Enabler	SOX Audit	Today, 11:24	66	+27%	10	10	Risk & Controls
+
+CP
+Chulbul Pandey
+kuldeep.msvm@gmail.com
+	Enabler	Management	Mar 27	5	-78%	0	1	Reports
+
+C
+CS
+cs@irame.ai
+	Enabler	Engineering	Today, 12:18	26	+30%	3	3	Workflows
+
+KP
+Kuldeep Pandey
+kuldeep2.msvm@gmail.com
+	Reviewer	—	Feb 13	0	—	0	0	—
+Showing 1–10 of 17
+1
+2
+0
