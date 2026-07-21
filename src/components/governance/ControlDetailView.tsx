@@ -8,9 +8,11 @@ import {
   Settings, Eye, Repeat, Share2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
+import InsightGenerator from '../shared/InsightGenerator';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { RISKS, WORKFLOWS, RACMS } from '../../data/mockData';
 import LinkWorkflowDrawer from './LinkWorkflowDrawer';
 import {
@@ -48,6 +50,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
   const [activeTab, setActiveTab] = useState<TabId>('definition');
   const [showLinkDrawer, setShowLinkDrawer] = useState(false);
   const [showLinkDrawerFromAttrs, setShowLinkDrawerFromAttrs] = useState(false);
@@ -140,12 +143,16 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     onUpdate({ ...control, mappedRisks: [...control.mappedRisks, riskId], updatedAt: 'Apr 26, 2026' });
     addHistoryEntry(`Mapped risk ${riskId}`);
     addToast({ message: `Risk ${riskId} mapped to ${control.controlId}`, type: 'success' });
+    const risk = RISKS.find(r => r.id === riskId);
+    logEvent({ action: 'Update', description: `Mapped risk "${risk?.name || riskId}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleRemoveRisk = (riskId: string) => {
     onUpdate({ ...control, mappedRisks: control.mappedRisks.filter(r => r !== riskId), updatedAt: 'Apr 26, 2026' });
     addHistoryEntry(`Removed risk mapping ${riskId}`);
     addToast({ message: `Risk ${riskId} removed from ${control.controlId}`, type: 'info' });
+    const risk = RISKS.find(r => r.id === riskId);
+    logEvent({ action: 'Update', description: `Unmapped risk "${risk?.name || riskId}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleLinkWorkflow = (workflowId: string, workflowName: string) => {
@@ -166,6 +173,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     setShowLinkDrawer(false);
     setShowLinkDrawerFromAttrs(false);
     addToast({ message: `Workflow "${workflowName}" linked to ${control.controlId}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Linked workflow "${workflowName}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleUnlinkWorkflow = (workflowId: string, workflowName: string) => {
@@ -181,12 +189,14 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     setWorkflowAttributes(prev => { const next = { ...prev }; delete next[workflowId]; return next; });
     addHistoryEntry(`Unlinked workflow "${workflowName}"`);
     addToast({ message: `Workflow "${workflowName}" unlinked`, type: 'info' });
+    logEvent({ action: 'Update', description: `Unlinked workflow "${workflowName}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleMarkReady = () => {
     onUpdate({ ...control, status: 'Active', updatedAt: 'Apr 26, 2026' });
     addHistoryEntry('Marked control as Active');
     addToast({ message: `${control.controlId} marked as Active — available for engagement snapshots`, type: 'success' });
+    logEvent({ action: 'Update', description: `Marked control "${control.name}" (${control.controlId}) Active`, module: 'Control Library', entity: 'Control' });
   };
 
   // Attribute handlers
@@ -207,6 +217,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
       }));
       addHistoryEntry(`Updated attribute "${data.name}"`);
       addToast({ message: `Attribute "${data.name}" updated`, type: 'success' });
+      logEvent({ action: 'Update', description: `Updated test attribute "${data.name}" on control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
     } else {
       const existing = workflowAttributes[primaryWfId] || [];
       const newId = `TA-${String(100 + existing.length + 1).padStart(3, '0')}`;
@@ -216,6 +227,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
       }));
       addHistoryEntry(`Added attribute "${data.name}" to workflow`);
       addToast({ message: `Attribute "${data.name}" added`, type: 'success' });
+      logEvent({ action: 'Create', description: `Added test attribute "${data.name}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
     }
     setShowAddModal(false);
     setEditingAttribute(null);
@@ -231,6 +243,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     }));
     addHistoryEntry(`Removed attribute "${attr?.name || attrId}"`);
     addToast({ message: 'Attribute removed', type: 'info' });
+    logEvent({ action: 'Delete', description: `Removed test attribute "${attr?.name || attrId}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
   };
 
   /* ─── Tab definitions ─── */
@@ -313,30 +326,42 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {/* ═══ CONTROL DEFINITION ═══ */}
             {activeTab === 'definition' && (
               <div className="space-y-6">
+                {/* AI insight — the Layer-2 deep card, cost-gated. Same journey as the
+                    engagement Controls tab: idle → Generate → full reasoning + fix.
+                    Not passed a test result (the library holds definitions, not runs),
+                    so it reads forward-looking; pricing-thread controls surface the
+                    confirmed root-cause story. */}
+                <InsightGenerator
+                  layer="control"
+                  subjectId={control.controlId}
+                  subjectLabel={control.name}
+                  isKey={control.classification === 'Key'}
+                />
+
                 {/* Description & Objective */}
                 <div className="grid grid-cols-2 gap-6">
-                  <div className="glass-card rounded-xl p-5">
+                  <div className="glass-card p-5">
                     <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Description</h3>
                     <p className="text-[0.8125rem] text-ink-700 leading-relaxed">{control.description || 'No description provided.'}</p>
                   </div>
-                  <div className="glass-card rounded-xl p-5">
+                  <div className="glass-card p-5">
                     <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Objective</h3>
                     <p className="text-[0.8125rem] text-ink-700 leading-relaxed">{control.objective || 'No objective defined.'}</p>
                   </div>
                 </div>
 
                 {/* Assertions */}
-                <div className="glass-card rounded-xl p-5">
+                <div className="glass-card p-5">
                   <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Assertions</h3>
                   {control.assertions.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
-                      {control.assertions.map(a => (<span key={a} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 text-[0.75rem] font-medium border border-gray-200/60"><Check size={11} className="text-gray-400" />{ASSERTION_LABELS[a] || a}</span>))}
+                      {control.assertions.map(a => (<span key={a} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-canvas text-ink-700 text-[0.75rem] font-medium border border-canvas-border/60"><Check size={11} className="text-ink-400" />{ASSERTION_LABELS[a] || a}</span>))}
                     </div>
                   ) : <p className="text-[0.75rem] text-ink-400">No assertions defined.</p>}
                 </div>
 
                 {/* Details */}
-                <div className="glass-card rounded-xl p-5">
+                <div className="glass-card p-5">
                   <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Details</h3>
                   <div className="grid grid-cols-3 gap-6">
                     <div><div className="text-[0.6875rem] text-ink-400 mb-1">Owner</div><div className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700"><User size={13} className="text-ink-400" />{control.owner}</div></div>
@@ -350,7 +375,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {/* ═══ CLASSIFICATION ═══ */}
             {activeTab === 'classification' && (
               <div className="space-y-6">
-                <div className="glass-card rounded-xl p-5">
+                <div className="glass-card p-5">
                   <div className="grid grid-cols-4 gap-6">
                     <div><div className="text-[0.6875rem] text-ink-400 mb-1">Importance</div><div className="text-[0.8125rem] font-semibold text-ink-800">{control.classification}</div></div>
                     <div><div className="text-[0.6875rem] text-ink-400 mb-1">Nature</div><div className="text-[0.8125rem] font-medium text-ink-700">{control.nature}</div></div>
@@ -449,7 +474,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               {/* Type */}
                               <td className="px-4 py-3.5 align-top">
                                 <div className="flex flex-wrap gap-1">
-                                  <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${wf.type === 'automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
+                                  <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${wf.type === 'automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-canvas text-ink-600'}`}>
                                     {wf.type === 'automated' ? 'Automated' : 'Manual'}
                                   </span>
                                   <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-surface-2 text-ink-600">
@@ -526,7 +551,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                   <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow from Control</button>
                 </div>
                 {linkedWorkflowObjects.length === 0 ? (
-                  <div className="glass-card rounded-xl p-8 text-center">
+                  <div className="glass-card p-8 text-center">
                     <Workflow size={32} className="mx-auto text-ink-300 mb-3" />
                     <p className="text-[0.875rem] font-semibold text-ink-600 mb-1">No workflows linked</p>
                     <p className="text-[0.75rem] text-ink-400">Link a workflow to define how this control will be tested during engagements.</p>
@@ -536,14 +561,14 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                     {linkedWorkflowObjects.map((wf, i) => {
                       const attrCount = (workflowAttributes[wf.id] || []).length;
                       return (
-                        <div key={wf.id} className="glass-card rounded-xl p-5">
+                        <div key={wf.id} className="glass-card p-5">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1.5">
                                 <Workflow size={15} className="text-brand-600" />
                                 <span className="text-[0.875rem] font-semibold text-ink-800">{wf.name}</span>
                                 {i === 0 && <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-brand-50 text-brand-700">PRIMARY</span>}
-                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${wf.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status}</span>
+                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${wf.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-canvas text-ink-600'}`}>{wf.status}</span>
                               </div>
                               <p className="text-[0.75rem] text-ink-500 mb-3">{wf.desc}</p>
                               <div className="grid grid-cols-5 gap-4 text-[0.75rem]">
@@ -575,7 +600,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {activeTab === 'test-design' && (
               <div className="space-y-5">
                 {control.linkedWorkflowIds.length === 0 ? (
-                  <div className="glass-card rounded-xl p-10 text-center">
+                  <div className="glass-card p-10 text-center">
                     <ClipboardList size={36} className="mx-auto text-ink-300 mb-3" />
                     <p className="text-[0.9375rem] font-semibold text-ink-600 mb-1">No workflow linked</p>
                     <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">Link or create a workflow to define test conditions. These describe what evidence and criteria are validated during testing.</p>
@@ -590,7 +615,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                       <Info size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
                       <div className="text-[0.75rem] text-mitigated-700">Changes to attributes affect future engagements only. Existing engagement snapshots are not changed.</div>
                     </div>
-                    <div className="glass-card rounded-xl p-4">
+                    <div className="glass-card p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <Workflow size={15} className="text-brand-600" />
@@ -601,7 +626,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               {draftVersionCreated ? (
                                 <span className="px-2 py-0.5 rounded text-[0.625rem] font-bold bg-mitigated-50 text-mitigated-700">DRAFT v2</span>
                               ) : (
-                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${primaryWf?.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${primaryWf?.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-canvas text-ink-600'}`}>
                                   {primaryWf?.status === 'active' ? 'PUBLISHED v1' : primaryWf?.status}
                                 </span>
                               )}
@@ -619,13 +644,13 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                       </div>
                     )}
                     {primaryAttributes.length === 0 ? (
-                      <div className="glass-card rounded-xl p-8 text-center">
+                      <div className="glass-card p-8 text-center">
                         <ClipboardList size={28} className="mx-auto text-ink-300 mb-2" />
                         <p className="text-[0.8125rem] text-ink-500">No attributes defined yet.</p>
                         <p className="text-[0.75rem] text-ink-400 mt-0.5">Add attributes to define what is tested and what evidence is required.</p>
                       </div>
                     ) : (
-                      <div className="glass-card rounded-xl overflow-hidden">
+                      <div className="glass-card overflow-hidden">
                         <div className="overflow-x-auto">
                           <table className="w-full text-[0.75rem]">
                             <thead><tr className="bg-canvas border-b border-canvas-border">
@@ -644,10 +669,10 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                                   <td className="px-4 py-3"><div className="font-medium text-ink-800">{attr.name}</div><div className="text-[0.75rem] text-ink-400 mt-0.5 line-clamp-1">{attr.description}</div></td>
                                   <td className="px-4 py-3"><div className="text-[0.75rem] text-ink-600 line-clamp-2">{attr.passCriteria}</div></td>
                                   <td className="px-4 py-3 text-center">{attr.evidenceRequired ? (<span className="inline-flex items-center gap-1 text-evidence-700 text-[0.6875rem] font-semibold"><Paperclip size={10} />{attr.evidenceType || 'Yes'}</span>) : <span className="text-[0.6875rem] text-ink-400">No</span>}</td>
-                                  <td className="px-4 py-3 text-center">{attr.mandatory ? (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-risk-50 text-risk-700">Required</span>) : (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-medium bg-gray-100 text-gray-500">Optional</span>)}</td>
-                                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${attr.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${attr.status === 'Active' ? 'bg-compliant' : 'bg-gray-400'}`} />{attr.status}</span></td>
+                                  <td className="px-4 py-3 text-center">{attr.mandatory ? (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-risk-50 text-risk-700">Required</span>) : (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-medium bg-canvas text-ink-500">Optional</span>)}</td>
+                                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${attr.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : 'bg-canvas text-ink-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${attr.status === 'Active' ? 'bg-compliant' : 'bg-ink-400'}`} />{attr.status}</span></td>
                                   <td className="px-4 py-3 text-center"><div className="flex items-center justify-center gap-1">
-                                    <button onClick={() => { setEditingAttribute(attr); setShowAddModal(true); }} title="Edit" className="p-1.5 rounded-md hover:bg-gray-100 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"><Pencil size={12} /></button>
+                                    <button onClick={() => { setEditingAttribute(attr); setShowAddModal(true); }} title="Edit" className="p-1.5 rounded-md hover:bg-canvas text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"><Pencil size={12} /></button>
                                     <button onClick={() => handleRemoveAttribute(attr.id)} title="Remove" className="p-1.5 rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer"><Trash2 size={12} /></button>
                                   </div></td>
                                 </tr>
@@ -665,7 +690,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {/* ═══ USAGE ═══ */}
             {activeTab === 'usage' && (
               <div className="space-y-5">
-                <div className="glass-card rounded-xl p-5">
+                <div className="glass-card p-5">
                   <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">RACM Matrices Using This Control ({controlRACMs.length})</h3>
                   {controlRACMs.length === 0 ? (
                     <div className="text-center py-8">
@@ -680,7 +705,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                               <span className="font-mono text-[0.6875rem] text-ink-500">{racm.id}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase ${racm.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{racm.status}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase ${racm.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-canvas text-ink-600'}`}>{racm.status}</span>
                             </div>
                             <div className="text-[0.8125rem] font-medium text-ink-800">{racm.name}</div>
                           </div>
@@ -696,7 +721,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
 
             {/* ═══ CHANGE HISTORY ═══ */}
             {activeTab === 'change-history' && (
-              <div className="glass-card rounded-xl p-5">
+              <div className="glass-card p-5">
                 <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Change History ({fullHistory.length})</h3>
                 <div className="relative">
                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-canvas-border" />

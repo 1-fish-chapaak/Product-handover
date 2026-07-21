@@ -172,7 +172,7 @@ export function EngagementTabBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ordered.join(','), activeTab]);
 
-  const pad = size === 'md' ? 'px-4 py-2.5 text-[13px]' : 'px-3 py-2 text-[11.5px]';
+  const pad = size === 'md' ? 'px-4 py-2.5 text-[0.8125rem]' : 'px-3 py-2 text-[0.71875rem]';
   const chip = size === 'md' ? 'w-6 h-6' : 'w-5 h-5';
   const iconSize = size === 'md' ? 13 : 12;
 
@@ -190,7 +190,7 @@ export function EngagementTabBar({
                 <button
                   onClick={() => onSelect(tab.id)}
                   className={`group flex items-center gap-1.5 ${pad} font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer select-none ${
-                    active ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
+                    active ? 'border-primary text-primary' : 'border-transparent text-ink-400 hover:text-text hover:border-canvas-border'
                   }`}
                 >
                   <span className={`inline-flex items-center justify-center ${chip} rounded-md ${meta.chip}`}>
@@ -210,7 +210,7 @@ export function EngagementTabBar({
           <button
             onClick={() => setMenuOpen(o => !o)}
             aria-label="Show or hide tabs"
-            className={`inline-flex items-center gap-1 px-2 h-7 rounded-md border text-[11px] font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1 px-2 h-7 rounded-md border text-[0.6875rem] font-medium transition-colors cursor-pointer ${
               menuOpen ? 'bg-primary-xlight/50 border-primary/30 text-primary' : 'border-border-light bg-white text-text-muted hover:text-text hover:bg-surface-2'
             }`}
           >
@@ -225,8 +225,8 @@ export function EngagementTabBar({
                   className="absolute right-0 top-full mt-1.5 z-30 w-60 rounded-xl border border-border-light bg-white shadow-lg overflow-hidden"
                 >
                   <div className="px-3 py-2 border-b border-border-light">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Show / hide tabs</div>
-                    <div className="text-[10.5px] text-text-muted mt-0.5">Drag the tab headers to reorder.</div>
+                    <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-text-muted">Show / hide tabs</div>
+                    <div className="text-[0.65625rem] text-text-muted mt-0.5">Drag the tab headers to reorder.</div>
                   </div>
                   <div className="py-1 max-h-[280px] overflow-y-auto">
                     {tabs.map(tab => {
@@ -239,7 +239,7 @@ export function EngagementTabBar({
                           <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md ${meta.chip} ${visible ? '' : 'opacity-50'}`}>
                             <Icon size={11} />
                           </span>
-                          <span className={`text-[12px] font-medium ${visible ? 'text-text' : 'text-text-muted'}`}>{tab.label}</span>
+                          <span className={`text-[0.75rem] font-medium ${visible ? 'text-text' : 'text-text-muted'}`}>{tab.label}</span>
                           <span className="ml-auto text-text-muted">{visible ? <Eye size={12} /> : <EyeOff size={12} />}</span>
                         </label>
                       );

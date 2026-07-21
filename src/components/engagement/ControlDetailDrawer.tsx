@@ -8,6 +8,7 @@ import {
   Upload, Play, Calendar, Filter, BarChart3, Download, Settings, Plus
 } from 'lucide-react';
 import { getControlById, getLinkedWorkflows, getAttributesForWorkflow, FINDINGS, ENGAGEMENT, type ControlDetail, type SampleItem, type Finding, type LinkedWorkflow } from './engagementData';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -182,7 +183,7 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
       {/* ── TEST INSTANCE DETAILS ── */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Test Instance Details</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Linked Workflows</span><p className="text-[0.75rem] font-semibold text-brand-700">{workflows.length === 1 ? `${ctrl.workflowName} ${ctrl.workflowVersion}` : `${workflows.length} workflows`}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Attributes</span><p className="text-[0.75rem] text-text">{totalAttrs} attributes{workflows.length > 1 ? ` across ${workflows.length} workflows` : ''}</p></div>
@@ -198,23 +199,23 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Execution Metrics</h4>
         <div className="grid grid-cols-5 gap-2">
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{tested}/{totalSamples}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Samples Tested</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${ctrl.exceptions > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{ctrl.samples.filter(s => s.status === 'fail' || s.status === 'exception').length}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Failed Samples</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-brand-700 tabular-nums">{attrCompletion}%</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Attr Complete</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${evidenceCompletion < 100 ? 'text-high-700' : 'text-compliant-700'}`}>{evidenceCompletion}%</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Evidence</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${ctrl.status === 'pending-review' ? 'text-mitigated-700' : 'text-text-muted'}`}>{ctrl.status === 'pending-review' ? '1' : '0'}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Pending Review</div>
           </div>
@@ -246,14 +247,14 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
 
         {workflows.length === 0 ? (
           /* Empty state */
-          <div className="glass-card rounded-xl p-6 text-center">
+          <div className="glass-card p-6 text-center">
             <Workflow size={24} className="mx-auto text-ink-300 mb-2" />
             <p className="text-[0.75rem] font-semibold text-ink-600 mb-0.5">No workflows linked</p>
             <p className="text-[0.625rem] text-ink-400">Link workflows to test this control's attributes.</p>
           </div>
         ) : (
           /* Workflow ↔ attribute table */
-          <div className="glass-card rounded-xl overflow-hidden">
+          <div className="glass-card overflow-hidden">
             <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
@@ -321,12 +322,12 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
       </div>
 
       {/* ── ATTRIBUTE DETAIL TABLE ── */}
-      <AttributeConditionsTable attrStats={attrStats} workflows={workflows} onGoToStep={onGoToStep} />
+      <AttributeConditionsTable ctrl={ctrl} attrStats={attrStats} workflows={workflows} onGoToStep={onGoToStep} />
 
       {/* ── CONTROL TEST OVERVIEW ── */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Control Test Overview</h4>
-        <div className="glass-card rounded-xl p-4 space-y-3">
+        <div className="glass-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Domain</span><p className="text-[0.75rem] text-text">{ctrl.domain}</p></div>
@@ -354,7 +355,8 @@ interface AttrStat {
   passCount: number; failCount: number; testedCount: number; exceptionCount: number; status: string;
 }
 
-function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
+function AttributeConditionsTable({ ctrl, attrStats, workflows, onGoToStep }: {
+  ctrl: ControlDetail;
   attrStats: AttrStat[];
   workflows: LinkedWorkflow[];
   onGoToStep: (s: TestingStep) => void;
@@ -362,6 +364,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
   // Local overrides for workflow mapping (demo only — does not mutate source data)
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const logEvent = useAuditLog();
 
   const handleRemap = (attrId: string, newWfId: string) => {
     if (newWfId === '__link_new__') {
@@ -371,7 +374,11 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
     }
     setOverrides(prev => ({ ...prev, [attrId]: newWfId }));
     const wf = workflows.find(w => w.id === newWfId);
-    if (wf) showToast(`Attribute mapped to ${wf.name}`);
+    if (wf) {
+      showToast(`Attribute mapped to ${wf.name}`);
+      const attr = attrStats.find(a => a.id === attrId);
+      logEvent({ action: 'Update', description: `Mapped attribute "${attr?.name ?? attrId}" to workflow ${wf.name} on ${ctrl.controlName}`, module: 'Engagements', entity: 'Control' });
+    }
   };
 
   const showToast = (msg: string) => {
@@ -398,7 +405,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
           {unmappedCount > 0 && <span className="text-[0.625rem] text-risk-700 font-medium">{unmappedCount} unmapped</span>}
         </div>
       </div>
-      <div className="glass-card rounded-xl overflow-hidden relative">
+      <div className="glass-card overflow-hidden relative">
         <div className="overflow-x-auto">
           <table className="w-full text-[0.6875rem]">
             <thead>
@@ -539,6 +546,7 @@ type PopulationState = 'NO_DATA_SELECTED' | 'DATA_SELECTED' | 'SNAPSHOT_CREATED'
 type SourceMode = 'existing' | 'upload' | null;
 
 function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void; onPopulationLocked?: (info: { locked: boolean; recordCount: number; source: string; snapshotId: string }) => void }) {
+  const logEvent = useAuditLog();
   // Always start with NO_DATA_SELECTED — user must explicitly choose
   const [popState, setPopState] = useState<PopulationState>('NO_DATA_SELECTED');
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
@@ -565,6 +573,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
   const handleSelectDataset = () => {
     if (!selectedDatasetId) return;
     setPopState('DATA_SELECTED');
+    if (selectedDataset) logEvent({ action: 'Update', description: `Selected population dataset "${selectedDataset.source}" (${selectedDataset.records} records) for ${ctrl.controlId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const handleFileUpload = (fileName: string) => {
@@ -572,6 +581,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
     const mockRecords = Math.floor(Math.random() * 5000) + 500;
     setUploadedFile({ name: fileName, records: mockRecords });
     setPopState('DATA_SELECTED');
+    logEvent({ action: 'Upload', description: `Uploaded population file "${fileName}" for ${ctrl.controlId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -589,6 +599,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
       setPopState('SNAPSHOT_CREATED');
       setLocking(false);
       onPopulationLocked?.({ locked: true, recordCount: datasetInfo?.records || 0, source: datasetInfo?.source || '', snapshotId: datasetInfo?.snapshotId || `POP-SNAP-${ctrl.controlId}-001` });
+      logEvent({ action: 'Update', description: `Locked population snapshot for ${ctrl.controlName}`, module: 'Engagements', entity: 'Control' });
     }, 800);
   };
 
@@ -645,7 +656,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
 
           {/* Option A: Existing dataset list */}
           {sourceMode === 'existing' && (
-            <div className="glass-card rounded-xl p-4 space-y-3">
+            <div className="glass-card p-4 space-y-3">
               <p className="text-[0.6875rem] font-semibold text-text-muted uppercase">Available Datasets</p>
               <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
                 {EXISTING_DATASETS.map(ds => (
@@ -679,7 +690,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
 
           {/* Option B: Upload new dataset */}
           {sourceMode === 'upload' && (
-            <div className="glass-card rounded-xl p-4 space-y-3">
+            <div className="glass-card p-4 space-y-3">
               <div
                 onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
@@ -720,7 +731,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
             Population Dataset
             <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ml-auto bg-evidence-50 text-evidence-700">Selected</span>
           </h4>
-          <div className="glass-card rounded-xl p-4 space-y-3">
+          <div className="glass-card p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-[0.625rem] text-text-muted uppercase">Source</span><p className="text-[0.75rem] text-text font-medium">{datasetInfo.source}</p></div>
               <div><span className="text-[0.625rem] text-text-muted uppercase">Records</span><p className="text-[0.75rem] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
@@ -753,7 +764,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
             Population Dataset
             <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ml-auto bg-compliant-50 text-compliant-700">Snapshot Locked</span>
           </h4>
-          <div className="glass-card rounded-xl p-4 space-y-3 border-compliant/20">
+          <div className="glass-card p-4 space-y-3 border-compliant/20">
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-[0.625rem] text-text-muted uppercase">Source</span><p className="text-[0.75rem] text-text font-medium">{datasetInfo.source}</p></div>
               <div><span className="text-[0.625rem] text-text-muted uppercase">Records</span><p className="text-[0.75rem] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
@@ -786,6 +797,7 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
   onCreateTestItems: (set: SampleSet) => void;
   populationInfo?: { locked: boolean; recordCount: number } | null;
 }) {
+  const logEvent = useAuditLog();
   const isAutomated = ctrl.workflowName?.toLowerCase().includes('automat') || ctrl.controlName?.toLowerCase().includes('automat');
   const defaultMode = isAutomated ? 'full-run' : 'sampling';
 
@@ -843,6 +855,7 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
           if (effectiveMode === 'full-run') {
             const popSize = populationInfo?.recordCount || ctrl.populationSize || 10245;
             onCreateTestItems({ rows: Array.from({ length: Math.min(popSize, 500) }, (_, i) => i), size: popSize, populationSize: popSize, method: 'full', generatedAt: new Date().toISOString() });
+            logEvent({ action: 'Create', description: `Selected ${effectiveMode} execution mode — ${popSize} test items for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' });
             onGoToStep('evidence');
           } else {
             onGoToStep('samples');
@@ -899,11 +912,12 @@ function generateSamples(populationSize: number, config: SamplingConfig): number
 function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
   ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void; onSamplesCreated?: (set: SampleSet) => void;
 }) {
+  const logEvent = useAuditLog();
   const [items, setItems] = useState<{ ref: string; desc: string }[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const handleAdd = () => { if (!newRef.trim()) return; setItems(prev => [...prev, { ref: newRef.trim(), desc: newDesc.trim() }]); setNewRef(''); setNewDesc(''); };
-  const handleConfirm = () => { if (items.length === 0) return; onSamplesCreated?.({ rows: items.map((_, i) => i), size: items.length, populationSize: items.length, method: 'manual', generatedAt: new Date().toISOString() }); onGoToStep?.('evidence'); };
+  const handleAdd = () => { if (!newRef.trim()) return; const newRefVal = newRef.trim(); setItems(prev => [...prev, { ref: newRefVal, desc: newDesc.trim() }]); setNewRef(''); setNewDesc(''); logEvent({ action: 'Create', description: `Added manual sample "${newRefVal}" for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' }); };
+  const handleConfirm = () => { if (items.length === 0) return; onSamplesCreated?.({ rows: items.map((_, i) => i), size: items.length, populationSize: items.length, method: 'manual', generatedAt: new Date().toISOString() }); logEvent({ action: 'Create', description: `Confirmed ${items.length} manual samples for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' }); onGoToStep?.('evidence'); };
 
   return (
     <div className="space-y-5">
@@ -911,7 +925,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
         <h3 className="text-[0.875rem] font-bold text-text mb-1">Select Samples for Testing</h3>
         <p className="text-[0.75rem] text-text-muted">Add the items you want to test manually. No population dataset is required.</p>
       </div>
-      <div className="glass-card rounded-xl p-4 space-y-3">
+      <div className="glass-card p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Reference ID <span className="text-red-400">*</span></label>
@@ -929,7 +943,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
         <button onClick={handleAdd} disabled={!newRef.trim()} className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-[0.6875rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Plus size={11} />Add Sample</button>
       </div>
       {items.length > 0 && (
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <table className="w-full text-[0.6875rem]">
             <thead><tr className="border-b border-border bg-surface-2/50">
               <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase">Sample</th>
@@ -942,7 +956,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
                 <td className="px-3 py-2 font-mono text-text-muted">S-{String(i + 1).padStart(3, '0')}</td>
                 <td className="px-3 py-2 text-text">{s.ref}</td>
                 <td className="px-3 py-2 text-text-muted">{s.desc || '—'}</td>
-                <td className="px-3 py-2"><button onClick={() => setItems(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-risk-700 cursor-pointer"><X size={11} /></button></td>
+                <td className="px-3 py-2"><button onClick={() => setItems(prev => prev.filter((_, j) => j !== i))} className="text-ink-400 hover:text-risk-700 cursor-pointer"><X size={11} /></button></td>
               </tr>
             ))}</tbody>
           </table>
@@ -959,6 +973,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
 // ─── SAMPLES STEP (NEW) ─────────────────────────────────────────────────────
 
 function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void }) {
+  const logEvent = useAuditLog();
   const [samplingMethod, setSamplingMethod] = useState<'random' | 'mus' | 'risk-based' | 'manual'>('random');
   const [sampleSize, setSampleSize] = useState(25);
   const [generating, setGenerating] = useState(false);
@@ -980,6 +995,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
     setTimeout(() => {
       setGenerated(true);
       setGenerating(false);
+      logEvent({ action: 'Create', description: `Generated samples (${samplingMethod}) — ${sampleSize} of ${populationSize} for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' });
     }, 1200);
   };
 
@@ -1019,12 +1035,12 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
                 className={`w-full text-left p-3 rounded-lg border transition-all ${
                   samplingMethod === m.id
                     ? 'border-primary bg-primary/5 ring-1 ring-primary/20 cursor-pointer'
-                    : m.enabled ? 'border-border-light hover:border-primary/20 cursor-pointer' : 'border-border-light bg-gray-50/50 opacity-50 cursor-not-allowed'
+                    : m.enabled ? 'border-border-light hover:border-primary/20 cursor-pointer' : 'border-border-light bg-canvas/50 opacity-50 cursor-not-allowed'
                 }`}>
                 <div className="flex items-center gap-2">
                   {samplingMethod === m.id ? <CheckCircle2 size={13} className="text-primary shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300 shrink-0" />}
                   <span className="text-[0.75rem] font-semibold text-text">{m.label}</span>
-                  {!m.enabled && <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-400 ml-auto">Coming Soon</span>}
+                  {!m.enabled && <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-canvas text-ink-400 ml-auto">Coming Soon</span>}
                 </div>
                 <p className="text-[0.625rem] text-text-muted mt-0.5 ml-5.5">{m.desc}</p>
               </button>
@@ -1035,7 +1051,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
         {/* Sample Size */}
         <div>
           <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Sample Size</h4>
-          <div className="glass-card rounded-xl p-4 space-y-3">
+          <div className="glass-card p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Number of Samples</label>
@@ -1045,7 +1061,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
               </div>
               <div>
                 <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Population Size</label>
-                <div className="px-3 py-2 border border-border rounded-lg text-[0.75rem] font-mono text-text bg-gray-50 cursor-not-allowed">{populationSize.toLocaleString()}</div>
+                <div className="px-3 py-2 border border-border rounded-lg text-[0.75rem] font-mono text-text bg-canvas cursor-not-allowed">{populationSize.toLocaleString()}</div>
               </div>
             </div>
             <p className="text-[0.625rem] text-text-muted">Recommended: {recommendedMin}–{recommendedMax} samples for this dataset.</p>
@@ -1064,7 +1080,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
             <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Preview</h4>
             <button onClick={handlePreview} className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer">Refresh Preview</button>
           </div>
-          <div className="glass-card rounded-xl p-4">
+          <div className="glass-card p-4">
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div><span className="text-[0.625rem] text-text-muted uppercase">Population</span><p className="text-[0.75rem] font-mono text-text">{populationSize.toLocaleString()}</p></div>
               <div><span className="text-[0.625rem] text-text-muted uppercase">Sample Size</span><p className="text-[0.75rem] font-mono text-primary">{Math.min(sampleSize, populationSize)}</p></div>
@@ -1117,7 +1133,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Database size={11} />Sample Selection Summary
         </h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-3 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Population Snapshot</span><p className="text-[0.75rem] font-mono text-brand-700">POP-SNAP-{ctrl.controlId}-001</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Population Size</span><p className="text-[0.75rem] font-mono text-text">{ctrl.populationSize.toLocaleString()}</p></div>
@@ -1134,7 +1150,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <FileText size={11} />Required Evidence for Each Sample
         </h4>
-        <div className="glass-card rounded-xl p-3">
+        <div className="glass-card p-3">
           <div className="flex flex-wrap gap-1.5">
             {ctrl.workflowAttributes.filter(a => a.requiredEvidence).map(a => (
               <span key={a.id} className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-100">
@@ -1151,7 +1167,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">
           Samples ({ctrl.samples.length})
         </h4>
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
@@ -1198,15 +1214,15 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
 
       {/* ── D. Readiness Summary ── */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className="text-lg font-bold text-compliant-700 tabular-nums">{readyCt}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Ready</div>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${partialCt > 0 ? 'text-high-700' : 'text-text-muted'}`}>{partialCt}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Partial</div>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${neededCt > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{neededCt}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Needed</div>
         </div>
@@ -1282,19 +1298,19 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Evidence Status</h4>
         <div className="grid grid-cols-4 gap-2">
-          <div className="glass-card rounded-xl p-2.5 text-center">
+          <div className="glass-card p-2.5 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{totalFiles}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Files Uploaded</div>
           </div>
-          <div className="glass-card rounded-xl p-2.5 text-center">
+          <div className="glass-card p-2.5 text-center">
             <div className="text-lg font-bold text-compliant-700 tabular-nums">{completeCt}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Complete</div>
           </div>
-          <div className="glass-card rounded-xl p-2.5 text-center">
+          <div className="glass-card p-2.5 text-center">
             <div className={`text-lg font-bold tabular-nums ${partialCt > 0 ? 'text-high-700' : 'text-text-muted'}`}>{partialCt}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Partial</div>
           </div>
-          <div className="glass-card rounded-xl p-2.5 text-center">
+          <div className="glass-card p-2.5 text-center">
             <div className={`text-lg font-bold tabular-nums ${missingCt > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{missingCt}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Missing</div>
           </div>
@@ -1310,7 +1326,7 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
             const isExpanded = expandedSample === sample.id;
 
             return (
-              <div key={sample.id} className={`glass-card rounded-xl overflow-hidden ${evStatus.label === 'Missing' ? 'border-risk/10' : ''}`}>
+              <div key={sample.id} className={`glass-card overflow-hidden ${evStatus.label === 'Missing' ? 'border-risk/10' : ''}`}>
                 {/* Sample header row */}
                 <button onClick={() => setExpandedSample(isExpanded ? null : sample.id)}
                   className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-2/30 transition-colors cursor-pointer">
@@ -1536,7 +1552,7 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                   <span className="text-[0.625rem] text-text-muted">{sample.evidenceFiles.length} evidence</span>
                   {(() => {
                     const r = getSampleResult(sample);
-                    return <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center ${r === 'pass' ? 'bg-compliant-50 text-compliant-700' : r === 'fail' ? 'bg-risk-50 text-risk-700' : 'bg-gray-100 text-gray-500'}`}>
+                    return <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center ${r === 'pass' ? 'bg-compliant-50 text-compliant-700' : r === 'fail' ? 'bg-risk-50 text-risk-700' : 'bg-canvas text-ink-500'}`}>
                       {r === 'pass' ? 'Passed' : r === 'fail' ? 'Failed' : 'Pending'}
                     </span>;
                   })()}
@@ -1567,12 +1583,12 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                         const wfName = getAttrWorkflow(attr);
                         const evCount = sample.evidenceFiles.length;
                         return (
-                          <div key={attr.id} className="glass-card rounded-lg p-3">
+                          <div key={attr.id} className="glass-card p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 mb-0.5">
                                   <span className="text-[0.75rem] font-medium text-text">{attr.name}</span>
-                                  <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-canvas text-ink-500'}`}>
                                     {isAuto ? 'Auto' : 'Manual'}
                                   </span>
                                 </div>
@@ -1657,7 +1673,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
       </div>
 
       {/* ── Test Instance Header ── */}
-      <div className="glass-card rounded-xl p-4">
+      <div className="glass-card p-4">
         <div className="grid grid-cols-2 gap-3">
           <div><span className="text-[0.625rem] text-text-muted uppercase">Test Instance</span><p className="text-[0.75rem] font-mono text-text">{wp.testInstanceId}</p></div>
           <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] text-text">{wp.controlName}</p></div>
@@ -1671,7 +1687,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Shield size={11} />Control Design
         </h5>
-        <div className="glass-card rounded-xl p-4 space-y-3">
+        <div className="glass-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><span className="text-[0.625rem] text-text-muted uppercase">Control Description</span><p className="text-[0.75rem] text-text-secondary leading-relaxed mt-0.5">{ctrl.description}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Control Owner</span><p className="text-[0.75rem] text-text">{ctrl.controlOwner}</p></div>
@@ -1693,7 +1709,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Target size={11} />Test Attributes
         </h5>
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
@@ -1724,7 +1740,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
             const isExpanded = expandedRound === round.round;
             const isLocked = round.status === 'complete';
             return (
-              <div key={round.round} className={`glass-card rounded-xl overflow-hidden ${isLocked ? '' : 'border-primary/20'}`}>
+              <div key={round.round} className={`glass-card overflow-hidden ${isLocked ? '' : 'border-primary/20'}`}>
                 <button onClick={() => setExpandedRound(isExpanded ? null : round.round)} className="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-2/30 transition-colors">
                   <div className="flex items-center gap-3">
                     {isExpanded ? <ChevronDown size={12} className="text-text-muted" /> : <ChevronRight size={12} className="text-text-muted" />}
@@ -1946,7 +1962,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
         </h5>
 
         {/* 9. Reviewer info */}
-        <div className="glass-card rounded-xl p-4 space-y-3">
+        <div className="glass-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span><p className="text-[0.75rem] font-medium text-text">{ctrl.reviewer}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Status</span>
@@ -2097,7 +2113,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Shield size={11} />Submission Summary
           </h5>
-          <div className="glass-card rounded-xl p-4">
+          <div className="glass-card p-4">
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
               <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
@@ -2111,15 +2127,15 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
 
         {/* KPIs */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{tested}/{ctrl.samples.length}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Samples Tested</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-compliant-700'}`}>{failed}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Failed Samples</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{evidenceCount}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Files</div>
           </div>
@@ -2130,7 +2146,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <CheckCircle2 size={11} />Readiness Checklist
           </h5>
-          <div className="glass-card rounded-xl p-4 space-y-2">
+          <div className="glass-card p-4 space-y-2">
             {readinessItems.map((item, i) => (
               <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg bg-surface-2/40">
                 {item.done
@@ -2250,7 +2266,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Shield size={11} />Control Summary
         </h5>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
@@ -2264,19 +2280,19 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
 
       {/* ── Testing Metrics ── */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className="text-lg font-bold text-text tabular-nums">{tested}/{ctrl.samples.length}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Tested</div>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className="text-lg font-bold text-compliant-700 tabular-nums">{passed}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Passed</div>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Failed</div>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center">
+        <div className="glass-card p-3 text-center">
           <div className="text-lg font-bold text-text tabular-nums">{ctrl.samples.reduce((sum, s) => sum + s.evidenceFiles.length, 0)}</div>
           <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Files</div>
         </div>
@@ -2287,7 +2303,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Database size={11} />Sample-Level Results ({ctrl.samples.length})
         </h5>
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-[0.6875rem]">
               <thead>
@@ -2376,7 +2392,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <BarChart3 size={11} />Attribute Summary
         </h5>
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
@@ -2431,7 +2447,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
           </h5>
 
           {!showSendBackForm ? (
-            <div className="glass-card rounded-xl p-4 space-y-3">
+            <div className="glass-card p-4 space-y-3">
               <p className="text-[0.6875rem] text-text-muted">Review the sample results and attribute details above. Then approve or send back for further testing.</p>
               <div className="flex gap-3">
                 <button onClick={() => onApprove?.()}
@@ -2445,7 +2461,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
               </div>
             </div>
           ) : (
-            <div className="glass-card rounded-xl p-4 space-y-3 border-high/20">
+            <div className="glass-card p-4 space-y-3 border-high/20">
               <div className="flex items-center gap-2">
                 <ArrowLeft size={12} className="text-high-700" />
                 <span className="text-[0.75rem] font-bold text-high-700">Send Back for Rework</span>
@@ -2548,7 +2564,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         </div>
 
         {/* Current status */}
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="text-[0.625rem] text-text-muted uppercase">Current Status</span>
@@ -2577,7 +2593,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         {/* Progress tracker */}
         <div>
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Progress to Conclusion</h5>
-          <div className="glass-card rounded-xl p-4 space-y-1.5">
+          <div className="glass-card p-4 space-y-1.5">
             {progressSteps.map((step, i) => (
               <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg">
                 {step.done
@@ -2679,23 +2695,23 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
       <div>
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Execution Summary</h5>
         <div className="grid grid-cols-5 gap-2">
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{ctrl.samples.length}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Total Samples</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-compliant-700 tabular-nums">{passed}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Passed</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Failed</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Exceptions</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{evidenceCount}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Evidence</div>
           </div>
@@ -2703,7 +2719,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
       </div>
 
       {/* Control details */}
-      <div className="glass-card rounded-xl p-4">
+      <div className="glass-card p-4">
         <div className="grid grid-cols-2 gap-3">
           <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
           <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
@@ -2720,7 +2736,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <AlertTriangle size={11} className="text-risk-700" />Failed Samples ({failedSamples.length})
           </h5>
-          <div className="glass-card rounded-xl overflow-hidden">
+          <div className="glass-card overflow-hidden">
             <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="border-b border-border bg-risk-50/20">
@@ -2752,7 +2768,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
 
       {/* Reviewer notes */}
       {ctrl.workingPaper.rounds.filter(r => r.reviewerNotes).map(r => (
-        <div key={r.round} className="glass-card rounded-xl p-4">
+        <div key={r.round} className="glass-card p-4">
           <span className="text-[0.625rem] font-bold text-text-muted uppercase">Reviewer Comments — Round {r.round}</span>
           <p className="text-[0.75rem] text-text-secondary mt-1 leading-relaxed">{r.reviewerNotes}</p>
           <p className="text-[0.625rem] text-text-muted mt-1">{ctrl.reviewer} · {r.date}</p>
@@ -2764,7 +2780,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         <div>
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Linked Findings</h5>
           {linkedFindings.map(f => (
-            <div key={f.id} className="glass-card rounded-xl p-4 border-l-4 border-risk mb-2">
+            <div key={f.id} className="glass-card p-4 border-l-4 border-risk mb-2">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[0.75rem] font-mono font-bold text-risk-700">{f.id}</span>
                 <span className={`px-2 h-5 rounded-full text-[0.625rem] font-bold inline-flex items-center ${f.severity === 'Material Weakness' ? 'bg-risk-50 text-risk-700' : f.severity === 'Significant Deficiency' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{f.severity}</span>
@@ -2789,19 +2805,19 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Supporting Data</h5>
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => onGoToStep?.('working-paper')}
-            className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
+            className="glass-card p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <Copy size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
             <p className="text-[0.6875rem] font-semibold text-text">Working Paper</p>
             <p className="text-[0.5625rem] text-text-muted">View full record</p>
           </button>
           <button onClick={() => onGoToStep?.('samples')}
-            className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
+            className="glass-card p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <Database size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
             <p className="text-[0.6875rem] font-semibold text-text">Samples</p>
             <p className="text-[0.5625rem] text-text-muted">{ctrl.samples.length} items</p>
           </button>
           <button onClick={() => onGoToStep?.('evidence')}
-            className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
+            className="glass-card p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <FileText size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
             <p className="text-[0.6875rem] font-semibold text-text">Evidence</p>
             <p className="text-[0.5625rem] text-text-muted">{evidenceCount} files</p>
@@ -2840,19 +2856,23 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
   const [attributeResults, setAttributeResults] = useState<Record<string, Record<string, { result: 'pass' | 'fail' | 'pending'; evidenceIds: string[]; notes: string }>>>({});
   const controlType = deriveControlType(ctrl);
   const eng = ENGAGEMENT;
+  const logEvent = useAuditLog();
 
   const handleSubmitForReview = () => {
     setReviewSubmitted(true);
+    logEvent({ action: 'Update', description: `Submitted control "${ctrl.controlName}" for review`, module: 'Engagements', entity: 'Control' });
   };
 
   const handleApprove = () => {
     setReviewApproved(true);
+    logEvent({ action: 'Update', description: `Approved testing for control "${ctrl.controlName}"`, module: 'Engagements', entity: 'Control' });
     // Auto-navigate to conclusion after approval
     setTimeout(() => setActiveStep('conclusion'), 600);
   };
 
   const handleSendBack = (_comment: string) => {
     setReviewSubmitted(false);
+    logEvent({ action: 'Update', description: `Sent control "${ctrl.controlName}" back for rework`, module: 'Engagements', entity: 'Control' });
     // Return to testing step
     setTimeout(() => setActiveStep('testing'), 600);
   };
@@ -2907,7 +2927,7 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
                 <span className="text-[0.625rem] font-mono text-text-muted">{ctrl.controlId}</span>
                 {ctrl.isKey && <span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700 inline-flex items-center">KEY</span>}
                 <StatusLabel status={ctrl.status} />
-                <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${controlType === 'Automated' ? 'bg-evidence-50 text-evidence-700' : controlType === 'Manual' ? 'bg-gray-100 text-gray-600' : 'bg-brand-50 text-brand-700'}`}>{controlType}</span>
+                <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${controlType === 'Automated' ? 'bg-evidence-50 text-evidence-700' : controlType === 'Manual' ? 'bg-canvas text-ink-600' : 'bg-brand-50 text-brand-700'}`}>{controlType}</span>
               </div>
               <h2 className="text-[0.875rem] font-bold text-text truncate">{ctrl.controlName}</h2>
               <div className="flex items-center gap-2 mt-1">

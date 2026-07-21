@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
-import { validationQA, validationSummary, validationTable } from './helpers';
+import { validationQA, validationSummary, validationTable, wfRunRef } from './helpers';
 import type {
   Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement,
-  MaterialityRules, OperatingStep, Override, Population, Role, Sampling, TestResult, TrackConclusion,
+  MaterialityRules, OperatingStep, Override, Population, RacmReview, Role, Sampling, TestResult, TrackConclusion,
 } from './types';
 
 let _uid = 0;
@@ -14,13 +14,13 @@ type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecK
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 import { ROLE_LABEL } from './types';
 
-// The three primary tabs — mirrors how other engagements are laid out.
-export type SoxTab = 'overview' | 'racm' | 'controls';
-// 'overview' | 'racm' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
-type View = 'overview' | 'racm' | 'racm-editor' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
-export interface RacmEditorMeta { name: string; process: string }
+// The four primary tabs — mirrors how other engagements are laid out.
+export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls';
+// 'overview' | 'racm' | 'risks' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
+type View = 'overview' | 'racm' | 'racm-editor' | 'risks' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
+export interface RacmEditorMeta { name: string; process?: string }
 
-const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', controls: 'register' };
+const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register' };
 
 interface IcfrCtx {
   eng: IcfrEngagement;
@@ -69,6 +69,14 @@ interface IcfrCtx {
   toggleStepAI: (controlId: string, stepId: string, on: boolean) => void;
   runStepValidation: (controlId: string, stepId: string) => void;
   testAllAttributes: (controlId: string) => void;
+  // RACM row review — auditor approval / remark, plus bulk testing
+  approveRacmRows: (controlIds: string[]) => void;
+  remarkRacmRow: (controlId: string, remark: string) => void;
+  clearRacmReview: (controlId: string) => void;
+  bulkTestControls: (controlIds: string[]) => void;
+  // RACM / SOP source documents uploaded on the RACM page
+  racmDocs: EvidenceFile[];
+  addRacmDoc: (fileName: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -105,6 +113,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [view, setView] = useState<View>('overview');
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null);
   const [racmEditor, setRacmEditor] = useState<RacmEditorMeta | null>(null);
+  const [racmDocs, setRacmDocs] = useState<EvidenceFile[]>([]);
 
   const me = `You · ${ROLE_LABEL[role]}`;
 
@@ -219,7 +228,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchControl]);
 
   const pullStepRun = useCallback<IcfrCtx['pullStepRun']>((controlId, stepId) => {
-    patchStep(controlId, stepId, s => ({ ...s, workflowRunRef: 'run · just now · 0 exceptions', result: s.result === 'Not tested' ? 'Pass' : s.result }));
+    patchStep(controlId, stepId, s => {
+      const res = s.result === 'Not tested' ? 'Pass' : s.result;
+      return { ...s, workflowRunRef: `${wfRunRef(controlId + s.id, res === 'Fail')} · just now`, result: res };
+    });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'pull-run', verb: 'pulled a workflow run', target: s.code, result: s.result } : null; });
   }, [patchStep, pushExec]);
 
@@ -268,14 +280,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchStep(controlId, stepId, s => {
       const willFail = (s.override ? s.override.result : s.result) === 'Fail';
       const res: TestResult = willFail ? 'Fail' : 'Pass';
-      return { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail), table: validationTable(willFail), fileName: s.inputFile?.name, at: 'just now' } };
+      return { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id), table: validationTable(willFail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' } };
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against file', target: s.code, result: s.result } : null; });
   }, [patchStep, pushExec]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
-      const res: TestResult = s.result === 'Fail' || s.override?.result === 'Fail' ? 'Fail' : 'Pass';
-      return { ...s, result: res, workflowRunRef: s.workflowName ? (s.workflowRunRef ?? 'run · just now · 0 exceptions') : s.workflowRunRef };
+      const fail = s.result === 'Fail' || s.override?.result === 'Fail';
+      const res: TestResult = fail ? 'Fail' : 'Pass';
+      const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
+      return {
+        ...s, result: res,
+        workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(controlId + s.id, fail)} · just now`) : s.workflowRunRef,
+        validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, controlId + s.id), table: validationTable(fail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+      };
     }) } }));
     pushExec(prev => { const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps; return steps && steps.length ? { controlId, track: 'operating', kind: 'test-all', verb: 'tested all attributes', target: `${steps.length} attribute${steps.length === 1 ? '' : 's'}`, result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' } : null; });
   }, [patchControl, pushExec]);
@@ -289,6 +307,68 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'operating', kind: 'override', verb: 'overrode the operating conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
   }, [patchControl, pushExec]);
+
+  // ── RACM row review + bulk testing ────────────────────────────────────────────
+  const approveRacmRows = useCallback<IcfrCtx['approveRacmRows']>((controlIds) => {
+    const ids = new Set(controlIds);
+    setEng(prev => ({ ...prev, controls: prev.controls.map(c => ids.has(c.id) ? { ...c, racmReview: { status: 'Approved', by: me, at: 'just now' } as RacmReview } : c) }));
+  }, [me]);
+
+  const remarkRacmRow = useCallback<IcfrCtx['remarkRacmRow']>((controlId, remark) => {
+    setEng(prev => ({ ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: { status: 'Remark', remark, by: me, at: 'just now' } as RacmReview } : c) }));
+  }, [me]);
+
+  const clearRacmReview = useCallback<IcfrCtx['clearRacmReview']>((controlId) => {
+    setEng(prev => ({ ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: undefined } : c) }));
+  }, []);
+
+  // Bulk test — for each selected control, validate every design consideration and
+  // test every operating attribute (an existing Fail / overridden Fail stays Fail),
+  // then conclude each track from its results. One trail entry per control.
+  const bulkTestControls = useCallback<IcfrCtx['bulkTestControls']>((controlIds) => {
+    setEng(prev => {
+      const ids = new Set(controlIds);
+      const execs: ExecutionEvent[] = [];
+      const controls = prev.controls.map(c => {
+        if (!ids.has(c.id)) return c;
+        const points = c.design.points.map(p => {
+          const willFail = (p.override ? p.override.result : p.result) === 'Fail';
+          return { ...p, result: (willFail ? 'Fail' : 'Pass') as TestResult, override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
+        });
+        const steps = c.operating.steps.map(s => {
+          const fail = s.result === 'Fail' || s.override?.result === 'Fail';
+          const res: TestResult = fail ? 'Fail' : 'Pass';
+          const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
+          return {
+            ...s, result: res,
+            workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(c.id + s.id, fail)} · just now`) : s.workflowRunRef,
+            validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, c.id + s.id), table: validationTable(fail, c.id + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+          };
+        });
+        const designConcl: TrackConclusion = points.some(p => p.result === 'Fail') ? 'Ineffective' : 'Effective';
+        const opConcl: TrackConclusion = steps.some(s => s.result === 'Fail') ? 'Ineffective' : 'Effective';
+        const checks = points.length + steps.length;
+        if (checks > 0) execs.push({
+          id: uid('ex'), controlId: c.id, track: 'operating', kind: 'test-all', verb: 'bulk tested design & operating',
+          target: `${checks} check${checks === 1 ? '' : 's'}`,
+          result: (points.length && designConcl === 'Ineffective') || (steps.length && opConcl === 'Ineffective') ? 'Ineffective' : 'Effective',
+          by: me, role, at: 'just now',
+        });
+        return {
+          ...c,
+          design: points.length ? { ...c.design, points, conclusion: designConcl, override: undefined, testedBy: me, testedAt: 'just now' } : c.design,
+          operating: steps.length ? { ...c.operating, steps, conclusion: opConcl, override: undefined, testedBy: me, testedAt: 'just now' } : c.operating,
+        };
+      });
+      return { ...prev, controls, executions: [...execs, ...prev.executions] };
+    });
+  }, [me, role]);
+
+  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName) => {
+    const lower = fileName.toLowerCase();
+    const kind: EvidenceFile['kind'] = lower.endsWith('.csv') ? 'CSV' : lower.endsWith('.xlsx') || lower.endsWith('.xls') ? 'XLSX' : lower.endsWith('.png') || lower.endsWith('.jpg') ? 'IMG' : 'PDF';
+    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' }, ...prev]);
+  }, [me]);
 
   // ── discussions ───────────────────────────────────────────────────────────────
   const addComment = useCallback<IcfrCtx['addComment']>((controlId, anchor, text) => {
@@ -393,11 +473,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
+    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
     togglePeriod, rollForward, createEngagement,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -269,17 +269,17 @@ export default function ExecutorColumnMapping({
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
+                  <span className="text-[0.875rem] font-bold text-ink-900">{input.name}</span>
                   <SlotFunctionTag input={input} />
                 </div>
-                <p className="text-[11.5px] text-ink-400 mt-0.5 line-clamp-1">{input.description}</p>
+                <p className="text-[0.71875rem] text-ink-400 mt-0.5 line-clamp-1">{input.description}</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 ml-4">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[18px] font-bold text-ink-800 tabular-nums leading-tight">
+                  <span className="text-[1.125rem] font-bold text-ink-800 tabular-nums leading-tight">
                     {mapped}/{total}
                   </span>
-                  <span className="text-[10px] text-ink-400 font-semibold leading-tight">
+                  <span className="text-[0.625rem] text-ink-400 font-semibold leading-tight">
                     column
                     <br />
                     mapped
@@ -298,14 +298,14 @@ export default function ExecutorColumnMapping({
 
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink-400 shrink-0">
+                  <span className="text-[0.65625rem] font-bold uppercase tracking-[0.12em] text-ink-400 shrink-0">
                     Mapped Sources
                   </span>
                   {uploaded.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setPreviewInput({ name: input.name, files: uploaded })}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated hover:border-ink-300 hover:text-ink-800 px-2.5 py-0.5 text-[11px] font-semibold text-ink-600 transition-colors cursor-pointer shrink-0"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated hover:border-ink-300 hover:text-ink-800 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-ink-600 transition-colors cursor-pointer shrink-0"
                     >
                       <Eye size={11} />
                       Preview
@@ -343,7 +343,7 @@ export default function ExecutorColumnMapping({
                   />
                   <span
                     className={[
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] shrink-0',
+                      'inline-flex items-center rounded-full px-2 py-0.5 text-[0.65625rem] font-bold uppercase tracking-[0.08em] shrink-0',
                       matchTier.text,
                       matchTier.pillBg,
                     ].join(' ')}
@@ -362,7 +362,7 @@ export default function ExecutorColumnMapping({
 
               <div className="flex items-center flex-wrap gap-1.5">
                 {uploaded.length === 0 ? (
-                  <span className="text-[11.5px] text-ink-400 italic">
+                  <span className="text-[0.71875rem] text-ink-400 italic">
                     No files mapped. Upload or choose a file to get started.
                   </span>
                 ) : (
@@ -371,7 +371,7 @@ export default function ExecutorColumnMapping({
                       <span
                         key={`${f.name}-${i}`}
                         title={f.name}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/60 bg-brand-50/60 pl-2.5 pr-1.5 py-1 text-[11.5px] text-ink-700"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/60 bg-brand-50/60 pl-2.5 pr-1.5 py-1 text-[0.71875rem] text-ink-700"
                       >
                         <FileIcon size={11} className="text-brand-600/70 shrink-0" />
                         <span className="max-w-[180px] truncate">{f.name}</span>
@@ -397,13 +397,13 @@ export default function ExecutorColumnMapping({
             {isOpen && total > 0 && (
               <div className="border-t border-canvas-border/40">
                 <div className="px-5 pt-4 pb-1">
-                  <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink-400">
+                  <span className="text-[0.65625rem] font-bold uppercase tracking-[0.12em] text-ink-400">
                     Column Alignment
                   </span>
                 </div>
 
                 {/* Table headers */}
-                <div className="grid grid-cols-[1fr_1fr_120px] gap-3 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-400">
+                <div className="grid grid-cols-[1fr_1fr_120px] gap-3 px-5 py-2 text-[0.625rem] font-bold uppercase tracking-[0.1em] text-ink-400">
                   <span>Source Column</span>
                   <span>Target Schema</span>
                   <span className="text-right">Confidence</span>
@@ -419,13 +419,13 @@ export default function ExecutorColumnMapping({
                       }
                       className="w-full flex items-center justify-between gap-3 px-5 py-2 bg-brand-50/40 border-y border-brand-100/60 hover:bg-brand-50/60 transition-colors cursor-pointer text-left"
                     >
-                      <div className="flex items-center gap-2 text-[12px] text-brand-700 font-semibold">
+                      <div className="flex items-center gap-2 text-[0.75rem] text-brand-700 font-semibold">
                         <CheckCircle2 size={14} className="text-brand-600" />
                         <span>{auto.length} fields auto-mapped</span>
                         <span className="text-ink-400 font-normal">·</span>
                         <span className="text-ink-500 font-normal">avg {avgAuto}% confidence</span>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700">
+                      <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700">
                         {autoOpen ? 'Collapse' : 'Expand'}
                         {autoOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </span>
@@ -462,7 +462,7 @@ export default function ExecutorColumnMapping({
                 {/* Review group (70–89) — auto-mapped but flagged for a glance */}
                 {review.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 px-5 py-2 border-y border-canvas-border text-[11.5px] font-bold uppercase tracking-[0.1em] text-mitigated-700">
+                    <div className="flex items-center gap-2 px-5 py-2 border-y border-canvas-border text-[0.71875rem] font-bold uppercase tracking-[0.1em] text-mitigated-700">
                       <AlertCircle size={13} />
                       Review recommended ({review.length})
                     </div>
@@ -495,7 +495,7 @@ export default function ExecutorColumnMapping({
                 {/* Needs attention group (<70) — not auto-mapped, manual required */}
                 {attention.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50/60 border-y border-mitigated/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-mitigated-700">
+                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50/60 border-y border-mitigated/20 text-[0.71875rem] font-bold uppercase tracking-[0.1em] text-mitigated-700">
                       <AlertTriangle size={13} />
                       Needs attention ({attention.length})
                     </div>
@@ -600,7 +600,7 @@ function AlignmentRow({
     >
       {/* Source */}
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[12.5px] font-semibold text-ink-800 truncate">
+        <span className="text-[0.78125rem] font-semibold text-ink-800 truncate">
           {alignment.source.name}
         </span>
         <DTypeChip dtype={alignment.source.dtype} />
@@ -623,7 +623,7 @@ function AlignmentRow({
       <div className="flex items-center justify-end gap-1.5">
         {!isUnmapped ? (
           <>
-            <span className={`text-[13px] font-bold tabular-nums ${tier.text}`}>
+            <span className={`text-[0.8125rem] font-bold tabular-nums ${tier.text}`}>
               {alignment.confidence}%
             </span>
             <button
@@ -641,7 +641,7 @@ function AlignmentRow({
             </button>
           </>
         ) : (
-          <span className="text-[11.5px] text-ink-400">—</span>
+          <span className="text-[0.71875rem] text-ink-400">—</span>
         )}
       </div>
     </div>
@@ -650,7 +650,7 @@ function AlignmentRow({
 
 function DTypeChip({ dtype }: { dtype: ColumnDType }) {
   return (
-    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider bg-canvas text-ink-500 border border-canvas-border shrink-0">
+    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[0.59375rem] font-bold uppercase tracking-wider bg-canvas text-ink-500 border border-canvas-border shrink-0">
       {dtype}
     </span>
   );
@@ -667,7 +667,7 @@ function MoreFilesChip({ files }: { files: { name: string }[] }) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <span className="inline-flex items-center rounded-lg border border-brand-200/60 bg-brand-50/40 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 cursor-default">
+      <span className="inline-flex items-center rounded-lg border border-brand-200/60 bg-brand-50/40 px-2.5 py-1 text-[0.71875rem] font-semibold text-brand-700 cursor-default">
         + {files.length} more
       </span>
       {open && (
@@ -675,7 +675,7 @@ function MoreFilesChip({ files }: { files: { name: string }[] }) {
           {files.map((f, i) => (
             <div
               key={`${f.name}-${i}`}
-              className="flex items-center gap-1.5 rounded px-2 py-1 text-[11.5px] text-ink-700"
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-[0.71875rem] text-ink-700"
             >
               <FileIcon size={11} className="text-brand-600/70 shrink-0" />
               <span className="truncate">{f.name}</span>
@@ -713,7 +713,7 @@ function TargetPicker({
           ref={btnRef}
           type="button"
           onClick={onToggle}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-canvas-elevated hover:bg-brand-50/40 px-3 py-1.5 text-[12px] font-semibold text-brand-700 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-canvas-elevated hover:bg-brand-50/40 px-3 py-1.5 text-[0.75rem] font-semibold text-brand-700 transition-colors cursor-pointer"
         >
           <Plus size={12} />
           Map column
@@ -732,7 +732,7 @@ function TargetPicker({
         ref={btnRef}
         type="button"
         onClick={onToggle}
-        className="w-full inline-flex items-center justify-between gap-2 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 px-2 py-1.5 text-[12px] text-ink-800 transition-colors cursor-pointer"
+        className="w-full inline-flex items-center justify-between gap-2 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 px-2 py-1.5 text-[0.75rem] text-ink-800 transition-colors cursor-pointer"
       >
         <span className="flex items-center gap-1.5 min-w-0">
           <span className="font-semibold text-brand-700 truncate">{current}</span>
@@ -809,12 +809,12 @@ function PickerMenu({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search columns..."
-          className="w-full text-[12px] text-ink-800 placeholder:text-ink-400 outline-none bg-transparent"
+          className="w-full text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none bg-transparent"
         />
       </div>
       <div className="max-h-60 overflow-y-auto py-1">
         {filtered.length === 0 ? (
-          <p className="px-3 py-2 text-[11.5px] text-ink-400 italic">No matches.</p>
+          <p className="px-3 py-2 text-[0.71875rem] text-ink-400 italic">No matches.</p>
         ) : (
           filtered.map((opt) => {
             const selected = opt === current;
@@ -823,7 +823,7 @@ function PickerMenu({
                 key={opt}
                 type="button"
                 onClick={() => onPick(opt)}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left transition-colors cursor-pointer ${
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[0.78125rem] text-left transition-colors cursor-pointer ${
                   selected ? 'bg-brand-50/60 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-brand-50/40'
                 }`}
               >
@@ -897,7 +897,7 @@ function JustificationPopover({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-canvas-border/60">
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-brand-700">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[0.65625rem] font-bold uppercase tracking-[0.1em] text-brand-700">
           <Sparkles size={11} />
           AI Justification
         </span>
@@ -919,11 +919,11 @@ function JustificationPopover({
           return (
             <div key={m.key}>
               <div className="flex items-baseline justify-between gap-2 mb-1">
-                <span className="text-[12.5px] font-bold text-ink-800">
+                <span className="text-[0.78125rem] font-bold text-ink-800">
                   {m.label}{' '}
-                  <span className="text-ink-400 font-normal text-[11px]">×{m.weight}%</span>
+                  <span className="text-ink-400 font-normal text-[0.6875rem]">×{m.weight}%</span>
                 </span>
-                <span className={`text-[12.5px] font-bold tabular-nums ${valueTier.text}`}>
+                <span className={`text-[0.78125rem] font-bold tabular-nums ${valueTier.text}`}>
                   {value}%
                 </span>
               </div>
@@ -933,7 +933,7 @@ function JustificationPopover({
                   style={{ width: `${Math.min(100, Math.max(2, value))}%` }}
                 />
               </div>
-              <p className="text-[11px] text-ink-500 mt-1">{m.description}</p>
+              <p className="text-[0.6875rem] text-ink-500 mt-1">{m.description}</p>
             </div>
           );
         })}
@@ -941,17 +941,17 @@ function JustificationPopover({
 
       {/* Summary */}
       <div className="px-4 pb-3 pt-1">
-        <p className="text-[11.5px] text-ink-700 leading-snug">{alignment.explanation}</p>
+        <p className="text-[0.71875rem] text-ink-700 leading-snug">{alignment.explanation}</p>
       </div>
 
       {/* Footer */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-t border-canvas-border/60 bg-canvas/40">
         <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${tier.text} ${tier.pillBg} ${tier.pillBorder}`}
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6875rem] font-bold ${tier.text} ${tier.pillBg} ${tier.pillBorder}`}
         >
           Overall: {alignment.confidence}%
         </span>
-        <span className="text-[11px] text-ink-500 truncate">
+        <span className="text-[0.6875rem] text-ink-500 truncate">
           {alignment.source.name} → {alignment.target?.name ?? '—'}
         </span>
       </div>
@@ -989,7 +989,7 @@ function SelectFileDropdown({
         ref={btnRef}
         type="button"
         onClick={onToggle}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-canvas-elevated hover:bg-brand-50 px-3 py-1.5 text-[11.5px] font-semibold text-brand-700 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-canvas-elevated hover:bg-brand-50 px-3 py-1.5 text-[0.71875rem] font-semibold text-brand-700 transition-colors cursor-pointer"
       >
         <ArrowLeftRight size={12} />
         Select File(s)
@@ -1068,7 +1068,7 @@ function SelectFileMenu({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search files..."
-          className="w-full text-[12px] text-ink-700 placeholder:text-ink-400 outline-none bg-transparent"
+          className="w-full text-[0.75rem] text-ink-700 placeholder:text-ink-400 outline-none bg-transparent"
         />
       </div>
       <div className="max-h-48 overflow-y-auto py-1">
@@ -1078,7 +1078,7 @@ function SelectFileMenu({
             return (
               <label
                 key={`${f.name}-${i}`}
-                className={`flex items-center gap-2.5 px-3 py-2 text-[12px] cursor-pointer transition-colors ${
+                className={`flex items-center gap-2.5 px-3 py-2 text-[0.75rem] cursor-pointer transition-colors ${
                   isSelected ? 'text-ink-800' : 'text-ink-600 hover:bg-brand-50/40'
                 }`}
               >
@@ -1093,7 +1093,7 @@ function SelectFileMenu({
             );
           })
         ) : (
-          <p className="px-3 py-3 text-[11px] text-ink-400 text-center">No files found</p>
+          <p className="px-3 py-3 text-[0.6875rem] text-ink-400 text-center">No files found</p>
         )}
       </div>
     </div>,
@@ -1140,8 +1140,8 @@ function DataPreviewModal({
               <FileIcon size={16} className="text-brand-600" />
             </div>
             <div>
-              <div className="text-[14px] font-bold text-ink-900">{schemaName}</div>
-              <div className="text-[11.5px] text-ink-400">{fileName}</div>
+              <div className="text-[0.875rem] font-bold text-ink-900">{schemaName}</div>
+              <div className="text-[0.71875rem] text-ink-400">{fileName}</div>
             </div>
           </div>
           <button
@@ -1154,13 +1154,13 @@ function DataPreviewModal({
         </div>
 
         <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[0.78125rem]">
             <thead>
               <tr className="border-b border-canvas-border bg-canvas/60">
                 {PREVIEW_COLUMNS.map((col) => (
                   <th
                     key={col}
-                    className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-ink-400"
+                    className="px-4 py-2.5 text-left text-[0.625rem] font-bold uppercase tracking-[0.1em] text-ink-400"
                   >
                     {col}
                   </th>
@@ -1183,11 +1183,11 @@ function DataPreviewModal({
         </div>
 
         <div className="flex items-center justify-between px-6 py-3 border-t border-canvas-border">
-          <span className="text-[11px] text-ink-400">Previewing first 5 entries</span>
+          <span className="text-[0.6875rem] text-ink-400">Previewing first 5 entries</span>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-4 py-2 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold px-4 py-2 transition-colors cursor-pointer"
           >
             Close Preview
           </button>

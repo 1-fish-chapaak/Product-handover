@@ -180,7 +180,7 @@ test('CUSTOM — edit lifecycle + persistence', async ({ page }) => {
       headerText: '', footerText: '',
       sections: [{ id: 's1', name: 'Executive Summary' }, { id: 's2', name: 'Appendix' }],
     }];
-    try { localStorage.setItem('irame.reports.customTemplates.v1', JSON.stringify(t)); } catch { /* ignore */ }
+    try { localStorage.setItem('irame.reports.customTemplates.v2', JSON.stringify(t)); } catch { /* ignore */ }
   });
   await page.goto('/?view=reports&tab=templates');
   await page.waitForTimeout(800);
@@ -190,14 +190,15 @@ test('CUSTOM — edit lifecycle + persistence', async ({ page }) => {
   await page.getByRole('button', { name: 'Edit template QA Lifecycle Pack' }).click({ force: true });
   await page.waitForTimeout(400);
   await expect(page.getByRole('heading', { name: 'Edit template' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Save template/ })).toBeVisible();
+  // Edit mode's CTA is "Save changes" (create mode is "Create template").
+  await expect(page.getByRole('button', { name: /Save changes/ })).toBeVisible();
   await page.screenshot({ path: `${SHOT}/custom-02-edit.png` });
 
   await page.getByRole('button', { name: 'Close' }).click();
   await page.waitForTimeout(300);
   // Still exactly one custom (no duplicate).
   const count = await page.evaluate(() => {
-    try { return JSON.parse(localStorage.getItem('irame.reports.customTemplates.v1') || '[]').length; } catch { return -1; }
+    try { return JSON.parse(localStorage.getItem('irame.reports.customTemplates.v2') || '[]').length; } catch { return -1; }
   });
   expect(count).toBe(1);
 

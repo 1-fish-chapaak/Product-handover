@@ -1,13 +1,86 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Share2, Download, List, Pencil, Check, X, GitBranch, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, ShieldAlert } from 'lucide-react';
 import AtrDocument from './AtrDocument';
-import type { AtrReportData } from './atrTypes';
+import type { AtrReportData, AtrMeta, AtrObservation } from './atrTypes';
+import type { AtrSectionKey } from './atrSections';
 import { computeExecSummary, exportAtrExcel } from './atrTemplate';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import ReportDiscardDialog from './ReportDiscardDialog';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import AtrReviewDrawer from './AtrReviewDrawer';
-import { loadVersions, nowStamp } from './atrReview';
+import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
+
+// Summarize an edit into a version label by diffing the saved report against the
+// working draft — so the version trail reads from what actually changed rather
+// than a hand-typed note. The user can still rename any version afterwards.
+function describeEdits(prev: AtrReportData, next: AtrReportData): string {
+  const areas: string[] = [];
+  if (JSON.stringify(prev.meta) !== JSON.stringify(next.meta)) areas.push('report details');
+  if (JSON.stringify(prev.observations) !== JSON.stringify(next.observations)) areas.push('observations');
+  if (JSON.stringify(prev.insights) !== JSON.stringify(next.insights)) areas.push('insights');
+  if (areas.length === 0) return 'Minor revision';
+  const list = areas.length === 1 ? areas[0] : `${areas.slice(0, -1).join(', ')} & ${areas[areas.length - 1]}`;
+  return `Edited ${list}`;
+}
+
+// Editable meta fields → friendly labels for the change log.
+const META_LABELS: Partial<Record<keyof AtrMeta, string>> = {
+  reportId: 'Report ID', auditTitle: 'Audit title', auditPeriod: 'Audit period',
+  preparedBy: 'Prepared by', reviewedBy: 'Reviewed by', generatedOn: 'Generated on',
+  auditEntity: 'Audit entity', totalExceptions: 'Total exceptions',
+  brandColor: 'Brand colour', logoDataUrl: 'Logo',
+};
+const clip = (s: unknown, n = 36) => {
+  const str = String(s ?? '').replace(/\s+/g, ' ').trim();
+  return str.length > n ? `${str.slice(0, n)}…` : str;
+};
+const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+
+// Field-level diff within a single observation.
+function diffObservation(prev: AtrObservation, next: AtrObservation): string[] {
+  const out: string[] = [];
+  if (prev.title !== next.title) out.push(`renamed to “${clip(next.title, 28)}”`);
+  if ((prev.status ?? '') !== (next.status ?? '')) out.push(`status ${prev.status ?? '—'} → ${next.status ?? '—'}`);
+  if ((prev.risk ?? '') !== (next.risk ?? '')) out.push(`risk ${prev.risk ?? '—'} → ${next.risk ?? '—'}`);
+  if ((prev.classification ?? '') !== (next.classification ?? '')) out.push(`classification → ${next.classification ?? '—'}`);
+  if ((prev.exceptions ?? 0) !== (next.exceptions ?? 0)) out.push(`exceptions ${prev.exceptions ?? 0} → ${next.exceptions ?? 0}`);
+  if ((prev.description ?? '') !== (next.description ?? '')) out.push('edited description');
+  if (changed(prev.process, next.process) || changed(prev.querySummary, next.querySummary) || changed(prev.riskSummary, next.riskSummary)) out.push('edited details');
+  const pa = prev.actionPlans ?? [], na = next.actionPlans ?? [];
+  if (na.length > pa.length) out.push(`added ${na.length - pa.length} action plan${na.length - pa.length === 1 ? '' : 's'}`);
+  else if (na.length < pa.length) out.push(`removed ${pa.length - na.length} action plan${pa.length - na.length === 1 ? '' : 's'}`);
+  else if (changed(pa, na)) out.push('edited action plans');
+  return out;
+}
+
+// Full diff of two ATR snapshots into a human-readable change log. Observations
+// and insights are matched by position, with tail entries read as add/remove.
+function diffAtr(prev: AtrReportData, next: AtrReportData): string[] {
+  const changes: string[] = [];
+  (Object.keys(META_LABELS) as (keyof AtrMeta)[]).forEach(k => {
+    if (!changed(prev.meta?.[k], next.meta?.[k])) return;
+    if (k === 'logoDataUrl') changes.push(next.meta.logoDataUrl ? 'Updated logo' : 'Removed logo');
+    else if (k === 'brandColor') changes.push('Changed brand colour');
+    else changes.push(`${META_LABELS[k]}: ${clip(prev.meta?.[k]) || '—'} → ${clip(next.meta?.[k]) || '—'}`);
+  });
+  const po = prev.observations ?? [], no = next.observations ?? [];
+  const commonO = Math.min(po.length, no.length);
+  for (let i = 0; i < commonO; i++) {
+    const sub = diffObservation(po[i], no[i]);
+    if (sub.length) changes.push(`OBS-${String(i + 1).padStart(2, '0')} “${clip(no[i].title, 24)}”: ${sub.join(', ')}`);
+  }
+  for (let i = commonO; i < no.length; i++) changes.push(`Added observation “${clip(no[i].title, 28)}”`);
+  for (let i = commonO; i < po.length; i++) changes.push(`Removed observation “${clip(po[i].title, 28)}”`);
+  const pi = prev.insights ?? [], ni = next.insights ?? [];
+  const commonI = Math.min(pi.length, ni.length);
+  for (let i = 0; i < commonI; i++) {
+    if (changed(pi[i], ni[i])) changes.push(`Edited insight “${clip(ni[i].title, 28)}”`);
+  }
+  for (let i = commonI; i < ni.length; i++) changes.push(`Added insight “${clip(ni[i].title, 28)}”`);
+  for (let i = commonI; i < pi.length; i++) changes.push(`Removed insight “${clip(pi[i].title, 28)}”`);
+  return changes;
+}
 // ATR KPI tone → export accent hex (mirrors the on-screen exec-summary tiles).
 const ATR_TONE_HEX = { brand: '#6A12CD', ink: '#334155', high: '#C2410C', compliant: '#15803D', mitigated: '#B45309' };
 
@@ -17,7 +90,8 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
-  status?: 'draft' | 'final';
+  /** Reports have no draft state — an ATR is issued, or frozen from edits. */
+  status?: 'final' | 'frozen';
   atrData: AtrReportData;
 }
 
@@ -37,6 +111,8 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   // discard guard so leaving (or cancelling) only prompts when edits are unsaved.
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
+  // Save runs only after the user confirms.
+  const [confirmingSave, setConfirmingSave] = useState(false);
   // The view remounts per report (navigating away passes through the list), so
   // the initializer is enough — no prop→state resync effect needed.
   const [draft, setDraft] = useState<AtrReportData>(report.atrData);
@@ -55,18 +131,49 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
     setEditing(false);
     if (action === 'leave') onBack();
   };
-  const saveEdits = () => { onSave?.(draft); setEditing(false); };
+  const saveEdits = () => {
+    // Capture a version from this edit before persisting, so every saved change
+    // grows the version trail automatically (no separate "finalize" step).
+    if (dirty) {
+      const current = loadVersions(report.id, {
+        status: report.status ?? 'final',
+        by: report.generatedBy ?? draft.meta.preparedBy ?? 'You',
+        at: report.generatedAt ?? draft.meta.generatedOn ?? nowStamp(),
+        reviewedBy: draft.meta.reviewedBy,
+        observations: draft.observations.map(o => o.title),
+      });
+      appendVersion(report.id, current, describeEdits(report.atrData, draft), 'draft', draft.meta.preparedBy ?? 'You', diffAtr(report.atrData, draft));
+    }
+    onSave?.(draft);
+    setEditing(false);
+  };
 
   const { meta, observations, insights } = draft;
 
-  // The ATR document's sections are fixed; the rail mirrors them in order.
+  // Current version number for the banner byline — reads the same trail the
+  // review drawer shows. Re-reads each render, so it updates after a save.
+  const atrVersion = currentVersion(report.id, {
+    status: report.status === 'final' ? 'final' : 'draft',
+    by: report.generatedBy ?? meta.preparedBy ?? 'You',
+    at: report.generatedAt ?? meta.generatedOn ?? '',
+    reviewedBy: meta.reviewedBy,
+    observations: observations.map(o => o.title),
+  });
+
+  // Sections removed during editing — persisted on meta so the rail + document
+  // stay in sync and the choice survives save.
+  const hiddenSections = (meta.hiddenSections ?? []) as AtrSectionKey[];
+  const deleteSection = (key: AtrSectionKey) =>
+    setDraft(d => ({ ...d, meta: { ...d.meta, hiddenSections: [...(d.meta.hiddenSections ?? []), key] } }));
+
+  // The rail mirrors the visible sections in order (hidden ones drop out).
   const outlineEntries = [
-    { id: 'atr-exec', title: 'Executive Summary' },
-    { id: 'atr-obs-summary', title: 'Observation Wise Summary' },
-    { id: 'atr-obs-details', title: 'Observation Details' },
-    ...(insights.length > 0 ? [{ id: 'atr-insights', title: 'Key Insights & Recommendations' }] : []),
-    { id: 'atr-signoff', title: 'Approvals & Sign-Off' },
-  ];
+    { key: 'summary' as AtrSectionKey, id: 'atr-exec', title: 'Executive Summary' },
+    { key: 'process' as AtrSectionKey, id: 'atr-obs-summary', title: 'Observation Wise Summary' },
+    { key: 'details' as AtrSectionKey, id: 'atr-obs-details', title: 'Observation Details' },
+    ...(insights.length > 0 ? [{ key: 'insights' as AtrSectionKey, id: 'atr-insights', title: 'Key Insights & Recommendations' }] : []),
+    { key: 'signoff' as AtrSectionKey, id: 'atr-signoff', title: 'Approvals & Sign-Off' },
+  ].filter(e => !hiddenSections.includes(e.key));
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
@@ -149,7 +256,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
       <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         <button
           onClick={requestBack}
-          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           <ArrowLeft size={14} /> Back to Reports
         </button>
@@ -159,14 +266,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {dirty && <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mitigated-600 mr-1">Unsaved changes</span>}
               <button
                 onClick={requestCancel}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <X size={14} /> Cancel
               </button>
               <button
-                onClick={saveEdits}
+                onClick={() => setConfirmingSave(true)}
                 disabled={!dirty}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check size={14} /> Save changes
               </button>
@@ -174,15 +281,15 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
           ) : (
             <>
               <button
-                onClick={() => setReviewTab('versions')}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                onClick={() => setReviewTab('comments')}
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
-                <GitBranch size={14} /> Versions
+                <History size={14} /> Activity
               </button>
               {onManageExceptions && (
                 <button
                   onClick={onManageExceptions}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <ShieldAlert size={14} /> Case Management
                 </button>
@@ -190,7 +297,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {editable && (
                 <button
                   onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Pencil size={14} /> Edit
                 </button>
@@ -198,14 +305,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {onShare && (
                 <button
                   onClick={onShare}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Share2 size={14} /> Share
                 </button>
               )}
               <button
                 onClick={() => setShowDownloadModal(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
               >
                 <Download size={14} /> Download
               </button>
@@ -217,7 +324,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
       {/* Reader workspace — outline rail + constrained document column. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
-          <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
+          <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-3.5">
             <div className="flex items-center gap-2 mb-3 px-1">
               <List size={13} className="text-ink-400" />
               <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">On this page</span>
@@ -231,7 +338,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
                     <button
                       onClick={() => scrollToSection(e.id)}
                       aria-current={isActive ? 'true' : undefined}
-                      className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+                      className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
                     >
                       <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${isActive ? 'text-brand-700' : 'text-brand-500'}`}>{String(i + 1).padStart(2, '0')}</span>
                       <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
@@ -247,6 +354,9 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             meta={meta}
             observations={observations}
             insights={insights}
+            version={atrVersion}
+            hiddenSections={hiddenSections}
+            onDeleteSection={deleteSection}
             maxWidthClass="max-w-none"
             editable={editing}
             onMetaChange={m => setDraft(d => ({ ...d, meta: m }))}
@@ -281,9 +391,11 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             onClose={() => setReviewTab(null)}
             onTab={t => setReviewTab(t)}
             initialVersions={loadVersions(report.id, {
-              status: report.status === 'final' ? 'final' : 'draft',
+              status: report.status ?? 'final',
               by: report.generatedBy ?? meta.preparedBy ?? 'You',
               at: report.generatedAt ?? meta.generatedOn ?? nowStamp(),
+              reviewedBy: meta.reviewedBy,
+              observations: observations.map(o => o.title),
             })}
             me={meta.preparedBy ?? 'You'}
           />
@@ -302,6 +414,18 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
         cancelLabel="Keep editing"
         onConfirm={confirmDiscard}
         onCancel={() => setPendingDiscard(null)}
+      />
+
+      {/* Save guard — confirm before persisting edits (captures a new version). */}
+      <ConfirmationModal
+        open={confirmingSave}
+        title="Save changes?"
+        description="Your edits will be saved to this ATR and captured as a new version."
+        confirmLabel="Save changes"
+        cancelLabel="Keep editing"
+        tone="primary"
+        onConfirm={() => { setConfirmingSave(false); saveEdits(); }}
+        onClose={() => setConfirmingSave(false)}
       />
     </motion.div>
   );

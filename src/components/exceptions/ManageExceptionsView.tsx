@@ -167,7 +167,7 @@ const TONE_DOT: Record<KpiTone, string> = {
 };
 
 function KpiBar({ cells, bare = false }: { cells: KpiCell[]; bare?: boolean }) {
-  const chrome = bare ? '' : 'border border-canvas-border rounded-[12px] overflow-hidden';
+  const chrome = bare ? '' : 'border border-canvas-border rounded-lg overflow-hidden';
   return (
     <div
       role="group"
@@ -196,12 +196,12 @@ function KpiCell({ cell }: { cell: KpiCell }) {
     >
       <div className="flex items-center gap-2 mb-3 text-ink-500">
         <Icon size={13} strokeWidth={1.75} className="shrink-0" aria-hidden />
-        <span className="text-[11px] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
+        <span className="text-[0.6875rem] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
         {tone !== 'default' && (
           <span aria-hidden className={`w-1 h-1 rounded-full ${TONE_DOT[tone]} ml-0.5`} />
         )}
       </div>
-      <div className={`font-display text-[30px] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
+      <div className={`font-display text-[1.875rem] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
         {value}
       </div>
       {active && (
@@ -238,12 +238,12 @@ function KpiBarInline({ cells }: { cells: KpiCell[] }) {
           >
             <div className="flex items-center gap-2 mb-1.5 text-ink-500">
               <Icon size={12} strokeWidth={1.75} className="shrink-0" aria-hidden />
-              <span className="text-[10.5px] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
+              <span className="text-[0.65625rem] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
               {tone !== 'default' && (
                 <span aria-hidden className={`w-1 h-1 rounded-full ${TONE_DOT[tone]} ml-0.5`} />
               )}
             </div>
-            <div className={`font-display text-[22px] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
+            <div className={`font-display text-[1.375rem] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
               {value}
             </div>
             {active && (
@@ -277,7 +277,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
     <div className="flex items-center gap-1 p-1 bg-canvas-elevated border border-canvas-border rounded-full">
       <button
         onClick={() => setRole('risk-owner')}
-        className={`flex items-center gap-1.5 px-3 h-7 text-[12px] font-medium rounded-full transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-3 h-7 text-[0.75rem] font-medium rounded-full transition-colors cursor-pointer ${
           role === 'risk-owner' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-700'
         }`}
       >
@@ -286,7 +286,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
       </button>
       <button
         onClick={() => setRole('auditor')}
-        className={`flex items-center gap-1.5 px-3 h-7 text-[12px] font-medium rounded-full transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-3 h-7 text-[0.75rem] font-medium rounded-full transition-colors cursor-pointer ${
           role === 'auditor' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-700'
         }`}
       >
@@ -877,7 +877,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <header className="shrink-0 h-[60px] px-6 flex items-center gap-4 bg-canvas-elevated border-b border-canvas-border">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 transition-colors cursor-pointer pr-2 border-r border-canvas-border mr-1"
+            className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 hover:text-brand-700 transition-colors cursor-pointer pr-2 border-r border-canvas-border mr-1"
             aria-label="Back to reports"
           >
             <ArrowLeft size={14} />
@@ -895,7 +895,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             <FileText size={15} className="shrink-0 text-brand-700" />
             <span className="truncate"><span className="font-semibold">You're managing exceptions for ATR generation.</span> Review the cases, then return to generate the report.</span>
           </div>
-          <button onClick={returnToAtr} className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer">
+          <button onClick={returnToAtr} className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-500 transition-colors cursor-pointer">
             Return to ATR &amp; generate <ArrowRight size={14} />
           </button>
         </div>
@@ -906,11 +906,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <div className={`max-w-[1600px] mx-auto px-8 ${embedded ? 'pt-4 pb-0' : 'pt-8 pb-0'}`}>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              {!embedded && <h1 className="text-[34px] font-semibold tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
+              {!embedded && <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
               {embedded ? (
-                <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
+                <h2 className="text-[1rem] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
               ) : (
-                <p className="text-[14px] text-ink-500 mt-1 mb-6">
+                <p className="text-[0.875rem] text-ink-500 mt-1 mb-6">
                   {contextLabel
                     ? `Triage and resolve exceptions for ${contextLabel}.`
                     : 'Triage and resolve exceptions surfaced from audit queries.'}
@@ -922,7 +922,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 onClick={() => setActivityDrawerOpen(true)}
                 title="View activity timeline"
                 aria-label="View activity timeline"
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center text-ink-500 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
               >
                 <History size={15} />
               </button>
@@ -944,7 +944,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <button
                     key={t.id}
                     onClick={() => setActiveNav(t.id)}
-                    className={`relative flex items-center gap-2 px-4 h-11 text-[13px] font-medium transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-2 px-4 h-11 text-[0.8125rem] font-medium transition-colors cursor-pointer ${
                       isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
                     }`}
                   >
@@ -978,7 +978,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <div className="px-8 pt-4 pb-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
 
             {/* Single outer card holds KPI bar, optional sourceQuery summary, and the table — one continuous editorial surface, no center divisions. */}
-            <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="bg-canvas-elevated border border-canvas-border rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
               {/* KPI bar — neutral surface, hairline-separated cells, tone-as-dot. Wrapped with pt so it doesn't sit flush against the card's top border. */}
               <div className="pt-4">
               {sourceQuery ? (
@@ -1007,7 +1007,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 <>
                   {/* Source query ATR — flows directly under the KPI bar */}
                   <div className="px-6 py-5">
-                    <div className="flex items-center gap-2 mb-3 text-[11px]">
+                    <div className="flex items-center gap-2 mb-3 text-[0.6875rem]">
                       <span className="font-bold text-brand-700 uppercase tracking-wider">Query · {sourceQuery.id}</span>
                     </div>
                     <button
@@ -1021,11 +1021,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       >
                         <ChevronDown size={14} />
                       </motion.span>
-                      <p className="text-[14px] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
+                      <p className="text-[0.875rem] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
                         {sourceQuery.title}
                       </p>
                     </button>
-                    <p className="text-[13px] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
+                    <p className="text-[0.8125rem] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
                   </div>
                   <AnimatePresence initial={false}>
                     {atrExpanded && (
@@ -1043,7 +1043,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                               { title: 'Observations', items: sourceQuery.observations },
                             ].map(section => (
                               <div key={section.title}>
-                                <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
+                                <h4 className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
                                 <ul className="space-y-2.5">
                                   {section.items.map((item, i) => (
                                     <motion.li
@@ -1051,7 +1051,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                                       initial={{ opacity: 0, x: -4 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       transition={{ delay: 0.08 + i * 0.05, duration: 0.3 }}
-                                      className="flex gap-2.5 text-[13px] text-ink-700 leading-relaxed"
+                                      className="flex gap-2.5 text-[0.8125rem] text-ink-700 leading-relaxed"
                                     >
                                       <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
                                       {item}
@@ -1147,7 +1147,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                           aria-haspopup="menu"
                           aria-expanded={bulkMenuOpen && active}
                           title={active ? `Bulk actions for ${selected.size} selected case${selected.size === 1 ? '' : 's'}` : 'Select one or more cases to enable bulk actions'}
-                          className={`flex items-center gap-1.5 h-8 px-3 text-[12px] font-medium rounded-[8px] border transition-colors ${
+                          className={`flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-medium rounded-md border transition-colors ${
                             active
                               ? 'text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer'
                               : 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
@@ -1156,7 +1156,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                           <Layers size={13} />
                           Bulk Actions
                           {active && (
-                            <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                            <span className="inline-flex items-center h-5 min-w-5 px-1 text-[0.65625rem] font-semibold bg-white/20 rounded-full tabular-nums">
                               {selected.size}
                             </span>
                           )}
@@ -1171,7 +1171,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -4 }}
                                 transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
-                                className="absolute left-0 top-full mt-1.5 z-[56] w-60 bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-lg py-1"
+                                className="absolute left-0 top-full mt-1.5 z-[56] w-60 bg-canvas-elevated border border-canvas-border rounded-lg shadow-lg py-1"
                                 role="menu"
                               >
                                 {items.map((item) => {
@@ -1182,11 +1182,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                                       type="button"
                                       role="menuitem"
                                       onClick={() => { setBulkMenuOpen(false); item.onClick(); }}
-                                      className="w-full flex items-center gap-2.5 px-3 h-9 text-[12.5px] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 cursor-pointer transition-colors text-left"
+                                      className="w-full flex items-center gap-2.5 px-3 h-9 text-[0.78125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 cursor-pointer transition-colors text-left"
                                     >
                                       <Icon size={14} className="text-ink-500 shrink-0" />
                                       <span className="flex-1">{item.label}</span>
-                                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
                                         {item.count}
                                       </span>
                                     </button>
@@ -1204,7 +1204,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               headerExtras={
                 <button
                   onClick={() => setSampleModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[0.78125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 cursor-pointer"
                 >
                   <FlaskConical size={13} />
                   Sample Data
@@ -1380,6 +1380,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: reason,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `Requested revised due date (${fmtDue(revisedDueDate)}) for ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: scope.length > 1
                 ? `Revised due date requested for ${scope.length} linked cases — sent to the auditor.`
                 : 'Revised due date request sent to the auditor for approval.' });
@@ -1427,6 +1428,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: comment || undefined,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `${approved ? 'Approved' : 'Rejected'} revised due date request for ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id}`, module: 'Exceptions', entity: 'Exception' });
               addToast({
                 type: approved ? 'success' : 'info',
                 message: scope.length > 1
@@ -1615,6 +1617,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setActiveSheetId(id);
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
+              logEvent({ action: 'Create', description: `Created sample data sheet "${payload.name}"`, module: 'Exceptions', entity: 'Sample' });
               addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
             }}
           />
@@ -1655,6 +1658,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: reason,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `Requested revised due date (${fmtDue(revisedDueDate)}) for ${ids.length} case${ids.length === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: `Revised due date requested for ${ids.length} case${ids.length === 1 ? '' : 's'} — sent to the auditor.` });
               setSelected(new Set());
               setBulkRequestDueOpen(false);
@@ -1700,6 +1704,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: comment || undefined,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `${approved ? 'Approved' : 'Rejected'} ${ids.length} revised due date request${ids.length === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' });
               addToast({
                 type: approved ? 'success' : 'info',
                 message: approved
@@ -1809,16 +1814,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[520px] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[520px] bg-canvas-elevated shadow-xl border border-canvas-border rounded-xl z-[60] flex flex-col"
               role="dialog" aria-label="Comment on selected cases"
             >
               <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><MessageSquare size={11} /> Bulk</span>
-                    <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Comment on {selected.size} case{selected.size === 1 ? '' : 's'}</h2>
+                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full"><MessageSquare size={11} /> Bulk</span>
+                    <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Comment on {selected.size} case{selected.size === 1 ? '' : 's'}</h2>
                   </div>
-                  <p className="text-[12.5px] text-ink-500 leading-snug">
+                  <p className="text-[0.78125rem] text-ink-500 leading-snug">
                     Posts to every selected case as the {personaName(persona)}. The {personaName(persona === 'risk-owner' ? 'auditor' : 'risk-owner')} will be notified and can reply on each case.
                   </p>
                 </div>
@@ -1834,16 +1839,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && bulkCommentText.trim()) { e.preventDefault(); postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); } }}
                   rows={4}
                   placeholder="Write a comment for the selected cases…"
-                  className="w-full resize-y rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2.5 text-[13px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
+                  className="w-full resize-y rounded-md border border-canvas-border bg-canvas-elevated px-3 py-2.5 text-[0.8125rem] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
                 />
               </div>
               <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
-                <button type="button" onClick={() => setCommentModalOpen(false)} className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors">Cancel</button>
+                <button type="button" onClick={() => setCommentModalOpen(false)} className="h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-[#F4F2F7] cursor-pointer transition-colors">Cancel</button>
                 <button
                   type="button"
                   disabled={!bulkCommentText.trim()}
                   onClick={() => { postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); }}
-                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send size={14} /> Post comment
                 </button>

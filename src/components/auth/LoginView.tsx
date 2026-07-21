@@ -66,7 +66,7 @@ export default function LoginView() {
           >
             <Sparkles size={18} className="text-white" />
           </div>
-          <span className="text-[14px] font-bold tracking-tight">IRAME.AI</span>
+          <span className="text-[0.875rem] font-bold tracking-tight">IRAME.AI</span>
         </motion.div>
 
         {/* hero — optically centered in the remaining space */}
@@ -130,7 +130,7 @@ export default function LoginView() {
             >
               <Sparkles size={18} className="text-white" />
             </div>
-            <span className="text-[14px] font-bold tracking-tight text-ink-900">IRAME.AI</span>
+            <span className="text-[0.875rem] font-bold tracking-tight text-ink-900">IRAME.AI</span>
           </div>
 
           <motion.h2

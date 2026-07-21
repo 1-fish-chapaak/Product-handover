@@ -7,6 +7,7 @@ import {
   Plus, Trash2, FileText, Loader2, CalendarClock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type {
   Engagement, EngType, AutomationSubtype, ProcessCode, EngagementMilestone,
 } from '../../data/engagements';
@@ -92,6 +93,7 @@ const STEP_LABELS = ['Type & basics', 'Scope', 'Team & timeline', 'Review'] as c
 
 export default function CreateEngagementWizard({ onClose, onCreated, initial }: Props): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const isEdit = Boolean(initial);
   const [step, setStep] = useState<Step>(1);
 
@@ -311,6 +313,9 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
   const submit = (status: Engagement['status']) => {
     const eng = buildEngagement(status);
+    if (!isEdit) {
+      logEvent({ action: 'Create', description: `Created engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
+    }
     addToast({
       message: isEdit
         ? `"${eng.name}" updated`
@@ -415,7 +420,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     </div>
                     <div>
                       <label className={labelCls}>Entity</label>
-                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Air India Express Ltd" className={inputCls} />
+                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
                     </div>
                   </div>
                   <div>

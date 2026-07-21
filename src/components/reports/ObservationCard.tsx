@@ -88,7 +88,7 @@ export function ObservationActionsMenu({
         onClick={handleToggle}
         title="More options"
         aria-label="More options"
-        className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <MoreVertical size={16} />
       </button>
@@ -96,7 +96,7 @@ export function ObservationActionsMenu({
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-canvas-border rounded-md shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
@@ -199,7 +199,7 @@ export default function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-canvas-border' : 'border border-canvas-border rounded-lg'}`}
     >
       <div className="px-6 py-5">
         <motion.div
@@ -260,7 +260,7 @@ export default function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-[12px] border border-canvas-border overflow-hidden bg-canvas cursor-zoom-in hover:border-brand-600/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="block w-[88px] h-[88px] rounded-lg border border-canvas-border overflow-hidden bg-canvas cursor-zoom-in hover:border-brand-600/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -276,7 +276,7 @@ export default function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-600/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-md hover:border-brand-600/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
                   <span className="text-[0.75rem] text-ink-800 font-medium truncate group-hover:text-brand-600">{att.name}</span>
@@ -290,13 +290,13 @@ export default function ObservationCard({
                   type="button"
                   onClick={() => setOverflowOpen(o => !o)}
                   aria-label={`Show ${overflowItems.length} more attachments`}
-                  className="w-[88px] h-[88px] rounded-[12px] border border-canvas-border bg-canvas hover:border-brand-600/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="w-[88px] h-[88px] rounded-lg border border-canvas-border bg-canvas hover:border-brand-600/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <span className="text-[1.125rem] leading-none font-semibold text-ink-900 tabular-nums">+{overflowItems.length}</span>
                   <span className="text-[0.625rem] text-ink-500 uppercase tracking-wider">more</span>
                 </button>
                 {overflowOpen && (
-                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1 max-h-[280px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-canvas-border rounded-md shadow-xl py-1 max-h-[280px] overflow-y-auto">
                     <div className="px-3 py-2 text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border/60">
                       {overflowItems.length} more {overflowItems.length === 1 ? 'attachment' : 'attachments'}
                     </div>
@@ -410,7 +410,7 @@ export default function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-xl cursor-default"
           />
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[0.75rem] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>

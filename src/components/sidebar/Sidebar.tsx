@@ -6,7 +6,7 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, Layers, Bell, Inbox,
+  ClipboardCheck, Layers, Bell, Inbox, BarChart3,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -38,7 +38,7 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
       whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 600, damping: 30 }}
       className={`
-        flex items-center gap-2.5 rounded-[6px] transition-colors duration-150 relative cursor-pointer
+        flex items-center gap-2.5 rounded-sm transition-colors duration-150 relative cursor-pointer
         ${expanded ? 'w-full h-8 px-3.5' : 'w-8 h-8 mx-auto px-0 justify-center'}
         ${active
           ? 'text-sidebar-accent font-semibold'
@@ -51,7 +51,7 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
       {active && (
         <motion.span
           layoutId="sidebar-active-pill"
-          className="absolute inset-0 rounded-[6px] bg-brand-500/25"
+          className="absolute inset-0 rounded-sm bg-brand-500/25"
           transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0.18, duration: 0.5 }}
         >
           {/* Left accent bar — rides along with the pill */}
@@ -78,7 +78,7 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -6, transition: { duration: 0.1, ease: 'easeIn' } }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: 0.06 }}
-            className="relative z-10 text-[14px] leading-[20px] truncate whitespace-nowrap"
+            className="relative z-10 text-[0.875rem] leading-[20px] truncate whitespace-nowrap"
             style={{ fontWeight: active ? 600 : 520 }}
           >
             {label}
@@ -92,7 +92,7 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.12 }}
-            className="relative z-10 ml-auto text-[12px] font-semibold bg-sidebar-accent text-brand-600 px-[7px] py-[2px] rounded-full tabular-nums"
+            className="relative z-10 ml-auto text-[0.75rem] font-semibold bg-sidebar-accent text-brand-600 px-[7px] py-[2px] rounded-full tabular-nums"
           >
             {badge}
           </motion.span>
@@ -113,7 +113,7 @@ function Divider({ label, expanded }: { label?: string; expanded: boolean }) {
   }
   return (
     <div className="px-3.5 py-2">
-      <span className="text-[12px] leading-[16px] font-medium uppercase text-white/60">{label}</span>
+      <span className="text-[0.75rem] leading-[16px] font-medium uppercase text-white/60">{label}</span>
     </div>
   );
 }
@@ -225,10 +225,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                 <Sparkles size={14} className="text-white" />
               </div>
               <div>
-                <div className="text-[14px] font-bold text-sidebar-accent leading-tight whitespace-nowrap">IRAME.AI</div>
+                <div className="text-[0.875rem] font-bold text-sidebar-accent leading-tight whitespace-nowrap">IRAME.AI</div>
                 <button
                   onClick={() => { setTeamOpen(p => !p); setTeamSearch(''); }}
-                  className="text-[12px] text-white font-medium whitespace-nowrap flex items-center gap-1 hover:text-sidebar-text transition-colors cursor-pointer"
+                  className="text-[0.75rem] text-white font-medium whitespace-nowrap flex items-center gap-1 hover:text-sidebar-text transition-colors cursor-pointer"
                 >
                   {TEAMS.find(t => t.id === activeTeam)?.name ?? 'Workspace'}
                   <ChevronDown size={8} className={`text-white transition-transform duration-150 ${teamOpen ? 'rotate-180' : ''}`} />
@@ -277,7 +277,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.6, opacity: 0 }}
                 transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}
-                className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[4px] rounded-full bg-sidebar-accent text-brand-600 text-[10px] font-semibold leading-none flex items-center justify-center tabular-nums"
+                className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[4px] rounded-full bg-sidebar-accent text-brand-600 text-[0.625rem] font-semibold leading-none flex items-center justify-center tabular-nums"
                 aria-hidden="true"
               >
                 {unreadNotifications > 99 ? '99+' : unreadNotifications}
@@ -299,7 +299,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               {/* Search */}
               <div className="p-3">
                 <div
-                  className="flex items-center gap-2.5 px-3.5 h-10 rounded-lg text-[13px]"
+                  className="flex items-center gap-2.5 px-3.5 h-10 rounded-lg text-[0.8125rem]"
                   style={{
                     border: '1px solid rgba(163, 102, 240, 0.35)',
                     background: 'rgba(163, 102, 240, 0.08)',
@@ -311,7 +311,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                     placeholder="Search workspace"
                     value={teamSearch}
                     onChange={e => setTeamSearch(e.target.value)}
-                    className="flex-1 bg-transparent outline-none text-white placeholder:text-white/60 text-[13px]"
+                    className="flex-1 bg-transparent outline-none text-white placeholder:text-white/60 text-[0.8125rem]"
                     style={{ boxShadow: 'none' }}
                     autoFocus
                   />
@@ -328,7 +328,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                     <button
                       key={team.id}
                       onClick={() => { setActiveTeam(team.id); setTeamOpen(false); }}
-                      className={`w-full flex items-center justify-between px-4 py-3 text-[14px] transition-colors duration-100 cursor-pointer ${isActive ? 'text-white' : 'text-white hover:bg-white/[0.05]'}`}
+                      className={`w-full flex items-center justify-between px-4 py-3 text-[0.875rem] transition-colors duration-100 cursor-pointer ${isActive ? 'text-white' : 'text-white hover:bg-white/[0.05]'}`}
                     >
                       <span style={{ fontWeight: isActive ? 600 : 400 }}>{team.name}</span>
                       {isActive ? (
@@ -383,6 +383,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <Divider label="System" expanded={isExpanded} />
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
+          {canAny(['ad_usage', 'ad_usage_people']) && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>
@@ -398,12 +399,12 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               exit={{ opacity: 0, height: 0 }}
               className="flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg bg-sidebar-surface border border-sidebar-border cursor-pointer hover:bg-sidebar-surface-hover transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-[12px] font-bold text-brand-600 shrink-0">
+              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-[0.75rem] font-bold text-brand-600 shrink-0">
                 {currentUser?.initials ?? '—'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-sidebar-accent truncate">{currentUser?.name ?? 'Signed out'}</div>
-                <div className="text-[12px] text-white truncate">{activeRole?.name ?? currentUser?.title ?? ''}</div>
+                <div className="text-[0.8125rem] font-semibold text-sidebar-accent truncate">{currentUser?.name ?? 'Signed out'}</div>
+                <div className="text-[0.75rem] text-white truncate">{activeRole?.name ?? currentUser?.title ?? ''}</div>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
@@ -436,18 +437,18 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
             >
               {signOutConfirm ? (
                 <div className="p-4">
-                  <div className="text-[13px] font-semibold text-white mb-1">Sign out?</div>
-                  <div className="text-[12px] text-white/50 mb-4">You'll need to sign in again to access your workspace.</div>
+                  <div className="text-[0.8125rem] font-semibold text-white mb-1">Sign out?</div>
+                  <div className="text-[0.75rem] text-white/50 mb-4">You'll need to sign in again to access your workspace.</div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setSignOutConfirm(false)}
-                      className="flex-1 px-3 py-2 rounded-lg text-[13px] font-medium text-white/80 border border-white/[0.12] hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white/80 border border-white/[0.12] hover:bg-white/[0.06] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={() => { setSignOutConfirm(false); setUserMenuOpen(false); signOut(); }}
-                      className="flex-1 px-3 py-2 rounded-lg text-[13px] font-medium text-white bg-risk hover:bg-risk-700 transition-colors cursor-pointer"
+                      className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white bg-risk hover:bg-risk-700 transition-colors cursor-pointer"
                     >
                       Sign Out
                     </button>
@@ -456,13 +457,13 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               ) : (
                 <div>
                   <div className="py-1.5">
-                    <div className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white cursor-not-allowed">
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white cursor-not-allowed">
                       <Building2 size={14} className="text-white" />
                       Irame Labs Pvt Ltd
                     </div>
                     <button
                       onClick={() => setHelpOpen(p => !p)}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                     >
                       <HelpCircle size={14} className="text-white" />
                       <span className="flex-1 text-left">Help & Support</span>
@@ -480,7 +481,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                             <button
                               key={item.label}
                               onClick={() => { setUserMenuOpen(false); setHelpOpen(false); window.open(item.url, '_blank'); }}
-                              className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="w-full flex items-center justify-between px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                             >
                               {item.label}
                               <ExternalLink size={12} className="text-white" />
@@ -492,7 +493,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                     <div className="h-px mx-3 my-1 bg-white/[0.08]" />
                     <button
                       onClick={() => setSignOutConfirm(true)}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-red-400 hover:bg-white/[0.06] hover:text-red-300 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-red-400 hover:bg-white/[0.06] hover:text-red-300 transition-colors cursor-pointer"
                     >
                       <LogOut size={14} />
                       Sign Out

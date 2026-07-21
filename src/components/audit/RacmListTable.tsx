@@ -34,6 +34,7 @@ import CreateControlDrawer from '../governance/CreateControlDrawer';
 import { useCreatedControls } from '../../data/createdControlsStore';
 import { BUSINESS_PROCESSES, RISKS, CONTROLS, WORKFLOWS, SOPS } from '../../data/mockData';
 import { AR_RACM_ENTRIES, AR_RACM_ID, type ArRacmEntry } from '../../data/arRacm';
+import { RACM_SEED_DATA, type RacmEntry } from '../../data/racmRegistry';
 
 // ─── Linkable risks (Link Risk sidesheet) ────────────────────────────────────
 // Extra business-process risks that are NOT part of any RACM's seed mapping, so
@@ -334,20 +335,11 @@ function synthSeedEntries(racm: RacmEntry): Record<string, string>[] {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface RacmEntry {
-  id: string; name: string; version: string; process: string; framework: string;
-  risks: number; controls: number; mappedRisks: number; unmappedRisks: number;
-  keyControls: number; workflowCoverage: number; attributesCoverage: number;
-  isValidated: boolean; linkedToEngagement: boolean;
-  /** Creation date (human-readable, e.g. "May 28, 2026") — shown on the RACM card meta line. */
-  createdAt?: string;
-  /** Last-updated date (human-readable) — shown next to "Created" on the RACM card meta line. */
-  updatedAt?: string;
-  /** false = still in draft review (editable Excel grid); true | undefined = frozen / active */
-  isFrozen?: boolean;
-  /** Original uploaded file name — used when re-opening the review editor */
-  sourceFileName?: string;
-}
+// RacmEntry + RACM_SEED_DATA now live in src/data/racmRegistry.ts so data
+// modules (Platform Usage) can count the same matrices this table renders.
+// Re-exported here so existing importers of this file are unchanged.
+export type { RacmEntry };
+export { RACM_SEED_DATA };
 
 // ─── RACM Status (lifecycle only) ───────────────────────────────────────────
 
@@ -385,18 +377,6 @@ const READINESS_BADGE: Record<RacmTableReadiness, string> = {
   'Configuration Pending':  'bg-evidence-50 text-evidence-700',
   'Ready':                  'bg-compliant-50 text-compliant-700',
 };
-
-// ─── Seed Data ──────────────────────────────────────────────────────────────
-
-export const RACM_SEED_DATA: RacmEntry[] = [
-  { id: AR_RACM_ID, name: 'FY26 AR: Accounts Receivable RACM', version: 'v1.0', process: 'O2C', framework: 'IFC/ICOFR, COSO 2013', risks: AR_RACM_ENTRIES.length, controls: new Set(AR_RACM_ENTRIES.map(e => e.controlId)).size, mappedRisks: AR_RACM_ENTRIES.length, unmappedRisks: 0, keyControls: AR_RACM_ENTRIES.filter(e => e.riskRating === 'Critical' || e.riskRating === 'High').length, workflowCoverage: 78, attributesCoverage: 100, isValidated: true, linkedToEngagement: false, sourceFileName: 'SOP_Accounts Receivable.pptx' },
-  { id: 'racm-001', name: 'FY26 P2P: Vendor Payment', version: 'v2.1', createdAt: 'May 20, 2026', updatedAt: 'Jun 4, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 9, controls: 24, mappedRisks: 9, unmappedRisks: 0, keyControls: 6, workflowCoverage: 92, attributesCoverage: 88, isValidated: true, linkedToEngagement: true },
-  { id: 'racm-002', name: 'FY26 O2C: Order to Cash RACM', version: 'v2.1', createdAt: 'May 15, 2026', updatedAt: 'Jun 1, 2026', process: 'O2C', framework: 'SOX ICFR', risks: 7, controls: 18, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 75, isValidated: true, linkedToEngagement: false },
-  { id: 'racm-003', name: 'FY26 R2R: Financial Close', version: 'v2.1', createdAt: 'Apr 28, 2026', updatedAt: 'May 22, 2026', process: 'R2R', framework: 'SOX ICFR', risks: 11, controls: 31, mappedRisks: 10, unmappedRisks: 1, keyControls: 8, workflowCoverage: 85, attributesCoverage: 80, isValidated: true, linkedToEngagement: true },
-  // S2C intentionally has NO seed RACM — it's the "from scratch" demo process whose
-  // RACM tab shows the empty state + Create RACM flow. (Was racm-004 Contract Review.)
-  { id: 'racm-005', name: 'FY26 ITGC: Access & Change', version: 'v2.1', createdAt: 'Mar 30, 2026', updatedAt: 'May 8, 2026', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
-];
 
 // ─── RACM mapping view ───────────────────────────────────────────────────────
 // "Open mapping" for any RACM: the full detail matrix (AR_RACM_COLUMNS) with the
@@ -695,6 +675,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     if (name && name !== current) {
       setRenamedNames(prev => ({ ...prev, [id]: name }));
       addToast({ message: `RACM renamed to "${name}".`, type: 'success' });
+      logEvent({ action: 'Update', description: `Renamed RACM "${current}" to "${name}"`, module: 'Governance', entity: 'RACM' });
     }
     setEditingRacmNameId(null);
   };
@@ -1022,7 +1003,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
           {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
-              <div key={`skel-${i}`} className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start rounded-xl border border-border-light bg-white">
+              <div key={`skel-${i}`} className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start rounded-lg border border-border-light bg-white">
                 {/* Title + description lane */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-2.5">
@@ -1291,7 +1272,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               alreadyLinkedIds={alreadyLinkedIds}
               onClose={() => setLinkRiskTarget(null)}
               onCreateRisk={() => setCreateRiskFromLink(true)}
-              onLink={risks => { addLinkedRisks(lrt.racmId, risks); setLinkRiskTarget(null); addToast({ message: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM.`, type: 'success' }); }}
+              onLink={risks => { addLinkedRisks(lrt.racmId, risks); setLinkRiskTarget(null); addToast({ message: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM ${lrt.racmId}`, module: 'Governance', entity: 'RACM' }); }}
             />
           );
         })()}
@@ -1321,7 +1302,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               alreadyLinkedIds={alreadyLinkedIds}
               onClose={() => setLinkControlTarget(null)}
               onCreateControl={() => setCreateControlFromLink(true)}
-              onApply={controls => { addLinkedControls(lct.riskId, controls); setLinkControlTarget(null); addToast({ message: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk.`, type: 'success' }); }}
+              onApply={controls => { addLinkedControls(lct.riskId, controls); setLinkControlTarget(null); addToast({ message: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk "${lct.riskName}"`, module: 'Governance', entity: 'RACM' }); }}
             />
           );
         })()}
@@ -1405,7 +1386,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         version={viewSop?.version}
         uploadedBy={viewSop?.uploadedBy}
         uploadedAgo={viewSop?.uploadedAgo}
-        onDownload={() => viewSop && addToast({ message: `Downloading ${viewSop.sopName}…`, type: 'info' })}
+        onDownload={() => { if (viewSop) { addToast({ message: `Downloading ${viewSop.sopName}…`, type: 'info' }); logEvent({ action: 'Export', description: `Downloaded SOP "${viewSop.sopName}"`, module: 'Process Hub', entity: 'SOP' }); } }}
         onClose={() => setViewSop(null)}
       />
 
@@ -1433,7 +1414,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             <LinkWorkflowToControlDrawer
               control={{ name: lwc.name, description: controlDescription(lwc.id), isKey: lwc.isKey, workflows: [] }}
               onClose={() => { if (lwt.controls.length > 1) setLinkWfControl(null); else { setLinkWfControl(null); setLinkWfTarget(null); } }}
-              onLink={(wf: ControlWorkflow) => { addLinkedWorkflow(lwt.riskId, lwc.id, wf); setLinkWfControl(null); setLinkWfTarget(null); addToast({ message: `Linked workflow "${wf.name}" to control.`, type: 'success' }); }}
+              onLink={(wf: ControlWorkflow) => { addLinkedWorkflow(lwt.riskId, lwc.id, wf); setLinkWfControl(null); setLinkWfTarget(null); addToast({ message: `Linked workflow "${wf.name}" to control.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${lwc.name}"`, module: 'Control Library', entity: 'Control' }); }}
             />
           );
         })()}
@@ -1790,7 +1771,7 @@ export function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClo
             </div>
           ) : controls.map(ctl => (
             <button key={ctl.id} type="button" onClick={() => onPick(ctl)}
-              className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
+              className="w-full flex items-center gap-2.5 px-4 py-3 rounded-lg border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
               <Star size={12} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
               <span className="font-mono text-[0.6875rem] text-brand-700 font-semibold shrink-0">{ctl.id}</span>
               <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{ctl.name}</span>

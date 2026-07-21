@@ -8,6 +8,7 @@ import ReportCard from '../shared/ReportCard';
 import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // Audit-area → design-system tone (StatusBadge §7.10.4). Used by both the grid
 // card eyebrow tint and the list Type chips so the colour vocabulary matches.
@@ -35,7 +36,7 @@ function parseAtrDate(s: string): Date | null {
 /** Origin tag shown under each report name. */
 function OriginBadge() {
   return (
-    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-info-50 text-info-700 text-[10.5px] font-semibold whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-info-50 text-info-700 text-[0.65625rem] font-semibold whitespace-nowrap">
       <Sparkles size={11} aria-hidden="true" /> System generated
     </span>
   );
@@ -53,6 +54,11 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
   /** Optional CTA rendered at the right end of the toolbar, after the view toggle. */
   trailingAction?: ReactNode;
 }) {
+  const logEvent = useAuditLog();
+  const logDownload = (atr: AtrLibraryReport) =>
+    logEvent({ action: 'Export', description: `Downloaded ATR "${reportDisplayName(atr.name)}"`, module: 'Reports', entity: 'Report' });
+  const logShare = (atr: AtrLibraryReport) =>
+    logEvent({ action: 'Share', description: `Shared ATR "${reportDisplayName(atr.name)}"`, module: 'Reports', entity: 'Report' });
   const [q, setQ] = useState('');
   const [area, setArea] = useState('All');
   const [auditor, setAuditor] = useState('All');
@@ -134,12 +140,12 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-          <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
+          <div className="w-12 h-12 rounded-lg bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
           <div className="text-[0.8125rem] font-medium text-ink-700">No ATRs match your filters.</div>
           {activeFilters && <button onClick={clearAll} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
         </div>
       ) : view === 'list' ? (
-        <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+        <div className="flex-1 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
         <SmartTable
           className=""
           variant="modern"
@@ -186,8 +192,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
               const atr = item as unknown as AtrLibraryReport;
               return (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
-                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
+                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); logDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
+                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); logShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
                 </div>
               );
             }},
@@ -213,8 +219,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>
-                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
-                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
+                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); logDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
+                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); logShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
                 </>}
               />
             );

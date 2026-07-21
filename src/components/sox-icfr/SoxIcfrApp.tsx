@@ -6,8 +6,10 @@ import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import { RoleSwitcher } from './parts';
+import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm from './Racm';
+import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
 import { DeficienciesView, ScopeView } from './extraViews';
@@ -17,6 +19,7 @@ import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' },
+  { id: 'risks', label: 'Risk Library' },
   { id: 'controls', label: 'Control Library' },
 ];
 
@@ -27,17 +30,18 @@ function Inner({ onBack }: { onBack?: () => void }) {
     <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
       <div className="max-w-[1320px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          {onBack && <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={15} /></button>}
+          {onBack && <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={15} /></button>}
           <span className="inline-flex items-center gap-2">
             <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></span>
-            <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
-            <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
-            <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
+            <span className="font-mono text-[0.75rem] font-semibold text-ink-700">{eng.code}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{eng.name}</span>
+            <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
           </span>
         </div>
         {/* The switcher is a demo affordance — it previews the other persona
             without changing who is signed in, hence the "Viewing as" prefix. */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          <NotificationsBell />
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
           <RoleSwitcher role={role} onChange={setRole} />
         </div>
@@ -57,14 +61,15 @@ function Inner({ onBack }: { onBack?: () => void }) {
     );
   }
 
-  // The three tabs are the primary nav; everything else is a drill-in reached from them.
-  const isRoot = view === 'overview' || view === 'racm' || view === 'register';
+  // The four tabs are the primary nav; everything else is a drill-in reached from them.
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
     : view === 'setup' ? <SetupWizard />
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? <Racm />
+    : tab === 'risks' ? <RiskLibrary />
     : <ControlRegister />;
 
   return (

@@ -10,7 +10,9 @@ export interface QueryClarificationData {
   questions: { question: string; options: string[]; multi?: boolean }[];
   answers: Record<number, string[]>;
   status: 'open' | 'submitted';
-  purpose?: 'audit-query' | 'save-workflow';
+  // 'severity' is the mid-run materiality question asked when the plan reaches
+  // the risk step — it sets the High/Medium threshold, it does not start a run.
+  purpose?: 'audit-query' | 'save-workflow' | 'severity';
 }
 
 // ─── Query clarification card (multi-select, navigated) ──────────────────────
@@ -150,7 +152,11 @@ export default function QueryClarificationCard({
   }, [safeIndex, optionCount, isMulti, attachedSources.length, files.length]);
 
   if (data.status === 'submitted') {
-    return <div className="text-[0.8125rem] text-ink-700 leading-relaxed">Got it. Running with these inputs.</div>;
+    return (
+      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
+        {data.purpose === 'severity' ? 'Got it — applying that to the findings now.' : 'Got it. Running with these inputs.'}
+      </div>
+    );
   }
   if (!viewQ) return null;
 
@@ -226,7 +232,7 @@ export default function QueryClarificationCard({
                 {/* Marker — square checkbox for multi-select, round radio for single */}
                 <span
                   aria-hidden="true"
-                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-[5px]' : 'rounded-full'} ${
+                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-sm' : 'rounded-full'} ${
                     isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border group-hover/opt:border-brand-300'
                   }`}
                 >
@@ -253,7 +259,7 @@ export default function QueryClarificationCard({
                 >
                   {s.kind === 'source' && (
                     <>
-                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                       <span className="truncate max-w-[10rem]">{s.name}</span>
                     </>
                   )}

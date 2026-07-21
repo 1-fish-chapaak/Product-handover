@@ -7,7 +7,7 @@ import { ControlExecStatus } from './types';
 // ─── Execution Status Display ─────────────────────────────────────────────
 
 export const EXEC_STATUS_DISPLAY: Record<ControlExecStatus, { label: string; bg: string; text: string }> = {
-  [ControlExecStatus.NOT_STARTED]:          { label: 'Not Started',          bg: 'bg-gray-100',    text: 'text-gray-600' },
+  [ControlExecStatus.NOT_STARTED]:          { label: 'Not Started',          bg: 'bg-canvas',    text: 'text-ink-600' },
   [ControlExecStatus.POPULATION_READY]:     { label: 'Population Ready',     bg: 'bg-amber-50',    text: 'text-amber-700' },
   [ControlExecStatus.TEST_ITEMS_READY]:     { label: 'Test Items Ready',     bg: 'bg-amber-50',    text: 'text-amber-600' },
   [ControlExecStatus.EVIDENCE_IN_PROGRESS]: { label: 'Evidence In Progress', bg: 'bg-blue-50',     text: 'text-blue-600' },
@@ -30,7 +30,7 @@ export const CONCLUSION_DISPLAY: Record<string, { label: string; bg: string; tex
 
 export const AUTOMATION_DISPLAY: Record<string, { label: string; bg: string; text: string }> = {
   AUTOMATED:    { label: 'Automated',    bg: 'bg-evidence-50', text: 'text-evidence-700' },
-  MANUAL:       { label: 'Manual',       bg: 'bg-gray-100',    text: 'text-gray-600' },
+  MANUAL:       { label: 'Manual',       bg: 'bg-canvas',    text: 'text-ink-600' },
   IT_DEPENDENT: { label: 'IT-Dependent', bg: 'bg-purple-50',   text: 'text-purple-700' },
 };
 
@@ -38,7 +38,7 @@ export const AUTOMATION_DISPLAY: Record<string, { label: string; bg: string; tex
 
 export const IMPORTANCE_DISPLAY: Record<string, { label: string; bg: string; text: string }> = {
   KEY:     { label: 'Key',     bg: 'bg-primary/10', text: 'text-primary' },
-  NON_KEY: { label: 'Non-Key', bg: 'bg-gray-100',   text: 'text-gray-600' },
+  NON_KEY: { label: 'Non-Key', bg: 'bg-canvas',   text: 'text-ink-600' },
 };
 
 // ─── Nature Class Display ─────────────────────────────────────────────────
@@ -53,14 +53,14 @@ export const NATURE_DISPLAY: Record<string, { label: string; bg: string; text: s
 
 export const CONTROL_TYPE_DISPLAY: Record<string, { label: string; bg: string; text: string }> = {
   Automated: { label: 'Automated', bg: 'bg-evidence-50', text: 'text-evidence-700' },
-  Manual:    { label: 'Manual',    bg: 'bg-gray-100',    text: 'text-gray-600' },
+  Manual:    { label: 'Manual',    bg: 'bg-canvas',    text: 'text-ink-600' },
   Hybrid:    { label: 'Hybrid',    bg: 'bg-purple-50',   text: 'text-purple-700' },
 };
 
 // ─── Evidence Status Display ──────────────────────────────────────────────
 
 export const EVIDENCE_STATUS_DISPLAY: Record<string, { label: string; bg: string; text: string }> = {
-  NOT_UPLOADED: { label: 'Not Uploaded', bg: 'bg-gray-100',   text: 'text-gray-500' },
+  NOT_UPLOADED: { label: 'Not Uploaded', bg: 'bg-canvas',   text: 'text-ink-500' },
   PARTIAL:      { label: 'Partial',      bg: 'bg-amber-50',   text: 'text-amber-600' },
   READY:        { label: 'Ready',        bg: 'bg-emerald-50', text: 'text-emerald-700' },
 };
@@ -68,7 +68,7 @@ export const EVIDENCE_STATUS_DISPLAY: Record<string, { label: string; bg: string
 // ─── Review Status Display ────────────────────────────────────────────────
 
 export const REVIEW_STATUS_DISPLAY: Record<string, { label: string; bg: string; text: string }> = {
-  NOT_SUBMITTED: { label: '—',        bg: 'bg-gray-50',    text: 'text-gray-400' },
+  NOT_SUBMITTED: { label: '—',        bg: 'bg-canvas',    text: 'text-ink-400' },
   PENDING:       { label: 'Pending',  bg: 'bg-purple-50',  text: 'text-purple-600' },
   APPROVED:      { label: 'Approved', bg: 'bg-emerald-50', text: 'text-emerald-700' },
   REJECTED:      { label: 'Rejected', bg: 'bg-red-50',     text: 'text-red-700' },

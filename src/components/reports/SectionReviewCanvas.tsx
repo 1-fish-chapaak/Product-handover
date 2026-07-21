@@ -31,7 +31,7 @@ import {
 function BlockRow({ block }: { block: CanvasBlock }) {
   const fillMeta = FILL_META[block.fill];
   return (
-    <div className="flex items-start gap-2 rounded-[8px] border border-canvas-border/70 bg-white px-2.5 py-2">
+    <div className="flex items-start gap-2 rounded-md border border-canvas-border/70 bg-white px-2.5 py-2">
       <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide mt-px">
         {BLOCK_KIND_LABEL[block.kind]}{block.kind === 'cards' && block.cardCount ? ` × ${block.cardCount}` : ''}
       </span>
@@ -112,7 +112,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
       dragControls={controls}
       ref={registerRef}
       whileDrag={{ scale: 1.015, boxShadow: '0 12px 28px -12px rgba(15,8,30,0.28)' }}
-      className={`group relative rounded-[10px] px-2.5 py-2 transition-colors ${bg} ${flashed ? 'ring-1 ring-brand-600/25' : ''}`}
+      className={`group relative rounded-lg px-2.5 py-2 transition-colors ${bg} ${flashed ? 'ring-1 ring-brand-600/25' : ''}`}
     >
       {/* Clicking the row (anywhere non-interactive) highlights the matching
           part of the uploaded report on the left — their own document is the
@@ -142,7 +142,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           onChange={e => onRename(e.target.value)}
           placeholder="Name this section"
           title="Click to rename this section"
-          className="flex-1 min-w-0 -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
+          className="flex-1 min-w-0 -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
         />
         <Pencil size={12} className="shrink-0 text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
         {isDetected && (
@@ -150,7 +150,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
             onClick={onJump}
             title="Show in document"
             aria-label="Show in document"
-            className="shrink-0 p-1 rounded-[6px] text-ink-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+            className="shrink-0 p-1 rounded-sm text-ink-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
           >
             <CornerDownRight size={12} />
           </button>
@@ -177,13 +177,13 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
         <RowDeleteButton
           onConfirm={onDelete}
           ariaLabel="Remove section"
-          triggerClassName="p-1 rounded-[6px] text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          triggerClassName="p-1 rounded-sm text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         />
       </div>
 
       {/* Wrapper paperwork — excluded with ONE confirmation, never silently. */}
       {section.wrapper && !empty && (
-        <div className="mt-1.5 ml-[2.25rem] mr-1 flex items-center gap-2 rounded-[8px] border border-mitigated-200 bg-white px-2.5 py-1.5">
+        <div className="mt-1.5 ml-[2.25rem] mr-1 flex items-center gap-2 rounded-md border border-mitigated-200 bg-white px-2.5 py-1.5">
           <AlertTriangle size={12} className="shrink-0 text-mitigated-600" />
           <p className="flex-1 text-[0.6875rem] text-mitigated-800">Looks like wrapper paperwork around the report (committee forms), not report content.</p>
           <button onClick={() => onWrapper(false)} className="shrink-0 px-2 py-0.5 rounded-full bg-mitigated-100 text-[0.625rem] font-semibold text-mitigated-800 hover:bg-mitigated-200 transition-colors cursor-pointer">Exclude it</button>
@@ -199,7 +199,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
             value={section.description ?? sectionBlurb(section.name)}
             onChange={e => onDescribe(e.target.value)}
             title="Click to edit this section's description"
-            className="w-full -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] text-ink-400 leading-relaxed transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-300"
+            className="w-full -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] text-ink-400 leading-relaxed transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-300"
           />
           {/* The why + the consequence — the engine's evidence for its guess,
               so the user checks our reason, not the abstract option. Once they
@@ -407,7 +407,7 @@ export default function SectionReviewCanvas({
       {/* The relative sanity check — our list vs the report's own contents.
           A 40-section report with a 40-entry TOC is correct, not a failure. */}
       {toc && (
-        <div className={`mb-2 flex items-start gap-2 rounded-[8px] border px-3 py-2 ${toc.verdict === 'match' ? 'border-compliant-200 bg-compliant-50/50' : 'border-mitigated-200 bg-mitigated-50/60'}`}>
+        <div className={`mb-2 flex items-start gap-2 rounded-md border px-3 py-2 ${toc.verdict === 'match' ? 'border-compliant-200 bg-compliant-50/50' : 'border-mitigated-200 bg-mitigated-50/60'}`}>
           <p className={`text-[0.6875rem] leading-relaxed ${toc.verdict === 'match' ? 'text-compliant-800' : 'text-mitigated-800'}`}>
             {toc.verdict === 'match'
               ? <>Matches the report’s own contents page ({toc.detected} detected, {toc.docEntries} listed).</>
@@ -421,7 +421,7 @@ export default function SectionReviewCanvas({
       {shaky.length > 0 && (
         <button
           onClick={jumpToFirstShaky}
-          className="w-full text-left mb-2 flex items-start gap-2 rounded-[8px] border border-mitigated-200 bg-mitigated-50/60 px-3 py-2 hover:bg-mitigated-50 transition-colors cursor-pointer"
+          className="w-full text-left mb-2 flex items-start gap-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-3 py-2 hover:bg-mitigated-50 transition-colors cursor-pointer"
         >
           <AlertTriangle size={13} className="mt-px shrink-0 text-mitigated-600" />
           <p className="text-[0.6875rem] text-mitigated-800 leading-relaxed">
@@ -451,7 +451,7 @@ export default function SectionReviewCanvas({
       <div className="mt-1.5 space-y-1.5">
         <button
           onClick={() => addSection()}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[10px] text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
         >
           <Plus size={13} /> Add a section the detector missed
         </button>
@@ -492,12 +492,12 @@ export default function SectionReviewCanvas({
                       ref={el => { pageRefs.current[pageNo] = el; }}
                       onClick={() => { if (first) jumpToSection(first.id); }}
                       title={first ? 'Show this page’s first section in the detected list' : undefined}
-                      className={`rounded-[10px] p-1 transition-colors duration-300 ${first ? 'cursor-pointer hover:bg-canvas/70' : ''} ${flashPage === pageNo ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/25' : ''}`}
+                      className={`rounded-lg p-1 transition-colors duration-300 ${first ? 'cursor-pointer hover:bg-canvas/70' : ''} ${flashPage === pageNo ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/25' : ''}`}
                     >
                       <img
                         src={src}
                         alt={`Page ${pageNo} of the uploaded report`}
-                        className="w-full rounded-[8px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]"
+                        className="w-full rounded-md border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]"
                       />
                       <figcaption className="mt-1 text-center text-[0.625rem] text-ink-400 tabular-nums">Page {pageNo}{pageCount ? ` of ${pageCount}` : ''}</figcaption>
                     </figure>
@@ -510,18 +510,18 @@ export default function SectionReviewCanvas({
                 )}
               </div>
             ) : detected.length === 0 ? (
-              <div className="rounded-[12px] border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
+              <div className="rounded-lg border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
                 No section headings were detected in the document. Add the sections it should have on the right.
               </div>
             ) : (
-              <article className="rounded-[12px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)] px-8 py-7">
+              <article className="rounded-lg border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)] px-8 py-7">
                 {detected.map((d, idx) => (
                   <div
                     key={d.id}
                     ref={el => { sourceRefs.current[d.id] = el; }}
                     onClick={() => jumpToSection(d.id)}
                     title="Show this section in the detected list"
-                    className={`group/src relative -mx-4 px-4 rounded-[8px] cursor-pointer transition-colors duration-300 hover:bg-canvas/60 ${
+                    className={`group/src relative -mx-4 px-4 rounded-md cursor-pointer transition-colors duration-300 hover:bg-canvas/60 ${
                       idx === 0 ? 'pb-4 mb-5 border-b border-canvas-border pt-1' : 'py-3'
                     } ${flashId === d.id ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/20' : ''}`}
                   >
@@ -547,11 +547,11 @@ export default function SectionReviewCanvas({
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {reportChrome ? (
-              <div className="rounded-[12px] shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]" style={reportChrome.accent ? ({ '--rep-accent': reportChrome.accent } as CSSProperties) : undefined}>
+              <div className="rounded-lg shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]" style={reportChrome.accent ? ({ '--rep-accent': reportChrome.accent } as CSSProperties) : undefined}>
                 <ReportBrandBanner
                   title={reportChrome.title || 'Untitled Template'}
                   titleClassName="text-[1.375rem]"
-                  className="rounded-t-[12px]"
+                  className="rounded-t-lg"
                   gradient={reportChrome.gradient}
                   footer={
                     <div className="grid grid-cols-2 gap-4">
@@ -572,7 +572,7 @@ export default function SectionReviewCanvas({
                 <div className="border-x border-canvas-border bg-white px-5 py-4">
                   {outlineBody}
                 </div>
-                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-5 py-3 flex items-center justify-center">
+                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-5 py-3 flex items-center justify-center">
                   <span className="text-[0.6875rem] text-ink-400 tracking-wide">{reportChrome.footerText || 'Generated by Irame'}</span>
                 </div>
               </div>

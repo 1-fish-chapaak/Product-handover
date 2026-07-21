@@ -14,6 +14,8 @@ import { useToast } from '../shared/Toast';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { type ComposerContext, editCodeContext } from '../chat/composerContext';
 import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
+import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -118,37 +120,10 @@ const PLAN_ASSUMPTIONS: PlanAssumption[] = [
   { key: 'Excluded',         value: 'Voided and reversed invoices' },
 ];
 
-// Chat/QnA execution-plan steps, in the shared PlanCard shape so they render
-// through the same QueryExecutionPlanCard the workflow builder uses (numbered
-// steps + type badge + expandable source chips).
-const CHAT_PLAN_STEPS: PlanCardStep[] = [
-  {
-    id: 'parse', name: 'Parse user query', type: 'extract',
-    description: 'Identified intent: risk analysis query for the P2P process.',
-  },
-  {
-    id: 'sources', name: 'Identify data sources', type: 'extract',
-    description: 'Selected SAP ERP AP Module and Vendor Master Data.',
-    sources: [
-      { id: 'sap-ap', name: 'SAP ERP AP Module', type: 'sql',
-        columns: ['Vendor', 'Invoice No', 'Amount', 'PO Ref', 'GL Account', 'Posting Date', 'Currency'] },
-      { id: 'vendor-master', name: 'Vendor Master Data', type: 'sql',
-        columns: ['Vendor ID', 'Vendor', 'Bank Account', 'Status', 'Risk Flag'] },
-    ],
-  },
-  {
-    id: 'plan', name: 'Generate query plan', type: 'analyze',
-    description: 'Built SQL joins across 3 tables with a risk-severity filter.',
-  },
-  {
-    id: 'execute', name: 'Execute query', type: 'validate',
-    description: 'Processed 1.2M records, filtered to 9 matching risks.',
-  },
-  {
-    id: 'format', name: 'Format results', type: 'summarize',
-    description: 'Generated the table view with severity indicators and control mapping.',
-  },
-];
+// Chat/QnA plan steps now live in ../../data/chatPlan (shared with the inline
+// PlanFlowDiagram rendered in the chat thread). The Plan tab shows the text
+// step list; the flow diagram lives inline between the reasoning trail and the
+// result in ChatView.
 
 // Flat shimmer placeholder shown while the plan "regenerates" — matches the
 // QueryExecutionPlanCard chrome (rounded-xl border, header + step rows) so the
@@ -162,7 +137,7 @@ function PlanRegenerateSkeleton() {
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <ListChecks size={14} className="text-brand-400 shrink-0" />
-        <span className="text-[13px] font-medium text-ink-500">Regenerating plan…</span>
+        <span className="text-[0.8125rem] font-medium text-ink-500">Regenerating plan…</span>
       </div>
       <ul className="flex flex-col border-t border-canvas-border">
         {[0, 1, 2].map(i => (
@@ -216,7 +191,8 @@ function PlanTab({
 
   return (
     <div className="space-y-4 pt-4">
-      {/* Query Execution Plan — shared with the workflow-builder canvas. */}
+      {/* Query Execution Plan — the text step list. The flow (DAG) view of the
+          same steps is rendered inline in the chat thread (ChatView). */}
       {regenerating ? (
         <PlanRegenerateSkeleton />
       ) : (
@@ -245,6 +221,7 @@ function PlanTab({
 
 function CodeTab({ onCanvasAction }: { onCanvasAction?: (ctx: ComposerContext) => void } = {}) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [copied, setCopied] = useState(false);
 
   const sql = `SELECT
@@ -285,6 +262,12 @@ ORDER BY
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      logEvent({
+        action: 'Export',
+        description: 'Downloaded query SQL',
+        module: 'Ask IRA',
+        entity: 'Query',
+      });
       addToast({ type: 'success', message: 'SQL downloaded as query.sql' });
     } catch {
       addToast({ type: 'error', message: 'Download failed' });
@@ -927,7 +910,7 @@ function ColumnRow({
         isChecked ? 'hover:bg-brand-50/60' : 'hover:bg-paper-50/70'
       }`}
     >
-      <span className={`inline-flex items-center justify-center size-[18px] rounded-[5px] shrink-0 transition-[background-color,border-color,box-shadow] duration-150 ${
+      <span className={`inline-flex items-center justify-center size-[18px] rounded-sm shrink-0 transition-[background-color,border-color,box-shadow] duration-150 ${
         isChecked
           ? 'bg-brand-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
           : 'bg-canvas-elevated border border-ink-300 group-hover/row:border-ink-500'

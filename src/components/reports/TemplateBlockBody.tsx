@@ -74,7 +74,7 @@ function fieldValue(label: string, f: CardFinding, id: string, ratedAs: string):
 }
 
 const AWAITING = (prompt?: string) => (
-  <div className="rounded-[8px] border border-dashed border-mitigated-300 bg-mitigated-50/40 px-3 py-2">
+  <div className="rounded-md border border-dashed border-mitigated-300 bg-mitigated-50/40 px-3 py-2">
     <p className="text-[0.8125rem] text-mitigated-700 font-medium">{prompt || 'Awaiting response'}</p>
     <p className="text-[0.6875rem] text-mitigated-700/70 mt-0.5">Only a real person fills this in, never the AI.</p>
   </div>
@@ -128,7 +128,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
     const isHuman = (label: string) => (block.humanFields ?? []).some(h => h.toLowerCase() === label.toLowerCase());
     if (cards.length === 0) {
       return (
-        <div className="rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-4">
+        <div className="rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-4 py-4">
           <p className="text-[0.8125rem] text-ink-500">Finding cards render here, one card per finding, in this template's saved shape{block.idPattern ? ` (${block.idPattern})` : ''}.</p>
         </div>
       );
@@ -140,7 +140,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
           const ratedAs = rateIn(findingScale, f.severity);
           const fields = block.cardFields ?? [];
           return (
-            <article key={id} className="rounded-[10px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04)] px-5 py-4" style={{ borderLeft: '3px solid var(--rep-accent, #550fa5)' }}>
+            <article key={id} className="rounded-lg border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04)] px-5 py-4" style={{ borderLeft: '3px solid var(--rep-accent, #550fa5)' }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-baseline gap-2.5 min-w-0">
                   <span className="shrink-0 font-mono text-[0.8125rem] font-semibold" style={{ color: 'var(--rep-accent, #550fa5)' }}>{id}</span>
@@ -179,7 +179,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
     const linkedRows = block.linkedTo && cards.length > 0 ? cards : [];
     return (
       <div className="max-w-full">
-        <div className="rounded-[8px] overflow-hidden border border-canvas-border">
+        <div className="rounded-md overflow-hidden border border-canvas-border">
           {cols.length > 0 ? (
             <div className="flex bg-canvas">
               {cols.slice(0, 6).map(c => (
@@ -269,7 +269,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
   // ── Callout — text set apart; fixed callouts print verbatim ──
   if (block.kind === 'callout') {
     return (
-      <div className="max-w-[80ch] rounded-[8px] border border-mitigated-200 bg-mitigated-50/50 px-4 py-3">
+      <div className="max-w-[80ch] rounded-md border border-mitigated-200 bg-mitigated-50/50 px-4 py-3">
         {block.fill === 'fixed' && (block.fixedBody ?? []).length > 0 ? (
           <>
             {(block.fixedBody ?? []).map((line, i) => (
@@ -291,7 +291,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
     return (
       <div className="max-w-[75%]">
         <div className="flex items-end gap-1.5 h-14">
-          {[40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-canvas-border" style={{ height: `${h}%` }} />)}
+          {[40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-xs bg-canvas-border" style={{ height: `${h}%` }} />)}
         </div>
         <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">
           {block.label || 'Chart'} · {block.fill === 'manual' ? 'no data connected — add manually' : 'filled from query data'}
@@ -337,7 +337,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
     // straight into it (door 1). Static only when no edit handler reached us.
     if (!manual) {
       return (
-        <div className="max-w-[80ch] rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3.5">
+        <div className="max-w-[80ch] rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-4 py-3.5">
           <p className="text-[0.8125rem] font-medium text-ink-500">No data connected — fill in manually.</p>
           <p className="text-[0.6875rem] text-ink-400 mt-1">The heading and shape keep their place in the report. Type or paste the content here; the export checklist flags it until it's filled.</p>
         </div>
@@ -353,7 +353,7 @@ function BlockBody({ block, cards, findingScale, composed, manual }: {
           rows={filled ? Math.min(10, Math.max(3, manual.text.split('\n').length + 1)) : 3}
           placeholder="No data connected — type or paste this section's content here."
           aria-label="Section content"
-          className={`w-full resize-y rounded-[10px] px-4 py-3 text-[0.9375rem] text-ink-700 leading-[1.8] transition-colors focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-400 ${
+          className={`w-full resize-y rounded-lg px-4 py-3 text-[0.9375rem] text-ink-700 leading-[1.8] transition-colors focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-400 ${
             filled ? 'border border-canvas-border bg-white' : 'border border-dashed border-canvas-border bg-canvas/40'
           }`}
         />

@@ -176,7 +176,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         <div className="border-b border-canvas-border bg-white flex items-center justify-between px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-brand-600/10 text-brand-600 rounded-[8px] shrink-0"><FileText size={16} /></div>
+              <div className="p-2 bg-brand-600/10 text-brand-600 rounded-md shrink-0"><FileText size={16} /></div>
               <div>
                 <input
                   value={title}
@@ -189,7 +189,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
           </div>
           <button
             onClick={() => setShowPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[0.75rem] font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[0.75rem] font-medium transition-colors cursor-pointer ${
               showPreview ? 'bg-brand-600/10 text-brand-600' : 'text-ink-500 hover:bg-paper-50'
             }`}
           >
@@ -201,7 +201,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         {/* Preview Mode */}
         {showPreview && (
           <div className="flex-1 overflow-y-auto py-5 px-6">
-            <div className="bg-white rounded-[12px] border border-canvas-border overflow-hidden">
+            <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
               {/* Report Header */}
               <div className="px-8 py-4 flex items-center justify-between" style={{ background: `${templateThemeColor}15` }}>
                 <div>
@@ -234,7 +234,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                       </div>
                     )}
                     {section.type === 'chart' && (
-                      <div className="pl-3 h-20 rounded-[12px] border border-dashed border-canvas-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
+                      <div className="pl-3 h-20 rounded-lg border border-dashed border-canvas-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
                         <PieChart size={16} style={{ color: templateThemeColor }} />
                         <span className="text-[0.6875rem] font-medium" style={{ color: templateThemeColor }}>Chart / Visualization</span>
                       </div>
@@ -279,7 +279,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               {showTemplateErrors && inlineMissing.length > 0 && (
                 <div
                   role="alert"
-                  className="mb-3 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
+                  className="mb-3 border border-risk-200 bg-risk-50 rounded-md px-3 py-2 text-[0.75rem] text-risk-800"
                 >
                   <div className="font-semibold mb-0.5">
                     {inlineMissing.length === 1 ? 'One field needs attention' : `${inlineMissing.length} fields need attention`}
@@ -314,7 +314,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showTemplateErrors && !title.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2 rounded-[8px] border text-[0.75rem] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2 rounded-md border text-[0.75rem] focus:outline-none focus:ring-2 ${
                       showTemplateErrors && !title.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
                         : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'
@@ -326,7 +326,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <div className="relative">
                     <button
                       onClick={() => setShowCategoryDropdown(p => !p)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-canvas-border text-[0.75rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
                     >
                       {templateCategory}
                       <ChevronDown size={12} className={`text-ink-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
@@ -335,11 +335,11 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 </div>
                 <div>
                   <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Header Text</label>
-                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                 </div>
                 <div>
                   <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Footer Text</label>
-                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                 </div>
               </div>
               <div className="mb-3">
@@ -349,15 +349,15 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     <button
                       key={c}
                       onClick={() => setTemplateThemeColor(c)}
-                      className={`w-8 h-8 border-2 transition-all cursor-pointer rounded-[8px] ${templateThemeColor === c ? 'border-text scale-110 shadow-md' : 'border-transparent'}`}
+                      className={`w-8 h-8 border-2 transition-all cursor-pointer rounded-md ${templateThemeColor === c ? 'border-text scale-110 shadow-md' : 'border-transparent'}`}
                       style={{ background: c }}
                     />
                   ))}
                 </div>
               </div>
               {/* Mini preview */}
-              <div className="border border-canvas-border rounded-[12px] p-3 bg-canvas">
-                <div className="bg-white rounded-[12px] shadow-sm border border-canvas-border overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
+              <div className="border border-canvas-border rounded-lg p-3 bg-canvas">
+                <div className="bg-white rounded-lg shadow-sm border border-canvas-border overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
                   <div className="h-5 flex items-center justify-between px-3" style={{ background: `${templateThemeColor}10` }}>
                     <span className="text-[0.375rem] font-bold" style={{ color: templateThemeColor }}>{title}</span>
                     <span className="text-[0.3125rem] text-ink-400">{templateHeader}</span>
@@ -384,10 +384,10 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <button
                     key={block.type}
                     onClick={() => addSection(block.type)}
-                    className="text-left p-3 rounded-[8px] border border-canvas-border hover:border-brand-600/30 hover:bg-brand-50/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
+                    className="text-left p-3 rounded-md border border-canvas-border hover:border-brand-600/30 hover:bg-brand-50/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <div className={`p-1 rounded-[8px] ${sectionColor(block.type)}`}>
+                      <div className={`p-1 rounded-md ${sectionColor(block.type)}`}>
                         <block.icon size={12} />
                       </div>
                       <span className="text-[0.75rem] font-semibold text-ink-800 group-hover:text-brand-600 transition-colors">{block.label}</span>
@@ -425,7 +425,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 }}
                 disabled={isSavingTemplate}
                 aria-busy={isSavingTemplate || undefined}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] border border-dashed border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-paper-50 hover:border-brand-600/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-dashed border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-paper-50 hover:border-brand-600/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 {isSavingTemplate ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
                 {isSavingTemplate ? 'Saving…' : 'Save as Template'}
@@ -445,7 +445,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   exit={{ opacity: 0, scale: 0.95 }}
                 >
                 <div
-                  className={`bg-white rounded-[12px] border shadow-sm hover:border-brand-600/20 transition-all duration-300 ${
+                  className={`bg-white rounded-lg border shadow-sm hover:border-brand-600/20 transition-all duration-300 ${
                     dragOverIndex === index ? 'border-brand-600 border-2' : 'border-canvas-border'
                   }`}
                   draggable
@@ -458,7 +458,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     <div className="cursor-grab active:cursor-grabbing text-ink-400/40 hover:text-ink-400 transition-colors">
                       <GripVertical size={14} />
                     </div>
-                    <div className="w-6 h-6 rounded-[8px] bg-brand-600/10 text-brand-600 text-[0.6875rem] font-bold flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 rounded-md bg-brand-600/10 text-brand-600 text-[0.6875rem] font-bold flex items-center justify-center shrink-0">
                       {index + 1}
                     </div>
                     <input
@@ -473,7 +473,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
 
                   <div className="px-4 py-3">
                     {section.type === 'text' ? (
-                      <div className="flex items-center gap-2 p-3 bg-canvas rounded-[12px]">
+                      <div className="flex items-center gap-2 p-3 bg-canvas rounded-lg">
                         <MessageSquare size={14} className="text-ink-400 shrink-0" />
                         <div>
                           <div className="text-[0.75rem] text-ink-400">Content added from /chat</div>
@@ -483,15 +483,15 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     ) : section.type === 'exception-summary' ? (
                       <div className="space-y-2">
                         <div className="flex gap-3">
-                          <div className="flex-1 p-2.5 bg-risk-50 rounded-[12px] text-center">
+                          <div className="flex-1 p-2.5 bg-risk-50 rounded-lg text-center">
                             <div className="text-[1rem] font-bold text-risk-700">8</div>
                             <div className="text-[0.75rem] text-risk-700 uppercase font-semibold">Flagged</div>
                           </div>
-                          <div className="flex-1 p-2.5 bg-high-50 rounded-[12px] text-center">
+                          <div className="flex-1 p-2.5 bg-high-50 rounded-lg text-center">
                             <div className="text-[1rem] font-bold text-high-700">3</div>
                             <div className="text-[0.75rem] text-high-700 uppercase font-semibold">Assigned</div>
                           </div>
-                          <div className="flex-1 p-2.5 bg-compliant-50 rounded-[12px] text-center">
+                          <div className="flex-1 p-2.5 bg-compliant-50 rounded-lg text-center">
                             <div className="text-[1rem] font-bold text-compliant-700">1</div>
                             <div className="text-[0.75rem] text-compliant-700 uppercase font-semibold">Resolved</div>
                           </div>
@@ -522,7 +522,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                         </table>
                       </div>
                     ) : section.type === 'chart' ? (
-                      <div className="flex items-center justify-center h-24 bg-canvas rounded-[12px]">
+                      <div className="flex items-center justify-center h-24 bg-canvas rounded-lg">
                         <div className="flex items-end gap-1 h-14">
                           {[40, 65, 25, 80, 55, 70].map((h, i) => (
                             <div key={i} className="w-6 rounded-t" style={{ height: `${h}%`, background: `rgba(106,18,205,${0.15 + (h / 200)})` }} />
@@ -543,7 +543,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         <div className="px-6 py-4 border-t border-canvas-border bg-white shrink-0 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] font-semibold text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-md border border-canvas-border bg-white text-[0.8125rem] font-semibold text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <ArrowLeft size={14} />
             Back
@@ -567,7 +567,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-[16px] shadow-xl w-[560px] overflow-hidden"
+              className="relative bg-white rounded-xl shadow-xl w-[560px] overflow-hidden"
               onClick={e => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -576,12 +576,12 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
             >
               <div className="px-5 py-4 border-b border-canvas-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-brand-600/10 text-brand-600 rounded-[8px]"><BookOpen size={14} /></div>
+                  <div className="p-1.5 bg-brand-600/10 text-brand-600 rounded-md"><BookOpen size={14} /></div>
                   <h4 id="save-template-title" className="text-[0.875rem] font-semibold text-ink-800">Save as Template</h4>
                 </div>
                 <button
                   onClick={() => setShowSaveTemplate(false)}
-                  className="p-1 hover:bg-paper-50 rounded-[8px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="p-1 hover:bg-paper-50 rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <X size={14} className="text-ink-400" />
                 </button>
@@ -590,7 +590,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 {showModalErrors && modalMissing.length > 0 && (
                   <div
                     role="alert"
-                    className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
+                    className="border border-risk-200 bg-risk-50 rounded-md px-3 py-2 text-[0.75rem] text-risk-800"
                   >
                     <div className="font-semibold mb-0.5">
                       {modalMissing.length === 1 ? 'One field needs attention' : `${modalMissing.length} fields need attention`}
@@ -624,7 +624,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showModalErrors && !templateName.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2.5 rounded-[8px] border text-[0.8125rem] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2.5 rounded-md border text-[0.8125rem] focus:outline-none focus:ring-2 ${
                       showModalErrors && !templateName.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
                         : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'
@@ -637,7 +637,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <textarea
                     value={templateDesc}
                     onChange={e => setTemplateDesc(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 resize-none min-h-[70px]"
+                    className="w-full px-3 py-2.5 rounded-md border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 resize-none min-h-[70px]"
                     placeholder="Describe what this template is for..."
                   />
                 </div>
@@ -645,7 +645,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Category</label>
                   <button
                     onClick={() => setShowCategoryDropdown(p => !p)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-canvas-border text-[0.8125rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
                   >
                     {templateCategory}
                     <ChevronDown size={14} className={`text-ink-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
@@ -656,7 +656,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                         initial={{ opacity: 0, y: -5 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -5 }}
-                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-[8px] shadow-xl border border-canvas-border z-10 overflow-hidden"
+                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-md shadow-xl border border-canvas-border z-10 overflow-hidden"
                       >
                         {TEMPLATE_CATEGORIES.map(cat => (
                           <button
@@ -676,7 +676,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 <button
                   onClick={() => setShowSaveTemplate(false)}
                   disabled={isSavingTemplateModal}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   Cancel
                 </button>
@@ -697,7 +697,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   }}
                   disabled={isSavingTemplateModal}
                   aria-busy={isSavingTemplateModal || undefined}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   {isSavingTemplateModal && <Loader2 size={12} className="animate-spin" />}
                   {isSavingTemplateModal ? 'Saving…' : 'Save Template'}

@@ -5,7 +5,7 @@
 // Self-contained: owns its own badge map, source-type icon/colour helpers and
 // the expandable file/column rows, so neither host has to thread internals in.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ListChecks, ChevronDown, AlertTriangle, RefreshCw, Pencil,
@@ -33,6 +33,15 @@ export interface PlanCardStep {
   description: string;
   /** Data files this step reads — rendered as expandable source chips. */
   sources?: PlanCardSource[];
+  /** One-line technical detail of the actual operation — SQL join, filter,
+   *  transform. Rendered as a mono artifact in the flow view. */
+  operation?: string;
+  /** Records read in / emitted out. When both are set the flow view draws a
+   *  row-count funnel (e.g. 1,200,000 → 9) inside the node. */
+  rowsIn?: number;
+  rowsOut?: number;
+  /** Short label for what this step hands to the next — the flow-edge tag. */
+  output?: string;
 }
 
 export interface PlanAssumption {
@@ -45,7 +54,7 @@ export interface PlanAssumption {
 
 // ─── Internal helpers ────────────────────────────────────────────────────
 
-const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string }> = {
+export const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string }> = {
   extract:   { label: 'INGESTION',   bg: 'bg-brand-50',      text: 'text-brand-700' },
   analyze:   { label: 'ANALYSIS',    bg: 'bg-brand-600',     text: 'text-white' },
   compare:   { label: 'COMPARISON',  bg: 'bg-compliant-50',  text: 'text-compliant-700' },
@@ -55,14 +64,14 @@ const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string
   calculate: { label: 'CALCULATION', bg: 'bg-mitigated-50',  text: 'text-mitigated-700' },
 };
 
-function typeColor(type: string): string {
+export function typeColor(type: string): string {
   if (type === 'csv' || type === 'excel') return 'text-compliant-700 bg-compliant-50';
   if (type === 'pdf') return 'text-high-700 bg-high-50';
   if (type === 'sql') return 'text-evidence-700 bg-evidence-50';
   return 'text-ink-500 bg-canvas';
 }
 
-function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
+export function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
   // One file open at a time — clicking a pill reveals that file's columns in a
   // full-width strip below the pill row; clicking it again (or another pill)
   // collapses / switches.
@@ -113,14 +122,14 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
       {/* Columns for the open file. */}
       {activeSource && activeCols.length > 0 && (
         <div className="rounded-lg border border-canvas-border/70 bg-canvas/30 px-3 py-2.5">
-          <div className="text-[11px] font-semibold text-ink-600 mb-1.5">
+          <div className="text-[0.6875rem] font-semibold text-ink-600 mb-1.5">
             Columns in {activeSource.name}
           </div>
           <div className="flex flex-wrap gap-1">
             {visibleCols.map(col => (
               <span
                 key={col}
-                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
+                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[0.71875rem] font-mono text-brand-700"
               >
                 {col}
               </span>
@@ -129,7 +138,7 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
               <button
                 type="button"
                 onClick={() => setShowAll(true)}
-                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[0.71875rem] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
               >
                 +{hiddenCount} more
               </button>
@@ -138,7 +147,7 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
               <button
                 type="button"
                 onClick={() => setShowAll(false)}
-                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[0.71875rem] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
               >
                 Show less
               </button>
@@ -153,25 +162,28 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
 // ─── Query Execution Plan card ───────────────────────────────────────────
 // Numbered steps + type badge + description + expandable source chips.
 
-export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
+export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit, headerAccessory }: {
   steps: PlanCardStep[];
   onRegenerate?: () => void;
   onStepEdit?: (step: PlanCardStep) => void;
+  /** Optional control rendered in the header (e.g. a Flow/Steps view toggle). */
+  headerAccessory?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
       <div className="flex items-center px-4 py-3">
-        <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
+        <div className="flex-1 flex items-center gap-2 text-[0.875rem] font-semibold tracking-tight text-ink-900">
           <ListChecks size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">Query Execution Plan</span>
         </div>
+        {headerAccessory}
         {onRegenerate && (
           <button
             type="button"
             onClick={onRegenerate}
             title="Regenerate plan"
-            className="ml-1 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
+            className="ml-1 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
           >
             <RefreshCw size={12} />
             Regenerate
@@ -218,14 +230,14 @@ export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[13px] font-semibold text-ink-900">{step.name}</h3>
+                    <h3 className="text-[0.8125rem] font-semibold text-ink-900">{step.name}</h3>
                     {badge && (
-                      <span className={`text-[11px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}>
+                      <span className={`text-[0.6875rem] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}>
                         {badge.label}
                       </span>
                     )}
                   </div>
-                  <p className="text-[12px] text-ink-500 leading-relaxed mt-0.5">{step.description}</p>
+                  <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5">{step.description}</p>
                   {sources.length > 0 && (
                     <div className="mt-2">
                       <StepFilesAndColumns sources={sources} />
@@ -238,7 +250,7 @@ export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
                     onClick={() => onStepEdit(step)}
                     title={`Edit step — ${step.name}`}
                     aria-label={`Edit step — ${step.name}`}
-                    className="shrink-0 -mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-1.5 py-0.5 rounded-md cursor-pointer transition-[color,background-color,opacity] opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="shrink-0 -mt-0.5 inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-1.5 py-0.5 rounded-md cursor-pointer transition-[color,background-color,opacity] opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     <Pencil size={11} />
                     Edit

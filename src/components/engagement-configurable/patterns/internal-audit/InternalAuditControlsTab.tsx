@@ -13,6 +13,7 @@ import { RACMS, SOPS, CHECKLISTS, type InternalAuditScopeState } from './interna
 import { simulateAnalysisRun, type InternalAuditAnalysisState, type AnalysisRun } from './internalAuditAnalysisData';
 import { BulkExecuteModal } from '../../../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../../../workflow/WorkflowLibraryView';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Derive controls with linked workflows ──────────────────────────────
 
@@ -168,12 +169,12 @@ const SOURCE_CLS: Record<string, string> = {
   'SOP': 'bg-amber-50 text-amber-700',
 };
 const STATUS_CLS: Record<string, string> = {
-  'Draft': 'bg-gray-100 text-gray-600',
+  'Draft': 'bg-canvas text-ink-600',
   'Ready': 'bg-emerald-50 text-emerald-700',
   'Needs Review': 'bg-amber-50 text-amber-700',
 };
 const WF_STATUS_CLS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-500',
+  Draft: 'bg-canvas text-ink-500',
   Ready: 'bg-blue-50 text-blue-700',
   Active: 'bg-emerald-50 text-emerald-700',
 };
@@ -191,6 +192,7 @@ interface Props {
 }
 
 export default function InternalAuditControlsTab({ engagement, scope, analysisState, onUpdateAnalysis, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const controls = useMemo(() => deriveControls(scope), [scope]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedWfIds, setSelectedWfIds] = useState<Set<string>>(new Set());
@@ -287,10 +289,13 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
       }
     }
     onUpdateAnalysis({ ...analysisState, runs: [...analysisState.runs, ...newRuns] });
+    if (newRuns.length > 0) {
+      logEvent({ action: 'Run', description: `Ran ${newRuns.length} control workflow${newRuns.length === 1 ? '' : 's'} in "${engagement.name}"`, module: 'Engagements', entity: 'Workflow' });
+    }
     setShowBulkModal(false);
     setSelectedWfIds(new Set());
     setSelectedControlIds(new Set());
-  }, [bulkMode, controls, selectedControlIds, expandedControl, selectedWfIds, engagement.owner, analysisState, onUpdateAnalysis]);
+  }, [bulkMode, controls, selectedControlIds, expandedControl, selectedWfIds, engagement.owner, engagement.name, analysisState, onUpdateAnalysis, logEvent]);
 
   const bulkControlWfCount = controls.filter(c => selectedControlIds.has(c.id)).reduce((s, c) => s + c.workflows.length, 0);
 
@@ -305,14 +310,14 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
       <div className="grid grid-cols-5 gap-3">
         {[
           { label: 'Total Controls', value: controls.length, color: 'text-text' },
-          { label: 'From Checklist', value: checklistCount, color: checklistCount > 0 ? 'text-blue-600' : 'text-gray-400' },
-          { label: 'From RACM', value: racmCount, color: racmCount > 0 ? 'text-purple-600' : 'text-gray-400' },
-          { label: 'From SOP', value: sopCount, color: sopCount > 0 ? 'text-amber-600' : 'text-gray-400' },
-          { label: 'Linked Workflows', value: totalWfs, color: totalWfs > 0 ? 'text-primary' : 'text-gray-400' },
+          { label: 'From Checklist', value: checklistCount, color: checklistCount > 0 ? 'text-blue-600' : 'text-ink-400' },
+          { label: 'From RACM', value: racmCount, color: racmCount > 0 ? 'text-purple-600' : 'text-ink-400' },
+          { label: 'From SOP', value: sopCount, color: sopCount > 0 ? 'text-amber-600' : 'text-ink-400' },
+          { label: 'Linked Workflows', value: totalWfs, color: totalWfs > 0 ? 'text-primary' : 'text-ink-400' },
         ].map(s => (
-          <div key={s.label} className="rounded-xl border border-border-light bg-white p-4">
+          <div key={s.label} className="rounded-lg border border-border-light bg-white p-4">
             <div className={`text-[1.125rem] font-bold tabular-nums ${s.color}`}>{s.value}</div>
-            <div className="text-[0.625rem] text-gray-400 font-medium mt-0.5">{s.label}</div>
+            <div className="text-[0.625rem] text-ink-400 font-medium mt-0.5">{s.label}</div>
           </div>
         ))}
       </div>
@@ -340,7 +345,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
             </button>
             {selectedControlIds.size > 0 && (
               <>
-                <button onClick={clearControlSelection} className="text-[0.6875rem] font-semibold text-gray-400 hover:text-gray-600 cursor-pointer">Clear</button>
+                <button onClick={clearControlSelection} className="text-[0.6875rem] font-semibold text-ink-400 hover:text-ink-600 cursor-pointer">Clear</button>
                 <span className="text-[0.6875rem] text-primary font-semibold">{selectedControlIds.size} control{selectedControlIds.size !== 1 ? 's' : ''} · {bulkControlWfCount} workflow{bulkControlWfCount !== 1 ? 's' : ''}</span>
               </>
             )}
@@ -374,22 +379,22 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                   {wfCount > 0 && (
                     <input type="checkbox" checked={isControlSelected} onChange={(e) => { e.stopPropagation(); toggleControlSelect(ctrl.id); }}
                       onClick={e => e.stopPropagation()}
-                      className="w-3.5 h-3.5 rounded border-gray-300 accent-[#6a12cd] cursor-pointer shrink-0" />
+                      className="w-3.5 h-3.5 rounded border-ink-300 accent-[#6a12cd] cursor-pointer shrink-0" />
                   )}
                   {wfCount === 0 && <div className="w-3.5 shrink-0" />}
-                  {isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
+                  {isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-ink-400 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[0.75rem] font-semibold text-text">{ctrl.name}</span>
                       <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold ${SOURCE_CLS[ctrl.source]}`}>{ctrl.source}</span>
                     </div>
-                    <div className="text-[0.625rem] text-gray-400 mt-0.5">{ctrl.sourceName} · {ctrl.process}</div>
+                    <div className="text-[0.625rem] text-ink-400 mt-0.5">{ctrl.sourceName} · {ctrl.process}</div>
                   </div>
-                  <div className="flex items-center gap-3 text-[0.625rem] text-gray-400 shrink-0">
+                  <div className="flex items-center gap-3 text-[0.625rem] text-ink-400 shrink-0">
                     {wfCount > 0 ? (
                       <span className="flex items-center gap-1 font-medium text-primary"><Workflow size={10} />{wfCount} workflow{wfCount !== 1 ? 's' : ''}</span>
                     ) : (
-                      <span className="text-gray-300">No workflows</span>
+                      <span className="text-ink-300">No workflows</span>
                     )}
                     <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${STATUS_CLS[ctrl.status]}`}>{ctrl.status}</span>
                   </div>
@@ -411,7 +416,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                     </div>
 
                     {wfCount === 0 && (
-                      <p className="text-[0.6875rem] text-gray-400 italic">No workflows linked yet. Link or create a workflow to enable execution.</p>
+                      <p className="text-[0.6875rem] text-ink-400 italic">No workflows linked yet. Link or create a workflow to enable execution.</p>
                     )}
 
                     {wfCount > 0 && (
@@ -423,7 +428,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                               className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer">Select All ({wfCount})</button>
                             {selectedCount > 0 && (
                               <button onClick={clearWfSelection}
-                                className="text-[0.625rem] font-semibold text-gray-400 hover:text-gray-600 cursor-pointer">Clear</button>
+                                className="text-[0.625rem] font-semibold text-ink-400 hover:text-ink-600 cursor-pointer">Clear</button>
                             )}
                             {selectedCount > 0 && (
                               <span className="text-[0.625rem] text-primary font-semibold">{selectedCount} selected</span>
@@ -443,16 +448,16 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                                 onClick={() => toggleWf(wf.id)}
                               >
                                 <input type="checkbox" checked={isSelected} onChange={() => toggleWf(wf.id)}
-                                  className="w-3.5 h-3.5 rounded border-gray-300 accent-[#6a12cd] cursor-pointer mt-0.5 shrink-0" onClick={e => e.stopPropagation()} />
+                                  className="w-3.5 h-3.5 rounded border-ink-300 accent-[#6a12cd] cursor-pointer mt-0.5 shrink-0" onClick={e => e.stopPropagation()} />
                                 <Workflow size={13} className="text-brand-600 shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
                                     <span className="text-[0.75rem] font-medium text-text">{wf.name}</span>
-                                    <span className="text-[0.5625rem] font-mono text-gray-400">{wf.version}</span>
+                                    <span className="text-[0.5625rem] font-mono text-ink-400">{wf.version}</span>
                                     <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${WF_STATUS_CLS[wf.status]}`}>{wf.status}</span>
                                   </div>
                                   {wf.description && (
-                                    <p className="text-[0.625rem] text-gray-400 mt-0.5">{wf.description}</p>
+                                    <p className="text-[0.625rem] text-ink-400 mt-0.5">{wf.description}</p>
                                   )}
                                 </div>
                               </div>
@@ -469,7 +474,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
         </div>
       ) : (
         <div className="rounded-xl border border-border-light bg-white p-8 text-center">
-          <ClipboardCheck size={28} className="text-gray-300 mx-auto mb-2" />
+          <ClipboardCheck size={28} className="text-ink-300 mx-auto mb-2" />
           <p className="text-[0.8125rem] font-semibold text-text mb-1">No Controls Yet</p>
           <p className="text-[0.6875rem] text-text-muted">Select SOPs, RACMs, or Checklists in the Scope tab to populate controls.</p>
         </div>

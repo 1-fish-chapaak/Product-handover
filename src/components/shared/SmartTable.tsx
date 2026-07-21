@@ -78,6 +78,19 @@ interface SmartTableProps<T extends Record<string, unknown>> {
    *  exactly and the table always fills its container, so a width-less column
    *  takes the remainder. Off by default (auto layout) for existing callers. */
   fixedLayout?: boolean;
+  /** Keep every column header on one line (`white-space: nowrap`). For dense
+   *  fixed-layout tables where a two-word header ("Last active") would otherwise
+   *  wrap and drag the whole header row taller. Off by default. */
+  nowrapHeaders?: boolean;
+  /** Tighter cell padding for the default variant (px-3 / shorter rows instead
+   *  of px-4). Buys horizontal room back on wide, many-column tables. No effect
+   *  on the 'modern' variant, which has its own rhythm. Off by default. */
+  compact?: boolean;
+  /** Pin the search/filter toolbar to the scroller alongside the sticky header,
+   *  so the controls stay in reach while the rows scroll. Requires stickyHeader
+   *  and a headerExtra toolbar; pair with `stickyHeaderTop` so the column header
+   *  parks just under the pinned toolbar. Off by default. */
+  stickyToolbar?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -122,6 +135,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
   searchBg = 'bg-white',
   showSortHint = false,
   isRowSelected,
+  nowrapHeaders = false,
+  compact = false,
+  stickyToolbar = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -200,7 +216,13 @@ export default function SmartTable<T extends Record<string, unknown>>({
     >
       {/* Toolbar */}
       {(searchable || headerExtra) && (
-        <div className={`flex items-center justify-between gap-3 ${isModern ? 'px-5 py-3' : 'px-4 py-2.5 border-b border-border-light bg-surface-2/50'}`}>
+        <div className={[
+          'flex items-center justify-between gap-3',
+          isModern ? 'px-5 py-3' : 'px-4 py-2.5 border-b border-border-light',
+          // Pinned toolbars need a solid fill so scrolled rows don't show
+          // through; the resting toolbar keeps its subtle surface tint.
+          stickyHeader && stickyToolbar ? 'sticky top-0 z-20 bg-canvas-elevated' : (isModern ? '' : 'bg-surface-2/50'),
+        ].filter(Boolean).join(' ')}>
           {searchable && (
             <div className="relative flex-1 max-w-xs">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -208,7 +230,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder={searchPlaceholder}
-                className={`w-full pl-8 pr-8 py-1.5 border border-border ${searchBg} text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all`} style={{ borderRadius: '8px' }}
+                className={`w-full pl-8 pr-8 py-1.5 border border-border ${searchBg} text-[0.75rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all`} style={{ borderRadius: '8px' }}
               />
               {search && (
                 <button
@@ -220,9 +242,17 @@ export default function SmartTable<T extends Record<string, unknown>>({
               )}
             </div>
           )}
-          {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
+          {/* When the caller opted out of the built-in search it owns the whole
+              toolbar row, so the slot has to span it — otherwise the wrapper is
+              content-sized and a `w-full` / `ml-auto` inside it resolves against
+              its own width and no-ops, which is why the search-left ·
+              filters-right toolbars (§7.11.1) all clumped to the left. Tables
+              that keep the built-in search are unaffected. */}
+          {headerExtra && (
+            <div className={`flex items-center gap-2 ${searchable ? '' : 'flex-1 min-w-0'}`}>{headerExtra}</div>
+          )}
           {paginated && !hideResultCount && (
-            <div className="text-[12px] text-text-muted shrink-0">
+            <div className="text-[0.75rem] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
             </div>
           )}
@@ -232,7 +262,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Table — `overflow-x-auto` also forces overflow-y to `auto`, which would
           trap the sticky header; drop it when the header is pinned. */}
       <div className={stickyHeader ? '' : 'overflow-x-auto'}>
-        <table className={`w-full ${fixedLayout ? 'table-fixed' : ''} ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
+        <table className={`w-full ${fixedLayout ? 'table-fixed' : ''} ${isModern ? 'text-[0.8125rem]' : 'text-[0.78125rem]'}`}>
           <thead>
             <tr className="bg-surface-2 border-b border-border-light">
               {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : ''}`} />}
@@ -242,7 +272,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   className={[
                     isModern
                       ? `${dense ? 'py-2.5' : 'py-3'} font-semibold text-text-secondary ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
-                      : 'px-4 py-2.5 font-semibold text-text-secondary',
+                      : `${compact ? 'px-3 py-2' : 'px-4 py-2.5'} font-semibold text-text-secondary`,
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
                     // Pin the header row to the page scroller, parked under any
@@ -254,7 +284,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
                 >
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className={`inline-flex items-center gap-1.5 ${nowrapHeaders ? 'whitespace-nowrap' : ''}`}>
                     {col.label}
                     {col.sortable !== false && (
                       <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
@@ -277,9 +307,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
                       <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
                         <Search size={18} className="text-text-muted/50" />
                       </div>
-                      <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
+                      <div className="text-[0.8125rem] font-medium text-text-secondary">{emptyMessage}</div>
                       {search && (
-                        <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
+                        <button onClick={() => setSearch('')} className="text-[0.75rem] text-primary font-medium hover:underline cursor-pointer mt-1">
                           Clear search
                         </button>
                       )}
@@ -342,7 +372,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         className={[
                           isModern
                             ? `${dense ? 'py-2.5' : 'py-4'} ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
-                            : 'px-4 py-3',
+                            : compact ? 'px-3 py-2.5' : 'px-4 py-3',
                           // Opt-in selected-row accent: a left brand bar carried by the first cell.
                           ci === 0 && selected ? 'shadow-[inset_3px_0_0_#6A12CD]' : '',
                           col.truncate ? 'max-w-0' : '',
@@ -372,14 +402,14 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Pagination */}
       {paginated && totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-          <div className="text-[12px] text-text-muted">
+          <div className="text-[0.75rem] text-text-muted">
             Showing {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sorted.length)} of {sorted.length}
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={safePage === 0}
-              className="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              className="p-1.5 rounded-md hover:bg-canvas disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
               <ChevronLeft size={14} />
             </button>
@@ -387,10 +417,10 @@ export default function SmartTable<T extends Record<string, unknown>>({
               <button
                 key={i}
                 onClick={() => setPage(i)}
-                className={`w-7 h-7 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`w-7 h-7 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                   i === safePage
                     ? 'bg-primary text-white'
-                    : 'text-text-secondary hover:bg-gray-100'
+                    : 'text-text-secondary hover:bg-canvas'
                 }`}
               >
                 {i + 1}
@@ -399,7 +429,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={safePage >= totalPages - 1}
-              className="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              className="p-1.5 rounded-md hover:bg-canvas disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
               <ChevronRight size={14} />
             </button>

@@ -471,7 +471,7 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
-export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string };
+export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string; attachments?: string[] };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 

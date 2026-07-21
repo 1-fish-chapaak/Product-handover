@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Link2, Globe, Lock, ChevronDown, Check, Users, Trash2, Building2, X } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 
 type Anchor = { top: number; left: number; right: number; bottom: number; width: number; height: number };
@@ -244,6 +245,7 @@ function MemberRowSkeleton({ pulse, widths }: { pulse: boolean; widths: [string,
 
 export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const reduce = useReducedMotion();
   const [query, setQuery] = useState('');
   const [chips, setChips] = useState<{ label: string; value: string; invalid?: boolean }[]>([]);
@@ -427,6 +429,12 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
     setChips([]);
     setQuery('');
     onShare?.(pending.map(p => p.value));
+    logEvent({
+      action: 'Share',
+      description: `Shared ${scopeLabel ?? 'workspace'} with ${pending.length} ${pending.length === 1 ? 'recipient' : 'recipients'} (${pending.map(p => p.label).join(', ')})`,
+      module: auditTarget.module,
+      entity: auditTarget.entity,
+    });
   };
 
   const canInvite = chips.length > 0 || query.trim().length > 0;
@@ -458,6 +466,16 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
   // keeps the raw lowercase scope; only the visible/aria wording is prettified.
   const SCOPE_LABELS: Record<string, string> = { racm: 'RACM', 'workflow-output': 'workflow output' };
   const scopeLabel = scope ? (SCOPE_LABELS[scope] ?? scope) : null;
+  // Audit-log routing — the shared thing's scope decides which module/entity
+  // the event files under.
+  const auditTarget = (() => {
+    const s = (scope ?? 'workspace').toLowerCase();
+    if (s === 'report') return { module: 'Reports', entity: 'Report' };
+    if (s === 'dashboard') return { module: 'Dashboards', entity: 'Dashboard' };
+    if (s === 'workflow' || s === 'workflow-output') return { module: 'Workflow Library', entity: 'Workflow' };
+    if (s === 'racm') return { module: 'Governance', entity: 'RACM' };
+    return { module: 'Admin', entity: scopeLabel ?? 'workspace' };
+  })();
   const shareLink = `join.irame.ai/${scope ?? 'workspace'}`;
   const handleCopyLink = async () => {
     try {
@@ -473,6 +491,12 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
     addToast({ type: 'success', message: 'Link copied to clipboard.' });
+    logEvent({
+      action: 'Share',
+      description: `Copied share link for ${scopeLabel ?? 'workspace'}`,
+      module: auditTarget.module,
+      entity: auditTarget.entity,
+    });
   };
 
   const showSuggestions = focused && suggestions.length > 0 && !dismissed;

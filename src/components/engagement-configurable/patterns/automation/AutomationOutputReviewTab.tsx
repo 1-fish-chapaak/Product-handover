@@ -61,8 +61,8 @@ export default function AutomationOutputReviewTab({ engagement, runsState, onNav
           </>
         ) : (
           <>
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gray-100 mx-auto">
-              <Clock size={28} className="text-gray-400" />
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-canvas mx-auto">
+              <Clock size={28} className="text-ink-400" />
             </div>
             <h4 className="text-[1rem] font-bold text-text">Waiting for Execution</h4>
             <p className="text-[0.75rem] text-text-muted max-w-md mx-auto">
@@ -85,9 +85,9 @@ export default function AutomationOutputReviewTab({ engagement, runsState, onNav
               { label: 'Outputs Generated', value: totalOutputs },
               { label: 'Exceptions Found', value: totalExceptions, cls: totalExceptions > 0 ? 'text-amber-600' : 'text-emerald-600' },
             ].map(s => (
-              <div key={s.label} className="rounded-xl border border-border-light bg-white p-4 text-center">
+              <div key={s.label} className="rounded-lg border border-border-light bg-white p-4 text-center">
                 <div className={`text-[1.25rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-                <div className="text-[0.625rem] text-gray-400 font-medium mt-0.5">{s.label}</div>
+                <div className="text-[0.625rem] text-ink-400 font-medium mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
@@ -100,7 +100,7 @@ export default function AutomationOutputReviewTab({ engagement, runsState, onNav
               const wfExceptions = completedRuns.flatMap(r => r.exceptions).filter(e => e.sourceWorkflowName === wfName);
               const records = wfOutputs.reduce((s, o) => s + (o.recordCount || 0), 0);
               return (
-                <div key={wfName} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border-light bg-white">
+                <div key={wfName} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border-light bg-white">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0"><Workflow size={14} /></div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[0.8125rem] font-semibold text-text truncate">{wfName}</div>

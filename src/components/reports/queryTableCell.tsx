@@ -15,7 +15,7 @@ export const SEVERITY_PILL: Record<string, string> = {
 export function cellRender(value: string, header: string, first: boolean) {
   if (/severit|^risk/i.test(header)) {
     return (
-      <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${SEVERITY_PILL[value] || 'bg-gray-50 text-gray-600 border-canvas-border'}`}>
+      <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${SEVERITY_PILL[value] || 'bg-canvas text-ink-600 border-canvas-border'}`}>
         {value}
       </span>
     );

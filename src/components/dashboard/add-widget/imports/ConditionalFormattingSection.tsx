@@ -120,13 +120,13 @@ export default function ConditionalFormattingSection({
   };
 
   return (
-    <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
+    <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
       >
         <div className="flex items-center gap-2">
-          <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+          <div className="size-[18px] rounded-xs flex items-center justify-center">
             <Palette className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
           <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Conditional Formatting</span>
@@ -151,7 +151,7 @@ export default function ConditionalFormattingSection({
               {rules.map((rule, index) => {
                 const ConditionIcon = getConditionIcon(rule.condition);
                 return (
-                  <div key={rule.id} className="bg-white rounded-[8px] p-3 border border-[#e5e7eb] shadow-sm space-y-2.5">
+                  <div key={rule.id} className="bg-white rounded-lg p-3 border border-[#e5e7eb] space-y-2.5">
                     {/* Rule Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export default function ConditionalFormattingSection({
                       {rules.length > 1 && (
                         <button
                           onClick={() => removeRule(rule.id)}
-                          className="size-[24px] flex items-center justify-center rounded-[4px] hover:bg-red-50 transition-colors group"
+                          className="size-[24px] flex items-center justify-center rounded-xs hover:bg-red-50 transition-colors group"
                         >
                           <X className="size-[14px] text-[#94a3b8] group-hover:text-red-500" strokeWidth={2} />
                         </button>
@@ -205,7 +205,7 @@ export default function ConditionalFormattingSection({
                               value={rule.value}
                               onChange={(e) => updateRule(rule.id, "value", e.target.value)}
                               placeholder="Min value"
-                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-sm text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                             />
                           </div>
                           <div className="flex flex-col gap-1">
@@ -215,7 +215,7 @@ export default function ConditionalFormattingSection({
                               value={rule.value2 || ""}
                               onChange={(e) => updateRule(rule.id, "value2", e.target.value)}
                               placeholder="Max value"
-                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-sm text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                             />
                           </div>
                         </div>
@@ -241,7 +241,7 @@ export default function ConditionalFormattingSection({
                             value={rule.value}
                             onChange={(e) => updateRule(rule.id, "value", e.target.value)}
                             placeholder="Enter value"
-                            className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-sm text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -265,7 +265,7 @@ export default function ConditionalFormattingSection({
           {/* Add Condition Button */}
           <button
             onClick={addRule}
-            className="relative w-full py-2.5 rounded-[8px] bg-white border border-[#6a12cd] border-dashed text-[#6a12cd] text-[0.75rem] font-semibold flex items-center justify-center gap-2 hover:bg-[#faf5ff] active:bg-[#f5f0ff] transition-all shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[0px] py-[10px]"
+            className="relative w-full py-2.5 rounded-md bg-white border border-[#6a12cd] border-dashed text-[#6a12cd] text-[0.75rem] font-semibold flex items-center justify-center gap-2 hover:bg-[#faf5ff] active:bg-[#f5f0ff] transition-all shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[0px] py-[10px]"
           >
             <Plus className="size-[14px]" strokeWidth={2.5} />
             Add Condition

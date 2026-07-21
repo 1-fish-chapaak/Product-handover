@@ -13,6 +13,7 @@ import {
   CheckCircle2, Circle, FlaskConical, Play, Loader2, XCircle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -22,6 +23,9 @@ import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
 import ControlTestJourney from './ControlTestJourney';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRecs } from '../../data/layeredInsights';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,6 +164,7 @@ function kindForFile(name: string): EvidenceKind {
 export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow }: Props): JSX.Element {
   const { addToast, updateToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const ws = useEngagementWorkspace();
   const controls = ws.controls;
 
@@ -309,6 +314,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const acceptSuggestion = (attributeId: string, suggestion: AiSuggestion) => {
     ws.linkWorkflow(attributeId, suggestion.id);
     addToast({ type: 'success', message: `Linked "${suggestion.name}"` });
+    logEvent({ action: 'Update', description: `Linked suggested workflow "${suggestion.name}" to control attribute ${attributeId}`, module: 'Control Library', entity: 'Control' });
   };
 
   const declineSuggestion = (suggestion: AiSuggestion) =>
@@ -317,6 +323,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const linkManualWorkflow = (attributeId: string, opt: ManualWorkflowOption) => {
     ws.linkWorkflow(attributeId, opt.id);
     addToast({ type: 'success', message: `Linked "${opt.name}"` });
+    logEvent({ action: 'Update', description: `Linked workflow "${opt.name}" to control attribute ${attributeId}`, module: 'Control Library', entity: 'Control' });
   };
 
   const unlinkWorkflow = (attributeId: string, workflowId: string) => {
@@ -349,6 +356,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     ws.addAttribute(controlId, desc);
     setDraftAttr(prev => ({ ...prev, [controlId]: '' }));
     addToast({ type: 'success', message: 'Attribute added' });
+    logEvent({ action: 'Update', description: `Added attribute "${desc}" to control ${controlId}`, module: 'Control Library', entity: 'Control' });
   };
 
   const addEvidenceFile = (attributeId: string, file: File) => {
@@ -359,6 +367,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     };
     setEvidence(prev => ({ ...prev, [attributeId]: [...(prev[attributeId] ?? []), entry] }));
     addToast({ type: 'success', message: `Uploaded "${file.name}"` });
+    logEvent({ action: 'Upload', description: `Uploaded evidence "${file.name}" for attribute ${attributeId}`, module: 'Engagements', entity: 'Evidence' });
   };
 
   const removeEvidence = (attributeId: string, fileId: string) => {
@@ -375,6 +384,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     }));
     setSamples(prev => ({ ...prev, [attributeId]: [...(prev[attributeId] ?? []), ...batch] }));
     addToast({ type: 'success', message: `Generated 25 ${method.toLowerCase()} samples` });
+    logEvent({ action: 'Create', description: `Generated 25 ${method.toLowerCase()} samples for attribute ${attributeId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const setSampleResult = (attributeId: string, sampleId: string, result: SampleResult) =>
@@ -394,6 +404,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     };
     setSamples(prev => ({ ...prev, [attributeId]: [...(prev[attributeId] ?? []), entry] }));
     addToast({ type: 'success', message: `Uploaded sample file "${file.name}"` });
+    logEvent({ action: 'Upload', description: `Uploaded sample file "${file.name}" for attribute ${attributeId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const getSampleMethod = (attributeId: string): SampleMethod => sampleMethods[attributeId] ?? 'Random';
@@ -417,7 +428,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   if (controls.length === 0) {
     return (
       <>
-        <div className="glass-card rounded-xl">
+        <div className="glass-card">
           <ListPlaceholder
             icon={Shield}
             title="No controls in scope yet"
@@ -438,6 +449,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                 ws.addControl(input);
                 setAddControlOpen(false);
                 addToast({ type: 'success', message: input.inRacm ? 'Control added & pushed to RACM' : 'Control added' });
+                logEvent({ action: 'Create', description: `Created control "${input.description}"${input.inRacm ? ' and pushed it to the RACM' : ''}`, module: 'Control Library', entity: 'Control' });
               }}
             />
           )}
@@ -458,7 +470,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       </div>
 
       {/* ─── Filter row ─── */}
-      <div className="glass-card rounded-xl p-3.5">
+      <div className="glass-card p-3.5">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
           {/* Status pills */}
           <div className="flex items-center gap-1">
@@ -530,7 +542,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       </div>
       <div className="space-y-2.5">
         {filteredControls.length === 0 && (
-          <div className="glass-card rounded-xl">
+          <div className="glass-card">
             <ListPlaceholder
               icon={Search}
               title="No matching controls"
@@ -550,10 +562,11 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         {filteredControls.map(c => {
           const status = controlStatuses.get(c.controlId) ?? 'Not tested';
           const expanded = expandedControlIds.has(c.controlId);
+          const aiRecs = actionableRecs({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status, isKey: c.isKey });
           return (
             <div
               key={c.controlId}
-              className="glass-card rounded-xl overflow-hidden"
+              className="glass-card overflow-hidden"
             >
               <button
                 onClick={() => toggleExpand(c.controlId)} aria-expanded={expanded}
@@ -568,6 +581,11 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                   </span>
                 )}
                 {c.isKey && <span className="px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 inline-flex items-center shrink-0">Key</span>}
+                {aiRecs.length > 0 && (
+                  <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
+                    <AIRecommendsPopover recs={aiRecs} subjectLabel={c.controlId} subjectSub={c.description} />
+                  </span>
+                )}
                 <span className={`px-2 h-6 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
                 </span>
@@ -584,6 +602,13 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
+                      <InsightGenerator
+                        layer="control"
+                        subjectId={c.controlId}
+                        subjectLabel={c.description}
+                        status={status}
+                        isKey={c.isKey}
+                      />
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
                         <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
@@ -743,6 +768,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
               ws.addControl(input);
               setAddControlOpen(false);
               addToast({ type: 'success', message: input.inRacm ? 'Control added & pushed to RACM' : 'Control added' });
+              logEvent({ action: 'Create', description: `Created control "${input.description}"${input.inRacm ? ' and pushed it to the RACM' : ''}`, module: 'Control Library', entity: 'Control' });
             }}
           />
         )}
@@ -754,7 +780,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
             attribute={mapAttr}
             workflows={ws.workflows}
             linkedIds={ws.workflowIdsForAttribute(mapAttr.id)}
-            onLink={(id) => { ws.linkWorkflow(mapAttr.id, id); addToast({ type: 'success', message: 'Workflow linked' }); }}
+            onLink={(id) => { ws.linkWorkflow(mapAttr.id, id); addToast({ type: 'success', message: 'Workflow linked' }); logEvent({ action: 'Update', description: `Linked workflow "${ws.workflows.find(w => w.id === id)?.name ?? id}" to control attribute ${mapAttr.id}`, module: 'Control Library', entity: 'Control' }); }}
             onUnlink={(id) => unlinkWorkflow(mapAttr.id, id)}
             onCreate={createWorkflow}
             onClose={() => setMapAttr(null)}
@@ -874,7 +900,7 @@ function WorkflowMapModal({
                       linked ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-brand-200 hover:bg-canvas/50'
                     }`}
                   >
-                    <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
+                    <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 transition-colors ${
                       linked ? 'bg-brand-600 border-brand-600' : 'bg-white border-canvas-border'
                     }`}>
                       {linked && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -1021,7 +1047,7 @@ function AddControlModal({
 
 function KpiTile({ label, value, tone }: { label: string; value: number | string; tone: string }): JSX.Element {
   return (
-    <div className="glass-card rounded-xl p-3">
+    <div className="glass-card p-3">
       <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-500 mb-1 truncate">{label}</div>
       <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
     </div>

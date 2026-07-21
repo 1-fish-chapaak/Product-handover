@@ -127,7 +127,7 @@ function ReviewerStatusBadge({ status }: { status: string }) {
     'Approved': { bg: 'bg-green-50', text: 'text-green-700', icon: <CheckCircle2 size={11} /> },
     'Pending Review': { bg: 'bg-amber-50', text: 'text-amber-700', icon: <Clock size={11} /> },
     'Rejected': { bg: 'bg-red-50', text: 'text-red-700', icon: <XCircle size={11} /> },
-    'Not Started': { bg: 'bg-gray-100', text: 'text-gray-500', icon: null },
+    'Not Started': { bg: 'bg-canvas', text: 'text-ink-500', icon: null },
   };
   const s = map[status] || map['Not Started'];
   return (
@@ -139,7 +139,7 @@ function ReviewerStatusBadge({ status }: { status: string }) {
 }
 
 function ConclusionBadge({ conclusion }: { conclusion: string }) {
-  if (!conclusion) return <span className="text-gray-300 text-[0.75rem]">-</span>;
+  if (!conclusion) return <span className="text-ink-300 text-[0.75rem]">-</span>;
   const map: Record<string, { bg: string; text: string }> = {
     'Effective': { bg: 'bg-green-50', text: 'text-green-700' },
     'Ineffective': { bg: 'bg-red-50', text: 'text-red-700' },
@@ -212,7 +212,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           >
             <FileText size={14} />
             Evidence
-            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'evidence' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
+            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'evidence' ? 'bg-primary/10 text-primary' : 'bg-canvas-border text-ink-500'}`}>
               {EVIDENCE_ROWS.length}
             </span>
           </button>
@@ -226,7 +226,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           >
             <Database size={14} />
             Working Papers
-            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'working-papers' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
+            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'working-papers' ? 'bg-primary/10 text-primary' : 'bg-canvas-border text-ink-500'}`}>
               {WORKING_PAPER_ROWS.length}
             </span>
           </button>
@@ -241,7 +241,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               { label: 'Pending Review', value: String(EVIDENCE_ROWS.filter(e => e.status === 'Pending Review').length), color: 'text-warning' },
               { label: 'Rejected', value: String(EVIDENCE_ROWS.filter(e => e.status === 'Rejected').length), color: 'text-danger' },
             ].map(card => (
-              <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
+              <div key={card.label} className="bg-white rounded-lg border border-border-light p-3 text-center hover: transition-all duration-200">
                 <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
                 <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               </div>
@@ -255,7 +255,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               { label: 'Pending Review', value: String(WORKING_PAPER_ROWS.filter(w => w.reviewerStatus === 'Pending Review').length), color: 'text-warning' },
               { label: 'Rejected', value: String(WORKING_PAPER_ROWS.filter(w => w.reviewerStatus === 'Rejected').length), color: 'text-danger' },
             ].map(card => (
-              <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
+              <div key={card.label} className="bg-white rounded-lg border border-border-light p-3 text-center hover: transition-all duration-200">
                 <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
                 <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               </div>
@@ -278,7 +278,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           >
             <div className="flex flex-col items-center justify-center py-6">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 transition-colors ${
-                dragOver ? 'bg-primary/10' : 'bg-gray-100'
+                dragOver ? 'bg-primary/10' : 'bg-canvas'
               }`}>
                 <CloudUpload size={20} className={dragOver ? 'text-primary' : 'text-text-muted'} />
               </div>
@@ -343,7 +343,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[0.75rem] text-text-secondary bg-gray-50 px-1.5 py-0.5 rounded font-medium">{row.type}</span>
+                          <span className="text-[0.75rem] text-text-secondary bg-canvas px-1.5 py-0.5 rounded font-medium">{row.type}</span>
                         </td>
                         <td className="px-3 py-3">
                           <span className="text-[0.75rem] font-mono text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/10 cursor-pointer hover:bg-primary/10">{row.linkedControl}</span>
@@ -359,15 +359,15 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
-                            <button className="p-1 rounded hover:bg-gray-100 text-text-muted hover:text-primary cursor-pointer" title="View">
+                            <button className="p-1 rounded hover:bg-canvas text-text-muted hover:text-primary cursor-pointer" title="View">
                               <Eye size={12} />
                             </button>
-                            <button className="p-1 rounded hover:bg-gray-100 text-text-muted hover:text-primary cursor-pointer" title="Download">
+                            <button className="p-1 rounded hover:bg-canvas text-text-muted hover:text-primary cursor-pointer" title="Download">
                               <Download size={12} />
                             </button>
                             <button
                               onClick={() => onOpenTrace?.(row.linkedControl)}
-                              className="p-1 rounded hover:bg-gray-100 text-text-muted hover:text-purple-600 cursor-pointer"
+                              className="p-1 rounded hover:bg-canvas text-text-muted hover:text-purple-600 cursor-pointer"
                               title="View Trace"
                             >
                               <Shield size={12} />
@@ -384,7 +384,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               <span className="text-[0.75rem] text-text-muted">Showing {filteredEvidence.length} of {EVIDENCE_ROWS.length} evidence items</span>
               <div className="flex items-center gap-1">
                 <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
-                <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
+                <button className="p-1 rounded hover:bg-canvas text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
               </div>
             </div>
           </div>
@@ -420,7 +420,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-text-secondary font-mono text-[0.75rem] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
+                          <span className="text-text-secondary font-mono text-[0.75rem] bg-canvas px-1.5 py-0.5 rounded">{row.engagement}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
@@ -453,14 +453,14 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                             </button>
                             <button
                               onClick={() => onOpenWorkflow?.(row.controlId)}
-                              className="p-1 rounded hover:bg-gray-100 text-text-muted hover:text-indigo-600 cursor-pointer"
+                              className="p-1 rounded hover:bg-canvas text-text-muted hover:text-indigo-600 cursor-pointer"
                               title="View Workflow"
                             >
                               <Workflow size={12} />
                             </button>
                             <button
                               onClick={() => onOpenTrace?.(row.controlId)}
-                              className="p-1 rounded hover:bg-gray-100 text-text-muted hover:text-purple-600 cursor-pointer"
+                              className="p-1 rounded hover:bg-canvas text-text-muted hover:text-purple-600 cursor-pointer"
                               title="View Trace"
                             >
                               <Shield size={12} />
@@ -477,7 +477,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               <span className="text-[0.75rem] text-text-muted">Showing {filteredWPs.length} of {WORKING_PAPER_ROWS.length} working papers</span>
               <div className="flex items-center gap-1">
                 <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
-                <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
+                <button className="p-1 rounded hover:bg-canvas text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
               </div>
             </div>
           </div>

@@ -51,7 +51,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
 
   const allSources = SEED;
   const fileSources = allSources.filter(s => s.type === 'file');
-  const dbSources = allSources.filter(s => s.type === 'database' || s.type === 'api' || s.type === 'cloud');
+  const dbSources = allSources.filter(s => s.type === 'database');
 
   const handleClose = () => {
     setActiveTab('recent');

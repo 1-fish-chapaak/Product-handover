@@ -23,6 +23,7 @@ import type { JourneyFiles, UploadedFile, WorkflowDraft } from './types';
 import Button from '../ui/Button';
 import { cn } from '../../lib/cn';
 import { useFavouriteSources } from '../data-sources/useFavouriteSources';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   open: boolean;
@@ -247,6 +248,7 @@ export default function UploadDataModal({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const logEvent = useAuditLog();
   const { favs, toggleFav } = useFavouriteSources();
   const [tab, setTab] = useState<TabId>(allowedTabs?.[0] ?? 'upload');
   // The catalog this instance shows — chat "Session file" assets are dropped
@@ -428,6 +430,12 @@ export default function UploadDataModal({
         linkedSources: linkedSourceNames,
       });
     }
+    logEvent({
+      action: 'Upload',
+      description: `Attached ${totalSelected} data source${totalSelected === 1 ? '' : 's'} to workflow`,
+      module: 'Workflows',
+      entity: 'Data Source',
+    });
     onClose();
   };
 
@@ -469,7 +477,7 @@ export default function UploadDataModal({
               {/* Header — title + close on their own row (search moved below the
                   tabs, matching the chat picker). */}
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border">
-                <h2 className="text-[15px] font-semibold text-ink-800 shrink-0">
+                <h2 className="text-[0.9375rem] font-semibold text-ink-800 shrink-0">
                   {title}
                 </h2>
                 <button
@@ -496,7 +504,7 @@ export default function UploadDataModal({
                       type="button"
                       onClick={() => setTab(t.id)}
                       className={cn(
-                        'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer',
+                        'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-[0.8125rem] font-semibold transition-colors cursor-pointer',
                         active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800',
                       )}
                     >
@@ -505,7 +513,7 @@ export default function UploadDataModal({
                       {typeof t.count === 'number' && (
                         <span
                           className={cn(
-                            'text-[12px] font-semibold tabular-nums',
+                            'text-[0.75rem] font-semibold tabular-nums',
                             active ? 'text-brand-600' : 'text-ink-400',
                           )}
                         >
@@ -650,10 +658,10 @@ export default function UploadDataModal({
                                 <FileText size={13} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-[13px] font-semibold text-ink-800 truncate">
+                                <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                                   {f.name}
                                 </div>
-                                <div className="text-[12px] text-ink-400 tabular-nums">
+                                <div className="text-[0.75rem] text-ink-400 tabular-nums">
                                   {f.size > 1024 * 1024
                                     ? `${(f.size / (1024 * 1024)).toFixed(1)} MB`
                                     : f.size > 1024
@@ -684,14 +692,14 @@ export default function UploadDataModal({
                                   <Icon size={13} className={styles.icon} />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[13px] font-semibold text-ink-800 truncate">
+                                  <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                                     {a.name}
                                   </div>
-                                  <div className="text-[12px] text-ink-400 tabular-nums truncate">
+                                  <div className="text-[0.75rem] text-ink-400 tabular-nums truncate">
                                     {a.meta}
                                   </div>
                                 </div>
-                                <span className="text-[12px] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
+                                <span className="text-[0.75rem] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
                                   {kindBadgeLabel(a.kind)}
                                 </span>
                                 <button
@@ -714,14 +722,14 @@ export default function UploadDataModal({
                 {(tab === 'all' || tab === 'files' || tab === 'db' || tab === 'favourites') && (
                   visibleAssets.length === 0 ? (
                     <div className="flex flex-col items-center justify-center text-center py-16">
-                      <div className="text-[13px] font-semibold text-ink-700">
+                      <div className="text-[0.8125rem] font-semibold text-ink-700">
                         {search
                           ? `No matches for "${search}".`
                           : tab === 'favourites'
                             ? 'No favourites yet'
                             : 'No sources available'}
                       </div>
-                      <div className="text-[12px] text-ink-400 mt-1">
+                      <div className="text-[0.75rem] text-ink-400 mt-1">
                         {search
                           ? 'Try a different keyword.'
                           : tab === 'favourites'
@@ -751,7 +759,7 @@ export default function UploadDataModal({
                             >
                               {/* Square checkbox — matches the chat picker + shared DS Checkbox. */}
                               <div className={cn(
-                                'w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors',
+                                'w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 transition-colors',
                                 selected ? 'bg-brand-600 border-brand-600' : 'bg-canvas-elevated border-canvas-border',
                               )}>
                                 {selected && <Check size={11} className="text-white" strokeWidth={3} />}
@@ -761,14 +769,14 @@ export default function UploadDataModal({
                                 <Icon size={15} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className={cn('text-[13px] font-medium truncate', selected ? 'text-brand-700' : 'text-ink-800')}>
+                                <div className={cn('text-[0.8125rem] font-medium truncate', selected ? 'text-brand-700' : 'text-ink-800')}>
                                   {a.name}
                                 </div>
-                                <div className="text-[11.5px] text-ink-500 truncate mt-0.5 tabular-nums">
+                                <div className="text-[0.71875rem] text-ink-500 truncate mt-0.5 tabular-nums">
                                   {a.meta}
                                 </div>
                               </div>
-                              <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-ink-600 bg-paper-100">
+                              <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold text-ink-600 bg-paper-100">
                                 {kindBadgeLabel(a.kind)}
                               </span>
                             </button>
@@ -802,8 +810,8 @@ export default function UploadDataModal({
                           <Folder size={15} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium text-ink-800 truncate">{f.name}</div>
-                          <div className="text-[11.5px] text-ink-500 truncate mt-0.5 tabular-nums">
+                          <div className="text-[0.8125rem] font-medium text-ink-800 truncate">{f.name}</div>
+                          <div className="text-[0.71875rem] text-ink-500 truncate mt-0.5 tabular-nums">
                             {f.count} {f.count === 1 ? 'file' : 'files'} · {f.bytes > 1024 * 1024 ? `${(f.bytes / (1024 * 1024)).toFixed(1)} MB` : `${(f.bytes / 1024).toFixed(1)} KB`}
                           </div>
                         </div>
@@ -825,7 +833,7 @@ export default function UploadDataModal({
 
               {/* Footer */}
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border bg-canvas">
-                <p className="text-[13px] text-ink-500 tabular-nums">
+                <p className="text-[0.8125rem] text-ink-500 tabular-nums">
                   {totalSelected > 0 ? (
                     <><span className="font-semibold text-ink-700">{totalSelected}</span> {totalSelected === 1 ? 'item' : 'items'} selected</>
                   ) : (

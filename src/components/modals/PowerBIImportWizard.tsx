@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle, BarChart3, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { POWER_BI_DASHBOARDS } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onClose: () => void;
@@ -12,6 +13,7 @@ type WizardStep = 'connect' | 'browse' | 'preview' | 'done';
 
 export default function PowerBIImportWizard({ onClose }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [step, setStep] = useState<WizardStep>('connect');
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -36,6 +38,13 @@ export default function PowerBIImportWizard({ onClose }: Props) {
       setImporting(false);
       setStep('done');
       addToast({ type: 'success', message: 'Dashboard imported.' });
+      const dash = POWER_BI_DASHBOARDS.find(d => d.id === selectedDashboard);
+      logEvent({
+        action: 'Create',
+        description: `Imported Power BI dashboard "${dash?.name ?? 'Dashboard'}"${dash ? ` (${dash.tiles} tiles from ${dash.workspace})` : ''}`,
+        module: 'Dashboards',
+        entity: 'Dashboard',
+      });
     }, 1200);
   };
 

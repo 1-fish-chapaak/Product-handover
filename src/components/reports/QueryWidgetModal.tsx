@@ -111,7 +111,7 @@ export default function QueryWidgetModal({
           aria-modal="true"
           aria-labelledby="query-widget-title"
           tabIndex={-1}
-          className="w-full max-w-[840px] h-[640px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
+          className="w-full max-w-[840px] h-[640px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-xl shadow-xl overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
@@ -128,7 +128,7 @@ export default function QueryWidgetModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 shrink-0"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 shrink-0"
             >
               <X size={20} />
             </button>
@@ -212,7 +212,7 @@ export default function QueryWidgetModal({
                         <button
                           key={g.id}
                           onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
-                          className={`glass-card rounded-xl p-4 text-left w-full cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
+                          className={`glass-card p-4 text-left w-full cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
                         >
                           <div className="flex items-center justify-between gap-2 mb-3">
                             <h3 className="text-[0.9375rem] font-semibold text-ink-900 truncate">{g.title}</h3>
@@ -243,7 +243,7 @@ export default function QueryWidgetModal({
                         <button
                           key={t.id}
                           onClick={() => toggleIn(selTables, t.id, setSelTables)}
-                          className={`glass-card rounded-xl p-4 text-left w-full block cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
+                          className={`glass-card p-4 text-left w-full block cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
                         >
                           <div className="flex items-center justify-between gap-2 mb-3">
                             <div className="min-w-0">
@@ -254,7 +254,7 @@ export default function QueryWidgetModal({
                           </div>
                           {/* The dashboard table styling — surface-2 uppercase headers,
                               brand-700 first column, severity pills via cellRender. */}
-                          <div className="overflow-x-auto rounded-[10px] border border-canvas-border pointer-events-none">
+                          <div className="overflow-x-auto rounded-lg border border-canvas-border pointer-events-none">
                             <table className="w-full text-left">
                               <thead>
                                 <tr className="border-b border-canvas-border bg-surface-2/50">
@@ -298,14 +298,14 @@ export default function QueryWidgetModal({
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-md hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 Cancel
               </button>
               <button
                 onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, tables: selTables })}
                 disabled={totalSelected === 0}
-                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${totalSelected === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
+                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${totalSelected === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
               >
                 <FileText size={14} />
                 {confirmLabel}

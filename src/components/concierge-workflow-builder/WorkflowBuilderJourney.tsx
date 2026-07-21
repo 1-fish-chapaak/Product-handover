@@ -23,6 +23,7 @@ import type {
 } from './types';
 import type { QueryClarificationData } from '../chat/QueryClarificationCard';
 import type { AttachmentSelection } from '../chat/DataPickerModal';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onBack: () => void;
@@ -76,6 +77,7 @@ function tolerancePctFromAnswer(answer: string | undefined): number {
 }
 
 export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitialPromptConsumed }: Props) {
+  const logEvent = useAuditLog();
   const [step, setStep] = useState<JourneyStep>(1);
   const [prompt, setPrompt] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -329,7 +331,13 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
     if (!prompt.trim()) return;
     const draft = generateWorkflow(prompt);
     applyWorkflow(draft, 'prompt', prompt);
-  }, [prompt, applyWorkflow]);
+    logEvent({
+      action: 'Create',
+      description: 'Generated workflow from prompt',
+      module: 'Workflows',
+      entity: 'Workflow',
+    });
+  }, [prompt, applyWorkflow, logEvent]);
 
   // When the journey is opened with a pre-seeded prompt (e.g. handed off from
   // the chat empty-state Submit), auto-generate and skip Step 1. The user lands
@@ -356,8 +364,14 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
         { ...template, id: `draft-${Date.now()}` },
         'template',
       );
+      logEvent({
+        action: 'Create',
+        description: `Started workflow from template "${template.name}"`,
+        module: 'Workflows',
+        entity: 'Workflow',
+      });
     },
-    [applyWorkflow],
+    [applyWorkflow, logEvent],
   );
 
   const handleAttachDraft = useCallback(
@@ -380,6 +394,12 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
     async (_t: ToleranceCardState) => {
       if (!workflow) return;
       setRunning(true);
+      logEvent({
+        action: 'Run',
+        description: `Ran workflow "${workflow.name}"`,
+        module: 'Workflows',
+        entity: 'Workflow',
+      });
       try {
         const r = await runWorkflow(workflow, files, mappings);
         setResult(r);
@@ -391,7 +411,7 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
         setRunning(false);
       }
     },
-    [workflow, files, mappings, pushAssistantAfterDelay],
+    [workflow, files, mappings, pushAssistantAfterDelay, logEvent],
   );
 
   useEffect(() => {
@@ -454,12 +474,18 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
       setWorkflowSaved(true);
       setSaveModalOpen(false);
       pushUser('Save Workflow');
+      logEvent({
+        action: 'Create',
+        description: `Saved workflow "${payload.name}"`,
+        module: 'Workflows',
+        entity: 'Workflow',
+      });
       pushEvent(
         `**${payload.name}** saved to **${payload.businessProcess} · ${payload.racm}**.`,
         'success',
       );
     },
-    [workflow, pushUser, pushEvent],
+    [workflow, pushUser, pushEvent, logEvent],
   );
 
   // All steps now host their CTAs inline (or auto-progress), so the top-bar

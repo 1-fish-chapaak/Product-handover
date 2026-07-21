@@ -8,8 +8,8 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
 }
 
 const SIZES: Record<Size, string> = {
-  sm: 'h-7 text-[13px] px-2.5',
-  md: 'h-9 text-[13px] px-3',
+  sm: 'h-7 text-[0.8125rem] px-2.5',
+  md: 'h-9 text-[0.8125rem] px-3',
 };
 
 const Input = forwardRef<HTMLInputElement, Props>(function Input(

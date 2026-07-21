@@ -16,7 +16,7 @@ import { PlanSection, type ExecutorParameters } from '../concierge-workflow-buil
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
-import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
+import { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -31,7 +31,11 @@ import type {
 } from '../concierge-workflow-builder/types';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
+import LayeredInsightCard from '../shared/LayeredInsightCard';
+import type { LayeredInsight } from '../../data/layeredInsights';
+import WorkflowFollowUpInsights from './WorkflowFollowUpInsights';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
 interface WorkflowExecutorProps {
@@ -634,7 +638,7 @@ function ConfidenceChip({ value }: { value: number }) {
         ? 'bg-mitigated-50 text-mitigated-700'
         : 'bg-canvas text-ink-500';
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-bold font-mono ${color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.75rem] font-bold font-mono ${color}`}>
       {value}%
     </span>
   );
@@ -678,10 +682,10 @@ function ExpectedColumnsPopover({
       <div className="flex items-start justify-between gap-2 px-3.5 py-2.5 border-b border-canvas-border">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-[13px] font-bold text-ink-800">Expected columns</span>
-            <span className="text-[12px] font-semibold text-ink-400">{cols.length}</span>
+            <span className="text-[0.8125rem] font-bold text-ink-800">Expected columns</span>
+            <span className="text-[0.75rem] font-semibold text-ink-400">{cols.length}</span>
           </div>
-          <p className="text-[11.5px] text-ink-400 truncate">{input.name}</p>
+          <p className="text-[0.71875rem] text-ink-400 truncate">{input.name}</p>
         </div>
         <button
           type="button"
@@ -698,13 +702,13 @@ function ExpectedColumnsPopover({
             <span className="mt-0.5"><ColumnTypeIcon dataType={col.dataType} /></span>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[12.5px] font-semibold text-ink-800">{col.name}</span>
-                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
+                <span className="text-[0.78125rem] font-semibold text-ink-800">{col.name}</span>
+                <span className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">
                   {col.dataType}
                 </span>
               </div>
               {col.sample != null && (
-                <p className="text-[11.5px] font-mono text-ink-400 truncate">{col.sample}</p>
+                <p className="text-[0.71875rem] font-mono text-ink-400 truncate">{col.sample}</p>
               )}
             </div>
           </div>
@@ -729,7 +733,7 @@ function FileMatchBadge({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${tier.pillText} ${tier.pillBg}`}
+        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.65625rem] font-bold uppercase tracking-[0.08em] ${tier.pillText} ${tier.pillBg}`}
       >
         {match.confidence}% match
       </span>
@@ -760,7 +764,7 @@ function FileMatchPopover({
   return (
     <div className="absolute right-0 z-40 mt-2 w-[340px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-canvas-border">
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-brand-700">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[0.6875rem] font-bold uppercase tracking-[0.1em] text-brand-700">
           <Wand2 size={12} /> AI Justification
         </span>
         <button
@@ -778,25 +782,25 @@ function FileMatchPopover({
           return (
             <div key={m.key}>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-bold text-ink-800">
+                <span className="text-[0.78125rem] font-bold text-ink-800">
                   {m.label} <span className="text-ink-400 font-semibold">×{m.weight}%</span>
                 </span>
-                <span className="text-[13px] font-bold tabular-nums text-ink-800">{value}%</span>
+                <span className="text-[0.8125rem] font-bold tabular-nums text-ink-800">{value}%</span>
               </div>
               <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
                 <div className={`h-full rounded-full ${matchBarColor(value)}`} style={{ width: `${value}%` }} />
               </div>
-              <p className="text-[11px] text-ink-400 mt-1">{m.description}</p>
+              <p className="text-[0.6875rem] text-ink-400 mt-1">{m.description}</p>
             </div>
           );
         })}
-        <p className="text-[12px] text-ink-500 leading-relaxed">{match.verdict}</p>
+        <p className="text-[0.75rem] text-ink-500 leading-relaxed">{match.verdict}</p>
       </div>
       <div className="flex items-center gap-2 px-4 py-2.5 border-t border-canvas-border">
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${tier.pillText} ${tier.pillBg} ${tier.pillBorder}`}>
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6875rem] font-bold ${tier.pillText} ${tier.pillBg} ${tier.pillBorder}`}>
           Overall: {match.confidence}%
         </span>
-        <span className="text-[11.5px] text-ink-400 truncate">{label}</span>
+        <span className="text-[0.71875rem] text-ink-400 truncate">{label}</span>
       </div>
     </div>
   );
@@ -867,10 +871,10 @@ function StructuredFileCard({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold text-ink-800">{input.name}</span>
+              <span className="text-[0.8125rem] font-semibold text-ink-800">{input.name}</span>
               <SlotFunctionTag input={input} />
             </div>
-            <div className="text-[11px] text-ink-400">
+            <div className="text-[0.6875rem] text-ink-400">
               {resolveColumnSpecs(input).length} columns · {input.type.toUpperCase()} · {input.required ? 'Required' : 'Optional'}
             </div>
           </div>
@@ -878,22 +882,22 @@ function StructuredFileCard({
         <div className="relative flex items-center gap-2 shrink-0">
           {match && <FileMatchBadge match={match} open={popoverOpen} onToggle={onTogglePopover} />}
           {isGreen && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[0.65625rem] font-semibold border border-compliant/25">
               <Check size={10} strokeWidth={3} /> Auto-mapped
             </span>
           )}
           {isAmber && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10.5px] font-semibold border border-mitigated-200">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.65625rem] font-semibold border border-mitigated-200">
               <Check size={10} strokeWidth={3} /> Auto-mapped · review
             </span>
           )}
           {isLow && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[0.65625rem] font-semibold border border-risk/25">
               <AlertTriangle size={10} /> Manual mapping required
             </span>
           )}
           {!hasSources && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[0.65625rem] font-semibold border border-risk/25">
               <AlertCircle size={10} /> Unmapped
             </span>
           )}
@@ -904,7 +908,7 @@ function StructuredFileCard({
       </div>
 
       {shownSources.length > 1 && (
-        <div className="flex items-center gap-1.5 mt-1.5 mb-2 text-[11px] text-ink-500">
+        <div className="flex items-center gap-1.5 mt-1.5 mb-2 text-[0.6875rem] text-ink-500">
           <Layers size={11} className="text-brand-600 shrink-0" />
           <span>
             <span className="font-semibold text-ink-700">Unioned</span> · {shownSources.length} sources · ~{fmtRows(unionRows)} combined rows
@@ -914,7 +918,7 @@ function StructuredFileCard({
 
       <div className="flex flex-wrap items-center gap-2 mt-2.5">
         {shownSources.length === 0 ? (
-          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-2 text-[12px] text-ink-400 italic">
+          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-2 text-[0.75rem] text-ink-400 italic">
             <Link2 size={12} className="text-ink-300" />
             No source mapped
           </span>
@@ -923,7 +927,7 @@ function StructuredFileCard({
             <span
               key={s.name}
               className={[
-                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px]',
+                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[0.75rem]',
                 s.schemaOk === false
                   ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
                   : 'border-canvas-border bg-canvas text-ink-700',
@@ -936,7 +940,7 @@ function StructuredFileCard({
                 <FileIcon size={12} className="text-ink-400 shrink-0" />
               )}
               <span className="font-medium truncate max-w-[200px]">{s.name}</span>
-              <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+              <span className="text-[0.625rem] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
               {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
               <button
                 type="button"
@@ -961,7 +965,7 @@ function StructuredFileCard({
       {isLow && (
         <div className="flex items-start gap-2 mt-2.5 px-1">
           <AlertTriangle size={11} className="text-risk shrink-0 mt-0.5" />
-          <span className="text-[11px] text-risk-700 leading-relaxed">
+          <span className="text-[0.6875rem] text-risk-700 leading-relaxed">
             Low match confidence — we couldn&apos;t auto-map a file to this input with certainty. Map a source from your files manually before continuing.
           </span>
         </div>
@@ -970,7 +974,7 @@ function StructuredFileCard({
       {isMismatch && (
         <div className="flex items-start gap-2 mt-2.5 px-1">
           <AlertTriangle size={11} className="text-mitigated-700 shrink-0 mt-0.5" />
-          <span className="text-[11px] text-mitigated-700 leading-relaxed">
+          <span className="text-[0.6875rem] text-mitigated-700 leading-relaxed">
             One source&apos;s schema diverges from the others — its columns won&apos;t line up in the union. Remove it or re-map it before continuing.
           </span>
         </div>
@@ -984,6 +988,7 @@ function StructuredFileCard({
 export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp, onShareResults, onOpenInKnowledgeHub, onComposeInChat }: WorkflowExecutorProps) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   // Most workflow IDs resolve to the AP duplicate-detection mock. The
   // consolidated-file tester is a dedicated single-run journey driven by one
   // bundled workbook — its own flow is built out separately from the
@@ -998,6 +1003,97 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           : workflowId === 'lw-consolidated-file-compare'
             ? CONSOLIDATED_FILE_COMPARE_WORKFLOW
             : EXECUTOR_WORKFLOW;
+
+  // Single "what this run means" insight, derived from the run's own output so
+  // the numbers always match the results table. Aggregates the flagged rows by
+  // duplicate group (total double-pay exposure, biggest single group, most
+  // clear-cut match) and renders through the same LayeredInsightCard anatomy as
+  // the engagement / risk / control surfaces.
+  const outputInsight = useMemo<LayeredInsight>(() => {
+    const money = (s: string) => Number(s.replace(/[$,]/g, ''));
+    const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+    const byGroup = new Map<string, typeof RESULTS_DATA>();
+    for (const r of RESULTS_DATA) {
+      const g = byGroup.get(r.duplicateGroup) ?? [];
+      g.push(r);
+      byGroup.set(r.duplicateGroup, g);
+    }
+    const groups = [...byGroup.entries()].map(([id, rows]) => ({
+      id,
+      vendor: rows[0].vendor,
+      amount: money(rows[0].amount),
+      amountLabel: rows[0].amount,
+      count: rows.length,
+      match: Math.max(...rows.map((r) => r.confidence)),
+    }));
+
+    const exposure = groups.reduce((sum, g) => sum + g.amount, 0);
+    const biggest = [...groups].sort((a, b) => b.amount - a.amount)[0];
+    const clearest = [...groups].sort((a, b) => b.match - a.match)[0];
+    const avgMatch = groups.reduce((sum, g) => sum + g.match, 0) / groups.length;
+
+    return {
+      id: 'run-output-duplicates',
+      layer: 'control',
+      subjectId: 'this-run',
+      subjectLabel: 'Duplicate invoice check — this run',
+      takeaway: `${groups.length} duplicate invoice pairs put ${usd(exposure)} at risk of double payment.`,
+      verdict: { label: 'Exceptions found', tone: 'negative' },
+      severity: 'high',
+      likelyCause: {
+        label: 'Vendor-name variants are slipping past the exact-match check.',
+        detail: `Each pair bills the same amount under a slightly different spelling of the same vendor — near-duplicate vendor-master records, not random keying noise. ${biggest.vendor} is the single largest exposure at ${biggest.amountLabel}, matching at ${biggest.match}%.`,
+        confirmFirst: true,
+      },
+      reasoning: `${RESULTS_DATA.length} flags out of 4,521 invoices checked (${((RESULTS_DATA.length / 4521) * 100).toFixed(1)}%) form ${groups.length} pairs. Each pair is one exposure counted once — the ${usd(exposure)} total is ${groups.length} amounts, not ${RESULTS_DATA.length} invoices' worth.`,
+      atStake: `${usd(exposure)} could be paid twice if these clear settlement. The ${clearest.vendor} pair (${clearest.amountLabel}) is the most clear-cut at ${clearest.match}% — same vendor, same amount.`,
+      factors: { frequency: 0.5, sourceDiversity: 0.6, recency: 1, businessImpact: 0.9 },
+      confidenceOverride: Math.round(avgMatch) / 100,
+      evidence: [...groups]
+        .sort((a, b) => b.amount - a.amount)
+        .map((g) => ({
+          ref: g.id,
+          label: g.vendor,
+          detail: `${g.amountLabel} billed ${g.count}× · ${g.match}% match`,
+          tone: g.match >= 95 ? 'negative' : 'caution',
+        })),
+      evidenceNote: `${RESULTS_DATA.length} flagged rows · 1 run — this-run evidence, not yet a recurring pattern.`,
+      runsAnalysed: 1,
+      detectedOn: '15 Jul 2026',
+      detectedBy: 'traceable',
+      rollupOf: { label: 'flagged rows', count: RESULTS_DATA.length },
+      checkMore: [
+        { kind: 'split', label: 'Split by vendor or amount' },
+        { kind: 'trace', label: `Trace the ${biggest.vendor} pair`, detail: biggest.amountLabel },
+        { kind: 'ask', label: 'Ask which pair to hold first' },
+      ],
+      recommendedActions: [],
+      recommendations: [
+        {
+          id: 'run-rec-hold', category: 'monitoring', priority: 'do-now',
+          title: `Hold the ${groups.length} flagged pairs before the next payment run.`,
+          rationale: `${usd(exposure)} clears settlement otherwise — a hold is reversible, a double payment is a recovery exercise.`,
+        },
+        {
+          id: 'run-rec-cause', category: 'root-cause', priority: 'do-now',
+          title: `Confirm the vendor-master duplicates behind the ${biggest.vendor} pair.`,
+          rationale: 'Near-duplicate vendor records explain every pair; confirm the mechanism before escalating any of them as fraud.',
+          guardrail: 'The fraud call stays the auditor’s.',
+        },
+        {
+          id: 'run-rec-evidence', category: 'evidence', priority: 'this-period',
+          title: `Re-check the ${clearest.match}% ${clearest.vendor} pair against the PO and receipt.`,
+          rationale: 'Same vendor, same amount can still be a legitimate split delivery — the paper decides.',
+        },
+        {
+          id: 'run-rec-automation', category: 'automation', priority: 'advisory',
+          title: 'Add a fuzzy vendor-name match at invoice intake.',
+          rationale: 'Every pair cleared the exact-match check on spelling alone; a similarity threshold catches the next one at entry.',
+        },
+      ],
+    };
+  }, []);
 
   // When the executor is opened from the Audit Logs new-tab flow, the URL
   // carries ?state=completed — boot directly into the "complete" output view
@@ -1357,9 +1453,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       return next;
     });
     addToast({ type: 'success', message: `Added ${toAdd.length} ${toAdd.length === 1 ? 'item' : 'items'} to this workflow.` });
+    logEvent({
+      action: 'Upload',
+      description: `Added ${toAdd.length} input file${toAdd.length === 1 ? '' : 's'} to "${workflow.name}"`,
+      module: 'Workflow Library',
+      entity: 'Workflow',
+    });
     // A fresh upload resolves the insufficient-data gate, unblocking the flow.
     setInsufficientData(false);
-  }, [files, pickTargetInputId, addToast]);
+  }, [files, pickTargetInputId, addToast, logEvent, workflow.name]);
 
   const advance = useCallback(() => {
     const totalDuration = EXECUTION_STEPS.reduce((a, s) => a + s.duration, 0);
@@ -1388,6 +1490,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   const startExecution = useCallback(() => {
     if (!hasRequired) return;
+    logEvent({ action: 'Run', description: `Ran workflow "${workflow.name}"`, module: 'Workflow Library', entity: 'Workflow' });
     setPhase('running');
     setCurrentStep(0);
     setProgress(0);
@@ -1404,10 +1507,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     // Structured executors demo the insufficient-data gate; PDF flows don't.
     setInsufficientData(!isPdfExecutor);
     advance();
-  }, [hasRequired, advance, isPdfExecutor]);
+  }, [hasRequired, advance, isPdfExecutor, logEvent, workflow.name]);
 
   const stopExecution = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    logEvent({ action: 'Update', description: `Stopped run of "${workflow.name}"`, module: 'Workflow Library', entity: 'Workflow' });
     setPhase('idle');
     setCurrentStep(0);
     setProgress(0);
@@ -1416,7 +1520,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setUnstructuredMappings([]);
     setColumnMapPending(false);
     setInsufficientData(false);
-  }, []);
+  }, [logEvent, workflow.name]);
 
   const resolveClarification = useCallback(() => {
     clarificationAnsweredRef.current = true;
@@ -1515,7 +1619,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       <header className="h-12 shrink-0 border-b border-canvas-border bg-canvas-elevated flex items-center px-6">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
         >
           <ArrowLeft size={14} />
           Workflows
@@ -1530,26 +1634,26 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="rounded-2xl border border-canvas-border bg-canvas-elevated p-6 mb-6 relative overflow-hidden"
+              className="rounded-lg border border-canvas-border bg-canvas-elevated p-6 mb-6 relative overflow-hidden"
             >
               <div className="absolute -top-20 -right-20 w-60 h-60 bg-gradient-to-br from-brand-50 to-transparent rounded-full pointer-events-none" />
               <div className="flex items-start justify-between relative">
                 <div>
-                  <div className="flex items-center gap-2 text-[11.5px] mb-2">
+                  <div className="flex items-center gap-2 text-[0.71875rem] mb-2">
                     <span className="flex items-center gap-1.5 text-compliant-700 font-bold uppercase tracking-wider">
                       <span className="w-1.5 h-1.5 rounded-full bg-compliant animate-pulse" />
                       Active
                     </span>
                     <span className="text-ink-400 font-mono">{workflowId.toUpperCase()}</span>
                   </div>
-                  <h1 className="text-[22px] font-bold text-ink-800 mb-2 tracking-tight">
+                  <h1 className="text-[1.375rem] font-bold text-ink-800 mb-2 tracking-tight">
                     {workflow.name}
                   </h1>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11.5px] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[0.71875rem] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
                       {workflow.category}
                     </span>
-                    <span className="text-[11.5px] font-semibold text-ink-500 bg-canvas border border-canvas-border px-2 py-0.5 rounded-full font-mono">
+                    <span className="text-[0.71875rem] font-semibold text-ink-500 bg-canvas border border-canvas-border px-2 py-0.5 rounded-full font-mono">
                       v3.2
                     </span>
                   </div>
@@ -1566,7 +1670,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
                         <Loader2 size={13} />
                       </motion.div>
-                      <span className="text-[12px] font-semibold">Executing...</span>
+                      <span className="text-[0.75rem] font-semibold">Executing...</span>
                     </motion.div>
                   )}
                   {phase === 'complete' && (
@@ -1577,7 +1681,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       className="flex items-center gap-2 bg-compliant-50 text-compliant-700 px-3 py-1.5 rounded-lg"
                     >
                       <CheckCircle2 size={13} />
-                      <span className="text-[12px] font-semibold">Complete</span>
+                      <span className="text-[0.75rem] font-semibold">Complete</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1591,8 +1695,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-2">
                       <FileIcon size={14} className="text-brand-600" />
-                      <span className="text-[13px] font-semibold text-ink-800">Required Files</span>
-                      <span className="text-[12px] text-ink-400">
+                      <span className="text-[0.8125rem] font-semibold text-ink-800">Required Files</span>
+                      <span className="text-[0.75rem] text-ink-400">
                         {workflow.inputs.filter((i) => i.required).length} required ·{' '}
                         {workflow.inputs.length} total
                       </span>
@@ -1600,7 +1704,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <button
                       type="button"
                       onClick={() => setRequiredOpen((v) => !v)}
-                      className="text-[12px] text-ink-500 inline-flex items-center gap-1 cursor-pointer hover:text-ink-700"
+                      className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1 cursor-pointer hover:text-ink-700"
                     >
                       {requiredOpen ? 'Click to collapse' : 'Click to Expand'}
                       {requiredOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -1614,10 +1718,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         return (
                           <div
                             key={input.id}
-                            className="inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-1.5 text-[12.5px] font-semibold text-ink-800"
+                            className="inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-1.5 text-[0.78125rem] font-semibold text-ink-800"
                           >
                             {input.name}
-                            <span className="text-[11px] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
+                            <span className="text-[0.6875rem] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
                               {input.type}
                             </span>
                             <SlotFunctionTag input={input} />
@@ -1640,25 +1744,25 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             className="rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3"
                           >
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[13px] font-semibold text-ink-800">
+                              <span className="text-[0.8125rem] font-semibold text-ink-800">
                                 {input.name}
                               </span>
-                              <span className="text-[11px] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
+                              <span className="text-[0.6875rem] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
                                 {input.type}
                               </span>
                               <SlotFunctionTag input={input} />
                               {input.required && (
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-risk">
+                                <span className="text-[0.625rem] font-bold uppercase tracking-wider text-risk">
                                   Required
                                 </span>
                               )}
                               {uploaded > 0 && (
-                                <span className="ml-auto text-[11px] rounded-full bg-compliant-50 text-compliant-700 px-2 py-0.5 font-semibold">
+                                <span className="ml-auto text-[0.6875rem] rounded-full bg-compliant-50 text-compliant-700 px-2 py-0.5 font-semibold">
                                   {uploaded}
                                 </span>
                               )}
                             </div>
-                            <p className="text-[12px] text-ink-500 leading-relaxed">
+                            <p className="text-[0.75rem] text-ink-500 leading-relaxed">
                               {input.description}
                             </p>
                             {(() => {
@@ -1672,7 +1776,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                     onClick={() =>
                                       setColumnsViewFor((v) => (v === input.id ? null : input.id))
                                     }
-                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-semibold cursor-pointer transition-colors ${
+                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[0.75rem] font-semibold cursor-pointer transition-colors ${
                                       open
                                         ? 'border-brand-200 bg-brand-50 text-brand-700'
                                         : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:bg-canvas'
@@ -1731,16 +1835,16 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     className="w-full flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-canvas/50 transition-colors"
                   >
                     <div className="text-left">
-                      <h2 className="text-[16px] font-bold text-ink-800 leading-tight">
+                      <h2 className="text-[1rem] font-bold text-ink-800 leading-tight">
                         Upload data files
                       </h2>
-                      <p className="text-[12px] text-ink-500 mt-0.5">
+                      <p className="text-[0.75rem] text-ink-500 mt-0.5">
                         {totalFiles > 0
                           ? `${totalFiles} file${totalFiles === 1 ? '' : 's'} added · ${workflow.inputs.filter((i) => (files[i.id] ?? []).length > 0).length}/${workflow.inputs.filter((i) => i.required).length} required inputs`
                           : 'Upload the files required for this workflow, then hit Execute.'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 text-[12px] text-ink-500">
+                    <div className="flex items-center gap-2 text-[0.75rem] text-ink-500">
                       {uploadOpen ? 'Click to collapse' : 'Click to expand'}
                       {uploadOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </div>
@@ -1779,15 +1883,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           <UploadCloud size={22} className="text-ink-500" />
                         </div>
                         <div>
-                          <div className="text-[14px] font-semibold text-ink-800">Add data to this workflow</div>
-                          <div className="text-[12px] text-ink-500 mt-0.5">
+                          <div className="text-[0.875rem] font-semibold text-ink-800">Add data to this workflow</div>
+                          <div className="text-[0.75rem] text-ink-500 mt-0.5">
                             Upload files, pick from your workspace, or link a data source.
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setDataPickerOpen(true)}
-                          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
                         >
                           <Plus size={14} />
                           Add Files
@@ -1801,13 +1905,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     {allAdded.length > 0 && (
                       <div className="border-t border-canvas-border bg-canvas/60">
                         <div className="px-5 py-2.5 flex items-center gap-2">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                          <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-500">
                             Attached
                           </span>
-                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-ink-800 text-white text-[10.5px] font-semibold">
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-ink-800 text-white text-[0.65625rem] font-semibold">
                             {totalFiles}
                           </span>
-                          <span className="ml-auto text-[11px] text-ink-400">
+                          <span className="ml-auto text-[0.6875rem] text-ink-400">
                             {workflow.inputs.filter((i) => (files[i.id] ?? []).length > 0).length}/
                             {workflow.inputs.filter((i) => i.required).length} required inputs satisfied
                           </span>
@@ -1818,7 +1922,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             return (
                               <span
                                 key={`${inputId}-${file.name}-${index}`}
-                                className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] text-ink-800 max-w-full"
+                                className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] text-ink-800 max-w-full"
                                 title={`${file.name}${isLinked ? '' : ` · ${humanSize(file.size)}`} · ${inputName}`}
                               >
                                 {isLinked ? (
@@ -1827,7 +1931,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                   <FileIcon size={11} className="text-ink-500 shrink-0" />
                                 )}
                                 <span className="truncate max-w-[200px] font-medium">{file.name}</span>
-                                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider px-1 rounded bg-brand-50 text-brand-700 max-w-[120px] truncate">
+                                <span className="shrink-0 text-[0.625rem] font-medium uppercase tracking-wider px-1 rounded bg-brand-50 text-brand-700 max-w-[120px] truncate">
                                   {inputName}
                                 </span>
                                 <button
@@ -1851,12 +1955,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   <div className="px-5 py-4 border-t border-canvas-border">
                     <div className="flex items-start gap-5">
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400 mb-3">
+                        <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-3">
                           Parameters
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="text-[12px] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
+                            <label className="text-[0.75rem] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
                               <Percent size={12} className="text-brand-600" />
                               Match Threshold
                             </label>
@@ -1869,15 +1973,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                 onChange={(e) =>
                                   handleParametersChange({ ...parameters, threshold: e.target.value })
                                 }
-                                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated pl-3 pr-8 py-2 text-[13px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated pl-3 pr-8 py-2 text-[0.8125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                               />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-400">
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[0.75rem] text-ink-400">
                                 %
                               </span>
                             </div>
                           </div>
                           <div>
-                            <label className="text-[12px] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
+                            <label className="text-[0.75rem] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
                               <CalendarDays size={12} className="text-brand-600" />
                               Date Range
                             </label>
@@ -1887,14 +1991,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                 onChange={(e) =>
                                   handleParametersChange({ ...parameters, dateFrom: e.target.value })
                                 }
-                                className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[12.5px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                               />
                               <DatePicker
                                                                 value={parameters.dateTo}
                                 onChange={(e) =>
                                   handleParametersChange({ ...parameters, dateTo: e.target.value })
                                 }
-                                className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[12.5px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                               />
                             </div>
                           </div>
@@ -1906,7 +2010,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           onClick={startExecution}
                           disabled={!hasRequired}
                           className={[
-                            'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-colors',
+                            'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[0.8125rem] font-semibold transition-colors',
                             hasRequired
                               ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
                               : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed',
@@ -1918,7 +2022,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       </div>
                     </div>
                     {!hasRequired && (
-                      <div className="mt-3 text-[11.5px] text-ink-400">
+                      <div className="mt-3 text-[0.71875rem] text-ink-400">
                         Add files for all required inputs to enable Execute
                       </div>
                     )}
@@ -1935,12 +2039,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <div className="px-5 py-4">
                       <div className="flex items-start gap-5">
                         <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400 mb-3">
+                          <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-3">
                             Parameters
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="text-[12px] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
+                              <label className="text-[0.75rem] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
                                 <Percent size={12} className="text-brand-600" />
                                 Match Threshold
                               </label>
@@ -1953,15 +2057,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                   onChange={(e) =>
                                     handleParametersChange({ ...parameters, threshold: e.target.value })
                                   }
-                                  className="w-full rounded-lg border border-canvas-border bg-canvas-elevated pl-3 pr-8 py-2 text-[13px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                  className="w-full rounded-lg border border-canvas-border bg-canvas-elevated pl-3 pr-8 py-2 text-[0.8125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                                 />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-400">
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[0.75rem] text-ink-400">
                                   %
                                 </span>
                               </div>
                             </div>
                             <div>
-                              <label className="text-[12px] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
+                              <label className="text-[0.75rem] font-semibold text-ink-600 flex items-center gap-1.5 mb-1.5">
                                 <CalendarDays size={12} className="text-brand-600" />
                                 Date Range
                               </label>
@@ -1971,14 +2075,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                   onChange={(e) =>
                                     handleParametersChange({ ...parameters, dateFrom: e.target.value })
                                   }
-                                  className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[12.5px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                  className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                                 />
                                 <DatePicker
                                                                     value={parameters.dateTo}
                                   onChange={(e) =>
                                     handleParametersChange({ ...parameters, dateTo: e.target.value })
                                   }
-                                  className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[12.5px] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                                  className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                                 />
                               </div>
                             </div>
@@ -1990,7 +2094,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             onClick={startExecution}
                             disabled={!hasRequired}
                             className={[
-                              'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-colors',
+                              'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[0.8125rem] font-semibold transition-colors',
                               hasRequired
                                 ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
                                 : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed',
@@ -2002,7 +2106,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         </div>
                       </div>
                       {!hasRequired && (
-                        <div className="mt-3 text-[11.5px] text-ink-400">
+                        <div className="mt-3 text-[0.71875rem] text-ink-400">
                           Upload a PDF into every required slot above to enable Execute
                         </div>
                       )}
@@ -2017,12 +2121,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                 focused on the mapping itself. On the completed view it's folded
                 into the results header instead. */}
             {phase === 'running' && !columnMapPending && (
-              <section className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-3.5 mb-4">
+              <section className="rounded-lg border border-canvas-border bg-canvas-elevated px-5 py-3.5 mb-4">
                 <div className="flex items-center gap-3">
                   <UploadCloud size={14} className="text-brand-600 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-ink-800">Upload data files</div>
-                    <div className="text-[12px] text-ink-500">
+                    <div className="text-[0.8125rem] font-semibold text-ink-800">Upload data files</div>
+                    <div className="text-[0.75rem] text-ink-500">
                       {totalFiles} file{totalFiles === 1 ? '' : 's'} added ·{' '}
                       {workflow.inputs.filter((i) => (files[i.id] ?? []).length > 0).length}/
                       {workflow.inputs.filter((i) => i.required).length} required inputs
@@ -2042,7 +2146,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   className="rounded-2xl border border-brand-200 p-6 bg-brand-50/30 mb-4"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
+                    <h3 className="text-[0.8125rem] font-bold text-ink-800 flex items-center gap-2">
                       {(clarificationPending || fileMapPending || columnMapPending) ? (
                         <AlertCircle size={15} className="text-mitigated-700" />
                       ) : (
@@ -2053,10 +2157,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       {(clarificationPending || fileMapPending || columnMapPending) ? 'Paused — waiting for input' : 'Running Workflow'}
                     </h3>
                     <div className="flex items-center gap-3">
-                      <span className="text-[12px] font-mono font-bold text-brand-700">{progress}%</span>
+                      <span className="text-[0.75rem] font-mono font-bold text-brand-700">{progress}%</span>
                       <button
                         onClick={stopExecution}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-risk-50 hover:bg-risk-50/80 text-risk text-[11.5px] font-semibold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-risk-50 hover:bg-risk-50/80 text-risk text-[0.71875rem] font-semibold transition-colors cursor-pointer"
                       >
                         <Square size={12} />
                         Stop
@@ -2081,18 +2185,18 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       <AlertCircle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[12px] font-semibold text-mitigated-700">
+                          <span className="text-[0.75rem] font-semibold text-mitigated-700">
                             Insufficient data detected
                           </span>
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold rounded-md bg-canvas-elevated border border-mitigated-200 text-mitigated-700 px-1.5 py-0.5">
+                          <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold rounded-md bg-canvas-elevated border border-mitigated-200 text-mitigated-700 px-1.5 py-0.5">
                             <FileIcon size={10} />
                             GL Trial Balance
-                            <span className="text-[9.5px] font-bold uppercase tracking-wider text-risk">
+                            <span className="text-[0.59375rem] font-bold uppercase tracking-wider text-risk">
                               Required
                             </span>
                           </span>
                         </div>
-                        <div className="text-[11.5px] text-ink-600 mt-1 leading-relaxed">
+                        <div className="text-[0.71875rem] text-ink-600 mt-1 leading-relaxed">
                           The file mapped to this required input has only <span className="font-mono font-semibold">2,340</span> rows
                           (expected ~<span className="font-mono font-semibold">5,000</span> for this period).
                           Upload a complete file to continue — the run stays paused until the data is sufficient.
@@ -2100,7 +2204,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         <button
                           type="button"
                           onClick={() => setDataPickerOpen(true)}
-                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
+                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
                         >
                           <UploadCloud size={13} />
                           Upload file
@@ -2135,7 +2239,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             )}
                           </div>
                           <span
-                            className={`text-[12px] ${
+                            className={`text-[0.75rem] ${
                               isDone
                                 ? 'text-ink-400 line-through'
                                 : isCurrent
@@ -2162,14 +2266,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25 }}
-                  className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 mb-6"
+                  className="rounded-lg border border-canvas-border bg-canvas-elevated p-5 mb-6"
                 >
                   <div className="flex items-start justify-between gap-4 mb-4">
-                    <h3 className="text-[14px] font-bold text-ink-800 leading-snug">
+                    <h3 className="text-[0.875rem] font-bold text-ink-800 leading-snug">
                       {CLARIFICATION_QUESTION}
                     </h3>
                     <div className="flex items-center gap-1.5 shrink-0 text-ink-400">
-                      <span className="text-[12px]">1 of 1</span>
+                      <span className="text-[0.75rem]">1 of 1</span>
                       <button
                         type="button"
                         onClick={resolveClarification}
@@ -2198,7 +2302,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         >
                           <span
                             className={[
-                              'w-7 h-7 rounded-lg flex items-center justify-center text-[12px] font-bold shrink-0 transition-colors',
+                              'w-7 h-7 rounded-lg flex items-center justify-center text-[0.75rem] font-bold shrink-0 transition-colors',
                               selected
                                 ? 'bg-brand-600 text-white'
                                 : 'bg-canvas-elevated border border-canvas-border text-ink-400',
@@ -2207,7 +2311,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             {selected ? <Check size={14} strokeWidth={3} /> : i + 1}
                           </span>
                           <span
-                            className={`flex-1 text-[13px] ${
+                            className={`flex-1 text-[0.8125rem] ${
                               selected ? 'text-brand-700 font-semibold' : 'text-ink-700'
                             }`}
                           >
@@ -2234,7 +2338,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         value={clarificationOther}
                         onChange={(e) => setClarificationOther(e.target.value)}
                         placeholder="Something else"
-                        className="flex-1 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none"
+                        className="flex-1 bg-transparent text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -2245,7 +2349,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       onClick={resolveClarification}
                       disabled={clarificationChoice === null && !clarificationOther.trim()}
                       className={[
-                        'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors',
+                        'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[0.8125rem] font-semibold transition-colors',
                         clarificationChoice !== null || clarificationOther.trim()
                           ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
                           : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed',
@@ -2257,7 +2361,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <button
                       type="button"
                       onClick={resolveClarification}
-                      className="text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       Skip
                     </button>
@@ -2275,18 +2379,18 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25 }}
-                  className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 mb-6"
+                  className="rounded-lg border border-canvas-border bg-canvas-elevated p-5 mb-6"
                 >
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div>
-                      <h3 className="text-[14px] font-bold text-ink-800 leading-snug">
+                      <h3 className="text-[0.875rem] font-bold text-ink-800 leading-snug">
                         Confirm file mapping
                       </h3>
-                      <p className="text-[11.5px] text-ink-500 mt-0.5">
+                      <p className="text-[0.71875rem] text-ink-500 mt-0.5">
                         Review auto-detected file mappings. Re-assign any files that don&apos;t match before proceeding to column mapping.
                       </p>
                     </div>
-                    <span className="text-[12px] text-ink-400 shrink-0">Step 1 of 2</span>
+                    <span className="text-[0.75rem] text-ink-400 shrink-0">Step 1 of 2</span>
                   </div>
 
                   {/* Your Files — the inventory of everything added to this run,
@@ -2323,8 +2427,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     return (
                       <div className="mt-4 mb-1">
                         <div className="flex items-center gap-2 mb-2.5">
-                          <span className="text-[13px] font-bold text-ink-800">Your Files</span>
-                          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-canvas border border-canvas-border text-[11px] font-semibold text-ink-500">
+                          <span className="text-[0.8125rem] font-bold text-ink-800">Your Files</span>
+                          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-canvas border border-canvas-border text-[0.6875rem] font-semibold text-ink-500">
                             {all.length}
                           </span>
                         </div>
@@ -2338,12 +2442,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                 <FileIcon size={15} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-[13px] font-semibold text-ink-800 truncate">{f.name}</div>
-                                <div className="text-[11px] text-ink-400">
+                                <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">{f.name}</div>
+                                <div className="text-[0.6875rem] text-ink-400">
                                   {f.linkedSource ? 'Linked from data source' : `Uploaded · ${humanSize(f.size)}`}
                                 </div>
                               </div>
-                              <span className="text-[10px] font-semibold uppercase tracking-wide rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
+                              <span className="text-[0.625rem] font-semibold uppercase tracking-wide rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
                                 {ext(f.name)}
                               </span>
                               <button
@@ -2423,17 +2527,17 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   {unstructuredMappings.length > 0 && (
                     <>
                       <div className="flex items-center gap-2 mt-5 mb-2">
-                        <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
+                        <span className="text-[0.65625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
                           Unstructured documents
                         </span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-semibold border border-mitigated-200">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.625rem] font-semibold border border-mitigated-200">
                           Manual mapping required
                         </span>
                         <div className="flex-1 h-px bg-canvas-border" />
                       </div>
                       <div className="flex items-start gap-2 mb-3 px-0.5">
                         <Info size={12} className="text-ink-400 shrink-0 mt-0.5" />
-                        <p className="text-[11.5px] text-ink-500 leading-relaxed">
+                        <p className="text-[0.71875rem] text-ink-500 leading-relaxed">
                           PDFs can&apos;t be auto-mapped. Confirm which workflow input each document satisfies — we&apos;ll then extract fields one-by-one with manual review in the next step.
                         </p>
                       </div>
@@ -2471,10 +2575,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                     <FileText size={16} />
                                   </div>
                                   <div className="min-w-0">
-                                    <div className="text-[13px] font-semibold text-ink-800 truncate">
+                                    <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                                       {pdf.fileName}
                                     </div>
-                                    <div className="text-[11px] text-ink-400 flex items-center gap-1.5">
+                                    <div className="text-[0.6875rem] text-ink-400 flex items-center gap-1.5">
                                       <span>{humanSize(pdf.size)}</span>
                                       <span>·</span>
                                       <span className="font-semibold uppercase">PDF</span>
@@ -2491,17 +2595,17 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   {isMapped && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[0.65625rem] font-semibold border border-compliant/25">
                                       <Check size={10} strokeWidth={3} /> Mapped
                                     </span>
                                   )}
                                   {isPending && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10.5px] font-semibold border border-mitigated-200">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.65625rem] font-semibold border border-mitigated-200">
                                       <AlertTriangle size={10} /> Needs review
                                     </span>
                                   )}
                                   {isSkipped && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-canvas text-ink-500 text-[10.5px] font-semibold border border-canvas-border">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-canvas text-ink-500 text-[0.65625rem] font-semibold border border-canvas-border">
                                       Skipped
                                     </span>
                                   )}
@@ -2510,7 +2614,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
                               {!isSkipped && (
                                 <div className="flex items-center gap-2.5 mt-3 flex-wrap">
-                                  <span className="text-[11.5px] font-semibold text-ink-600">
+                                  <span className="text-[0.71875rem] font-semibold text-ink-600">
                                     Map to input:
                                   </span>
                                   <InputSlotDropdown
@@ -2538,7 +2642,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                           ),
                                         )
                                       }
-                                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
+                                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.71875rem] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
                                     >
                                       <Check size={11} strokeWidth={3} />
                                       Confirm
@@ -2555,7 +2659,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                         ),
                                       )
                                     }
-                                    className="ml-auto text-[11.5px] font-semibold text-ink-500 hover:text-risk transition-colors cursor-pointer"
+                                    className="ml-auto text-[0.71875rem] font-semibold text-ink-500 hover:text-risk transition-colors cursor-pointer"
                                   >
                                     Skip this file
                                   </button>
@@ -2575,7 +2679,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                                         ),
                                       )
                                     }
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[0.71875rem] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
                                   >
                                     <RefreshCw size={11} />
                                     Restore
@@ -2615,7 +2719,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           onClick={resolveFileMap}
                           disabled={!canConfirm}
                           className={[
-                            'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors',
+                            'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[0.8125rem] font-semibold transition-colors',
                             canConfirm
                               ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
                               : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed',
@@ -2629,7 +2733,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <button
                       type="button"
                       onClick={resolveFileMap}
-                      className="text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       Skip
                     </button>
@@ -2648,20 +2752,20 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25 }}
-                  className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 mb-6"
+                  className="rounded-lg border border-canvas-border bg-canvas-elevated p-5 mb-6"
                 >
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
-                      <h3 className="text-[14px] font-bold text-ink-800 leading-snug">
+                      <h3 className="text-[0.875rem] font-bold text-ink-800 leading-snug">
                         {isPdfExecutor ? 'Review extracted fields' : 'Confirm column mapping'}
                       </h3>
-                      <p className="text-[11.5px] text-ink-500 mt-0.5">
+                      <p className="text-[0.71875rem] text-ink-500 mt-0.5">
                         {isPdfExecutor
                           ? 'Each PDF was already assigned to its input during upload. Review the fields we extracted from each document and resolve any low-confidence values.'
                           : 'Review auto-mapped columns and resolve any that need attention before execution continues.'}
                       </p>
                     </div>
-                    <span className="text-[12px] text-ink-400 shrink-0">
+                    <span className="text-[0.75rem] text-ink-400 shrink-0">
                       {isPdfExecutor ? 'Step 1 of 1' : 'Step 2 of 2'}
                     </span>
                   </div>
@@ -2684,7 +2788,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       <button
                         type="button"
                         onClick={backToFileMap}
-                        className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 border border-canvas-border bg-canvas-elevated hover:bg-canvas transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 border border-canvas-border bg-canvas-elevated hover:bg-canvas transition-colors cursor-pointer"
                       >
                         <ArrowLeft size={14} />
                         Back
@@ -2692,7 +2796,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       <button
                         type="button"
                         onClick={resolveColumnMap}
-                        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[0.8125rem] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
                       >
                         Confirm mapping & continue
                         <ArrowRight size={14} />
@@ -2701,7 +2805,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <button
                       type="button"
                       onClick={resolveColumnMap}
-                      className="text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       Skip
                     </button>
@@ -2726,14 +2830,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     ].map((card) => (
                       <div
                         key={card.label}
-                        className="bg-canvas-elevated border border-canvas-border rounded-xl p-4 hover:border-brand-200 transition-colors"
+                        className="bg-canvas-elevated border border-canvas-border rounded-lg p-4 hover:border-brand-200 transition-colors"
                       >
                         <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center mb-2.5">
                           <card.icon size={14} />
                         </div>
-                        <div className="text-[11px] text-ink-400 uppercase tracking-wider mb-1">{card.label}</div>
-                        <div className="text-[22px] font-bold font-mono text-ink-800 leading-none mb-1">{card.value}</div>
-                        <div className="text-[11.5px] text-ink-500">{card.note}</div>
+                        <div className="text-[0.6875rem] text-ink-400 uppercase tracking-wider mb-1">{card.label}</div>
+                        <div className="text-[1.375rem] font-bold font-mono text-ink-800 leading-none mb-1">{card.value}</div>
+                        <div className="text-[0.71875rem] text-ink-500">{card.note}</div>
                       </div>
                     ))}
                   </div>
@@ -2741,7 +2845,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden mb-5">
                     <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-canvas-border">
                       <div className="min-w-0">
-                        <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
+                        <h3 className="text-[0.8125rem] font-bold text-ink-800 flex items-center gap-2">
                           <TrendingUp size={14} className="text-brand-600" />
                           Duplicate Invoice Matches
                         </h3>
@@ -2749,7 +2853,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             standalone card: how many files fed the run and
                             which inputs they satisfied — provenance beside the
                             output. */}
-                        <div className="flex items-center gap-1.5 mt-1 pl-[22px] text-[11.5px] text-ink-400 min-w-0">
+                        <div className="flex items-center gap-1.5 mt-1 pl-[22px] text-[0.71875rem] text-ink-400 min-w-0">
                           <UploadCloud size={11} className="text-ink-300 shrink-0" />
                           <span className="truncate">
                             {totalFiles} file{totalFiles === 1 ? '' : 's'} added · {satisfiedInputs.length}/{requiredInputCount} inputs
@@ -2763,12 +2867,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           </span>
                         </div>
                       </div>
-                      <span className="text-[12px] text-ink-400 font-mono shrink-0 mt-0.5">{RESULTS_DATA.length} records</span>
+                      <span className="text-[0.75rem] text-ink-400 font-mono shrink-0 mt-0.5">{RESULTS_DATA.length} records</span>
                     </div>
                     <div className="overflow-x-auto">
                       <div className="grid grid-cols-[140px_1fr_120px_110px_90px] gap-3 px-5 py-2.5 bg-canvas border-b border-canvas-border min-w-[640px]">
                         {['Invoice #', 'Vendor', 'Amount', 'Dup. Group', 'Confidence'].map((h) => (
-                          <span key={h} className="text-[11px] font-bold text-ink-400 uppercase tracking-wider">
+                          <span key={h} className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider">
                             {h}
                           </span>
                         ))}
@@ -2781,51 +2885,52 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           transition={{ delay: 0.2 + i * 0.03 }}
                           className="grid grid-cols-[140px_1fr_120px_110px_90px] gap-3 px-5 py-3 border-b border-canvas-border last:border-0 hover:bg-brand-50/30 transition-colors items-center min-w-[640px]"
                         >
-                          <span className="text-[12px] font-mono text-brand-700 font-medium">{row.invoiceNo}</span>
+                          <span className="text-[0.75rem] font-mono text-brand-700 font-medium">{row.invoiceNo}</span>
                           <span className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-[12px] text-ink-800 truncate">{row.vendor}</span>
+                            <span className="text-[0.75rem] text-ink-800 truncate">{row.vendor}</span>
                             <RowMemoryMarker vendor={row.vendor} />
                           </span>
-                          <span className="text-[12px] font-mono text-ink-800 font-medium">{row.amount}</span>
-                          <span className="text-[12px] font-mono text-ink-500 bg-canvas px-2 py-0.5 rounded w-fit">{row.duplicateGroup}</span>
+                          <span className="text-[0.75rem] font-mono text-ink-800 font-medium">{row.amount}</span>
+                          <span className="text-[0.75rem] font-mono text-ink-500 bg-canvas px-2 py-0.5 rounded w-fit">{row.duplicateGroup}</span>
                           <ConfidenceChip value={row.confidence} />
                         </motion.div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 mb-5">
+                  {/* What this run means — one focused output insight, sitting
+                      between the results and the run's actions. Rendered through
+                      the shared LayeredInsightCard so every AI-insight surface
+                      reads identically. */}
+                  <LayeredInsightCard
+                    insight={outputInsight}
+                    headerLabel="this run"
+                    evidenceLabel="Evidence · duplicate groups"
+                  />
+
+                  <div className="flex items-center gap-2.5 mt-5 mb-5">
                     <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12.5px] font-semibold transition-colors cursor-pointer">
                       <Download size={13} />
                       Download CSV
                     </button>
-                    <button className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[12.5px] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer">
+                    <button className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[0.78125rem] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer">
                       <LayoutDashboard size={13} />
                       Add to Dashboard
                     </button>
-                    <button className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[12.5px] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer">
+                    <button className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[0.78125rem] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer">
                       <AlertTriangle size={13} />
                       Create Exceptions
                     </button>
                     <button
                       onClick={() => setPhase('idle')}
-                      className="ml-auto inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[12.5px] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer"
+                      className="ml-auto inline-flex items-center gap-1.5 px-3.5 py-2 border border-canvas-border rounded-lg text-[0.78125rem] font-semibold text-ink-600 hover:bg-canvas hover:border-brand-300 transition-colors cursor-pointer"
                     >
                       Run again
                     </button>
                   </div>
 
-                  {/* What memory knows — cross-workflow correlation + output
-                      compare, shown beneath the output and its actions as
-                      supporting context. The source-drift conflict is resolved
-                      earlier on the confirm-mapping screen (before approve &
-                      run), so it's suppressed here rather than gating the output. */}
-                  <div className="mb-5">
-                    <WorkflowMemoryPanel showSourceDrift={false} />
-                  </div>
-
-                  {/* Follow-up — bridge from "here are results" to a chat
-                      thread that already carries the run as context. */}
+                  {/* Follow-up — the primary next step off the results, sitting
+                      directly under the run's action buttons. */}
                   {onFollowUp && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
@@ -2837,9 +2942,9 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         <span className="w-6 h-6 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center">
                           <MessageSquare size={13} />
                         </span>
-                        <h3 className="text-[13px] font-bold text-ink-800">Ask a follow-up</h3>
+                        <h3 className="text-[0.8125rem] font-bold text-ink-800">Ask a follow-up</h3>
                       </div>
-                      <p className="text-[12px] text-ink-500 mb-3.5 pl-8">
+                      <p className="text-[0.75rem] text-ink-500 mb-3.5 pl-8">
                         Keep digging into these results with Ira — it opens a chat with this run already in context.
                       </p>
 
@@ -2849,7 +2954,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             key={q}
                             type="button"
                             onClick={() => submitFollowUp(q)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-canvas-border bg-canvas-elevated text-[12px] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
                           >
                             {q}
                             <ArrowRight size={12} className="text-ink-300" />
@@ -2868,7 +2973,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             }
                           }}
                           placeholder="Ask anything about these results…"
-                          className="flex-1 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none"
+                          className="flex-1 bg-transparent text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none"
                         />
                         <button
                           type="button"
@@ -2887,6 +2992,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       </div>
                     </motion.div>
                   )}
+
+                  {/* Ira looked beyond this run — the two AI-insight cards
+                      (a. compare with previous output, b. cross-workflow
+                      correlation), after the follow-up composer. Each card's
+                      "what to do next" seeds that composer. */}
+                  <div className="mt-5">
+                    <WorkflowFollowUpInsights onAction={submitFollowUp} />
+                  </div>
+
                 </motion.section>
               )}
             </AnimatePresence>
@@ -2960,8 +3074,8 @@ function ColumnAlignmentRow({ col }: { col: ColumnAlignment }) {
     <div className="grid grid-cols-[1fr_1fr] gap-4 items-center py-2.5 border-b border-canvas-border/30 last:border-b-0">
       <div className="flex items-center gap-2 min-w-0">
         <div className="w-0.5 h-6 rounded-full bg-brand-400 shrink-0" />
-        <span className="text-[12.5px] font-medium text-ink-800 truncate">{col.source.name}</span>
-        <span className="text-[9.5px] font-bold uppercase tracking-wide rounded bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
+        <span className="text-[0.78125rem] font-medium text-ink-800 truncate">{col.source.name}</span>
+        <span className="text-[0.59375rem] font-bold uppercase tracking-wide rounded bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
           {col.source.dtype}
         </span>
       </div>
@@ -2969,15 +3083,15 @@ function ColumnAlignmentRow({ col }: { col: ColumnAlignment }) {
         <ArrowRight size={12} className="text-ink-300 shrink-0" />
         {col.target ? (
           <div className="flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas px-2.5 py-1 min-w-0 flex-1">
-            <span className="text-[12.5px] font-medium text-brand-700 truncate">{col.target.name}</span>
-            <span className="text-[9.5px] font-bold uppercase tracking-wide rounded bg-brand-50 border border-brand-100 text-brand-600 px-1.5 py-0.5 shrink-0">
+            <span className="text-[0.78125rem] font-medium text-brand-700 truncate">{col.target.name}</span>
+            <span className="text-[0.59375rem] font-bold uppercase tracking-wide rounded bg-brand-50 border border-brand-100 text-brand-600 px-1.5 py-0.5 shrink-0">
               {col.target.dtype}
             </span>
             <ChevronDown size={11} className="text-ink-400 shrink-0 ml-auto" />
           </div>
         ) : (
           <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-risk/40 bg-risk-50/30 px-2.5 py-1 min-w-0 flex-1">
-            <span className="text-[12px] text-risk italic">Unmapped</span>
+            <span className="text-[0.75rem] text-risk italic">Unmapped</span>
           </div>
         )}
       </div>
@@ -3044,10 +3158,10 @@ function ColumnAlignmentView({
               onClick={() => setExpanded(isOpen ? null : input.id)}
               className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-canvas/40 transition-colors cursor-pointer"
             >
-              <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
+              <span className="text-[0.875rem] font-bold text-ink-900">{input.name}</span>
               <div className="flex items-center gap-3">
-                <span className="text-[22px] font-bold text-ink-800 tabular-nums">{mappedCount}/{totalCount}</span>
-                <span className="text-[11px] text-ink-400 text-left leading-tight">column<br />mapped</span>
+                <span className="text-[1.375rem] font-bold text-ink-800 tabular-nums">{mappedCount}/{totalCount}</span>
+                <span className="text-[0.6875rem] text-ink-400 text-left leading-tight">column<br />mapped</span>
                 {isOpen ? <ChevronUp size={16} className="text-ink-400" /> : <ChevronDown size={16} className="text-ink-400" />}
               </div>
             </button>
@@ -3061,24 +3175,24 @@ function ColumnAlignmentView({
                 <div className="px-5 py-4 border-b border-canvas-border/60">
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+                      <span className="text-[0.65625rem] font-bold uppercase tracking-[0.14em] text-ink-400">
                         Mapped Sources
                       </span>
                       {sources.length > 1 && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-bold border border-brand-200">
                           <Layers size={10} />
                           Union of {sources.length}
                         </span>
                       )}
                     </div>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[11px] font-bold border border-compliant/20">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[0.6875rem] font-bold border border-compliant/20">
                       Linked
                       <CheckCircle2 size={11} />
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {sources.length === 0 ? (
-                      <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-1.5 text-[12px] text-ink-400 italic">
+                      <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-1.5 text-[0.75rem] text-ink-400 italic">
                         No source mapped
                       </span>
                     ) : (
@@ -3087,7 +3201,7 @@ function ColumnAlignmentView({
                         <span
                           key={s.name}
                           className={[
-                            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px]',
+                            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[0.78125rem]',
                             s.schemaOk === false
                               ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
                               : 'border-canvas-border bg-canvas text-ink-700',
@@ -3100,14 +3214,14 @@ function ColumnAlignmentView({
                             <FileIcon size={12} className="text-ink-400 shrink-0" />
                           )}
                           <span className="font-medium truncate max-w-[220px]">{s.name}</span>
-                          <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+                          <span className="text-[0.625rem] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
                           {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
                         </span>
                       ))
                     )}
                   </div>
                   {sources.length > 1 && (
-                    <p className="text-[11px] text-ink-500 leading-relaxed mt-2.5">
+                    <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-2.5">
                       Columns below are the shared schema across all {sources.length} sources · ~{fmtRows(unionRows)} combined rows. Rows are concatenated; the mapping is applied once to every source.
                     </p>
                   )}
@@ -3116,12 +3230,12 @@ function ColumnAlignmentView({
                 {/* Column Alignment */}
                 <div className="px-5 pt-4 pb-2">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+                    <span className="text-[0.65625rem] font-bold uppercase tracking-[0.14em] text-ink-400">
                       Column Alignment
                     </span>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
                     >
                       <Wand2 size={11} />
                       Map by description
@@ -3129,8 +3243,8 @@ function ColumnAlignmentView({
                   </div>
 
                   <div className="grid grid-cols-[1fr_1fr] gap-4 pb-2 border-b border-canvas-border/60">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Source Column</span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Target Schema</span>
+                    <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Source Column</span>
+                    <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Target Schema</span>
                   </div>
                 </div>
 
@@ -3144,11 +3258,11 @@ function ColumnAlignmentView({
                     >
                       <div className="flex items-center gap-2">
                         <CheckCircle2 size={14} className="text-compliant" />
-                        <span className="text-[12px] font-semibold text-compliant-700">
+                        <span className="text-[0.75rem] font-semibold text-compliant-700">
                           {goodCols.length} fields auto-mapped
                         </span>
                       </div>
-                      <span className="text-[11.5px] font-semibold text-ink-500 group-hover:text-brand-700 transition-colors">
+                      <span className="text-[0.71875rem] font-semibold text-ink-500 group-hover:text-brand-700 transition-colors">
                         {isAutoExpanded ? 'Collapse ↑' : 'Expand ↓'}
                       </span>
                     </button>
@@ -3168,10 +3282,10 @@ function ColumnAlignmentView({
                   <div className="mx-5 mb-4 rounded-xl border border-amber-300/60 bg-amber-50/60 overflow-hidden">
                     <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-200/60">
                       <AlertTriangle size={13} className="text-amber-600" />
-                      <span className="text-[11.5px] font-semibold text-amber-700">
+                      <span className="text-[0.71875rem] font-semibold text-amber-700">
                         {attentionCols.length} {attentionCols.length === 1 ? 'field needs' : 'fields need'} attention
                       </span>
-                      <span className="text-[11px] text-amber-600/70">
+                      <span className="text-[0.6875rem] text-amber-600/70">
                         — low confidence, type mismatch, or unmapped
                       </span>
                     </div>
@@ -3259,8 +3373,8 @@ function AddSourceDropdown({
     >
       {icon}
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] font-semibold text-ink-800 truncate">{name}</div>
-        <div className="text-[10.5px] text-ink-400">{sub}</div>
+        <div className="text-[0.75rem] font-semibold text-ink-800 truncate">{name}</div>
+        <div className="text-[0.65625rem] text-ink-400">{sub}</div>
       </div>
       <span
         className={[
@@ -3278,7 +3392,7 @@ function AddSourceDropdown({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-100 text-brand-700 text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-100 text-brand-700 text-[0.71875rem] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
       >
         <Plus size={12} />
         Add file or source
@@ -3302,21 +3416,21 @@ function AddSourceDropdown({
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search files & data sources…"
                   autoFocus
-                  className="w-full rounded-lg border border-canvas-border bg-canvas pl-7 pr-3 py-1.5 text-[12px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                  className="w-full rounded-lg border border-canvas-border bg-canvas pl-7 pr-3 py-1.5 text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                 />
               </div>
-              <p className="text-[10.5px] text-ink-400 mt-2 px-0.5 leading-snug">
+              <p className="text-[0.65625rem] text-ink-400 mt-2 px-0.5 leading-snug">
                 Pick one or more — same-schema sources are unioned into this input.
               </p>
             </div>
 
             <div className="max-h-[240px] overflow-y-auto px-1.5 pb-1.5">
               {fileItems.length === 0 && sourceItems.length === 0 ? (
-                <div className="text-[11.5px] text-ink-400 text-center py-4">No matches</div>
+                <div className="text-[0.71875rem] text-ink-400 text-center py-4">No matches</div>
               ) : (
                 <>
                   {fileItems.length > 0 && (
-                    <div className="px-2 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Files</div>
+                    <div className="px-2 pt-1.5 pb-1 text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Files</div>
                   )}
                   {fileItems.map(f => (
                     <Row
@@ -3329,7 +3443,7 @@ function AddSourceDropdown({
                     />
                   ))}
                   {sourceItems.length > 0 && (
-                    <div className="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Data sources</div>
+                    <div className="px-2 pt-2 pb-1 text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Data sources</div>
                   )}
                   {sourceItems.map(s => (
                     <Row
@@ -3349,7 +3463,7 @@ function AddSourceDropdown({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[12px] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
+                className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
               >
                 Done
               </button>
@@ -3389,7 +3503,7 @@ function InputSlotDropdown({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-800 text-[12px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer min-w-[200px]"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-800 text-[0.75rem] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer min-w-[200px]"
       >
         {selected ? (
           <>
@@ -3422,8 +3536,8 @@ function InputSlotDropdown({
                 >
                   <FileIcon size={12} className="text-brand-600 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-semibold text-ink-800 truncate">{i.name}</div>
-                    <div className="text-[10.5px] text-ink-400 truncate">
+                    <div className="text-[0.75rem] font-semibold text-ink-800 truncate">{i.name}</div>
+                    <div className="text-[0.65625rem] text-ink-400 truncate">
                       {i.columns?.length ?? 0} fields expected · {i.required ? 'Required' : 'Optional'}
                     </div>
                   </div>
@@ -3469,14 +3583,14 @@ function PDFFieldExtractionView({
         className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-canvas/40 transition-colors cursor-pointer text-left"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase rounded bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 border border-mitigated-200">
+          <span className="text-[0.875rem] font-bold text-ink-900">{input.name}</span>
+          <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold uppercase rounded bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 border border-mitigated-200">
             <ScanLine size={9} /> PDF · Manual
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-[22px] font-bold text-ink-800 tabular-nums">{extractedCount}/{totalCount}</span>
-          <span className="text-[11px] text-ink-400 text-left leading-tight">fields<br />extracted</span>
+          <span className="text-[1.375rem] font-bold text-ink-800 tabular-nums">{extractedCount}/{totalCount}</span>
+          <span className="text-[0.6875rem] text-ink-400 text-left leading-tight">fields<br />extracted</span>
           {isOpen ? <ChevronUp size={16} className="text-ink-400" /> : <ChevronDown size={16} className="text-ink-400" />}
         </div>
       </button>
@@ -3486,17 +3600,17 @@ function PDFFieldExtractionView({
           {/* Source document */}
           <div className="px-5 py-4 border-b border-canvas-border/60">
             <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+              <span className="text-[0.65625rem] font-bold uppercase tracking-[0.14em] text-ink-400">
                 Source document
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[11px] font-bold border border-mitigated-200">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.6875rem] font-bold border border-mitigated-200">
                 Unstructured
                 <FileText size={11} />
               </span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas px-3 py-1.5">
               <FileText size={12} className="text-mitigated-700" />
-              <span className="text-[12.5px] text-ink-700 font-medium">{pdfFileName}</span>
+              <span className="text-[0.78125rem] text-ink-700 font-medium">{pdfFileName}</span>
               <button type="button" className="text-ink-400 hover:text-ink-600 transition-colors cursor-pointer">
                 <X size={12} />
               </button>
@@ -3506,12 +3620,12 @@ function PDFFieldExtractionView({
           {/* Field Extraction header */}
           <div className="px-5 pt-4 pb-2">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+              <span className="text-[0.65625rem] font-bold uppercase tracking-[0.14em] text-ink-400">
                 Field Extraction
               </span>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
               >
                 <Wand2 size={11} />
                 Re-run extraction
@@ -3519,9 +3633,9 @@ function PDFFieldExtractionView({
             </div>
 
             <div className="grid grid-cols-[1fr_88px_1fr] gap-3 pb-2 border-b border-canvas-border/60">
-              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Extracted value</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Confidence</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Target field</span>
+              <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Extracted value</span>
+              <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Confidence</span>
+              <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-400">Target field</span>
             </div>
           </div>
 
@@ -3535,11 +3649,11 @@ function PDFFieldExtractionView({
               >
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={14} className="text-compliant" />
-                  <span className="text-[12px] font-semibold text-compliant-700">
+                  <span className="text-[0.75rem] font-semibold text-compliant-700">
                     {highConf.length} fields extracted with high confidence
                   </span>
                 </div>
-                <span className="text-[11.5px] font-semibold text-ink-500 group-hover:text-brand-700 transition-colors">
+                <span className="text-[0.71875rem] font-semibold text-ink-500 group-hover:text-brand-700 transition-colors">
                   {autoExpanded ? 'Collapse ↑' : 'Expand ↓'}
                 </span>
               </button>
@@ -3553,14 +3667,14 @@ function PDFFieldExtractionView({
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-0.5 h-6 rounded-full bg-brand-400 shrink-0" />
-                        <span className="text-[12.5px] font-mono text-ink-800 truncate">{f.sampleValue}</span>
+                        <span className="text-[0.78125rem] font-mono text-ink-800 truncate">{f.sampleValue}</span>
                       </div>
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-compliant-50 text-compliant-700 w-fit">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[0.6875rem] font-bold font-mono bg-compliant-50 text-compliant-700 w-fit">
                         {f.confidence}%
                       </span>
                       <div className="flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas px-2.5 py-1 min-w-0">
                         <ArrowRight size={11} className="text-ink-400 shrink-0" />
-                        <span className="text-[12.5px] font-medium text-brand-700 truncate">{f.target}</span>
+                        <span className="text-[0.78125rem] font-medium text-brand-700 truncate">{f.target}</span>
                       </div>
                     </div>
                   ))}
@@ -3574,10 +3688,10 @@ function PDFFieldExtractionView({
             <div className="mx-5 mb-4 rounded-xl border border-amber-300/60 bg-amber-50/60 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-200/60">
                 <AlertTriangle size={13} className="text-amber-600" />
-                <span className="text-[11.5px] font-semibold text-amber-700">
+                <span className="text-[0.71875rem] font-semibold text-amber-700">
                   {needsAttention.length} {needsAttention.length === 1 ? 'field needs' : 'fields need'} manual review
                 </span>
-                <span className="text-[11px] text-amber-600/70">
+                <span className="text-[0.6875rem] text-amber-600/70">
                   — low confidence, ambiguous, or not found
                 </span>
               </div>
@@ -3588,33 +3702,33 @@ function PDFFieldExtractionView({
                     <div key={f.target} className="py-3 border-b border-amber-200/40 last:border-b-0">
                       <div className="flex items-center justify-between gap-3 mb-1.5">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[12.5px] font-semibold text-amber-900">{f.target}</span>
-                          <span className="text-[10.5px] font-bold uppercase rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">
+                          <span className="text-[0.78125rem] font-semibold text-amber-900">{f.target}</span>
+                          <span className="text-[0.65625rem] font-bold uppercase rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">
                             Target
                           </span>
                         </div>
                         {found ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-amber-100 text-amber-800 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] font-bold font-mono bg-amber-100 text-amber-800 shrink-0">
                             {f.confidence}%
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold bg-amber-100 text-amber-800 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.65625rem] font-semibold bg-amber-100 text-amber-800 shrink-0">
                             Not extracted
                           </span>
                         )}
                       </div>
                       <div className="mb-2 pl-0.5">
                         {found ? (
-                          <div className="text-[11.5px] text-ink-600">
+                          <div className="text-[0.71875rem] text-ink-600">
                             Extracted: <span className="font-mono text-ink-800 font-medium">&ldquo;{f.sampleValue}&rdquo;</span>
                           </div>
                         ) : (
-                          <div className="text-[11.5px] text-ink-500 italic">
+                          <div className="text-[0.71875rem] text-ink-500 italic">
                             No matching value found in the document.
                           </div>
                         )}
                         {f.reason && (
-                          <div className="text-[11px] text-amber-700 mt-0.5 flex items-start gap-1">
+                          <div className="text-[0.6875rem] text-amber-700 mt-0.5 flex items-start gap-1">
                             <Info size={10} className="shrink-0 mt-0.5" />
                             <span>{f.reason}</span>
                           </div>
@@ -3625,21 +3739,21 @@ function PDFFieldExtractionView({
                           <>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.71875rem] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
                             >
                               <Check size={11} strokeWidth={3} />
                               Confirm value
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[11.5px] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[0.71875rem] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
                             >
                               <RefreshCw size={11} />
                               Re-extract
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[11.5px] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-700 text-[0.71875rem] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
                             >
                               <Pencil size={11} />
                               Edit
@@ -3649,14 +3763,14 @@ function PDFFieldExtractionView({
                           <>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.71875rem] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
                             >
                               <Pencil size={11} />
                               Add manually
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-500 text-[11.5px] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:bg-canvas text-ink-500 text-[0.71875rem] font-semibold px-2.5 py-1 transition-colors cursor-pointer"
                             >
                               Skip field
                             </button>
@@ -3716,24 +3830,24 @@ function RequiredPdfUploadCard({
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-semibold text-ink-800">
+            <span className="text-[0.8125rem] font-semibold text-ink-800">
               {input.name}
             </span>
-            <span className="text-[11px] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
+            <span className="text-[0.6875rem] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
               {input.type}
             </span>
             {input.required && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-risk">
+              <span className="text-[0.625rem] font-bold uppercase tracking-wider text-risk">
                 Required
               </span>
             )}
           </div>
-          <p className="text-[12px] text-ink-500 leading-relaxed mt-1">
+          <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-1">
             {input.description}
           </p>
         </div>
         {hasFile && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25 shrink-0">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[0.65625rem] font-semibold border border-compliant/25 shrink-0">
             <CheckCircle2 size={10} /> Uploaded
           </span>
         )}
@@ -3760,17 +3874,17 @@ function RequiredPdfUploadCard({
             <UploadCloud size={16} className="text-ink-500" />
           </div>
           <div className="text-center">
-            <div className="text-[12.5px] font-semibold text-ink-800">
+            <div className="text-[0.78125rem] font-semibold text-ink-800">
               Drop a PDF here
             </div>
-            <div className="text-[11px] text-ink-500 mt-0.5">
+            <div className="text-[0.6875rem] text-ink-500 mt-0.5">
               or click to pick from your computer
             </div>
           </div>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
-            className="mt-1 inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+            className="mt-1 inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
           >
             <Upload size={11} />
             Choose PDF
@@ -3782,15 +3896,15 @@ function RequiredPdfUploadCard({
             <FileText size={14} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-ink-800 truncate">
+            <div className="text-[0.78125rem] font-semibold text-ink-800 truncate">
               {file.name}
             </div>
-            <div className="text-[11px] text-ink-400">{humanSize(file.size)}</div>
+            <div className="text-[0.6875rem] text-ink-400">{humanSize(file.size)}</div>
           </div>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="text-[11.5px] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer px-2"
+            className="text-[0.71875rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer px-2"
             title="Replace file"
           >
             Replace

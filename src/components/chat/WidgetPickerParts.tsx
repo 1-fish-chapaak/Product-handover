@@ -113,7 +113,7 @@ export function ChartPreviewRow({ chart, checked, onChange, accent = 'brand' }: 
       aria-checked={checked}
       aria-label={chart.label}
       onClick={onChange}
-      className={`w-full glass-card rounded-xl overflow-hidden transition-all cursor-pointer text-left flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+      className={`w-full glass-card overflow-hidden transition-all cursor-pointer text-left flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
         checked ? a.ring : ''
       }`}
     >

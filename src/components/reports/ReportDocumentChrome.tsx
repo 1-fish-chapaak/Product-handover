@@ -41,7 +41,7 @@ export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boole
         // (text-<tone>-700 from stat.color); the label stays muted ink.
         const toneText = stat.color.match(/text-[\w-]+/)?.[0] ?? 'text-ink-900';
         return (
-          <div key={stat.label} className="glass-card rounded-xl px-5 py-5">
+          <div key={stat.label} className="glass-card px-5 py-5">
             <p className={`text-[2.5rem] font-bold leading-none tabular-nums tracking-[-0.035em] ${toneText}`}>
               {stat.value}
             </p>
@@ -116,7 +116,7 @@ export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, c
   return (
     <div className={className}>
       <div className="flex items-center gap-2.5 mb-4">
-        <span className="w-7 h-7 rounded-[8px] flex items-center justify-center text-white shrink-0" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={14} /></span>
+        <span className="w-7 h-7 rounded-md flex items-center justify-center text-white shrink-0" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={14} /></span>
         <div>
           <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15]">Approvals &amp; Sign-Off</h2>
           <p className="text-[0.8125rem] text-ink-500 leading-snug">Manual authorisation of this report.</p>
@@ -127,7 +127,7 @@ export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, c
           const signed = signoffs?.[s.id];
           const name = signed?.signedBy || s.name;
           return (
-            <div key={s.id} className={`rounded-[10px] border p-5 transition-colors ${signed ? 'border-compliant-200 bg-compliant-50/40' : 'border-canvas-border'}`}>
+            <div key={s.id} className={`rounded-lg border p-5 transition-colors ${signed ? 'border-compliant-200 bg-compliant-50/40' : 'border-canvas-border'}`}>
               <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
                 <PenLine size={12} /> {s.role}
               </div>
@@ -146,7 +146,7 @@ export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, c
               ) : (
                 <div className="border-t border-dashed border-canvas-border pt-2.5">
                   {interactive ? (
-                    <button onClick={() => onSign?.(s)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white cursor-pointer transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={12} /> Sign</button>
+                    <button onClick={() => onSign?.(s)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white cursor-pointer transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={12} /> Sign</button>
                   ) : (
                     <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
                   )}
@@ -240,7 +240,7 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
             {description}
           </div>
           {facts && facts.length > 0 && (
-            <div className="shrink-0 flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+            <div className="shrink-0 flex items-stretch rounded-lg border border-white/20 bg-white/10 overflow-hidden">
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
                   <div className="text-[1.5rem] font-bold text-white tabular-nums leading-none">{f.value}</div>
@@ -363,7 +363,7 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
               initial={{ opacity: 0, scale: 0.96, y: 6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden"
+              className="flex items-stretch rounded-lg border border-white/20 bg-white/10 overflow-hidden"
             >
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>

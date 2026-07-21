@@ -19,6 +19,7 @@ import {
   Loader2, FileStack, FileUp,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -34,6 +35,8 @@ import {
   type Automation,
 } from '../../data/racm';
 import { useEngagementWorkspace, type WorkspaceControl } from './engagementWorkspace';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRacmRecs } from '../../data/layeredInsights';
 
 /** Adapt a user-added control into a RACM row so it renders in the matrix. */
 function customControlToRacmRow(c: WorkspaceControl, process: Engagement['process']): RACMRow {
@@ -146,6 +149,7 @@ function entryStats(rows: RACMRow[]) {
 
 export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const ws = useEngagementWorkspace();
   const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
 
@@ -214,6 +218,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       const rows = generateRacmForProcess(engagement.process);
       setUploadedRows(rows);
       const areas = new Set(rows.map(r => r.subProcess)).size;
+      logEvent({ action: 'Create', description: `Created ${areas} RACM${areas === 1 ? '' : 's'} from uploaded matrix "${file.name}"`, module: 'Governance', entity: 'RACM' });
       addToast({ type: 'success', message: `Imported \`${file.name}\`: ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
     }
     e.target.value = '';
@@ -243,6 +248,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
         const attrs = gen.reduce((s, r) => s + r.attributes.length, 0);
         const entry: RacmEntry = { id, name: `${area} RACM`, subProcess: area, rows: gen, sop, source: 'sop-extracted', updatedAgo: 'just now' };
         setExtraEntries(prev => [entry, ...prev]);
+        logEvent({ action: 'Create', description: `Created RACM "${entry.name}" by extracting from SOP "${filename}"`, module: 'Governance', entity: 'RACM' });
         addToast({ type: 'success', message: `Extracted ${gen.length} controls · ${attrs} attributes from \`${filename}\`` });
         setExtracting(null);
         setSopPreview(entry); // show what was extracted, right on the list
@@ -323,7 +329,7 @@ function RacmLibraryList({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="glass-card rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
+      <div className="glass-card px-5 py-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><FileStack size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
@@ -413,8 +419,9 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
 }): JSX.Element {
   const s = entryStats(entry.rows);
   const badge = SOURCE_BADGE[entry.source];
+  const racmRecs = actionableRacmRecs({ subjectLabel: entry.name, risks: s.risks, controls: s.controls, keyControls: s.keyControls, attributes: s.attributes, hasSop: Boolean(entry.sop) });
   return (
-    <div className="glass-card rounded-xl p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
+    <div className="glass-card p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className="p-2.5 rounded-xl bg-brand-50 shrink-0"><BookOpen size={18} className="text-brand-600" /></div>
 
       {/* Identity + counts */}
@@ -424,6 +431,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
             {entry.name}
           </button>
           <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wider border ${badge.cls}`}>{badge.label}</span>
+          {racmRecs.length > 0 && <AIRecommendsPopover recs={racmRecs} subjectLabel={entry.name} subjectSub={entry.subProcess} className="shrink-0" />}
         </div>
         <div className="text-[0.6875rem] text-text-muted mt-1 tabular-nums">
           {s.risks} risk{s.risks === 1 ? '' : 's'}
@@ -491,6 +499,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
   onOpenFullEditor?: () => void;
 }): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [keyOnly, setKeyOnly] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -511,7 +520,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
       </button>
 
       {/* Toolbar */}
-      <div className="glass-card rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
+      <div className="glass-card px-5 py-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><BookOpen size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
@@ -551,7 +560,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
             </Gated>
           )}
           <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
-          <button onClick={() => addToast({ message: `Downloading ${entry.name} as XLSX…`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
+          <button onClick={() => { addToast({ message: `Downloading ${entry.name} as XLSX…`, type: 'info' }); logEvent({ action: 'Export', description: `Exported RACM "${entry.name}" as XLSX`, module: 'Governance', entity: 'RACM' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
             <Download size={12} /> Download
           </button>
           </Gated>
@@ -591,7 +600,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
             const groupControls = new Set(group.rows.map(r => r.controlId)).size;
             const groupKey = group.rows.filter(r => r.isKey).length;
             return (
-              <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+              <div key={group.subProcess} className="glass-card overflow-hidden">
                 <button onClick={() => toggleGroup(group.subProcess)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2/40 transition-colors cursor-pointer text-left" aria-expanded={!isCollapsed}>
                   <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">
@@ -664,6 +673,7 @@ function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => v
 
 function SopPreviewDrawer({ entry, onClose }: { entry: RacmEntry; onClose: () => void }): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const sop = entry.sop;
   const stats = entryStats(entry.rows);
   return (
@@ -725,7 +735,7 @@ function SopPreviewDrawer({ entry, onClose }: { entry: RacmEntry; onClose: () =>
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-2">
-          <Button variant="outline" size="sm" leftIcon={<Download size={12} />} onClick={() => addToast({ message: `Downloading ${sop?.name ?? 'SOP'}…`, type: 'info' })}>
+          <Button variant="outline" size="sm" leftIcon={<Download size={12} />} onClick={() => { addToast({ message: `Downloading ${sop?.name ?? 'SOP'}…`, type: 'info' }); logEvent({ action: 'Export', description: `Downloaded SOP "${sop?.name ?? 'SOP'}"`, module: 'Process Hub', entity: 'SOP' }); }}>
             Download SOP
           </Button>
           <Button variant="primary" size="sm" onClick={onClose}>Close</Button>
