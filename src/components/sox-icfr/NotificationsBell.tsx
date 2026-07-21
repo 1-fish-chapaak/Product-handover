@@ -33,7 +33,7 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, meOwner, openControl, setTab, setView } = useIcfr();
+  const { eng, role, meOwner, openControl, openRegister, setTab, setView } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // reduced-motion: the panel's scale/translate are JS transforms, which the
@@ -101,7 +101,7 @@ export default function NotificationsBell() {
         id: 'tests-more', kind: 'due',
         title: `${dueTests.length - 5} more control tests due`,
         detail: 'Open the Control Library "Due now" view to run the rest.',
-        onOpen: () => { setOpen(false); setTab('controls'); },
+        onOpen: () => { setOpen(false); openRegister({ view: 'due' }); },
       });
     }
 
@@ -180,17 +180,21 @@ export default function NotificationsBell() {
   }, [eng, role, meOwner, openControl, setTab, setView]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
+  // The badge tells the truth even where the list truncates: the "+N more"
+  // rollup line is one ROW but N pieces of work — count the work, not the row.
+  const hiddenTests = Math.max(0, testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls).length - 5);
+  const pending = items.length - (hiddenTests > 0 ? 1 : 0) + hiddenTests;
 
   return (
     <div ref={rootRef} className="relative">
-      <button onClick={() => setOpen(o => !o)} aria-label={`To-do — ${items.length} pending`}
+      <button onClick={() => setOpen(o => !o)} aria-label={`To-do — ${pending} pending`}
         className={cn('relative h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors cursor-pointer',
           open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300')}>
         <Bell size={16} />
-        {items.length > 0 && (
+        {pending > 0 && (
           <span className={cn('absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white inline-flex items-center justify-center tabular-nums',
             urgent > 0 ? 'bg-risk-600' : 'bg-brand-600')}>
-            {items.length}
+            {pending}
           </span>
         )}
       </button>

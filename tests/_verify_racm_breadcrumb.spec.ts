@@ -32,20 +32,20 @@ test('RACM matrix drops the engagement header for a breadcrumb', async ({ page }
   await expect(row.getByRole('button', { name: 'Open spreadsheet editor in a new tab' })).toBeVisible();
   await expect(page.getByText('Open RACM', { exact: true })).toHaveCount(0);
 
-  // the Upload RACM / SOP action lives on the listing now
-  await expect(page.getByRole('button', { name: /Upload RACM \/ SOP/ })).toBeVisible();
+  // a RACM is per-process, so Upload lives INSIDE the drilled matrix, not here
+  await expect(page.getByRole('button', { name: /Upload RACM \/ SOP/ })).toHaveCount(0);
 
   // drill into one process's matrix
   await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
   await page.waitForTimeout(700);
   await expect(page.getByRole('heading', { name: /Procure to Pay — Risk & Control Matrix/ })).toBeVisible();
 
-  // matrix toolbar: search + Status filter left, Bulk test + editor right; no Upload here
+  // matrix toolbar: search + Status filter left; Upload (process-scoped) + Bulk test + editor right
   await expect(page.getByPlaceholder('Search risks, controls, owners…')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Filter by review status' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Bulk test all/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open spreadsheet editor in a new tab' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Upload RACM \/ SOP/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Upload RACM \/ SOP/ })).toBeVisible();
 
   // the table must fit its container at desktop width — no horizontal overflow
   // (overflowing columns silently clip the row-action buttons at the right edge)
@@ -116,4 +116,20 @@ test('RACM matrix drops the engagement header for a breadcrumb', async ({ page }
   await crumbs.getByRole('button', { name: 'FY26 ICFR — Airline P2P & O2C' }).click();
   await page.waitForTimeout(900);
   await expect(page.getByText('Engagement sign-off')).toBeVisible();
+});
+
+// R4 — the tickmark legend is visible on the drilled matrix, not hover-only
+import { test as t2, expect as e2 } from './_helpers';
+t2('matrix shows the tickmark legend', async ({ page }) => {
+  t2.setTimeout(90_000);
+  await page.goto('/');
+  await page.locator('[title="Engagements"]').first().click();
+  await page.waitForTimeout(800);
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
+  await page.waitForTimeout(1000);
+  await page.locator('.sox-book-ui').getByRole('button', { name: 'RACM', exact: true }).first().click();
+  await page.waitForTimeout(800);
+  await page.getByRole('button', { name: /Open Procure to Pay RACM/ }).click();
+  await page.waitForTimeout(1000);
+  await e2(page.getByText('Design → Operating is the test order')).toBeVisible();
 });

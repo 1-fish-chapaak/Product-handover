@@ -51,8 +51,8 @@ function fmtISO(iso: string): string {
   return `${String(d).padStart(2, '0')} ${MONTHS[(m ?? 1) - 1]} ${y}`;
 }
 
-type RiskStatus = 'Exception' | 'Mitigated' | 'In testing' | 'Untested';
-const STATUS_TONE: Record<RiskStatus, Tone> = { Exception: 'risk', Mitigated: 'compliant', 'In testing': 'evidence', Untested: 'draft' };
+type RiskStatus = 'Exception' | 'Mitigated' | 'In testing' | 'Not tested';
+const STATUS_TONE: Record<RiskStatus, Tone> = { Exception: 'risk', Mitigated: 'compliant', 'In testing': 'evidence', 'Not tested': 'draft' };
 
 interface RiskRow {
   id: string;
@@ -93,7 +93,7 @@ function buildRisks(controls: Control[], period: PeriodBounds | null): RiskRow[]
     let rl = l, ri = i;
     if (!exception && allEffective) { rl = Math.max(1, l - 2); ri = Math.max(1, i - 1); }
     else if (!exception && anyTested) rl = Math.max(1, l - 1);
-    const status: RiskStatus = exception ? 'Exception' : allEffective ? 'Mitigated' : anyTested ? 'In testing' : 'Untested';
+    const status: RiskStatus = exception ? 'Exception' : allEffective ? 'Mitigated' : anyTested ? 'In testing' : 'Not tested';
     return { id, description: first.riskDescription, process: first.process, subProcess: first.subProcess, owner: first.owner, controls: cs, l, i, rl, ri, status, identified };
   }).sort((a, b) => (b.rl * b.ri) - (a.rl * a.ri) || (b.l * b.i) - (a.l * a.i));
 }
@@ -292,7 +292,7 @@ export default function RiskLibrary() {
         <div className="flex-1" />
         <span className="text-[11.5px] text-ink-400">Showing {filtered.length} of {risks.length} risks</span>
         <FilterSelect value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" align="right" />
-        <FilterSelect value={status} options={['All', 'Exception', 'In testing', 'Mitigated', 'Untested']} allLabel="All statuses" onChange={v => setStatus(v as 'All' | RiskStatus)} ariaLabel="Filter by status" align="right" />
+        <FilterSelect value={status} options={['All', 'Exception', 'In testing', 'Mitigated', 'Not tested']} allLabel="All statuses" onChange={v => setStatus(v as 'All' | RiskStatus)} ariaLabel="Filter by status" align="right" />
         {bounds && (
           <DateRangeFilter bounds={bounds} from={from} to={to} active={dateActive} onApply={(f, t) => { setFrom(f); setTo(t); }} />
         )}

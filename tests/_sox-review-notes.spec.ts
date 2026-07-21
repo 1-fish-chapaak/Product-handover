@@ -42,7 +42,7 @@ test('a pending note blocks the countersign until resolved and verified', async 
 
   // auditor: resolves the note with a response (and has no verify pen)
   // (the persona is fixed inside the dossier — step back to the engagement to switch hats)
-  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Auditor', exact: true }).click();
   await page.waitForTimeout(600);
@@ -56,7 +56,7 @@ test('a pending note blocks the countersign until resolved and verified', async 
   await expect(page.getByText('Awaiting verification').first()).toBeVisible();
 
   // reviewer: the resolved note appears in the queue for verification
-  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
@@ -67,10 +67,12 @@ test('a pending note blocks the countersign until resolved and verified', async 
   await page.waitForTimeout(400);
   await expect(page.getByText(/Verified & closed/).first()).toBeVisible();
 
-  // with the note closed, the countersign unlocks and the paper turns final
+  // with the note closed, the countersign unlocks — and commits behind the
+  // same attest confirm the working-paper preview uses
   const counter = page.getByRole('button', { name: /Countersign & sign off/ });
   await expect(counter).toBeEnabled();
   await counter.click();
+  await page.locator('.modal').getByRole('button', { name: 'Countersign', exact: true }).click();
   await page.waitForTimeout(500);
   await expect(page.getByText('Concluded & countersigned — this paper is final.')).toBeVisible();
 });

@@ -14,7 +14,7 @@ import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
 import RunsView from './RunsView';
-import { DeficienciesView, ScopeView } from './extraViews';
+import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 
 const SOX_TABS: TabDef[] = [
@@ -26,7 +26,7 @@ const SOX_TABS: TabDef[] = [
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
@@ -106,11 +106,13 @@ function Inner({ onBack }: { onBack?: () => void }) {
   const isRacmMatrix = view === 'racm-list';
   const isScope = view === 'scope';
   const isDeficiencies = view === 'deficiencies';
+  const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header
-  const isDrillIn = isRacmMatrix || isScope || isDeficiencies;
+  const isDrillIn = isRacmMatrix || isScope || isDeficiencies || isHandoffs;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
+    : view === 'handoffs' ? <HandoffsView />
     : view === 'scope' ? <ScopeView />
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
@@ -143,6 +145,31 @@ function Inner({ onBack }: { onBack?: () => void }) {
             ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
             { label: eng.name, onClick: () => setTab('overview') },
             { label: 'Materiality & scope' },
+          ]} />
+        )}
+        {view === 'dossier' && (() => {
+          /* the dossier's trail names where ← actually lands — back() returns
+             to the context it was opened from, not a pinned page */
+          const VIEW_LABEL: Record<string, string> = {
+            register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
+            scope: 'Materiality & scope', runs: 'Test runs', overview: 'Overview', risks: 'Risk Library', handoffs: 'Handoffs',
+          };
+          const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
+          const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';
+          return (
+            <SoxBreadcrumb onBack={back} items={[
+              ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+              { label: eng.name, onClick: () => setTab('overview') },
+              { label: from, onClick: back },
+              { label: wpRef },
+            ]} />
+          );
+        })()}
+        {isHandoffs && (
+          <SoxBreadcrumb onBack={back} items={[
+            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            { label: eng.name, onClick: () => setTab('overview') },
+            { label: 'Handoffs' },
           ]} />
         )}
         {isDeficiencies && (

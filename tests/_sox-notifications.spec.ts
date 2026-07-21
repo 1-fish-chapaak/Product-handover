@@ -30,7 +30,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   // clicking an ineffective item opens that control's dossier
   await page.getByText(/concluded INEFFECTIVE/).first().click();
   await page.waitForTimeout(700);
-  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(500);
   // Phase 3 — the owner's SOX is a to-do list: the audit-side tabs are gone
   const soxNav = page.locator('.sox-book-ui');
@@ -50,17 +50,21 @@ test('risk owner overview task opens the control', async ({ page }) => {
   await page.waitForTimeout(1000);
   await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
   await page.waitForTimeout(600);
-  // regular testing: every control carries a due date; today's tests lead the inbox
-  // (D1 — the owner's move on a due test is attesting & evidencing, not running it)
-  await expect(page.getByText('Control tests due', { exact: true })).toBeVisible();
-  await page.getByText('Attest & evidence').first().click();
+  // regular testing: every control carries a due date; today's tests lead the
+  // checklist (D1 — the owner's move on a due test is attesting & evidencing,
+  // not running it). The desks rework folded the old cards into one dated list
+  // under "Your control tasks" — the row itself opens the control now.
+  await expect(page.getByRole('heading', { name: 'Your control tasks' })).toBeVisible();
+  await expect(page.getByText(/control tests? due/).first()).toBeVisible();
+  await page.getByText(/attest & evidence/).first().click();
   await page.waitForTimeout(700);
   await expect(page.getByText('Test of Design', { exact: false }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Back to register', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(500);
-  // document-request tasks still deep-link the same way
+  // document-request rows deep-link the same way (the inline "Provide
+  // documents" link acts in place; the row navigates)
   await expect(page.getByText('Due today').first()).toBeVisible();
-  await page.getByText('Open control · TOD / TOE').first().click();
+  await page.getByText(/document request/).first().click();
   await page.waitForTimeout(700);
   await expect(page.getByText('Test of Design', { exact: false }).first()).toBeVisible();
 });

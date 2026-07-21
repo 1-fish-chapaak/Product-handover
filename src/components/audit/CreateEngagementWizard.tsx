@@ -322,6 +322,19 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
   const fmtR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
+  // ─── Close guard ────────────────────────────────────────────────────────
+  // The wizard is dirty once any data field moves off its opening value (edit
+  // mode opens prefilled, so compare — never truthy-check). While dirty, the
+  // backdrop goes inert (a stray click is the #1 accident) and X/Cancel ask.
+  const dataSnap = JSON.stringify([type, name, entity, description, process, periodStart, periodEnd, owner,
+    framework, racmVersion, samplingMethod, sampleSize, materiality,
+    overallMateriality, pmPct, cttPct, keyOnly, scopeLevel, subProcessSel, linkedRacms]);
+  const initialSnapRef = useRef<string | null>(null);
+  if (initialSnapRef.current === null) initialSnapRef.current = dataSnap;
+  const dirty = dataSnap !== initialSnapRef.current;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const attemptClose = () => { if (dirty) setConfirmDiscard(true); else onClose(); };
+
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <>
@@ -329,7 +342,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
-        onClick={onClose}
+        onClick={dirty ? undefined : onClose}
       />
       <motion.aside
         initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
@@ -347,7 +360,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
               </div>
               <p className="text-[0.75rem] text-ink-500">Step {step} of 4 — {STEP_LABELS[step - 1]}</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
+            <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
             {[1, 2, 3, 4].map(n => (
@@ -848,7 +861,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={attemptClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <div className="flex items-center gap-2">
             {step > 1 && (
               <button onClick={prevStep} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
@@ -872,6 +885,24 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
           </div>
         </footer>
       </motion.aside>
+
+      {/* discard guard — typed input never dies on one click */}
+      {confirmDiscard && (
+        <div className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-start justify-center pt-[18vh] px-5" onClick={() => setConfirmDiscard(false)}>
+          <div className="w-full max-w-[420px] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <h2 className="text-[15px] font-semibold text-ink-900">{isEdit ? 'Discard your changes?' : 'Discard this engagement?'}</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">{isEdit ? 'Edits you made here will be lost.' : 'The details you typed will be lost.'}</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmDiscard(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setConfirmDiscard(false); onClose(); }} className="h-9 px-3.5 rounded-lg bg-risk-600 text-white text-[12.5px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Discard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

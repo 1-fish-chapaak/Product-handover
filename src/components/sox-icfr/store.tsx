@@ -30,13 +30,13 @@ import { ROLE_LABEL } from './types';
 export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs';
 // 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs'
 // are root-level views; the rest are drill-ins reached from them.
-type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'dossier' | 'deficiencies' | 'scope';
+type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
 export interface RacmEditorMeta { name: string; process?: string }
 
 const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs' };
 
 /** What a drill-in can return to — everything except the drill-ins themselves. */
-const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'deficiencies', 'scope'];
+const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'deficiencies', 'scope', 'handoffs'];
 
 /** The create-control form's payload — everything else on the Control is derived. */
 export interface NewControlDraft {
@@ -71,6 +71,12 @@ interface IcfrCtx {
   openRacmEditor: (meta: RacmEditorMeta) => void;
   openControl: (id: string) => void;
   back: () => void;
+  // where back() would land — the dossier breadcrumb names it honestly
+  returnView: View | null;
+  // Overview → Control Library with intent: the clicked count's exact view/filter
+  registerPreset: { view?: string; process?: string } | null;
+  openRegister: (preset: { view?: string; process?: string }) => void;
+  clearRegisterPreset: () => void;
   // design track
   setDocStatus: (controlId: string, docId: string, status: DocStatus) => void;
   setDesignPoint: (controlId: string, pointId: string, result: TestResult) => void;
@@ -116,8 +122,10 @@ interface IcfrCtx {
   clearRacmReview: (controlId: string) => void;
   bulkTestControls: (controlIds: string[]) => void;
   // RACM / SOP source documents uploaded on the RACM page
-  racmDocs: EvidenceFile[];
-  addRacmDoc: (fileName: string) => void;
+  // an uploaded RACM/SOP belongs to ONE process's matrix (a RACM is per-process);
+  // docs without a process are legacy engagement-wide pins and show everywhere
+  racmDocs: (EvidenceFile & { process?: string })[];
+  addRacmDoc: (fileName: string, process?: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -177,7 +185,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [returnView, setReturnView] = useState<View | null>(null);
   // Which business process's RACM the matrix view shows — one RACM per process.
   const [racmProcess, setRacmProcess] = useState<string | null>(null);
-  const [racmDocs, setRacmDocs] = useState<EvidenceFile[]>([]);
+  const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string })[]>([]);
   // Owner mode is a person-lane, not a role-lane: "mine" = this named owner's
   // controls, tasks and exceptions. The picker in the top bar switches personas.
   const [meOwner, setMeOwner] = useState('M. Nair · Accounts Payable');
@@ -237,13 +245,27 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setReturnView(RETURNABLE.includes(view) ? view : null);
     setSelectedControlId(id); setView('dossier');
   }, [view]);
-  // Drill-ins return to where they were opened from (e.g. the RACM matrix),
-  // falling back to the active tab's root so the tab bar stays in context.
-  const back = useCallback(() => {
-    setView(returnView ?? TAB_ROOT[tab]);
+  // A counted click on the Overview lands on the register showing exactly the
+  // counted set — the register consumes the preset once, then owns its filters.
+  const [registerPreset, setRegisterPreset] = useState<{ view?: string; process?: string } | null>(null);
+  const openRegister = useCallback((preset: { view?: string; process?: string }) => {
+    setRegisterPreset(preset);
+    setTabState('controls');
+    setView('register');
     setSelectedControlId(null);
     setReturnView(null);
-  }, [tab, returnView]);
+  }, []);
+  const clearRegisterPreset = useCallback(() => setRegisterPreset(null), []);
+  // Drill-ins return to where they were opened from (e.g. the RACM matrix),
+  // falling back to the active tab's root so the tab bar stays in context.
+  // A stale returnView can point at the page we're already on (Exceptions →
+  // dossier → its "Deficiencies" link lands back here without consuming it) —
+  // going "back" to the same view would be a dead click, so fall through.
+  const back = useCallback(() => {
+    setView(returnView && returnView !== view ? returnView : TAB_ROOT[tab]);
+    setSelectedControlId(null);
+    setReturnView(null);
+  }, [tab, returnView, view]);
 
   // ── design track ──────────────────────────────────────────────────────────────
   // D1 role gates: testing is the auditor's pen alone. The owner contributes
@@ -672,10 +694,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role, raiseDeficiencyIfIneffective]);
 
-  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName) => {
+  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName, process) => {
     const lower = fileName.toLowerCase();
     const kind: EvidenceFile['kind'] = lower.endsWith('.csv') ? 'CSV' : lower.endsWith('.xlsx') || lower.endsWith('.xls') ? 'XLSX' : lower.endsWith('.png') || lower.endsWith('.jpg') ? 'IMG' : 'PDF';
-    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' }, ...prev]);
+    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now', process }, ...prev]);
   }, [me]);
 
   // ── discussions ───────────────────────────────────────────────────────────────
@@ -803,6 +825,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           const remStatus = status === 'Remediation' ? 'In progress' as const : status === 'Retest' ? 'Done' as const : d.remediation.status;
           return { ...d, status, remediation: { ...d.remediation, status: remStatus } };
         }),
+        // submitting the fix also clears the owner's remediation reminder — one
+        // declaration, both surfaces agree (portal checklist ↔ exceptions page)
+        tasks: status === 'Retest'
+          ? prev.tasks.map(t => t.type === 'remediation' && t.controlId === target.controlId && t.status === 'open' ? { ...t, status: 'cleared' as const } : t)
+          : prev.tasks,
         executions: [event, ...prev.executions],
       };
     });
@@ -1081,7 +1108,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
-    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back,
+    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back, returnView,
+    registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
@@ -1093,7 +1121,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

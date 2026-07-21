@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, History, Lightbulb, Lock, Paperclip, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, X, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
+import { ArrowRight, ChevronRight, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
+import { useToast } from '../shared/Toast';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
 import { SeverityPill } from './parts';
 import { FormSelect } from '../shared/FilterSelect';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity, type SignificantAccount } from './types';
+import { MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -424,9 +425,10 @@ function formatDueLabel(date: string | null): string {
 // The remediation plan — the owner's commitment: the action on the root cause,
 // who does it, by when, plus the evidence behind "done". Editable only in the
 // owner's hat while the exception is still theirs; everyone else reads it.
-function RemediationPlan({ d, isOwner, onPatch, onAttach }: { d: Deficiency; isOwner: boolean; onPatch: (patch: Partial<Deficiency['remediation']>) => void; onAttach: (fileName: string) => void }) {
+function RemediationPlan({ d, isOwner, locked = false, onPatch, onAttach }: { d: Deficiency; isOwner: boolean; locked?: boolean; onPatch: (patch: Partial<Deficiency['remediation']>) => void; onAttach: (fileName: string) => void }) {
   const r = d.remediation;
-  const editable = isOwner && (d.status === 'Identified' || d.status === 'Remediation');
+  // a sealed engagement retires the owner's pen along with everyone else's
+  const editable = isOwner && !locked && (d.status === 'Identified' || d.status === 'Remediation');
   const overdue = dueIsPast(r.date) && r.status !== 'Done';
   const files = r.evidence ?? [];
   return (
@@ -498,20 +500,85 @@ function SeverityConclusion({ d, assess, M, showMateriality }: { d: Deficiency; 
   );
 }
 
+// ─── Handoffs — open requests between audit and the first line ───────────────────
+// Same type labels as the Overview card; same row anatomy as the owner's checklist.
+const HANDOFF_GROUPS: { type: TaskType; label: string; Icon: typeof Upload; tone: string }[] = [
+  { type: 'pbc', label: 'Document requests', Icon: Upload, tone: 'text-evidence-700' },
+  { type: 'query', label: 'Open questions', Icon: MessageSquare, tone: 'text-brand-700' },
+  { type: 'remediation', label: 'Remediations', Icon: FileWarning, tone: 'text-high-700' },
+];
+
+export function HandoffsView() {
+  const { eng, openControl } = useIcfr();
+  const open = eng.tasks.filter(t => t.status === 'open');
+  const cleared = eng.tasks.length - open.length;
+  const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
+  return (
+    <div className="space-y-4">
+      {/* getting back up is the breadcrumb's job (rendered by the shell):
+          Engagements / engagement / Handoffs */}
+      <div>
+        <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Handoffs</h1>
+        <p className="text-[13px] text-ink-500 mt-0.5">Open requests between audit and the first line — documents, questions and remediations. A row opens its control.</p>
+      </div>
+
+      {open.length === 0 ? (
+        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">
+          <div className="w-12 h-12 rounded-full bg-compliant-50 flex items-center justify-center"><CheckCircle2 size={22} className="text-compliant-700" /></div>
+          <p className="text-[15px] font-semibold text-ink-800">No open handoffs</p>
+          <p className="text-[13px] text-ink-500">Nothing is waiting on either side right now.</p>
+        </div>
+      ) : HANDOFF_GROUPS.map(g => {
+        const rows = open.filter(t => t.type === g.type);
+        if (rows.length === 0) return null;
+        return (
+          <section key={g.type} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <g.Icon size={15} className={g.tone} />
+              <h2 className="text-[13px] font-bold text-ink-800">{g.label}</h2>
+              <span className="ml-auto text-[11px] font-semibold text-ink-400">{rows.length} open</span>
+            </div>
+            <div className="space-y-0.5">
+              {rows.map(t => (
+                <button key={t.id} onClick={() => openControl(t.controlId)} className={rowCls}>
+                  <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : 'text-ink-400'} /></span>
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                    <b className="font-semibold text-ink-900">{t.title}</b> <span className="text-ink-400">· {t.controlId} · with {t.assignee}</span>
+                  </span>
+                  <span className={cn('shrink-0 text-[11.5px] font-semibold', t.overdue ? 'text-risk-700' : 'text-ink-400')}>{t.dueLabel}</span>
+                  <ChevronRight size={14} className="shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {cleared > 0 && <p className="text-[11.5px] text-ink-400">{cleared} already submitted or cleared — each control's activity trail keeps the history.</p>}
+    </div>
+  );
+}
+
 // ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
 const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
 const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, role, me, meOwner, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence } = useIcfr();
+  const { eng, role, me, meOwner, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence } = useIcfr();
+  const { addToast } = useToast();
   const M = eng.materiality; const rules = eng.rules;
   // closing an exception is the terminal four-eyes act — it commits behind an attest confirm
   const [closingId, setClosingId] = useState<string | null>(null);
+  // …and a mistaken close comes back only with a recorded reason — same weight, same modal
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
   // three lines, three lanes: the owner remediates, the auditor evaluates &
   // retests, the reviewer closes — each hat only sees its own actions.
   const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
+  // a countersigned engagement is a sealed record — the store already drops
+  // every write, so the page must say so and put its pens away
+  const locked = isEngagementLocked(eng);
   // person-lane: the owner sees only exceptions riding their own controls
   const defs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
   // aggregation groups on offer: every group already in use plus each process name
@@ -526,9 +593,16 @@ export function DeficienciesView() {
           Engagements / engagement / Exceptions */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? 'My exceptions' : 'Exceptions'}</h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? 'My exceptions' : 'Exceptions'}</h1>
+            {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 bg-paper-100 border border-canvas-border rounded-full px-2 h-[20px]">
+              <Lock size={11} className="text-ink-400" /> Engagement concluded · read-only
+            </span>}
+          </div>
           <p className="text-[13px] text-ink-500 mt-0.5">
-            {isOwner
+            {locked
+              ? 'The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.'
+              : isOwner
               ? 'Exceptions on your controls — commit the plan, execute the fix, and submit for retest. The auditor evaluates severity; the reviewer closes.'
               : <>Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</>}
           </p>
@@ -609,8 +683,9 @@ export function DeficienciesView() {
 
                 {/* severity + remediation — the owner's card leads with THEIR work (visual reverse) */}
                 <div className={cn('mt-3 flex flex-col gap-3', isOwner && 'flex-col-reverse')}>
-                {/* severity — the auditor evaluates; owner and reviewer read the grade */}
-                {isAuditor ? (
+                {/* severity — the auditor evaluates; owner and reviewer read the
+                    grade. A sealed engagement retires the auditor's pens too. */}
+                {isAuditor && !locked ? (
                   <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
                     <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
                     <div className="flex items-center gap-2 flex-wrap text-[12px]">
@@ -672,17 +747,18 @@ export function DeficienciesView() {
                 )}
 
                 {/* remediation — the owner's plan; editable in their hat until submitted */}
-                <RemediationPlan d={d} isOwner={isOwner} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
+                <RemediationPlan d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
                 </div>
 
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest */}
-                  {d.status === 'Identified' && (
+                  {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest.
+                      A sealed engagement shows the standing stage, never a pen. */}
+                  {!locked && d.status === 'Identified' && (
                     role !== 'reviewer'
                       ? <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>
                       : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> Awaiting remediation — {d.remediation.owner}</span>
                   )}
-                  {d.status === 'Remediation' && (
+                  {!locked && d.status === 'Remediation' && (
                     isOwner
                       ? (() => {
                           const hasEvidence = (d.remediation.evidence?.length ?? 0) > 0;
@@ -695,14 +771,14 @@ export function DeficienciesView() {
                       : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
                   )}
                   {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
-                  {d.status === 'Retest' && (
+                  {!locked && d.status === 'Retest' && (
                     isAuditor ? <>
                       <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
                       <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
                     </> : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><CheckCircle2 size={14} className="text-ink-400" /> With the auditor for retest{isOwner ? ' — you never test your own fix' : ''}</span>
                   )}
                   {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
-                  {d.status === 'Awaiting reviewer' && (
+                  {!locked && d.status === 'Awaiting reviewer' && (
                     role !== 'reviewer' ? (
                       <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
                     ) : d.retest && d.retest.by === me ? (
@@ -712,6 +788,11 @@ export function DeficienciesView() {
                     )
                   )}
                   {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
+                  {/* the way back in: audit-side only, never one-click — the reason is the record */}
+                  {!locked && !isOwner && d.status === 'Closed' && (
+                    <button onClick={() => { setReopeningId(d.id); setReopenReason(''); }}
+                      className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
+                  )}
                 </div>
               </div>
             );
@@ -730,10 +811,36 @@ export function DeficienciesView() {
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{closingId}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review and can't be undone.</p>
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{closingId}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review — it comes back only through a reopen with a recorded reason.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button onClick={() => setClosingId(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button onClick={() => { signOffException(closingId); setClosingId(null); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* reopen — the mirror of the close: same weight, and the reason IS the record */}
+      {reopeningId && (
+        <div className="modal-backdrop" onClick={() => setReopeningId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><RotateCcw size={15} className="text-high-700" /> Reopen this exception?</h2>
+                <button onClick={() => setReopeningId(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{reopeningId}</span> returns to Remediation — the reviewer sign-off and retest clear, and your reason goes on the trail with your name.</p>
+              <textarea autoFocus value={reopenReason} onChange={e => setReopenReason(e.target.value)} rows={2}
+                placeholder="Why it comes back — e.g. the fix regressed, or new occurrences surfaced"
+                className="mt-3 w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setReopeningId(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button disabled={!reopenReason.trim()}
+                  onClick={() => { reopenException(reopeningId, reopenReason.trim()); setReopeningId(null); addToast({ type: 'warning', title: 'Reopened', message: `${reopeningId} is back in remediation — the trail records why.` }); }}
+                  className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12.5px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
               </div>
             </div>
           </div>

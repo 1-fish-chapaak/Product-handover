@@ -52,7 +52,7 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, meOwner, setView, setTab, signOffEngagement } = useIcfr();
+  const { eng, role, meOwner, setView, setTab, openRegister, signOffEngagement } = useIcfr();
   const { addToast } = useToast();
   // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
@@ -118,13 +118,14 @@ export default function Overview() {
     }).sort((a, b) => b.total - a.total);
   }, [eng.controls]);
 
+  // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
-    { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
-    { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
-    { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
-    { k: 'Ineffective', v: stats.ineffective, t: 'text-risk-700' },
-    { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
-    { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
+    { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700', view: 'design-done' },
+    { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700', view: 'operating-done' },
+    { k: 'Effective', v: stats.effective, t: 'text-compliant-700', view: 'effective' },
+    { k: 'Ineffective', v: stats.ineffective, t: 'text-risk-700', view: 'exceptions' },
+    { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700', view: 'review' },
+    { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700', view: 'owner' },
   ];
 
   return (
@@ -168,7 +169,7 @@ export default function Overview() {
       {/* progress rail */}
       {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
-          <button key={s.k} onClick={() => setTab('controls')} title="Open the Control Library" className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
+          <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
             <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
             <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </button>
@@ -214,7 +215,7 @@ export default function Overview() {
               );
             })}
           </div>
-          <button onClick={() => setTab('controls')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
+          <button onClick={() => setView('handoffs')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
             Manage handoffs <ArrowRight size={13} />
           </button>
         </div>
@@ -254,6 +255,10 @@ export default function Overview() {
         const openOther = sev.open - sev.mwOpen;
         const unconcluded = stats.total - concludedCount;
         const papersAwaiting = stats.total - stats.reviewed - unconcluded;
+        // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
+        // preparer's own signature — the row says the split instead of hiding it
+        const papersWithReviewer = stats.awaitingReview;
+        const papersWithPreparer = papersAwaiting - stats.awaitingReview;
         const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total;
         // One row per outstanding item — each keeps the same filtered destination it linked to before.
         // The exceptions count lives HERE and only here — the sign-off block below never restates it.
@@ -262,10 +267,12 @@ export default function Overview() {
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
           { key: 'other', show: openOther > 0, onClick: () => setView('deficiencies'), icon: <Circle size={11} className="text-high-600" />,
             label: <><b className="font-semibold text-ink-900">{openOther}</b> exception{openOther === 1 ? '' : 's'} still working through remediation → retest → close</> },
-          { key: 'unconcluded', show: unconcluded > 0, onClick: () => setTab('controls'), icon: <Circle size={11} className="text-ink-400" />,
+          { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
             label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
-          { key: 'papers', show: papersAwaiting > 0, onClick: () => setTab('controls'), icon: <Circle size={11} className="text-evidence-600" />,
-            label: <><b className="font-semibold text-ink-900">{papersAwaiting}</b> paper{papersAwaiting === 1 ? '' : 's'} awaiting sign-off</> },
+          { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
+            label: <><b className="font-semibold text-ink-900">{papersWithReviewer}</b> paper{papersWithReviewer === 1 ? '' : 's'} awaiting countersign — with the reviewer</> },
+          { key: 'papers-prep', show: papersWithPreparer > 0, onClick: () => openRegister({ view: 'papers' }), icon: <Circle size={11} className="text-evidence-600" />,
+            label: <><b className="font-semibold text-ink-900">{papersWithPreparer}</b> paper{papersWithPreparer === 1 ? '' : 's'} awaiting the preparer's signature</> },
         ].filter(r => r.show);
         const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
         return (
@@ -368,7 +375,7 @@ export default function Overview() {
             const notStarted = p.total - p.effective - p.ineffective - p.inProgress;
             const seg = (n: number, color: string) => n > 0 ? <span style={{ width: `${(n / p.total) * 100}%`, background: color }} className="h-full" /> : null;
             return (
-              <button key={p.name} onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
+              <button key={p.name} onClick={() => openRegister({ process: p.name })} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
                 <div className="flex items-center gap-2 mb-2.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: spineColor(p.name) }} />
                   <span className="text-[13.5px] font-semibold text-ink-900 truncate">{p.name}</span>
@@ -384,8 +391,8 @@ export default function Overview() {
                   <span><b className="text-compliant-700">{p.effective}</b> effective</span>
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
                   {p.inProgress > 0 && <span><b className="text-brand-700">{p.inProgress}</b> in progress</span>}
-                  {notStarted > 0 && <span><b className="text-ink-600">{notStarted}</b> not started</span>}
-                  <span className="ml-auto tabular-nums">D {p.designDone}/{p.total} · O {p.operatingDone}/{p.total}</span>
+                  {notStarted > 0 && <span><b className="text-ink-600">{notStarted}</b> not tested</span>}
+                  <span className="ml-auto tabular-nums">Design {p.designDone}/{p.total} · Operating {p.operatingDone}/{p.total}</span>
                 </div>
               </button>
             );

@@ -59,6 +59,37 @@ function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; ti
   );
 }
 
+// A trash press always asks once before it commits — the deleted row takes its
+// recorded evidence with it, so the confirm says what goes.
+function TrashConfirmButton({ heading, body, hint, onDelete, iconSize, btnCls }: { heading: string; body: string; hint: string; onDelete: () => void; iconSize: number; btnCls: string }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <>
+      <button onClick={() => setAsking(true)} title={hint} className={btnCls}><Trash2 size={iconSize} /></button>
+      {asking && createPortal(
+        <div className="modal-backdrop" onClick={() => setAsking(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><Trash2 size={15} className="text-risk-600" /> {heading}</h2>
+                <button onClick={() => setAsking(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">{body}</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setAsking(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { setAsking(false); onDelete(); }} className="h-9 px-3.5 rounded-lg bg-risk-600 text-white text-[12.5px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><Trash2 size={13} /> Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -279,7 +310,9 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
             {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
             <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button>
             <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Replace size={12} /></button>
-            <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+            <TrashConfirmButton heading="Delete this consideration?" body="Its validation result and evidence go with it." hint="Remove" iconSize={12}
+              onDelete={() => removeDesignPoint(control.id, point.id)}
+              btnCls="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer" />
           </div>
         )}
         {validating && <span className="text-[11px] font-semibold text-evidence-600 shrink-0">Validating…</span>}
@@ -381,7 +414,9 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
             <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[12px] font-semibold cursor-pointer transition-colors', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Replace size={13} /> Override</button>
-            <button onClick={() => removeAttribute(control.id, step.id)} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
+            <TrashConfirmButton heading={`Delete attribute ${step.code}?`} body="Its recorded runs, attestations and evidence go with it." hint="Remove attribute" iconSize={13}
+              onDelete={() => removeAttribute(control.id, step.id)}
+              btnCls="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer" />
           </div>
         )}
       </div>
@@ -528,7 +563,9 @@ function DesignSection({ control, canEdit, canContribute }: { control: Control; 
                   <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status}</Pill>
                   {canContribute && <div className="flex items-center gap-1">
                     {doc.status !== 'Received' && <button onClick={() => setDocStatus(control.id, doc.id, 'Received')} className="h-7 px-2.5 text-[11.5px] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}
-                    {canEdit && <button onClick={() => removeDesignDoc(control.id, doc.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>}
+                    {canEdit && <TrashConfirmButton heading="Delete this document?" body="Its received status and any attached file go with it." hint="Remove" iconSize={12}
+                      onDelete={() => removeDesignDoc(control.id, doc.id)}
+                      btnCls="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer" />}
                   </div>}
                 </div>
               ))}
@@ -1111,9 +1148,16 @@ function ReviewerGate({ control, notesPending, onCountersign, onReturn }: { cont
   const { addToast } = useToast();
   const [returning, setReturning] = useState(false);
   const [reason, setReason] = useState('');
+  // the countersign is irreversible — same attest confirm as the paper preview
+  const [confirming, setConfirming] = useState(false);
   const signedBy = control.wpSignoff?.preparer;
   // self-review guard — the paper's preparer never countersigns their own work
   const selfReview = signedBy?.by === me;
+  const commitCountersign = () => {
+    setConfirming(false);
+    onCountersign();
+    addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` });
+  };
   return (
     <div className="mb-5 rounded-xl border border-evidence-200 bg-evidence-50/40 px-4 py-3">
       <div className="flex items-center gap-2.5 flex-wrap">
@@ -1128,7 +1172,7 @@ function ReviewerGate({ control, notesPending, onCountersign, onReturn }: { cont
         </span>
         <span className="ml-auto flex items-center gap-2">
           {!selfReview && <button disabled={notesPending > 0} title={notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close first` : undefined}
-            onClick={() => { onCountersign(); addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` }); }}
+            onClick={() => setConfirming(true)}
             className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>}
           <button onClick={() => setReturning(o => !o)} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><CornerDownRight size={13} /> Return to auditor</button>
         </span>
@@ -1141,6 +1185,26 @@ function ReviewerGate({ control, notesPending, onCountersign, onReturn }: { cont
             className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Return</button>
           <button onClick={() => { setReturning(false); setReason(''); }} className="h-9 px-3 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Cancel</button>
         </div>
+      )}
+      {confirming && createPortal(
+        <div className="modal-backdrop" onClick={() => setConfirming(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> Countersign this paper?</h2>
+                <button onClick={() => setConfirming(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — countersign? This closes the paper.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirming(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={commitCountersign} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign</button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -1164,7 +1228,7 @@ export default function ControlDossier() {
   // preview-before-download for the working paper (sign-off travels with it)
   const [wpPreview, setWpPreview] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
-  if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
+  if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Go back</button></div>;
   // Three pens on one paper: the auditor tests (canEdit), the owner contributes
   // evidence — documents and attestations (canContribute) — and the reviewer only
   // reads until the control concludes, then countersigns or returns it. A concluded
@@ -1180,7 +1244,7 @@ export default function ControlDossier() {
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Back to register</button>
+      {/* orientation is the shell breadcrumb's job now — Engagements / engagement / context / W-P ref */}
 
       {/* leadsheet header */}
       <motion.div className="leadsheet mb-5" variants={{ hidden: { opacity: 0, y: 14, scale: 0.99 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>

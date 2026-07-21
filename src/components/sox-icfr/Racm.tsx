@@ -35,7 +35,7 @@ type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
 function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
   const concl = controls.map(controlConclusion);
   if (concl.includes('Ineffective')) return { label: 'Exceptions', tone: 'risk' };
-  if (concl.every(x => x === 'Not started')) return { label: 'Draft', tone: 'draft' };
+  if (concl.every(x => x === 'Not started')) return { label: 'Not tested', tone: 'draft' };
   if (concl.every(x => x === 'Effective')) return { label: 'Concluded', tone: 'compliant' };
   return { label: 'In testing', tone: 'evidence' };
 }
@@ -49,23 +49,7 @@ function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<
  * the spreadsheet editor stays one click away per RACM.
  */
 export function RacmLanding() {
-  const { eng, openRacmMatrix, addRacmDoc } = useIcfr();
-  const { addToast } = useToast();
-  const [importing, setImporting] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // Upload a RACM / SOP source document — parsed (simulated) and pinned to the matrix.
-  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    setImporting(f.name);
-    window.setTimeout(() => {
-      addRacmDoc(f.name);
-      setImporting(null);
-      addToast({ type: 'success', title: 'Imported', message: `${f.name} attached to the engagement RACM — rows and test attributes read from the document.` });
-    }, 1600);
-  };
+  const { eng, openRacmMatrix } = useIcfr();
 
   const processes = useMemo(() => {
     const map = new Map<string, Control[]>();
@@ -75,14 +59,8 @@ export function RacmLanding() {
 
   return (
     <>
-    <div className="flex items-center justify-end mb-3">
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
-      <button onClick={() => fileRef.current?.click()} disabled={!!importing}
-        title="Upload a RACM workbook or SOP — rows and test attributes are read from the document"
-        className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
-        {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
-      </button>
-    </div>
+    {/* uploads live inside each process's matrix — a RACM is per-process, so the
+        drilled page (where the process is fixed) owns the "Upload RACM / SOP" */}
     <div className="reg-wrap">
       <table className="w-full border-collapse">
         <thead className="reg-head">
@@ -172,7 +150,8 @@ function ReviewCell({ c }: { c: Control }) {
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
-  const { eng, role, racmProcess, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs } = useIcfr();
+  const { eng, role, racmProcess, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
+  const { addToast } = useToast();
   const [q, setQ] = useState('');
   const [review, setReview] = useState<ReviewFilter>('All');
   // column filters — empty array = column unfiltered
@@ -183,9 +162,27 @@ export default function Racm() {
   const [remarkFor, setRemarkFor] = useState<Control | null>(null);
   const [remarkText, setRemarkText] = useState('');
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
+  // a bulk approve whose selection carries open remarks waits behind a confirm
+  const [bulkApproveIds, setBulkApproveIds] = useState<string[] | null>(null);
+  // Upload a RACM / SOP for THIS process — the drilled page is where the
+  // process is fixed, so the doc pins to this matrix and the toast names it.
+  const [importing, setImporting] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const isAuditor = role === 'auditor';
   const proc = racmProcess ?? eng.controls[0]?.process ?? '';
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setImporting(f.name);
+    window.setTimeout(() => {
+      addRacmDoc(f.name, proc);
+      setImporting(null);
+      addToast({ type: 'success', title: 'Imported', message: `${f.name} attached to ${proc} — RACM. Rows and test attributes read from the document.` });
+    }, 1600);
+  };
+  const myDocs = racmDocs.filter(d => !d.process || d.process === proc);
   const controls = useMemo(() => eng.controls.filter(c => c.process === proc), [eng.controls, proc]);
 
   const counts = useMemo(() => ({
@@ -251,6 +248,12 @@ export default function Racm() {
           ]}
           onChange={v => setReview(v as ReviewFilter)} ariaLabel="Filter by review status" />
         <div className="flex-1" />
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
+        <button onClick={() => fileRef.current?.click()} disabled={!!importing}
+          title={`Upload a RACM workbook or SOP for ${proc} — rows and test attributes are read from the document`}
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
+          {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
+        </button>
         {isAuditor && <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
           title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
           className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
@@ -264,10 +267,10 @@ export default function Racm() {
       </div>
 
       {/* source documents pinned to the matrix */}
-      {racmDocs.length > 0 && (
+      {myDocs.length > 0 && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
-          {racmDocs.map(d => (
+          {myDocs.map(d => (
             <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[11.5px] font-medium text-ink-700">
               <Paperclip size={11} className="text-ink-400" /> {d.name}
               <span className="text-ink-400">· {d.uploadedAt}</span>
@@ -277,7 +280,17 @@ export default function Racm() {
       )}
 
       {/* the matrix — flat rows in W/P order (already scoped to one process).
-          No legend: the ✓ / ✗ / – marks explain themselves on hover. */}
+          The tickmark legend is VISIBLE — hover-titles alone fail touch and
+          keyboard users, and Design→Operating is the one rule worth teaching. */}
+      <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-ink-400">
+        <span className="text-compliant-700 font-semibold">✓</span> effective
+        <span className="text-ink-300" aria-hidden>·</span>
+        <span className="text-risk-700 font-semibold">✗</span> ineffective
+        <span className="text-ink-300" aria-hidden>·</span>
+        <span className="font-semibold">–</span> not tested
+        <span className="text-ink-300" aria-hidden>·</span>
+        <span>Design → Operating is the test order</span>
+      </div>
       <div className="reg-wrap">
         <table className="w-full border-collapse">
           <thead className="reg-head">
@@ -366,13 +379,44 @@ export default function Racm() {
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           {isAuditor && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
-          {isAuditor && <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
+          {isAuditor && <button onClick={() => {
+            const ids = Array.from(sel);
+            // approving over an open remark erases it — that never happens silently
+            const remarked = ids.filter(id => controls.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
+            if (remarked > 0) { setBulkApproveIds(ids); return; }
+            approveRacmRows(ids); setSel(new Set());
+          }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
 
       {/* bulk test — compile files → attach unique datasets → execute */}
       {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
+
+      {/* bulk approve over open remarks — say what gets erased before it is */}
+      {bulkApproveIds && (() => {
+        const remarked = bulkApproveIds.filter(id => controls.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
+        return (
+          <div className="modal-backdrop" onClick={() => setBulkApproveIds(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-[15px] font-semibold text-ink-900">Approve {bulkApproveIds.length} row{bulkApproveIds.length === 1 ? '' : 's'}?</h2>
+                  <button onClick={() => setBulkApproveIds(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-[12.5px] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button onClick={() => setBulkApproveIds(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => { approveRacmRows(bulkApproveIds); setSel(new Set()); setBulkApproveIds(null); }}
+                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* remark modal */}
       {remarkFor && (

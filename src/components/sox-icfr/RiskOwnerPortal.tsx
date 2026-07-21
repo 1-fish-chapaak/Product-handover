@@ -7,12 +7,12 @@ import type { HandoffTask, TaskType } from './types';
 
 const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: string }> = {
   pbc: { label: 'document request', Icon: Upload, action: 'Provide documents' },
-  remediation: { label: 'remediation', Icon: FileWarning, action: 'Mark done' },
+  remediation: { label: 'remediation', Icon: FileWarning, action: 'Submit fix' },
   query: { label: 'question', Icon: MessageSquare, action: 'Respond' },
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, meOwner, submitTask, openControl, setTab } = useIcfr();
+  const { eng, meOwner, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
   const { addToast } = useToast();
   // person-lane: only this persona's tasks and controls — never the whole engagement
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
@@ -22,8 +22,23 @@ export default function RiskOwnerPortal() {
   const submitted = mine.filter(t => t.status !== 'open');
 
   const act = (t: HandoffTask) => {
+    // a remediation "done" goes through the same gate as the exceptions page:
+    // proof first, then the submit — never a reminder cleared on its own
+    if (t.type === 'remediation') {
+      const def = eng.deficiencies.find(d => d.controlId === t.controlId && (d.status === 'Identified' || d.status === 'Remediation'));
+      if (def) {
+        if ((def.remediation.evidence?.length ?? 0) > 0) {
+          setExceptionStatus(def.id, 'Retest'); // clears this reminder with it
+          addToast({ type: 'success', title: 'Submitted for retest', message: `${def.id} is with the auditor — your evidence rides along.` });
+        } else {
+          setView('deficiencies');
+          addToast({ type: 'warning', title: 'Evidence first', message: `Attach proof of the fix on ${def.id}, then submit — “done” needs proof.` });
+        }
+        return;
+      }
+    }
     submitTask(t.id);
-    addToast({ type: 'success', title: 'Sent to audit', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
+    addToast({ type: 'success', title: 'Sent to audit', message: 'Submitted — we’ll let you know if more is needed.' });
   };
 
   const dueTests = testsDueNow(eng.controls.filter(c => c.owner === meOwner));
@@ -65,7 +80,7 @@ export default function RiskOwnerPortal() {
               );
             })}
             {dueTests.length > 5 && (
-              <button onClick={() => setTab('controls')} className={rowCls}>
+              <button onClick={() => openRegister({ view: 'due' })} className={rowCls}>
                 <span className="w-4 shrink-0" />
                 <span className="text-[11.5px] text-ink-500">+{dueTests.length - 5} more control tests in the “Due now” view</span>
                 <span className="ml-auto" />

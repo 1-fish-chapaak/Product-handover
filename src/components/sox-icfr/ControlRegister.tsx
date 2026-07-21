@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
   Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
@@ -6,7 +6,7 @@ import {
 import { FilterSelect } from '../shared/FilterSelect';
 import { useIcfr } from './store';
 import {
-  controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isEngagementLocked, openDiscussionCount,
+  controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
@@ -17,14 +17,22 @@ import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
-type SavedView = 'all' | 'due' | 'court' | 'design' | 'operating' | 'exceptions' | 'key';
+type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
+  | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key';
 const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'due', label: 'Due now' },
   { id: 'court', label: 'My court' },
   { id: 'design', label: 'Design' },
+  { id: 'design-done', label: 'Design concluded' },
   { id: 'operating', label: 'Operating' },
+  { id: 'operating-done', label: 'Operating concluded' },
+  { id: 'effective', label: 'Effective' },
   { id: 'exceptions', label: 'Exceptions' },
+  { id: 'review', label: 'Awaiting review' },
+  { id: 'owner', label: 'Waiting on owner' },
+  { id: 'open', label: 'Not concluded' },
+  { id: 'papers', label: 'Awaiting sign-off' },
   { id: 'key', label: 'Key' },
 ];
 
@@ -34,7 +42,7 @@ function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length
 
 function CardTrack({ label, res, started }: { label: string; res: ReturnType<typeof trackResult>; started: boolean }) {
   const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
-  const word = res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
+  const word = res === 'Not tested' ? (started ? 'In progress' : 'Not tested') : res;
   return (
     <div className="flex items-center gap-2.5 text-[11.5px]">
       <span className="text-ink-400 w-[58px] shrink-0">{label}</span>
@@ -83,7 +91,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
     <span className="cell-track">
       <Tickmark result={result === 'Effective' ? 'Pass' : result === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} />
       <span className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-semibold text-ink-600 leading-none">{result === 'Not tested' ? 'Not started' : result}</span>
+        <span className="text-[11px] font-semibold text-ink-600 leading-none">{result}</span>
         <span className="inline-flex items-center gap-1.5">
           <span className="meter"><span style={{ width: `${pct}%`, background: tone }} /></span>
           <span className="text-[10px] tabular-nums text-ink-400">{label}</span>
@@ -94,7 +102,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, meOwner, openControl, requestDesignDocs, rollForward } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, rollForward, registerPreset, clearRegisterPreset } = useIcfr();
   const { addToast } = useToast();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -105,6 +113,14 @@ export default function ControlRegister() {
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
+  // An Overview count arrives with intent — apply its exact view/filter once,
+  // then the register owns its own filters again.
+  useEffect(() => {
+    if (!registerPreset) return;
+    if (registerPreset.view) setSavedView(registerPreset.view as SavedView);
+    if (registerPreset.process) setProcess(registerPreset.process);
+    clearRegisterPreset();
+  }, [registerPreset, clearRegisterPreset]);
   const [nature, setNature] = useState('All');
   const [grouped, setGrouped] = useState(true);
   const [dense, setDense] = useState(false);
@@ -127,8 +143,15 @@ export default function ControlRegister() {
     if (v === 'due') return isTestDueNow(c);
     if (v === 'court') return courtFor(c, eng.tasks, eng.reviewNotes) === role;
     if (v === 'design') return trackResult(c.design) === 'Not tested';
+    if (v === 'design-done') return trackResult(c.design) !== 'Not tested';
     if (v === 'operating') return trackResult(c.operating) === 'Not tested';
+    if (v === 'operating-done') return trackResult(c.operating) !== 'Not tested';
+    if (v === 'effective') return controlConclusion(c) === 'Effective';
     if (v === 'exceptions') return controlConclusion(c) === 'Ineffective';
+    if (v === 'review') return isAwaitingReview(c);
+    if (v === 'owner') return courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner';
+    if (v === 'open') return controlConclusion(c) === 'In progress';
+    if (v === 'papers') return controlConclusion(c) !== 'In progress' && !isControlFinal(c);
     if (v === 'key') return c.isKey;
     return true;
   };
