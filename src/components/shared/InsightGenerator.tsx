@@ -78,12 +78,19 @@ interface Props {
   stackScopeLabel?: string;
   /** How many top rows of the stack open on first render (default 1). */
   initialOpen?: number;
+  /** Preview mode: show only the top N stack cards + a "See all" CTA. */
+  previewCount?: number;
+  /** Where "See all" goes — the surface that renders the full stack. */
+  onSeeAll?: () => void;
+  /** Fold the stack's below-the-fold rows into a ledger (default true). */
+  stackFoldLedger?: boolean;
 }
 
 export default function InsightGenerator({
   layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false,
   labelOverride, scanOverride, stepsOverride, onCheckMore,
   subjects, stackScopeLabel, initialOpen = 1,
+  previewCount, onSeeAll, stackFoldLedger,
 }: Props) {
   const multi = (subjects?.length ?? 0) > 0;
   const key = multi ? `${cacheKey(layer, subjectId)}:stack:${subjects!.length}` : cacheKey(layer, subjectId);
@@ -129,7 +136,7 @@ export default function InsightGenerator({
     return (
       <div className="space-y-2">
         {multi && stack
-          ? <InsightStack insights={stack} scopeLabel={stackScopeLabel ?? ''} onCheckMore={onCheckMore} initialOpen={initialOpen} />
+          ? <InsightStack insights={stack} scopeLabel={stackScopeLabel ?? ''} onCheckMore={onCheckMore} initialOpen={initialOpen} previewCount={previewCount} onSeeAll={onSeeAll} foldLedger={stackFoldLedger} />
           : insight && <LayeredInsightCard insight={insight} onCheckMore={onCheckMore} />}
         <div className="flex items-center gap-2 px-1">
           <span className="text-[10.5px] text-ink-400 flex items-center gap-1"><Check size={11} className="text-compliant" /> Generated just now · cached for this session</span>
