@@ -150,6 +150,12 @@ export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, c
                   ) : (
                     <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
                   )}
+                  {/* Nearly every audit sign-off carries "signed on ____", and
+                      it is awkward to retrofit once reports are in print. */}
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-400">Signed on</span>
+                    <span className="flex-1 border-b border-dashed border-canvas-border" />
+                  </div>
                 </div>
               )}
             </div>

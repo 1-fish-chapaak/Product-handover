@@ -3,7 +3,7 @@
 // drawers, the add-query modal). Extracted wholesale from ReportsView so the
 // landing (ReportsView) and the reader (this file) are separate concerns.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import {
@@ -31,20 +31,23 @@ import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
-  computeQueryKpis, reportKind,
+  computeQueryKpis, reportKind, collectBlockLibrary,
   type WorkflowResult,
-  CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
   type SignatorySlot, type Signoff,
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
+import { buildReportFacts } from './byot/templateBinding';
+import TemplateBlockBody, { type CardFinding } from './TemplateBlockBody';
+import type { TemplateSection } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -1908,6 +1911,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 }) {
   const { addToast } = useToast();
   const { currentUser } = useCurrentUser();
+  const logEvent = useAuditLog();
   // Manual sign-on / sign-off on the report's approval slots. Signing records
   // the slot's assigned name (or the current user) + today's date; signing off
   // clears it. Persisted via onUpdateSignoffs (no-op if the report is read-only).
@@ -1981,13 +1985,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   // Resolve the template this report was generated from — used to show the
-  // Apply Template control as active. Falls back to the seed constant so a
-  // report made from a custom template still names it even after that template
-  // is removed from the user's active list.
+  // Apply Template control as active. A report whose template has since been
+  // deleted resolves to null, so the control simply shows no active template
+  // rather than naming one nobody can open.
   const reportTemplate =
     REPORT_TEMPLATES.find(t => t.id === report.templateId) ??
     customTemplates.find(t => t.id === report.templateId) ??
-    CUSTOM_TEMPLATES.find(t => t.id === report.templateId) ??
     null;
 
   const displayDescription = report.description ?? reportTemplate?.desc ?? '';
@@ -2235,6 +2238,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
     | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
     | { id: string; kind: 'note'; title: string; content: string }
+    | { id: string; kind: 'tblock'; title: string; tsec: TemplateSection; cards?: CardFinding[]; composed?: string }
     | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
 
   type ObservationItem = {
@@ -2249,6 +2253,22 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
   const isBulkAudit = report.tag === 'Bulk Audit';
   const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+  // One block printed in two places is stored once. Placements resolve back to
+  // that stored shape here, so both positions always print the same thing.
+  const templateBlockLibrary = useMemo(
+    () => collectBlockLibrary(report.templateSections ?? []),
+    [report.templateSections],
+  );
+  // What a bound block reads: this report's findings, its numbers, its details.
+  const reportFacts = useMemo(
+    () => buildReportFacts(
+      [...activeQueries, ...reportWorkflows.map(workflowToQueryDef)],
+      report,
+      activeStats,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeQueries, reportWorkflows, report, activeStats],
+  );
 
   const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => {
     const head: SectionItem[] = [
@@ -2302,21 +2322,56 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     // above the body, the rest below.
     const tmpl = (report.generatedQueries?.length || reportWorkflows.length) ? (report.templateSections ?? []) : [];
     if (tmpl.length > 0) {
-      const anchorIdx = tmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+      // The findings pool, flattened — stamped into repeating cards and linked
+      // action-plan tables in the template's own shape and rating words.
+      const generatedFacts = buildReportFacts(evidence, report, activeStats);
+      const cardFindings: CardFinding[] = generatedFacts.findings;
+      const cardsBlockOf = (s: TemplateSection) => s.blocks?.find(b => b.kind === 'cards');
+      const cardsSec = tmpl.find(s => s.kind === 'cards' || cardsBlockOf(s));
+      const cardsIdPattern = cardsSec ? (cardsSec.kind === 'cards' ? cardsSec.idPattern : cardsBlockOf(cardsSec)?.idPattern) : undefined;
+      // A template with its own repeating finding cards carries the findings
+      // there — the generic per-query body would duplicate them.
+      const hasCards = !!cardsSec;
+      const anchorIdx = tmpl.findIndex(s => s === cardsSec || /quer(y|ies)|testing results|findings/i.test(s.name));
       const pre: SectionItem[] = [];
       const post: SectionItem[] = [];
       tmpl.forEach((s, i) => {
         if (/executive summary/i.test(s.name)) return; // covered by the summary block
-        const block: SectionItem = {
-          id: `sec-tmpl-${i}`,
-          kind: 'note',
-          title: s.name,
-          content: composeSectionContent(s.name, evidence),
-        };
+        // Route by what the section IS. Typed sections (BYOT blocks, legacy
+        // kinds, fixed text, or any non-query fill) render through the block
+        // renderer — manual stays honestly empty, human waits for a person,
+        // fixed prints verbatim. Only query-filled prose is ever composed;
+        // the AI never invents content for the other cases.
+        const hasBlocks = (s.blocks?.length ?? 0) > 0;
+        const typed = hasBlocks || (s.kind && s.kind !== 'text') || s.fixed || (s.fill && s.fill !== 'query');
+        const wantsComposed = hasBlocks
+          ? (s.blocks ?? []).some(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'query')
+          : !s.fill || s.fill === 'query';
+        const needsCards = s.kind === 'cards' || (s.kind === 'table' && !!s.linkedTo) ||
+          (s.blocks ?? []).some(b => b.kind === 'cards' || !!b.linkedTo);
+        // A linked table borrows the cards' ID shape so its refs match.
+        const patched: TemplateSection = hasBlocks
+          ? { ...s, blocks: s.blocks!.map(b => (b.linkedTo && !b.idPattern ? { ...b, idPattern: cardsIdPattern } : b)) }
+          : s.kind === 'table' && s.linkedTo && !s.idPattern ? { ...s, idPattern: cardsIdPattern } : s;
+        const block: SectionItem = typed
+          ? {
+              id: `sec-tmpl-${i}`,
+              kind: 'tblock',
+              title: s.name,
+              tsec: patched,
+              cards: needsCards ? cardFindings : undefined,
+              composed: wantsComposed ? composeSectionContent(s.name, evidence) : undefined,
+            }
+          : {
+              id: `sec-tmpl-${i}`,
+              kind: 'note',
+              title: s.name,
+              content: composeSectionContent(s.name, evidence),
+            };
         if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
         else post.push(block);
       });
-      return [...head, ...pre, ...bodyBlocks, ...post];
+      return hasCards ? [...head, ...pre, ...post] : [...head, ...pre, ...bodyBlocks, ...post];
     }
 
     return [...head, ...bodyBlocks];
@@ -2351,6 +2406,55 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // Initial-generation loading flag: the summary prose is gated behind it so
   // "Generate Summary" produces a visible empty → loading → content transition.
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // ── "No data connected" is not a dead end (door 1): the user types or
+  // pastes into the section's shape, and the text stays with this report.
+  // Persisted per report so a reopen keeps the filled sections filled.
+  const MANUAL_FILLS_KEY = 'irame.reports.manualFills.v1';
+  const [manualFills, setManualFills] = useState<Record<string, string>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  // Sections already logged as hand-filled — the door-1 usage signal is one
+  // entry per section, not one per keystroke. That log IS the ranked evidence
+  // for which data integration to build next.
+  const manualLoggedRef = useRef<Set<string>>(new Set());
+  const setManualFill = (sectionId: string, text: string) =>
+    setManualFills(prev => ({ ...prev, [sectionId]: text }));
+  const commitManualFill = (sectionId: string, title: string) => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [sectionId]: manualFills[sectionId] ?? '' };
+      localStorage.setItem(MANUAL_FILLS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if ((manualFills[sectionId] ?? '').trim() && !manualLoggedRef.current.has(sectionId)) {
+      manualLoggedRef.current.add(sectionId);
+      logEvent({
+        action: 'Update',
+        description: `Filled "${title}" manually in "${report.name}" — no connected data for this section yet`,
+        module: 'Reports',
+        entity: 'Manual section',
+      });
+    }
+  };
+  // Door 2: setup that never changes gets remembered on the template itself —
+  // every future report from this template pre-fills it. Only custom templates
+  // can learn (standard ones are shared and read-only).
+  const canRemember = customTemplates.some(t => t.id === report.templateId);
+  const rememberManualFill = (title: string, content: string) => {
+    window.dispatchEvent(new CustomEvent('irame:template-remember-content', {
+      detail: { templateId: report.templateId, sectionName: title, content },
+    }));
+    logEvent({
+      action: 'Update',
+      description: `Saved "${title}" as a template default from "${report.name}"`,
+      module: 'Reports',
+      entity: 'Report Template',
+    });
+    addToast({ type: 'success', message: `Remembered. Future reports pre-fill “${title}” with this.` });
+  };
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
   const generateSummary = () => {
     if (isGeneratingSummary || summaryGenerated) return;
@@ -2941,10 +3045,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             </div>
 
 
-            {/* Summary Stats Bar — ATR-style KPI tiles */}
-            <div className="mb-5">
-              <ReportKpiTiles stats={activeStats} animate />
-            </div>
+            {/* Summary Stats Bar — ATR-style KPI tiles. A custom template with
+                its own summary section carries the tiles there instead, so the
+                reader never meets the same four numbers twice. */}
+            {!(appliedTemplate.sections ?? []).some(s =>
+              /\b(executive summary|overall (opinion|conclusion)|audit opinion|assurance opinion)\b/i.test(s.name)) && (
+              <div className="mb-5">
+                <ReportKpiTiles stats={activeStats} animate />
+              </div>
+            )}
 
             <AnimatePresence mode="wait">
               <motion.div key={appliedTemplate.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
@@ -2955,6 +3064,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 {(() => {
                   const tmplSections = appliedTemplate.sections ?? [];
                   const anchorIdx = tmplSections.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+                  // A section the template says "fills from audit data" has to
+                  // SHOW that data, not a sentence about it. The report's own
+                  // queries become the findings pool, and each typed section
+                  // renders through the same block engine the generated report
+                  // uses, so a severity-split section stamps only its own.
+                  // Generation reads the mould: every block's binding is looked
+                  // up against this report's own data before anything is drawn.
+                  const appliedFacts = buildReportFacts(activeQueries, report, activeStats);
+                  const appliedCards: CardFinding[] = appliedFacts.findings;
+                  // The applied template may be a BYOT one, which carries typed
+                  // blocks and its own rating words; the base seed type does not.
+                  const tmplTyped = tmplSections as TemplateSection[];
+                  const appliedLibrary = collectBlockLibrary(tmplTyped);
+                  const appliedScale = (appliedTemplate as { findingScale?: string[] }).findingScale;
                   const queryBlocks = (
                     <div className="space-y-4">
                       {activeQueries.map((q, qi) => (
@@ -2965,12 +3088,75 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (tmplSections.length === 0) return queryBlocks;
                   return (
                     <div className="space-y-4">
-                      {tmplSections.map((s, i) => {
+                      {tmplTyped.map((s, i) => {
                         const Icon = SECTION_ICONS[s.icon] || FileText;
                         const isExec = /executive summary/i.test(s.name);
                         const content = isExec
                           ? composeExecSummary(appliedTemplate.name, activeQueries)
                           : composeSectionContent(s.name, activeQueries);
+                        // The summary is the report's opening statement, so it
+                        // gets the same treatment under a custom template as it
+                        // does under ours: the numbers first, the rollup below
+                        // them, and a way to write it again. Only the heading
+                        // changes, because the heading is theirs.
+                        const isSummarySection = isExec
+                          || (s.blocks ?? []).some(b => b.binding === 'summary')
+                          || /\b(executive summary|overall (opinion|conclusion)|audit opinion|assurance opinion)\b/i.test(s.name);
+                        if (isSummarySection) {
+                          return (
+                            <div key={`${s.name}-${i}`} className="space-y-4">
+                              <motion.div
+                                initial={{ opacity: 0, y: 14 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: '-60px' }}
+                                transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                                className="bg-white rounded-lg border border-canvas-border px-6 py-5"
+                              >
+                                <ReportNumberedHeading
+                                  n={i + 1}
+                                  title={s.name}
+                                  subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
+                                  right={
+                                    <button
+                                      onClick={() => {
+                                        if (isRegeneratingSummary) return;
+                                        setIsRegeneratingSummary(true);
+                                        setTimeout(() => {
+                                          setSummaryOverride(ALT_SUMMARY);
+                                          setIsRegeneratingSummary(false);
+                                          addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                        }, 1200);
+                                      }}
+                                      disabled={isRegeneratingSummary}
+                                      aria-busy={isRegeneratingSummary || undefined}
+                                      title="Regenerate this summary with the latest queries"
+                                      className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      {isRegeneratingSummary
+                                        ? <Loader2 size={14} className="animate-spin" />
+                                        : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
+                                      {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
+                                    </button>
+                                  }
+                                />
+                                <div className="pb-6 border-b border-canvas-border mb-6">
+                                  <ReportKpiTiles stats={activeStats} animate />
+                                </div>
+                                {isRegeneratingSummary ? (
+                                  <div className="max-w-[80ch] space-y-2.5" aria-live="polite">
+                                    <div className="h-3.5 w-full rounded bg-canvas-border/70 animate-pulse" />
+                                    <div className="h-3.5 w-[92%] rounded bg-canvas-border/70 animate-pulse" />
+                                    <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
+                                  </div>
+                                ) : (
+                                  <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? content}</p>
+                                )}
+                              </motion.div>
+                              {(i === anchorIdx || (anchorIdx === -1 && i === tmplTyped.length - 1)) && queryBlocks}
+                            </div>
+                          );
+                        }
+
                         return (
                           <div key={`${s.name}-${i}`} className="space-y-4">
                             <motion.div
@@ -2983,7 +3169,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
                                 <Icon size={14} className="text-brand-600" /> {s.name}
                               </h3>
-                              <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                              {(s.blocks?.length ?? 0) > 0 || (s.kind && s.kind !== 'text') || s.fixed ? (
+                                <TemplateBlockBody
+                                  tsec={s}
+                                  cards={appliedCards}
+                                  findingScale={appliedScale}
+                                  composed={content}
+                                  blockLibrary={appliedLibrary}
+                                  facts={appliedFacts}
+                                />
+                              ) : (
+                                <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                              )}
                             </motion.div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
                           </div>
@@ -3043,10 +3240,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     dragListener: false as const,
                   };
 
-                  if (section.kind === 'cover') {
+  if (section.kind === 'cover') {
+                    // A cards-driven (BYOT) report carries its findings inside the
+                    // repeating-card block, not query sections — count what the
+                    // reader actually shows, never "0 queries".
+                    const cardTotal = sections.reduce((n, s) => n + (s.kind === 'tblock' && (s.tsec.kind === 'cards' || s.tsec.blocks?.some(b => b.kind === 'cards')) ? (s.cards?.length ?? 0) : 0), 0);
                     const scopeLabel = isBulkAudit
                       ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
-                      : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
+                      : cardTotal > 0
+                        ? `${cardTotal} ${cardTotal === 1 ? 'finding' : 'findings'}`
+                        : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
@@ -3226,6 +3429,40 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     );
                   }
 
+                  // Typed template blocks (BYOT) — repeating finding cards, real
+                  // tables, KPI/chart placeholders, fixed text, human slots.
+                  if (section.kind === 'tblock') {
+                    const t = section.tsec;
+                    // Door 1: a "no data connected" section takes typed input in
+                    // place; door 2 pre-fills from the template's remembered
+                    // default. Never a dead end.
+                    const isManualSection = t.blocks?.length
+                      ? t.blocks.some(b => b.fill === 'manual')
+                      : t.fill === 'manual' || (t.kind === 'table' && !t.linkedTo);
+                    const manualText = manualFills[section.id] ?? t.savedContent ?? '';
+                    return (
+                      <Reorder.Item key={section.id} {...sectionProps}>
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
+                          <TemplateBlockBody
+                            tsec={t}
+                            blockLibrary={templateBlockLibrary}
+                            facts={reportFacts}
+                            cards={section.cards}
+                            findingScale={report.findingScale}
+                            composed={section.composed}
+                            manual={isManualSection ? {
+                              text: manualText,
+                              onChange: text => setManualFill(section.id, text),
+                              onCommit: () => commitManualFill(section.id, section.title),
+                              onRemember: canRemember ? () => rememberManualFill(section.title, manualText) : undefined,
+                            } : undefined}
+                          />
+                        </div>
+                      </Reorder.Item>
+                    );
+                  }
+
                   if (section.kind === 'observation') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
@@ -3294,6 +3531,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             brandColor={report.brandColor}
             signatories={report.signoffEnabled ? report.signatories : undefined}
             signoffs={report.signoffs}
+            // The export checklist — sections still awaiting content (manual
+            // fill or a person's input) are named before download, so nothing
+            // incomplete leaves quietly. Export anyway stays allowed. A section
+            // the user already typed into (or the template remembered) is no
+            // longer incomplete.
+            incomplete={sections
+              .filter(s => {
+                if (s.kind !== 'tblock') return false;
+                const filled = (manualFills[s.id] ?? s.tsec.savedContent ?? '').trim().length > 0;
+                const manualOpen = !filled && (
+                  (s.tsec.blocks ?? []).some(b => b.fill === 'manual')
+                  || (!s.tsec.blocks?.length && s.tsec.fill === 'manual'));
+                const humanOpen =
+                  (s.tsec.blocks ?? []).some(b => (b.fill === 'human' && b.kind !== 'signoff') || (b.humanFields?.length ?? 0) > 0)
+                  || (!s.tsec.blocks?.length && (s.tsec.kind === 'human' || s.tsec.fill === 'human' || (s.tsec.humanFields?.length ?? 0) > 0));
+                return manualOpen || humanOpen;
+              })
+              .map(s => s.title)}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
@@ -3344,6 +3599,39 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               }
               if (s.kind === 'note') {
                 return { id: s.id, kind: 'note', title: s.title, content: s.content };
+              }
+              // Typed template blocks export as plain-language notes: the block
+              // shape is a screen affordance; the export states what fills it —
+              // by each block's own fill case, never invented.
+              if (s.kind === 'tblock') {
+                const t = s.tsec;
+                // Hand-typed content (door 1) or the template's remembered
+                // default (door 2) IS this section's export content.
+                const typed = (manualFills[s.id] ?? t.savedContent ?? '').trim();
+                const describeBlock = (b: NonNullable<TemplateSection['blocks']>[number]): string => {
+                  if (b.kind === 'cards') return `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${b.idPattern ? ` (${b.idPattern})` : ''}${b.cardFields?.length ? ` with fields: ${b.cardFields.join(', ')}` : ''}.`;
+                  if (b.kind === 'table') return `${b.columns?.length ? `Table — columns: ${b.columns.join(', ')}` : 'Table'}${b.linkedTo ? `. Auto-built from ${b.linkedTo}` : b.fill === 'manual' ? '. No data connected — filled in manually' : ''}.`;
+                  if (b.kind === 'signoff') return 'Signature slots — signed by real people.';
+                  if (b.kind === 'stat') return `Stat strip${b.slotLabels?.length ? ` (${b.slotLabels.join(', ')})` : ''}${b.fill === 'manual' ? ' — no data connected' : ''}.`;
+                  if (b.kind === 'slot') return `Details${b.slotLabels?.length ? `: ${b.slotLabels.join(', ')}` : ''}.`;
+                  if (b.kind === 'chart') return `${b.label ?? 'Chart'}${b.fill === 'manual' ? ' — no data connected' : ' — filled from query data'}.`;
+                  if (b.fill === 'fixed') return (b.fixedBody ?? []).join(' ');
+                  if (b.fill === 'human') return 'Awaiting response. Filled in by a person before the report is issued.';
+                  if (b.fill === 'manual') return typed || 'No data connected — filled in manually.';
+                  return s.composed ?? 'Filled from query data at generation.';
+                };
+                const content = t.blocks?.length
+                  ? t.blocks.map(describeBlock).filter(Boolean).join(' ')
+                  : t.kind === 'cards'
+                    ? `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${t.idPattern ? ` (${t.idPattern})` : ''}${t.cardFields?.length ? ` with fields: ${t.cardFields.join(', ')}` : ''}.`
+                    : t.kind === 'table'
+                      ? `${t.columns?.length ? `Table — columns: ${t.columns.join(', ')}` : 'Table'}${t.linkedTo ? `. Auto-built from ${t.linkedTo}` : ''}.`
+                      : t.kind === 'human'
+                        ? 'Awaiting response. Filled in by a person before the report is issued.'
+                        : t.fixed
+                          ? (t.fixedBody ?? []).join(' ')
+                          : (t.metric ?? s.composed ?? 'Filled from query data at generation.');
+                return { id: s.id, kind: 'note', title: s.title, content };
               }
               // Exec summary + stats sections carry the KPI tiles so exports can
               // render the same ATR-style tile grid as the on-screen document.

@@ -9,8 +9,9 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, CloudUpload,
+  WifiOff, FileCheck2, FolderArchive, CloudUpload, FileUp,
 } from 'lucide-react';
+import BringYourOwnTemplateTab from './byot/BringYourOwnTemplateTab';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
@@ -41,11 +42,6 @@ import { BulkAuditVariantView } from './BulkAuditVariants';
 import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
 import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type PickableQuery } from './templateQueryPool';
 import ReportView from './ReportView';
-// CUSTOM_TEMPLATES now lives in the shared keystone; re-exported so existing
-// importers (App.tsx) keep working.
-export { CUSTOM_TEMPLATES } from './reportShared';
-
-
 
 // Observation attachment type + helpers live in AddObservationModal.
 
@@ -200,10 +196,10 @@ export default function ReportsView({
   const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
-  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
+  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports' | 'byot'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
+    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports' || t === 'byot') return t;
     // Legacy deep-links to the old top-level ATR / Evidence tabs land in My Reports.
     if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
     return 'my-reports';
@@ -855,6 +851,8 @@ export default function ReportsView({
       pageNumbers: (rt as EditableTemplate).pageNumbers,
       signoffEnabled: (rt as EditableTemplate).signoffEnabled,
       signatories: (rt as EditableTemplate).signatories,
+      findingScale: (rt as EditableTemplate).findingScale,
+      opinionScale: (rt as EditableTemplate).opinionScale,
     };
     setGeneratedReports(prev => [newReport, ...prev]);
     setWizardTemplate(null);
@@ -1061,6 +1059,8 @@ export default function ReportsView({
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
+                : activeTab === 'byot'
+                ? <>Upload one old report as a PDF. We copy how it looks, not what it says, and every report we make for you after that looks the same way.</>
                 : activeTab === 'templates'
                 ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
                 : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, grouped by type across ATR, SOX, IA, and evidence.</>}
@@ -1079,6 +1079,7 @@ export default function ReportsView({
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
             { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
+            { id: 'byot', label: 'Bring Your Own Template', icon: FileUp, count: 0 },
           ] as const).map(tab => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1436,6 +1437,16 @@ export default function ReportsView({
           </div>
           );
         })()}
+
+        {/* Bring Your Own Template — upload one past report, read its shape,
+            review what we found, save it as a template. The Templates tab and
+            its editor are untouched; this is the import journey on its own. */}
+        {activeTab === 'byot' && (
+          <BringYourOwnTemplateTab
+            onSaveTemplate={addCustomTemplateUnique}
+            onDone={() => setActiveTab('templates')}
+          />
+        )}
 
         {activeTab === 'templates' && (() => {
           // Custom templates open straight into the editor (edit in place).
