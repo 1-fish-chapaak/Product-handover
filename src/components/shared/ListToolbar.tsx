@@ -35,7 +35,7 @@ export default function ListToolbar({
           value={search}
           onChange={e => onSearch(e.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-10 pl-10 pr-3 bg-canvas-elevated border border-canvas-border rounded-[10px] text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all"
+          className="w-full h-10 pl-10 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all"
         />
       </div>
       {trailing && <div className={`flex items-center gap-2 shrink-0 flex-wrap ${compactSearch ? 'sm:ml-auto' : ''}`}>{trailing}</div>}
@@ -117,12 +117,12 @@ export function ToolbarSelect({
   if (block) {
     return (
       <label className="block">
-        {label && <span className="block text-[11px] font-semibold text-ink-500 mb-1.5">{label}</span>}
-        <div className="relative flex items-center h-9 pl-3 pr-8 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 focus-within:border-brand-400 transition-colors">
+        {label && <span className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{label}</span>}
+        <div className="relative flex items-center h-9 pl-3 pr-8 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-300 focus-within:border-brand-400 transition-colors">
           <select
             value={value}
             onChange={e => onChange(e.target.value)}
-            className="appearance-none bg-transparent w-full text-[12.5px] font-medium text-ink-700 cursor-pointer outline-none truncate"
+            className="appearance-none bg-transparent w-full text-[0.78125rem] font-medium text-ink-700 cursor-pointer outline-none truncate"
           >
             {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -132,12 +132,12 @@ export function ToolbarSelect({
     );
   }
   return (
-    <div className="relative inline-flex items-center h-10 pl-3 pr-8 bg-canvas-elevated border border-canvas-border rounded-[10px] hover:border-brand-300 focus-within:border-brand-400 transition-colors">
-      {label && <span className="text-[11px] text-ink-400 mr-1.5 shrink-0">{label}</span>}
+    <div className="relative inline-flex items-center h-10 pl-3 pr-8 bg-canvas-elevated border border-canvas-border rounded-lg hover:border-brand-300 focus-within:border-brand-400 transition-colors">
+      {label && <span className="text-[0.6875rem] text-ink-400 mr-1.5 shrink-0">{label}</span>}
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="appearance-none bg-transparent text-[12.5px] font-medium text-ink-700 cursor-pointer outline-none pr-1 max-w-[120px] truncate"
+        className="appearance-none bg-transparent text-[0.78125rem] font-medium text-ink-700 cursor-pointer outline-none pr-1 max-w-[120px] truncate"
       >
         {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -172,7 +172,7 @@ export function ToolbarFilterMenu({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`inline-flex items-center gap-2 h-10 pl-3 pr-3 rounded-[10px] border text-[12.5px] font-medium cursor-pointer transition-colors ${
+        className={`inline-flex items-center gap-2 h-10 pl-3 pr-3 rounded-lg border text-[0.78125rem] font-medium cursor-pointer transition-colors ${
           activeCount > 0
             ? 'bg-brand-50 border-brand-200 text-brand-700'
             : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300'
@@ -181,7 +181,7 @@ export function ToolbarFilterMenu({
         <SlidersHorizontal size={15} className={activeCount > 0 ? 'text-brand-600' : 'text-ink-400'} />
         {label}
         {activeCount > 0 && (
-          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">{activeCount}</span>
+          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold tabular-nums">{activeCount}</span>
         )}
         <Chevron className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -201,14 +201,14 @@ export function ToolbarFilterMenu({
                   type="button"
                   onClick={() => { onClear(); }}
                   disabled={activeCount === 0}
-                  className="text-[12px] font-medium text-brand-700 hover:underline cursor-pointer disabled:text-ink-300 disabled:no-underline disabled:cursor-default"
+                  className="text-[0.75rem] font-medium text-brand-700 hover:underline cursor-pointer disabled:text-ink-300 disabled:no-underline disabled:cursor-default"
                 >
                   Clear all
                 </button>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="h-8 px-3 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors"
+                  className="h-8 px-3 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors"
                 >
                   Done
                 </button>
@@ -229,17 +229,17 @@ export function ToolbarViewToggle({
   onChange: (mode: 'list' | 'grid') => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 p-1 h-10 bg-canvas-elevated border border-canvas-border rounded-[10px]">
+    <div className="flex items-center gap-0.5 p-1 h-10 bg-canvas-elevated border border-canvas-border rounded-lg">
       <button
         onClick={() => onChange('list')}
-        className={`p-1.5 rounded-[7px] cursor-pointer transition-colors ${mode === 'list' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600'}`}
+        className={`p-1.5 rounded-sm cursor-pointer transition-colors ${mode === 'list' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600'}`}
         title="List view"
       >
         <List size={16} />
       </button>
       <button
         onClick={() => onChange('grid')}
-        className={`p-1.5 rounded-[7px] cursor-pointer transition-colors ${mode === 'grid' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600'}`}
+        className={`p-1.5 rounded-sm cursor-pointer transition-colors ${mode === 'grid' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600'}`}
         title="Grid view"
       >
         <LayoutGrid size={16} />

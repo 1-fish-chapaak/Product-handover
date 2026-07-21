@@ -19,6 +19,7 @@ import {
 } from './automationReportsData';
 import { DEFICIENCY_LABELS, type DeficiencyType } from './automationCasesData';
 import FloatingLines from '../../../shared/FloatingLines';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -213,7 +214,7 @@ function WorkflowExceptionDetails({ exceptions, automationState: _as, openExc, r
           <div className="flex items-center gap-3 text-[0.6875rem] mb-2">
             {openExc > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">{openExc} Open</span>}
             {reviewedExc > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{reviewedExc} Reviewed</span>}
-            {dismissedExc > 0 && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{dismissedExc} Dismissed</span>}
+            {dismissedExc > 0 && <span className="px-2 py-0.5 rounded-full bg-canvas text-ink-500 font-medium">{dismissedExc} Dismissed</span>}
             {caseCandExc > 0 && <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">{caseCandExc} Case Candidate{caseCandExc !== 1 ? 's' : ''}</span>}
           </div>
           <div className="space-y-1">
@@ -233,6 +234,7 @@ function WorkflowExceptionDetails({ exceptions, automationState: _as, openExc, r
 }
 
 export default function AutomationReportsTab({ engagement, automationState, reportsState, onUpdateReports, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as AutomationProjectConfig;
   const hasReportOutput = cfg.outputTypes.includes('REPORT');
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
@@ -259,8 +261,8 @@ export default function AutomationReportsTab({ engagement, automationState, repo
     return (
       <div className="space-y-4">
         <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Reports</h3><p className="text-[0.75rem] text-text-muted">Generate automation output reports.</p></div>
-        <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
-          <Lock size={28} className="text-gray-300 mx-auto" />
+        <div className="rounded-xl border-2 border-canvas-border bg-canvas/30 p-6 text-center space-y-3">
+          <Lock size={28} className="text-ink-300 mx-auto" />
           <h4 className="text-[0.875rem] font-semibold text-text">Reports Locked</h4>
           <p className="text-[0.75rem] text-text-muted">Complete at least one automation run before generating a report.</p>
           <button onClick={() => onNavigateTab?.('workflows')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Workflows <ChevronRight size={12} /></button>
@@ -276,6 +278,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
     const report: AutomationReport = { id: `rpt-${Date.now()}`, ...draft } as AutomationReport;
     onUpdateReports({ ...reportsState, reports: [...reportsState.reports, report] });
     setSelectedReportId(report.id);
+    logEvent({ action: 'Create', description: `Generated automation report "${report.title}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const updateReport = (id: string, updates: Partial<AutomationReport>) => {
@@ -288,6 +291,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
   const finalize = (id: string) => {
     updateReport(id, { status: 'FINAL', finalizedAt: now(), finalizedBy: engagement.owner, history: [...(selectedReport?.history || []), { id: `rrh-${Date.now()}`, action: 'FINALIZED', actor: engagement.owner, timestamp: now(), comments: 'Report finalized.' }] });
+    logEvent({ action: 'Update', description: `Finalized automation report "${selectedReport?.title || id}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const isFinal = selectedReport?.status === 'FINAL';
@@ -321,7 +325,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           ].map(s => (
             <div key={s.label} className="rounded-lg border border-border-light p-2 text-center">
               <div className={`text-[0.9375rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-              <div className="text-[0.5rem] text-gray-400 font-medium">{s.label}</div>
+              <div className="text-[0.5rem] text-ink-400 font-medium">{s.label}</div>
             </div>
           ))}
         </div>
@@ -344,7 +348,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
         <div className="flex items-center gap-2">
           {reportsState.reports.map(r => (
             <button key={r.id} onClick={() => setSelectedReportId(r.id)}
-              className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${selectedReportId === r.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${selectedReportId === r.id ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
               {r.title.length > 30 ? r.title.slice(0, 29) + '...' : r.title} <span className={`ml-1 px-1 py-0.5 rounded text-[0.4375rem] font-bold ${REPORT_STATUS_CLS[r.status]}`}>{r.status}</span>
             </button>
           ))}
@@ -359,7 +363,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
             <Share2 size={13} /> Share
           </button>
           </Gated>
-          <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={() => { logEvent({ action: 'Export', description: `Downloaded automation report "${selectedReport?.title || 'Automation Output Report'}"`, module: 'Engagements', entity: 'Report' }); alert('Download — placeholder'); }} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Download size={13} /> Download
           </button>
         </div>
@@ -397,13 +401,13 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                   <span className="text-white/70">{completedRuns.length} run{completedRuns.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-1 rounded-[10px] text-[0.6875rem] font-bold ${isFinal ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>
+                  <span className={`px-2.5 py-1 rounded-lg text-[0.6875rem] font-bold ${isFinal ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>
                     {selectedReport.status}
                   </span>
                   {!isFinal && (
                     <button
                       onClick={handleGenerate}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-lg hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
                     >
                       <Sparkles size={13} />
                       Regenerate
@@ -415,7 +419,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           </div>
 
           {/* ── Report metadata ── */}
-          <div className="bg-white rounded-xl border border-border-light p-5">
+          <div className="bg-white rounded-lg border border-border-light p-5">
             <div className="grid grid-cols-3 gap-x-8 gap-y-3 text-[0.75rem]">
               <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Project Name</span><span className="text-text font-semibold">{engagement.name}</span></div>
               <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Business Process</span><span className="text-text font-semibold">{engagement.businessProcess || 'P2P'}</span></div>
@@ -427,7 +431,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           </div>
 
           {/* ── Executive Summary ── */}
-          <div className="bg-white rounded-xl border border-border-light p-5">
+          <div className="bg-white rounded-lg border border-border-light p-5">
             <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
             <div className="grid grid-cols-4 gap-3 mb-4">
               {[
@@ -436,7 +440,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                 { icon: Shield, label: 'Cases Assigned', value: caseCount, color: 'text-brand-700 bg-brand-50' },
                 { icon: TrendingUp, label: 'Completion', value: caseCount > 0 ? `${Math.round(closedCases / caseCount * 100)}%` : allExceptions.length === 0 ? '100%' : '—', color: 'text-compliant-700 bg-compliant-50' },
               ].map(stat => (
-                <div key={stat.label} className="bg-white rounded-xl border border-border-light p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
+                <div key={stat.label} className="bg-white rounded-lg border border-border-light p-4 flex items-center gap-3 hover: hover:shadow-primary/5 transition-all">
                   <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
                   <div>
                     <div className="text-xl font-bold text-text">{stat.value}</div>
@@ -472,7 +476,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
             const TAG_CLS: Record<string, string> = {
               FINANCIAL: 'bg-blue-50 text-blue-700 border-blue-200',
               COMPLIANCE: 'bg-purple-50 text-purple-700 border-purple-200',
-              DOCUMENTATION: 'bg-gray-100 text-gray-600 border-gray-200',
+              DOCUMENTATION: 'bg-canvas text-ink-600 border-canvas-border',
               DATA: 'bg-cyan-50 text-cyan-700 border-cyan-200',
               FRAUD: 'bg-red-50 text-red-700 border-red-200',
               HIGH: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -497,9 +501,9 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                       {/* Tags row */}
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <span className="text-[0.5625rem] font-bold text-primary/50 uppercase tracking-wider">WORKFLOW {sectionIdx + 1}</span>
-                        <span className="text-gray-200 mx-0.5">·</span>
+                        <span className="text-ink-300 mx-0.5">·</span>
                         {section.tags.map(tag => (
-                          <span key={tag} className={`px-1.5 py-0.5 rounded border text-[0.5rem] font-bold uppercase tracking-wide ${TAG_CLS[tag] || 'bg-gray-50 text-gray-500 border-gray-200'}`}>{tag}</span>
+                          <span key={tag} className={`px-1.5 py-0.5 rounded border text-[0.5rem] font-bold uppercase tracking-wide ${TAG_CLS[tag] || 'bg-canvas text-ink-500 border-canvas-border'}`}>{tag}</span>
                         ))}
                       </div>
                       <h4 className="text-[0.9375rem] font-bold text-text leading-tight">{section.workflowName}</h4>
@@ -523,23 +527,23 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                       <div className="grid grid-cols-5 gap-2">
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
                           <div className="text-[1rem] font-bold tabular-nums text-text">{section.exceptions.length}</div>
-                          <div className="text-[0.5rem] text-gray-400 font-medium">Total</div>
+                          <div className="text-[0.5rem] text-ink-400 font-medium">Total</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
                           <div className="text-[1rem] font-bold tabular-nums text-red-600">{section.severityBreakdown['CRITICAL'] || 0}</div>
-                          <div className="text-[0.5rem] text-gray-400 font-medium">Critical</div>
+                          <div className="text-[0.5rem] text-ink-400 font-medium">Critical</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
                           <div className="text-[1rem] font-bold tabular-nums text-amber-600">{section.severityBreakdown['HIGH'] || 0}</div>
-                          <div className="text-[0.5rem] text-gray-400 font-medium">High</div>
+                          <div className="text-[0.5rem] text-ink-400 font-medium">High</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
                           <div className="text-[1rem] font-bold tabular-nums text-blue-600">{section.severityBreakdown['MEDIUM'] || 0}</div>
-                          <div className="text-[0.5rem] text-gray-400 font-medium">Medium</div>
+                          <div className="text-[0.5rem] text-ink-400 font-medium">Medium</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[1rem] font-bold tabular-nums text-gray-500">{section.severityBreakdown['LOW'] || 0}</div>
-                          <div className="text-[0.5rem] text-gray-400 font-medium">Low</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-ink-500">{section.severityBreakdown['LOW'] || 0}</div>
+                          <div className="text-[0.5rem] text-ink-400 font-medium">Low</div>
                         </div>
                       </div>
                     </div>
@@ -615,9 +619,9 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                           const isExcluded = automationState.outputReview.rejectedOutputIds.includes(o.id);
                           const isPending = !isApproved && !isExcluded;
                           return (
-                            <div key={o.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light/50 ${isExcluded ? 'bg-gray-50 opacity-60' : isPending ? 'bg-amber-50/20' : 'bg-surface-2/30'}`}>
-                              <FileText size={13} className={isApproved ? 'text-primary shrink-0' : 'text-gray-400 shrink-0'} />
-                              <span className={`text-[0.75rem] font-medium flex-1 ${isExcluded ? 'text-gray-400 line-through' : 'text-text'}`}>{o.name}</span>
+                            <div key={o.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light/50 ${isExcluded ? 'bg-canvas opacity-60' : isPending ? 'bg-amber-50/20' : 'bg-surface-2/30'}`}>
+                              <FileText size={13} className={isApproved ? 'text-primary shrink-0' : 'text-ink-400 shrink-0'} />
+                              <span className={`text-[0.75rem] font-medium flex-1 ${isExcluded ? 'text-ink-400 line-through' : 'text-text'}`}>{o.name}</span>
                               <span className="text-[0.625rem] text-text-muted">{o.outputType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span>
                               {o.recordCount && <span className="text-[0.625rem] text-text-muted tabular-nums">{o.recordCount} records</span>}
                               {isApproved && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold">Included in Report</span>}
@@ -644,7 +648,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
           {/* ── Cases / Exception Classification Summary ── */}
           {caseCount > 0 && (
-            <div className="bg-white rounded-xl border border-border-light p-5">
+            <div className="bg-white rounded-lg border border-border-light p-5">
               <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Shield size={14} className="text-primary" /> Cases & Classification Summary</h3>
               <div className="grid grid-cols-4 gap-2 mb-3">
                 {[
@@ -655,7 +659,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                 ].map(s => (
                   <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
                     <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-                    <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+                    <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -685,7 +689,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           )}
 
           {/* ── Key Metrics ── */}
-          <div className="bg-white rounded-xl border border-border-light p-5">
+          <div className="bg-white rounded-lg border border-border-light p-5">
             <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Key Metrics</h3>
             <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.75rem]">
               {[
@@ -710,7 +714,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
           {/* ── Recommendations ── */}
           {selectedReport.recommendations && (
-            <div className="bg-white rounded-xl border border-border-light p-5">
+            <div className="bg-white rounded-lg border border-border-light p-5">
               <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Recommendations</h3>
               <ul className="space-y-1">
                 {selectedReport.recommendations.split('\n').filter(Boolean).map((rec, i) => (
@@ -743,7 +747,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
             <div className="rounded-lg border border-border-light p-4">
               <h4 className="text-[0.6875rem] font-bold text-text mb-1">Report History</h4>
               <div className="space-y-1">{selectedReport.history.map(h => (
-                <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+                <div key={h.id} className="text-[0.5625rem] text-ink-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
               ))}</div>
             </div>
           )}

@@ -109,7 +109,7 @@ export default function StepMapData({
             {/* Compact header row */}
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[15px] font-semibold text-ink-900 shrink-0">
+                <span className="text-[0.9375rem] font-semibold text-ink-900 shrink-0">
                   {input.name}
                 </span>
                 <ArrowLeft size={13} className="text-ink-400 shrink-0" />
@@ -121,7 +121,7 @@ export default function StepMapData({
                   }
                   disabled={uploaded.length === 0}
                   className={cn(
-                    'text-[13px] truncate text-left transition-colors',
+                    'text-[0.8125rem] truncate text-left transition-colors',
                     uploaded.length > 0
                       ? 'text-ink-500 hover:text-brand-700 cursor-pointer'
                       : 'text-ink-400 italic cursor-default',
@@ -131,14 +131,14 @@ export default function StepMapData({
                 </button>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[12px] text-ink-400 tabular-nums whitespace-nowrap">
+                <span className="text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">
                   {selected.size} of {allCols.length} cols
                 </span>
                 <button
                   type="button"
                   onClick={() => toggleExpanded(input.id)}
                   aria-expanded={isOpen}
-                  className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
                 >
                   <Pencil size={12} />
                   Edit
@@ -150,7 +150,7 @@ export default function StepMapData({
             {!isOpen && (
               <div className="px-4 pb-3">
                 {selectedCols.length === 0 ? (
-                  <span className="text-[12px] text-ink-400 italic">
+                  <span className="text-[0.75rem] text-ink-400 italic">
                     No columns selected.
                   </span>
                 ) : (
@@ -158,7 +158,7 @@ export default function StepMapData({
                     {selectedCols.map((col) => (
                       <span
                         key={col}
-                        className="inline-flex items-center rounded-lg bg-brand-50 border border-brand-100 px-2.5 py-1 text-[12px] text-ink-800 font-medium"
+                        className="inline-flex items-center rounded-lg bg-brand-50 border border-brand-100 px-2.5 py-1 text-[0.75rem] text-ink-800 font-medium"
                       >
                         {col}
                       </span>
@@ -172,20 +172,20 @@ export default function StepMapData({
             {isOpen && (
               <div className="border-t border-canvas-border/60 px-4 py-3">
                 {allCols.length === 0 ? (
-                  <div className="text-[12px] text-ink-400">
+                  <div className="text-[0.75rem] text-ink-400">
                     No columns detected for {input.name}.
                   </div>
                 ) : (
                   <>
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-ink-400">
                         Select columns to use
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => selectAll(input.id, allCols)}
-                          className="text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer px-1 py-0.5 transition-colors"
+                          className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer px-1 py-0.5 transition-colors"
                         >
                           Select all
                         </button>
@@ -193,7 +193,7 @@ export default function StepMapData({
                         <button
                           type="button"
                           onClick={() => deselectAll(input.id)}
-                          className="text-[12px] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer px-1 py-0.5 transition-colors"
+                          className="text-[0.75rem] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer px-1 py-0.5 transition-colors"
                         >
                           Deselect all
                         </button>
@@ -221,7 +221,7 @@ export default function StepMapData({
                     </div>
 
                     {filteredCols.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[12px] text-ink-400">
+                      <div className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[0.75rem] text-ink-400">
                         No columns match &ldquo;{search}&rdquo;.
                       </div>
                     ) : (
@@ -253,7 +253,7 @@ export default function StepMapData({
                                     <Check size={12} strokeWidth={3} />
                                   )}
                                 </span>
-                                <span className="flex-1 text-[13px] font-medium text-ink-800 truncate">
+                                <span className="flex-1 text-[0.8125rem] font-medium text-ink-800 truncate">
                                   {col}
                                 </span>
                               </button>
@@ -346,8 +346,8 @@ function DataPreviewModal({
               <FileIcon size={16} className="text-brand-600" />
             </div>
             <div>
-              <div className="text-[15px] font-semibold text-ink-900">{schemaName}</div>
-              <div className="text-[12px] text-ink-400 font-mono">{fileName}</div>
+              <div className="text-[0.9375rem] font-semibold text-ink-900">{schemaName}</div>
+              <div className="text-[0.75rem] text-ink-400 font-mono">{fileName}</div>
             </div>
           </div>
           <button
@@ -360,13 +360,13 @@ function DataPreviewModal({
         </div>
 
         <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="border-b border-canvas-border bg-canvas/60">
                 {PREVIEW_COLUMNS.map((col) => (
                   <th
                     key={col}
-                    className="px-4 py-2.5 text-left text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-400"
+                    className="px-4 py-2.5 text-left text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-400"
                   >
                     {col}
                   </th>
@@ -389,7 +389,7 @@ function DataPreviewModal({
         </div>
 
         <div className="flex items-center justify-between px-6 py-3 border-t border-canvas-border">
-          <span className="text-[12px] text-ink-400">Previewing first 5 entries</span>
+          <span className="text-[0.75rem] text-ink-400">Previewing first 5 entries</span>
           <Button variant="primary" size="sm" onClick={onClose}>
             Close Preview
           </Button>

@@ -47,7 +47,7 @@ export default function ComprehensiveAtrModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog"
         aria-label="Action Taken Report"
       >
@@ -56,7 +56,7 @@ export default function ComprehensiveAtrModal({
             bar stays a thin context strip. */}
         <header className="shrink-0 px-6 py-2.5 flex items-center justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               <FileText size={14} />
             </div>
             <p className="text-[0.8125rem] font-medium text-ink-600 truncate">
@@ -86,14 +86,14 @@ export default function ComprehensiveAtrModal({
           )}
           <button
             onClick={onClose}
-            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
           >
             {onAddToReport ? 'Cancel' : 'Close'}
           </button>
           {onAddToReport ? (
             <button
               onClick={onAddToReport}
-              className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
+              className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer transition-colors"
             >
               <FilePlus2 size={14} />
               Add to Report
@@ -102,7 +102,7 @@ export default function ComprehensiveAtrModal({
           <div className="relative">
             <button
               onClick={() => setShowFormats(p => !p)}
-              className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
+              className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer transition-colors"
             >
               <Download size={14} />
               Download
@@ -111,7 +111,7 @@ export default function ComprehensiveAtrModal({
             {showFormats && (
               <>
                 <div className="fixed inset-0 z-[65]" onClick={() => setShowFormats(false)} />
-                <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-1 w-48 rounded-[8px] overflow-hidden">
+                <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-1 w-48 rounded-md overflow-hidden">
                   {[
                     { kind: 'pdf' as const, label: 'Print / Save as PDF' },
                     { kind: 'word' as const, label: 'Download as Word' },

@@ -6,7 +6,7 @@ import type { ControlDetail } from './components/engagement/engagementData';
 import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
 import { CurrentUserProvider, useCurrentUser } from './context/CurrentUserContext';
-import { AdminDataProvider } from './context/AdminDataContext';
+import { AdminDataProvider, useAuditLog } from './context/AdminDataContext';
 import { ShareProvider } from './context/ShareContext';
 import { VIEW_PERMISSIONS } from './data/rbac';
 import EmptyState from './components/shared/EmptyState';
@@ -63,6 +63,7 @@ import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
+import PlatformUsageView from './components/usage/PlatformUsageView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
@@ -176,7 +177,29 @@ function AppInner() {
     addNotification,
   } = useAppState();
 
-  const { can } = useCurrentUser();
+  const { can, canAny } = useCurrentUser();
+  const logEvent = useAuditLog();
+
+  // Every dashboard-creation path funnels through here so the audit log (and
+  // the Platform Usage "What got created" card) sees each new dashboard.
+  const createDashboard = useCallback((dashboard: Parameters<typeof addCreatedDashboard>[0]) => {
+    addCreatedDashboard(dashboard);
+    logEvent({ action: 'Create', description: `Created dashboard "${dashboard.name}"`, module: 'Dashboards', entity: 'Dashboard' });
+  }, [addCreatedDashboard, logEvent]);
+
+  const deleteDashboard = useCallback((id: string) => {
+    const name = state.createdDashboards.find(d => d.id === id)?.name;
+    deleteCreatedDashboard(id);
+    logEvent({ action: 'Delete', description: `Deleted dashboard${name ? ` "${name}"` : ''}`, module: 'Dashboards', entity: 'Dashboard' });
+  }, [state.createdDashboards, deleteCreatedDashboard, logEvent]);
+
+  // One Login event per session — AppInner mounts once the login gate passes.
+  const loginLogged = useRef(false);
+  useEffect(() => {
+    if (loginLogged.current) return;
+    loginLogged.current = true;
+    logEvent({ action: 'Login', description: 'User signed in', module: 'Admin', entity: 'Session' });
+  }, [logEvent]);
 
   const unreadNotifications = state.notifications.filter(n => !n.read).length;
 
@@ -461,9 +484,13 @@ function AppInner() {
       );
     }
 
-    // Route guard — block views the active role can't access.
+    // Route guard — block views the active role can't access. A gate may be a
+    // single permission or a set the user needs ANY of (e.g. Platform Usage,
+    // open to the workspace admin OR a team lead).
     const requiredPerm = VIEW_PERMISSIONS[state.view];
-    if (requiredPerm && !can(requiredPerm)) {
+    const allowed = requiredPerm == null
+      || (Array.isArray(requiredPerm) ? canAny(requiredPerm) : can(requiredPerm));
+    if (!allowed) {
       return (
         <div className="h-full flex items-center justify-center p-6">
           <EmptyState
@@ -526,7 +553,7 @@ function AppInner() {
                 const pending = state.pendingDashboard;
                 if (!pending) return;
                 const newId = `custom-${Date.now()}`;
-                addCreatedDashboard({
+                createDashboard({
                   id: newId,
                   name: pending.name,
                   description: pending.description || 'Custom dashboard',
@@ -546,10 +573,10 @@ function AppInner() {
                 ...BUILTIN_DASHBOARDS,
                 ...SHARED_DASHBOARD_OPTIONS,
               ]}
-              availableReports={GENERATED_REPORTS.map(r => ({ id: r.id, name: r.name, status: r.status as 'draft' | 'final', generatedBy: r.generatedBy }))}
+              availableReports={GENERATED_REPORTS.map(r => ({ id: r.id, name: r.name, generatedBy: r.generatedBy }))}
               onAddResultToDashboard={(payload) => {
                 if (payload.isNew && payload.newName) {
-                  addCreatedDashboard({
+                  createDashboard({
                     id: payload.dashboardId,
                     name: payload.newName,
                     description: payload.newDescription || 'Created from chat',
@@ -803,8 +830,8 @@ function AppInner() {
             onDashboardClick={(id, customFields) => openDashboard(id, customFields)}
             onImportPowerBI={() => setShowPowerBIWizard(true)}
             createdDashboards={state.createdDashboards}
-            onCreateDashboard={addCreatedDashboard}
-            onDeleteDashboard={deleteCreatedDashboard}
+            onCreateDashboard={createDashboard}
+            onDeleteDashboard={deleteDashboard}
             onUpdateDashboardSource={updateDashboardSource}
             onOpenChat={(pending) => {
               if (pending) setPendingDashboard(pending);
@@ -1071,6 +1098,9 @@ function AppInner() {
         return <AdminView activeTab="roles" />;
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
+
+      case 'platform-usage':
+        return <PlatformUsageView />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':

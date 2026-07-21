@@ -9,7 +9,7 @@ const OBS_STATUS_OPTS: AtrObservationStatus[] = ['Open', 'In Progress', 'Closed'
 const ACTION_STATUS_OPTS: AtrActionStatus[] = ['Pending', 'Partially Implemented', 'Implemented', 'Overdue', 'Not Due'];
 
 const INPUT =
-  'w-full px-3 py-2 rounded-[8px] border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15 transition-colors';
+  'w-full px-3 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15 transition-colors';
 const LABEL = 'text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1 block';
 
 function emptyObservation(): AtrObservation {
@@ -60,7 +60,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
             onClick={addObs}
             disabled={!canAdd}
             title={canAdd ? 'Add another observation' : 'Add a title to the current observation first'}
-            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={13} /> Add observation
           </button>
@@ -68,7 +68,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
       </div>
 
       {observations.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 py-14 text-center border border-dashed border-canvas-border rounded-[12px]">
+        <div className="flex flex-col items-center justify-center gap-2 py-14 text-center border border-dashed border-canvas-border rounded-lg">
           <AlertTriangle size={20} className="text-ink-400" />
           <div className="text-[0.8125rem] font-medium text-ink-700">No actionable items yet</div>
           <button onClick={addObs} className="text-[0.75rem] text-brand-700 font-semibold hover:underline cursor-pointer">Add the first observation</button>
@@ -76,7 +76,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
       )}
 
       {observations.map((obs, oIdx) => (
-        <div key={oIdx} className="rounded-[12px] border border-canvas-border bg-canvas overflow-hidden">
+        <div key={oIdx} className="rounded-lg border border-canvas-border bg-canvas overflow-hidden">
           {/* Observation header */}
           <div className="flex items-start gap-3 px-4 pt-3.5 pb-3 border-b border-canvas-border bg-canvas-elevated">
             <span className="shrink-0 w-6 h-6 mt-0.5 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-bold flex items-center justify-center">{oIdx + 1}</span>
@@ -138,13 +138,13 @@ export default function AtrItemsEditor({ observations, onChange }: {
             <div className="pt-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">Management action plans</span>
-                <button onClick={() => addPlan(oIdx)} className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 rounded-[7px] transition-colors cursor-pointer">
+                <button onClick={() => addPlan(oIdx)} className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 rounded-sm transition-colors cursor-pointer">
                   <Plus size={12} /> Add
                 </button>
               </div>
               <div className="space-y-2.5">
                 {obs.actionPlans.map((plan, pIdx) => (
-                  <div key={pIdx} className="rounded-[10px] border border-canvas-border bg-canvas-elevated p-3 space-y-2.5">
+                  <div key={pIdx} className="rounded-lg border border-canvas-border bg-canvas-elevated p-3 space-y-2.5">
                     <div className="flex items-start gap-2">
                       <textarea
                         value={plan.text}
@@ -187,7 +187,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
                   </div>
                 ))}
                 {obs.actionPlans.length === 0 && (
-                  <button onClick={() => addPlan(oIdx)} className="w-full py-2.5 text-[0.75rem] font-medium text-ink-500 border border-dashed border-canvas-border rounded-[10px] hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                  <button onClick={() => addPlan(oIdx)} className="w-full py-2.5 text-[0.75rem] font-medium text-ink-500 border border-dashed border-canvas-border rounded-lg hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
                     + Add an action plan
                   </button>
                 )}

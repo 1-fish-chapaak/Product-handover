@@ -174,10 +174,10 @@ function ExtractionCard({
       aria-label={done ? 'Extraction complete' : `Extracting ${filename}`}
       initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="fixed bottom-5 right-5 z-[80] w-[360px] max-w-[calc(100vw-2.5rem)] rounded-[14px] border border-canvas-border bg-white shadow-[0_16px_40px_-12px_rgba(15,8,30,0.28)] p-4"
+      className="fixed bottom-5 right-5 z-[80] w-[360px] max-w-[calc(100vw-2.5rem)] rounded-lg border border-canvas-border bg-white shadow-[0_16px_40px_-12px_rgba(15,8,30,0.28)] p-4"
     >
       <div className="flex items-start gap-3">
-        <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 ${done ? 'bg-compliant-50 text-compliant-600' : 'bg-brand-50 text-brand-600'}`}>
+        <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${done ? 'bg-compliant-50 text-compliant-600' : 'bg-brand-50 text-brand-600'}`}>
           {done ? <Check size={16} strokeWidth={2.5} /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />}
         </span>
         <div className="min-w-0 flex-1">
@@ -207,11 +207,11 @@ function ExtractionCard({
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background. Keep working.'}</span>
         {onOpen ? (
-          <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
+          <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
             <Maximize2 size={13} /> Open
           </button>
         ) : onMinimize ? (
-          <button onClick={onMinimize} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-ink-700 border border-canvas-border bg-white hover:bg-paper-50 cursor-pointer transition-colors">
+          <button onClick={onMinimize} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-700 border border-canvas-border bg-white hover:bg-paper-50 cursor-pointer transition-colors">
             <Minimize2 size={13} /> Minimize
           </button>
         ) : null}
@@ -233,7 +233,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1.5 w-[300px] bg-white rounded-[12px] shadow-[0_16px_40px_-12px_rgba(15,8,30,0.22)] border border-canvas-border z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1.5 w-[300px] bg-white rounded-lg shadow-[0_16px_40px_-12px_rgba(15,8,30,0.22)] border border-canvas-border z-50 overflow-hidden"
     >
       <div className="px-3.5 pt-3 pb-1">
         <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-[0.12em]">Select Template</span>
@@ -250,7 +250,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); if (query) setQuery(''); else onClose(); } }}
             placeholder="Search templates…"
             aria-label="Search templates"
-            className="w-full h-9 pl-9 pr-8 rounded-[8px] bg-canvas border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-600/40 transition-colors"
+            className="w-full h-9 pl-9 pr-8 rounded-md bg-canvas border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-600/40 transition-colors"
           />
           {query && (
             <button
@@ -275,10 +275,10 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
               aria-current={isActive || undefined}
-              className={`group/item relative w-full text-left px-3 py-2.5 rounded-[8px] transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-brand-50'}`}
+              className={`group/item relative w-full text-left px-3 py-2.5 rounded-md transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-brand-50'}`}
             >
               {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-brand-600" aria-hidden="true" />}
-              <div className={`p-1.5 rounded-[8px] transition-colors ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              <div className={`p-1.5 rounded-md transition-colors ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
@@ -297,9 +297,9 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
           <button
             onClick={() => { onSaveAsTemplate(); onClose(); }}
             title="Save this report's structure as a reusable custom template"
-            className="w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 hover:bg-brand-50 group/save"
+            className="w-full text-left px-3 py-2.5 rounded-md transition-colors cursor-pointer flex items-center gap-2.5 hover:bg-brand-50 group/save"
           >
-            <div className="p-1.5 rounded-[8px] text-ink-500 bg-paper-50 group-hover/save:text-brand-600">
+            <div className="p-1.5 rounded-md text-ink-500 bg-paper-50 group-hover/save:text-brand-600">
               <BookOpen size={12} />
             </div>
             <div className="flex-1 min-w-0">
@@ -413,14 +413,14 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           onClick={startEditBoth}
           aria-label={`Edit ${section.name}`}
           title="Edit heading and description"
-          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
+          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
         >
           <Pencil size={14} />
         </button>
         <RowDeleteButton
           onConfirm={onDelete}
           ariaLabel={`Delete ${section.name}`}
-          triggerClassName="no-focus-ring w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
+          triggerClassName="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
         />
       </div>
 
@@ -442,7 +442,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
               }}
               onPointerDown={e => e.stopPropagation()}
               aria-label="Section name"
-              className="min-w-0 flex-1 -my-0.5 px-1.5 py-0.5 rounded-[6px] bg-white border border-brand-400 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+              className="min-w-0 flex-1 -my-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-brand-400 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] focus:outline-none focus:ring-2 focus:ring-brand-600/30"
             />
           ) : (
             <h2 onDoubleClick={startEdit} title="Double-click to rename" className="min-w-0 truncate text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] cursor-text">{section.name}</h2>
@@ -468,13 +468,13 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           <div className="max-w-[75%]">
             <div className="flex items-end gap-1.5 h-14">
               {(section.chartType ?? 'bar') === 'bar'
-                ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-canvas-border" style={{ height: `${h}%` }} />)
+                ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-xs bg-canvas-border" style={{ height: `${h}%` }} />)
                 : <svg viewBox="0 0 120 40" className="w-full h-full text-canvas-border" preserveAspectRatio="none"><polyline points="0,32 24,20 48,26 72,10 96,16 120,6" fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
             </div>
             <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart</p>
           </div>
         ) : kind === 'table' ? (
-          <div className="max-w-[90%] rounded-[6px] overflow-hidden border border-canvas-border">
+          <div className="max-w-[90%] rounded-sm overflow-hidden border border-canvas-border">
             <div className="grid grid-cols-4 bg-canvas">
               {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
             </div>
@@ -497,13 +497,13 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
             }}
             onPointerDown={e => e.stopPropagation()}
             aria-label="Section description"
-            className="w-full max-w-[80ch] resize-none rounded-[6px] bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+            className="w-full max-w-[80ch] resize-none rounded-sm bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
           />
         ) : (
           <p
             onDoubleClick={startDescEdit}
             title="Double-click to edit this description"
-            className={`max-w-[80ch] text-[0.875rem] leading-relaxed cursor-text rounded-[4px] -mx-1 px-1 hover:bg-canvas/60 transition-colors ${section.description ? 'text-ink-600' : 'text-ink-500'}`}
+            className={`max-w-[80ch] text-[0.875rem] leading-relaxed cursor-text rounded-xs -mx-1 px-1 hover:bg-canvas/60 transition-colors ${section.description ? 'text-ink-600' : 'text-ink-500'}`}
           >
             {shownDesc}
           </p>
@@ -1131,7 +1131,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         exit={{ opacity: 0, scale: 0.97, y: 12 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
+        className="relative bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
           // Only react to file drags, and not while a scan/review is already up.
@@ -1157,7 +1157,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       >
         <div className="px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+            <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
             <div className="min-w-0">
               <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
               <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'A reusable layout for your reports' : template.name}</p>
@@ -1187,7 +1187,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                     className="overflow-hidden"
                   >
-                    <div className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2.5 text-[0.75rem] text-risk-800">
+                    <div className="border border-risk-200 bg-risk-50 rounded-md px-3 py-2.5 text-[0.75rem] text-risk-800">
                       <div className="font-semibold mb-1.5">Please complete the following before saving:</div>
                       <div className="flex flex-wrap gap-1.5">
                         {activeErrors.map(err => (
@@ -1216,7 +1216,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               {/* Segmented group switcher — Details (what the template is + its
                   outline) vs Branding (how it looks). Full ARIA tab pattern with
                   ←/→ navigation (#9). */}
-              <div role="tablist" aria-label="Template settings" className="relative flex p-1 bg-canvas rounded-[10px] gap-1">
+              <div role="tablist" aria-label="Template settings" className="relative flex p-1 bg-canvas rounded-lg gap-1">
                 {([['identity', 'Details'], ['branding', 'Branding']] as const).map(([key, label], i, arr) => {
                   const active = panel === key;
                   return (
@@ -1233,13 +1233,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           setPanel(arr[(i + (e.key === 'ArrowRight' ? 1 : arr.length - 1)) % arr.length][0]);
                         }
                       }}
-                      className={`relative flex-1 h-8 rounded-[7px] text-[0.75rem] font-semibold cursor-pointer transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'text-brand-700' : 'text-ink-600 hover:text-ink-900'}`}
+                      className={`relative flex-1 h-8 rounded-sm text-[0.75rem] font-semibold cursor-pointer transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'text-brand-700' : 'text-ink-600 hover:text-ink-900'}`}
                     >
                       {active && (
                         <motion.span
                           layoutId="template-panel-pill"
                           transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
-                          className="absolute inset-0 rounded-[7px] bg-white border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.08)]"
+                          className="absolute inset-0 rounded-sm bg-white border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.08)]"
                         />
                       )}
                       <span className="relative z-10">{label}</span>
@@ -1317,7 +1317,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ti * 0.03 }}
                           whileTap={{ scale: 0.98 }}
-                          className={`no-focus-ring flex items-center gap-2 rounded-[10px] border pl-2 pr-2.5 py-2 text-left transition-all cursor-pointer ${active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-canvas/40'}`}
+                          className={`no-focus-ring flex items-center gap-2 rounded-lg border pl-2 pr-2.5 py-2 text-left transition-all cursor-pointer ${active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-canvas/40'}`}
                         >
                           {/* The two named colours, overlapping with a white gap. */}
                           <span className="shrink-0 flex items-center">
@@ -1373,7 +1373,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                             aria-label="Signatory name"
                             className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                           />
-                          <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                          <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
                         </div>
                       ))}
                       <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
@@ -1390,10 +1390,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   {watermark.enabled && (
                     <div className="space-y-3.5">
                       {/* content mode — text or an uploaded image */}
-                      <div className="inline-flex p-0.5 bg-canvas rounded-[8px] gap-0.5">
+                      <div className="inline-flex p-0.5 bg-canvas rounded-md gap-0.5">
                         {(['text', 'image'] as const).map(m => (
                           <button key={m} type="button" onClick={() => setWm({ mode: m })}
-                            className={`h-7 px-3 rounded-[6px] text-[0.75rem] font-semibold capitalize transition-colors cursor-pointer ${watermark.mode === m ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
+                            className={`h-7 px-3 rounded-sm text-[0.75rem] font-semibold capitalize transition-colors cursor-pointer ${watermark.mode === m ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
                             {m}
                           </button>
                         ))}
@@ -1401,14 +1401,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
 
                       {watermark.mode === 'text' ? (
                         <input value={watermark.text} onChange={e => setWm({ text: e.target.value })} placeholder="CONFIDENTIAL"
-                          className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] uppercase tracking-wide transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                          className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.875rem] uppercase tracking-wide transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       ) : (
                         <>
                           <input ref={watermarkImgInputRef} type="file" accept="image/*" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, url => setWm({ imageDataUrl: url })); if (watermarkImgInputRef.current) watermarkImgInputRef.current.value = ''; }} />
                           {watermark.imageDataUrl ? (
-                            <div className="flex items-center gap-3 rounded-[10px] border border-canvas-border bg-canvas p-2.5">
-                              <div className="h-11 w-16 rounded-[6px] bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
+                            <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
+                              <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
                                 <img src={watermark.imageDataUrl} alt="Watermark" className="max-h-9 max-w-[56px] object-contain" />
                               </div>
                               <button type="button" onClick={() => watermarkImgInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
@@ -1416,7 +1416,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                             </div>
                           ) : (
                             <button type="button" onClick={() => watermarkImgInputRef.current?.click()}
-                              className="w-full flex items-center justify-center gap-2 rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
+                              className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
                               <Upload size={15} /> Upload a watermark image
                             </button>
                           )}
@@ -1440,7 +1440,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                                 type="button"
                                 onClick={() => setWm({ position: p })}
                                 aria-pressed={active}
-                                className={`h-7 rounded-[6px] text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
+                                className={`h-7 rounded-sm text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
                               >
                                 {p}
                               </button>
@@ -1470,7 +1470,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
                   className="shrink-0 px-6 pt-4"
                 >
-                  <div className="flex items-center gap-3 rounded-[12px] border border-brand-200 bg-brand-50/70 px-4 py-2.5">
+                  <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/70 px-4 py-2.5">
                     <span className="w-7 h-7 rounded-full bg-compliant-500 text-white flex items-center justify-center shrink-0"><Check size={15} strokeWidth={2.5} /></span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
@@ -1486,7 +1486,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     </div>
                     <button
                       type="button" onClick={openReview}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-white border border-brand-200 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-white border border-brand-200 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
                     ><Pencil size={13} /> Review</button>
                     <button
                       type="button" onClick={() => setConfirmRemoveImport(true)} aria-label="Remove imported file"
@@ -1501,11 +1501,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
-              <div className="relative mx-auto w-full max-w-3xl rounded-[12px] shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
+              <div className="relative mx-auto w-full max-w-3xl rounded-lg shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
-                  className="rounded-t-[12px]"
+                  className="rounded-t-lg"
                   gradient={coverGradient}
                   headerText={headerText}
                   footer={
@@ -1636,14 +1636,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 {/* Footer strip — closes the page. With page numbers on, the
                     footer text sits left and a page number sits right, mirroring
                     the numbered footer the export produces. */}
-                <div className={`border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center ${pageNumbers ? 'justify-between' : 'justify-center'}`}>
+                <div className={`border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-9 py-3 flex items-center ${pageNumbers ? 'justify-between' : 'justify-center'}`}>
                   <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || `Generated by ${brand.trim() || 'Irame'}`}</span>
                   {pageNumbers && <span className="text-[0.6875rem] text-ink-400 tabular-nums tracking-wide">Page 1</span>}
                 </div>
 
                 {/* Watermark — a diagonal text/image mark stamped across the page. */}
                 {watermark.enabled && (watermark.mode === 'text' ? watermark.text.trim() : watermark.imageDataUrl) && (
-                  <div className={`pointer-events-none absolute inset-0 z-[6] flex overflow-hidden rounded-[12px] ${WATERMARK_POS[watermark.position ?? 'center']}`}>
+                  <div className={`pointer-events-none absolute inset-0 z-[6] flex overflow-hidden rounded-lg ${WATERMARK_POS[watermark.position ?? 'center']}`}>
                     {watermark.mode === 'text' ? (
                       <span
                         className="font-extrabold uppercase tracking-[0.15em] whitespace-nowrap text-ink-900 select-none leading-none"
@@ -1680,7 +1680,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               whileTap={isSaving || importing ? undefined : { scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               title="Start from an existing report — a PDF's outline + letterhead are detected; Word/PowerPoint seed a suggested outline"
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
             >
               {importing
                 ? <><Loader2 size={15} className="animate-spin shrink-0" /> Reading the report…</>
@@ -1699,7 +1699,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             disabled={isSaving}
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</motion.button>
           {/* New templates create a fresh entry; existing custom templates save
               in place (overwrite). */}
@@ -1709,7 +1709,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             title={nameTaken ? 'A template with this name already exists — choose a different name' : undefined}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
@@ -1735,10 +1735,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               transition={{ duration: 0.14 }}
               className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-brand-950/40 backdrop-blur-[2px] pointer-events-none"
             >
-              <div className="w-full h-full rounded-[14px] border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
+              <div className="w-full h-full rounded-lg border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
                 <motion.span
                   initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }}
-                  className="w-14 h-14 rounded-[14px] bg-brand-50 text-brand-600 flex items-center justify-center"
+                  className="w-14 h-14 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"
                 >
                   <Upload size={24} />
                 </motion.span>
@@ -1759,10 +1759,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           {importing && (() => {
             const kind = scanningName ? classifyImport(scanningName) : null;
             const CORNERS = [
-              '-top-1.5 -left-1.5 border-t-2 border-l-2 rounded-tl-[8px]',
-              '-top-1.5 -right-1.5 border-t-2 border-r-2 rounded-tr-[8px]',
-              '-bottom-1.5 -left-1.5 border-b-2 border-l-2 rounded-bl-[8px]',
-              '-bottom-1.5 -right-1.5 border-b-2 border-r-2 rounded-br-[8px]',
+              '-top-1.5 -left-1.5 border-t-2 border-l-2 rounded-tl-md',
+              '-top-1.5 -right-1.5 border-t-2 border-r-2 rounded-tr-md',
+              '-bottom-1.5 -left-1.5 border-b-2 border-l-2 rounded-bl-md',
+              '-bottom-1.5 -right-1.5 border-b-2 border-r-2 rounded-br-md',
             ];
             const sweep = { duration: 2.6, ease: 'linear' as const, repeat: Infinity };
             return (
@@ -1782,11 +1782,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     <span key={i} className={`absolute w-5 h-5 border-brand-500/70 ${c}`} aria-hidden="true" />
                   ))}
 
-                  <div className="absolute inset-0 rounded-[10px] bg-white border border-canvas-border shadow-[0_22px_50px_-20px_rgba(15,8,30,0.4)] overflow-hidden">
+                  <div className="absolute inset-0 rounded-lg bg-white border border-canvas-border shadow-[0_22px_50px_-20px_rgba(15,8,30,0.4)] overflow-hidden">
                     {/* the page content — reads as a real report page */}
                     <div className="p-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-[5px] bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
+                        <div className="w-6 h-6 rounded-sm bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
                         <div className="flex-1 space-y-1">
                           <div className="h-1.5 w-20 rounded-full bg-ink-200" />
                           <div className="h-1 w-12 rounded-full bg-paper-200" />
@@ -1800,7 +1800,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         {[100, 94, 98, 86].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
                       </div>
                       <div className="mt-4 grid grid-cols-3 gap-1">
-                        {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-[3px] bg-paper-100 border border-paper-200" />)}
+                        {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-xs bg-paper-100 border border-paper-200" />)}
                       </div>
                       <div className="mt-4 space-y-[7px]">
                         {[96, 82, 90].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
@@ -1882,7 +1882,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
 
                   <button
                     onClick={() => setMinimized(true)}
-                    className="mt-6 inline-flex items-center gap-2 h-10 px-5 rounded-[9px] text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                    className="mt-6 inline-flex items-center gap-2 h-10 px-5 rounded-md text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
                   >
                     <Minimize2 size={15} aria-hidden="true" /> Minimize
                   </button>
@@ -1910,7 +1910,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               >
                 <header className="shrink-0 px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+                    <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
@@ -1943,8 +1943,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
                   </span>
                   <div className="flex items-center gap-2">
-                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer">Discard</motion.button>
-                    <motion.button whileTap={namedCount === 0 ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-[8px] enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer">Discard</motion.button>
+                    <motion.button whileTap={namedCount === 0 ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                       Use these sections
                     </motion.button>
                   </div>

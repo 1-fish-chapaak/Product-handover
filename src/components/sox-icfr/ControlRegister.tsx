@@ -33,7 +33,7 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
   const word = res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
   return (
-    <div className="flex items-center gap-2.5 text-[11.5px]">
+    <div className="flex items-center gap-2.5 text-[0.71875rem]">
       <span className="text-ink-400 w-[58px] shrink-0">{label}</span>
       <span className={cn('ac-dot', dot)} />
       <span className="font-medium text-ink-700">{word}</span>
@@ -48,8 +48,8 @@ function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: 
         <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
         <span className="ml-auto inline-flex items-center gap-2 shrink-0">
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
-          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
-          <span className="font-mono text-[10.5px] text-ink-400">{c.wpRef}</span>
+          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[0.625rem] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
+          <span className="font-mono text-[0.65625rem] text-ink-400">{c.wpRef}</span>
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
@@ -74,10 +74,10 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
     <span className="cell-track">
       <Tickmark result={result === 'Effective' ? 'Pass' : result === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} />
       <span className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-semibold text-ink-600 leading-none">{result === 'Not tested' ? 'Not started' : result}</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-600 leading-none">{result === 'Not tested' ? 'Not started' : result}</span>
         <span className="inline-flex items-center gap-1.5">
           <span className="meter"><span style={{ width: `${pct}%`, background: tone }} /></span>
-          <span className="text-[10px] tabular-nums text-ink-400">{label}</span>
+          <span className="text-[0.625rem] tabular-nums text-ink-400">{label}</span>
         </span>
       </span>
     </span>
@@ -164,16 +164,16 @@ export default function ControlRegister() {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <ListFilter size={13} className="text-ink-400" />
-          <select value={process} onChange={e => setProcess(e.target.value)} className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
+          <select value={process} onChange={e => setProcess(e.target.value)} className="bg-transparent text-[0.78125rem] font-semibold text-ink-700 focus:outline-none cursor-pointer">
             {processes.map(p => <option key={p} value={p}>{p === 'All' ? 'All processes' : p}</option>)}
           </select>
         </div>
         <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <select value={nature} onChange={e => setNature(e.target.value)} className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
+          <select value={nature} onChange={e => setNature(e.target.value)} className="bg-transparent text-[0.78125rem] font-semibold text-ink-700 focus:outline-none cursor-pointer">
             {['All', 'Manual', 'Automated', 'IT-dependent'].map(p => <option key={p} value={p}>{p === 'All' ? 'All natures' : p}</option>)}
           </select>
         </div>
@@ -181,8 +181,8 @@ export default function ControlRegister() {
         <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
         {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
         <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
-          <button onClick={() => setLayout('table')} title="Table view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'table' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><Table2 size={13} /> Table</button>
+          <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[0.75rem] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
+          <button onClick={() => setLayout('table')} title="Table view" className={cn('h-8 px-2.5 rounded-md text-[0.75rem] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'table' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><Table2 size={13} /> Table</button>
         </div>
       </div>
 
@@ -195,8 +195,8 @@ export default function ControlRegister() {
                 <div className="shelf-head">
                   <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                   <span className="shelf-title">{g.key}</span>
-                  <span className="text-[11.5px] text-ink-400 font-medium">· {g.rows.length}</span>
-                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded</span>
+                  <span className="text-[0.71875rem] text-ink-400 font-medium">· {g.rows.length}</span>
+                  <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded</span>
                   <span className="shelf-board" />
                 </div>
               )}
@@ -206,7 +206,7 @@ export default function ControlRegister() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
+            <div className="text-center py-16 text-ink-400 text-[0.8125rem] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
           )}
         </div>
       ) : (
@@ -230,7 +230,7 @@ export default function ControlRegister() {
                 {g.key && (
                   <tr className="reg-group-row"><td colSpan={colSpan}>
                     <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
-                      <span className="ml-2 text-[10.5px] font-semibold text-ink-400">
+                      <span className="ml-2 text-[0.65625rem] font-semibold text-ink-400">
                         {g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded
                       </span>
                     </span>
@@ -246,8 +246,12 @@ export default function ControlRegister() {
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                          <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[420px]">{c.description}</span>
-                          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+                          <span className="font-semibold text-ink-900 text-[0.78125rem] truncate max-w-[420px]">{c.description}</span>
+                          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[0.65625rem] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+                        </div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5">
+                          {c.id} · {c.subProcess} · {c.owner} ·{' '}
+                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                         <div className="text-[11px] text-ink-400 mt-0.5">
                           {c.id} · {c.subProcess} · {c.owner} ·{' '}
@@ -265,18 +269,18 @@ export default function ControlRegister() {
               </FragmentGroup>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
+              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[0.8125rem]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
             )}
           </tbody>
         </table>
       </div>
       )}
-      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {eng.controls.length} controls</div>
+      <div className="mt-3 text-[0.71875rem] text-ink-400">Showing {filtered.length} of {eng.controls.length} controls</div>
 
       {/* bulk bar */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
-          <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
+          <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}

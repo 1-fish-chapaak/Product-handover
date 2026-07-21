@@ -229,7 +229,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
       <div className="rounded-xl border border-border-light bg-white overflow-hidden">
         <table className="w-full text-[0.75rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
               <th className="px-4 py-2.5 text-left">Assignment</th>
               <th className="px-4 py-2.5 text-left">Entity</th>
               <th className="px-4 py-2.5 text-left">Owner</th>
@@ -257,12 +257,12 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                   >
                     <td className="px-4 py-3">
                       <div className="font-semibold text-text group-hover:text-purple-700 transition-colors">{a.name}</div>
-                      <div className="text-[0.625rem] text-gray-400 mt-0.5">{a.businessProcess}</div>
+                      <div className="text-[0.625rem] text-ink-400 mt-0.5">{a.businessProcess}</div>
                     </td>
                     <td className="px-4 py-3 text-text-muted">{a.entity}</td>
                     <td className="px-4 py-3">
                       <div className="text-text font-medium">{a.owner}</div>
-                      <div className="text-[0.625rem] text-gray-400">{a.reviewer}</div>
+                      <div className="text-[0.625rem] text-ink-400">{a.reviewer}</div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${tone.bg} ${tone.text}`}>
@@ -278,7 +278,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                           )}
                         </div>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-ink-300">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -287,7 +287,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                       ) : a.actionPlans > 0 ? (
                         <span className="text-compliant-700 font-medium tabular-nums">{a.actionPlans}</span>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-ink-300">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-text-muted">
@@ -299,7 +299,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                           <NextIcon size={10} />{a.nextAction}
                         </span>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-ink-300">—</span>
                       )}
                     </td>
                   </motion.tr>

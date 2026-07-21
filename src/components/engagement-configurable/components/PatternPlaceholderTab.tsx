@@ -49,11 +49,11 @@ export default function PatternPlaceholderTab({ tabId, tabLabel, patternType }: 
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
       <div className="p-3 rounded-xl bg-surface-2/40 mb-4">
-        <Construction size={24} className="text-gray-300" />
+        <Construction size={24} className="text-ink-300" />
       </div>
       <h4 className="text-[0.875rem] font-semibold text-text mb-2">{tabLabel}</h4>
       <p className="text-[0.75rem] text-text-muted leading-relaxed mb-4">{description}</p>
-      <span className="px-3 py-1 rounded-full bg-gray-100 text-[0.625rem] text-gray-400 font-medium">
+      <span className="px-3 py-1 rounded-full bg-canvas text-[0.625rem] text-ink-400 font-medium">
         Coming in a future build step
       </span>
     </div>

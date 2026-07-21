@@ -27,7 +27,7 @@ import {
 function PlaceholderSample({ kind, metric }: { kind: 'kpi' | 'chart' | 'table'; metric?: string }) {
   if (kind === 'kpi') {
     return (
-      <div className="flex items-center gap-3 rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+      <div className="flex items-center gap-3 rounded-md border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
         <div className="shrink-0">
           <div className="text-[1.25rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
           <div className="text-[0.5625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1">{metric || 'Metric'}</div>
@@ -38,17 +38,17 @@ function PlaceholderSample({ kind, metric }: { kind: 'kpi' | 'chart' | 'table'; 
   }
   if (kind === 'chart') {
     return (
-      <div className="rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+      <div className="rounded-md border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
         <div className="flex items-end gap-1 h-8">
-          {[40, 66, 32, 80, 52, 70].map((h, k) => <div key={k} className="flex-1 rounded-t-[2px] bg-canvas-border" style={{ height: `${h}%` }} />)}
+          {[40, 66, 32, 80, 52, 70].map((h, k) => <div key={k} className="flex-1 rounded-t-xs bg-canvas-border" style={{ height: `${h}%` }} />)}
         </div>
         <p className="text-[0.625rem] text-ink-400 mt-1.5">Chart — {metric ? `“${metric}” ` : ''}a graph renders here in the report.</p>
       </div>
     );
   }
   return (
-    <div className="rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
-      <div className="rounded-[4px] overflow-hidden border border-canvas-border">
+    <div className="rounded-md border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+      <div className="rounded-xs overflow-hidden border border-canvas-border">
         <div className="grid grid-cols-4 bg-canvas">
           {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-3 border-r last:border-r-0 border-canvas-border" />)}
         </div>
@@ -106,7 +106,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
       dragControls={controls}
       ref={registerRef}
       whileDrag={{ scale: 1.015, boxShadow: '0 12px 28px -12px rgba(15,8,30,0.28)' }}
-      className={`group relative rounded-[10px] px-2.5 py-2 transition-colors ${bg} ${flashed ? 'ring-1 ring-brand-600/25' : ''}`}
+      className={`group relative rounded-lg px-2.5 py-2 transition-colors ${bg} ${flashed ? 'ring-1 ring-brand-600/25' : ''}`}
     >
       <div className="flex items-center gap-2.5">
         <button
@@ -125,7 +125,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           onChange={e => onRename(e.target.value)}
           placeholder="Name this section"
           title="Click to rename this section"
-          className="flex-1 min-w-0 -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
+          className="flex-1 min-w-0 -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
         />
         {/* Pencil hint — makes it obvious the name is editable after upload. */}
         <Pencil size={12} className="shrink-0 text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
@@ -136,7 +136,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
             onClick={onJump}
             title="Show in document"
             aria-label="Show in document"
-            className="shrink-0 p-1 rounded-[6px] text-ink-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+            className="shrink-0 p-1 rounded-sm text-ink-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
           >
             <CornerDownRight size={12} />
           </button>
@@ -153,7 +153,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
         <RowDeleteButton
           onConfirm={onDelete}
           ariaLabel="Remove section"
-          triggerClassName="p-1 rounded-[6px] text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          triggerClassName="p-1 rounded-sm text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         />
       </div>
       {/* One-line description — editable. Seeded from the auto blurb; the author can
@@ -165,7 +165,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
             onChange={e => onDescribe(e.target.value)}
             placeholder="Add a one-line description…"
             title="Click to edit this section's description"
-            className="w-full -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] text-ink-400 leading-relaxed transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-300"
+            className="w-full -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] text-ink-400 leading-relaxed transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-300"
           />
         </div>
       )}
@@ -324,7 +324,7 @@ export default function SectionReviewCanvas({
       <div className="mt-1.5 space-y-1.5">
         <button
           onClick={() => addSection()}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[10px] text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
         >
           <Plus size={13} /> Add a section the detector missed
         </button>
@@ -357,21 +357,21 @@ export default function SectionReviewCanvas({
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {detected.length === 0 ? (
-              <div className="rounded-[12px] border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
+              <div className="rounded-lg border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
                 No section headings were detected in the document. Add the sections it should have on the right.
               </div>
             ) : (
               /* The source rendered as the page it came from — a white sheet with a
                  letterhead-style title block and document body, so it reads as the
                  real report, not a list of snippets. Each block stays click-to-jump. */
-              <article className="rounded-[12px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)] px-8 py-7">
+              <article className="rounded-lg border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)] px-8 py-7">
                 {detected.map((d, idx) => (
                   <div
                     key={d.id}
                     ref={el => { sourceRefs.current[d.id] = el; }}
                     onClick={() => jumpToSection(d.id)}
                     title="Show this section in the detected list"
-                    className={`group/src relative -mx-4 px-4 rounded-[8px] cursor-pointer transition-colors duration-300 hover:bg-canvas/60 ${
+                    className={`group/src relative -mx-4 px-4 rounded-md cursor-pointer transition-colors duration-300 hover:bg-canvas/60 ${
                       idx === 0 ? 'pb-4 mb-5 border-b border-canvas-border pt-1' : 'py-3'
                     } ${flashId === d.id ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/20' : ''}`}
                   >
@@ -400,11 +400,11 @@ export default function SectionReviewCanvas({
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {reportChrome ? (
-              <div className="rounded-[12px] shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]" style={reportChrome.accent ? ({ '--rep-accent': reportChrome.accent } as CSSProperties) : undefined}>
+              <div className="rounded-lg shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]" style={reportChrome.accent ? ({ '--rep-accent': reportChrome.accent } as CSSProperties) : undefined}>
                 <ReportBrandBanner
                   title={reportChrome.title || 'Untitled Template'}
                   titleClassName="text-[1.375rem]"
-                  className="rounded-t-[12px]"
+                  className="rounded-t-lg"
                   gradient={reportChrome.gradient}
                   footer={
                     /* Narrow half-width card — only the facts that matter while
@@ -428,7 +428,7 @@ export default function SectionReviewCanvas({
                 <div className="border-x border-canvas-border bg-white px-5 py-4">
                   {outlineBody}
                 </div>
-                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-5 py-3 flex items-center justify-center">
+                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-5 py-3 flex items-center justify-center">
                   <span className="text-[0.6875rem] text-ink-400 tracking-wide">{reportChrome.footerText || 'Generated by Irame'}</span>
                 </div>
               </div>

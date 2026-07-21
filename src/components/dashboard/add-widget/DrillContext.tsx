@@ -262,7 +262,7 @@ export function DrillBanner() {
                   : <Layers className="size-3 text-[#6a12cd]" />
                 }
               </div>
-              <span className="font-mono text-[12px] font-semibold text-[#6a12cd] whitespace-nowrap">
+              <span className="font-mono text-[0.75rem] font-semibold text-[#6a12cd] whitespace-nowrap">
                 {isInteractive
                   ? doubleDrillPending
                     ? drillState.doubleDrillMode === 1 ? "DD1 — State → Category → Sub-Category → Product"
@@ -282,7 +282,7 @@ export function DrillBanner() {
               {/* Root node */}
               <button
                 onClick={resetHierarchy}
-                className="font-mono text-[12px] text-[#6a12cd]/60 hover:text-[#6a12cd] transition-colors px-1.5 py-0.5 rounded hover:bg-[#6a12cd]/10 shrink-0"
+                className="font-mono text-[0.75rem] text-[#6a12cd]/60 hover:text-[#6a12cd] transition-colors px-1.5 py-0.5 rounded hover:bg-[#6a12cd]/10 shrink-0"
               >
                 {DRILL_LEVEL_META[0].shortLabel}
               </button>
@@ -296,7 +296,7 @@ export function DrillBanner() {
                     <ChevronRight className="size-2.5 text-[#6a12cd]/30" />
                     <button
                       onClick={() => jumpToLevel(targetLevel)}
-                      className={`font-mono text-[12px] px-1.5 py-0.5 rounded transition-all ${
+                      className={`font-mono text-[0.75rem] px-1.5 py-0.5 rounded transition-all ${
                         isActive
                           ? "bg-[#6a12cd] text-white"
                           : "text-[#6a12cd]/70 hover:text-[#6a12cd] hover:bg-[#6a12cd]/10"
@@ -312,8 +312,8 @@ export function DrillBanner() {
             {/* Current level description pill */}
             {!isInteractive && level > 0 && (
               <div className="ml-1 hidden sm:flex items-center gap-1 shrink-0">
-                <span className="text-[10px] text-gray-400">→</span>
-                <span className="text-[10px] bg-white border border-[#6a12cd]/20 text-[#6a12cd] px-2 py-0.5 rounded-full">
+                <span className="text-[0.625rem] text-ink-400">→</span>
+                <span className="text-[0.625rem] bg-white border border-[#6a12cd]/20 text-[#6a12cd] px-2 py-0.5 rounded-full">
                   {DRILL_LEVEL_META[level].description}
                 </span>
               </div>
@@ -323,7 +323,7 @@ export function DrillBanner() {
             <div className="ml-auto flex items-center gap-1 shrink-0">
               <button
                 onClick={resetHierarchy}
-                className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                className="flex items-center gap-1 px-2 py-0.5 text-[0.625rem] text-ink-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
               >
                 <X className="size-2.5" />
                 Clear

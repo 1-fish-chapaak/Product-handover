@@ -346,7 +346,7 @@ const MD_CLASS =
 
 function MarkdownResult({ text }: { text: string }) {
   return (
-    <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-6">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-6">
       <div className={MD_CLASS}>
         <ReactMarkdown>{text}</ReactMarkdown>
       </div>
@@ -375,24 +375,24 @@ function AuditResultView({ result }: { result: AuditResult }) {
     <div className="space-y-5">
       {/* KPI tally */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">KPIs checked</p>
           <p className="mt-1 text-[1.75rem] font-semibold tabular-nums text-ink-900 leading-none">
             {result.kpis.length}
           </p>
         </div>
-        <div className="rounded-[12px] border border-compliant-50 bg-compliant-50/60 p-4">
+        <div className="rounded-lg border border-compliant-50 bg-compliant-50/60 p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-compliant-700">Compliant</p>
           <p className="mt-1 text-[1.75rem] font-semibold tabular-nums text-compliant-700 leading-none">{passed}</p>
         </div>
-        <div className="rounded-[12px] border border-risk-50 bg-risk-50/60 p-4">
+        <div className="rounded-lg border border-risk-50 bg-risk-50/60 p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-risk-700">Non-Compliant</p>
           <p className="mt-1 text-[1.75rem] font-semibold tabular-nums text-risk-700 leading-none">{failed}</p>
         </div>
       </div>
 
       {/* Summary */}
-      <div className="rounded-[12px] border border-canvas-border bg-paper-50/70 p-5">
+      <div className="rounded-lg border border-canvas-border bg-paper-50/70 p-5">
         <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Summary</p>
         <p className="text-[0.875rem] leading-relaxed text-ink-700">{result.summary}</p>
       </div>
@@ -408,7 +408,7 @@ function AuditResultView({ result }: { result: AuditResult }) {
             return (
               <div
                 key={kpi.kpiNumber}
-                className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4"
+                className="rounded-lg border border-canvas-border bg-canvas-elevated p-4"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <h5 className="text-[0.875rem] font-semibold text-ink-900">
@@ -463,6 +463,7 @@ function ImageMode({
     messages: config.messages,
     totalMs: config.totalMs,
     buildResult: config.buildResult,
+    toolName: `Image Analytics · ${config.label}`,
   });
 
   // Open-from-history: jump straight to a finished result.

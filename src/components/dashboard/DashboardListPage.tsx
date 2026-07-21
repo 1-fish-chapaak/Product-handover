@@ -12,24 +12,14 @@ import Gated from '../shared/Gated';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
+import {
+  MY_DASHBOARDS, SHARED_DASHBOARDS, SAMPLE_DASHBOARDS, dashboardTags, DASHBOARD_TAG_LABEL,
+  type Dashboard, type DashboardSourceType,
+} from '../../data/dashboards';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type DashboardSourceType = 'excel' | 'csv' | 'sql' | 'query' | 'combo';
-
-interface Dashboard {
-  id: string;
-  name: string;
-  description: string;
-  timeAgo: string;
-  creator: string;
-  accent: string;
-  sharedBy?: string;
-  dataSource?: DashboardSourceType;
-  dataSourceNames?: string[];
-  /** SEED id of the source picked at creation. Required for live-SQL dashboards. */
-  sourceId?: string;
-}
+export type { Dashboard, DashboardSourceType };
 
 export interface DashboardCreateOpts {
   customFields?: string[];
@@ -55,81 +45,6 @@ interface DashboardListPageProps {
   onUpdateDashboardSource?: (id: string, patch: { dataSource?: DashboardSourceType; sourceId?: string; dataSourceNames?: string[] }) => void;
   onOpenChat?: (pendingDashboard?: { name: string; description: string }) => void;
 }
-
-// ─── Data ───────────────────────────────────────────────────────────────────
-
-const MY_DASHBOARDS: Dashboard[] = [
-  {
-    id: 'p2p',
-    name: 'Procurement (P2P)',
-    description: 'Procure-to-Pay analytics — invoice processing, duplicate flags, compliance rate, and vendor spend tracking.',
-    timeAgo: '2 hours ago',
-    creator: 'You',
-    accent: 'bg-brand-50 text-brand-700',
-    dataSource: 'excel',
-    dataSourceNames: ['Invoice_Master.xlsx', 'Vendor_Finance.xlsx'],
-  },
-  {
-    id: 'grc',
-    name: 'GRC Overview',
-    description: 'Governance, risk & compliance — total risks, controls tested, deficiencies, and workflow automation.',
-    timeAgo: '3 hours ago',
-    creator: 'You',
-    accent: 'bg-brand-50 text-brand-700',
-    dataSource: 'sql',
-    dataSourceNames: ['audit_controls_db'],
-  },
-  {
-    id: 'o2c',
-    name: 'Order to Cash (O2C)',
-    description: 'Revenue & collections overview — orders fulfilled, revenue recognized, DSO, and customer insights.',
-    timeAgo: '5 hours ago',
-    creator: 'You',
-    accent: 'bg-brand-50 text-brand-700',
-    dataSource: 'query',
-    dataSourceNames: ['revenue_query'],
-  },
-  {
-    id: 's2c',
-    name: 'Source to Contract (S2C)',
-    description: 'Sourcing & contract management — active contracts, vendor scores, savings realized, and expiry tracking.',
-    timeAgo: '1 day ago',
-    creator: 'You',
-    accent: 'bg-brand-50 text-brand-700',
-    dataSource: 'combo',
-    dataSourceNames: ['Invoice_Master.xlsx', 'PO_Register.csv', 'vendor_query', 'contract_db'],
-  },
-];
-
-const SHARED_DASHBOARDS: Dashboard[] = [
-  {
-    id: 'shared-1',
-    name: 'Vendor Risk Assessment',
-    description: 'Evaluation of vendor risk profiles across all business units.',
-    timeAgo: '4 hours ago',
-    creator: 'Sarah Johnson',
-    accent: 'bg-brand-50 text-brand-700',
-    sharedBy: 'Sarah Johnson',
-  },
-  {
-    id: 'shared-2',
-    name: 'SOX Compliance Tracker',
-    description: 'End-to-end SOX compliance progress and control testing status.',
-    timeAgo: '1 day ago',
-    creator: 'Michael Chen',
-    accent: 'bg-brand-50 text-brand-700',
-    sharedBy: 'Michael Chen',
-  },
-  {
-    id: 'shared-3',
-    name: 'AP Duplicate Detection',
-    description: 'Automated duplicate invoice detection across accounts payable.',
-    timeAgo: '2 days ago',
-    creator: 'David Martinez',
-    accent: 'bg-brand-50 text-brand-700',
-    sharedBy: 'David Martinez',
-  },
-];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -183,7 +98,7 @@ function NavFileTree({ files }: { files: { name: string; sheets: { name: string;
       {files.map(file => {
         const isFileOpen = expandedFiles[file.name] ?? false;
         return (
-          <div key={file.name} className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+          <div key={file.name} className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
             <button
               onClick={() => setExpandedFiles(p => ({ ...p, [file.name]: !p[file.name] }))}
               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] transition-all cursor-pointer"
@@ -284,7 +199,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
 
   const allSources = SEED;
   const fileSources = allSources.filter(s => s.type === 'file');
-  const dbSources = allSources.filter(s => s.type === 'database' || s.type === 'api' || s.type === 'cloud');
+  const dbSources = allSources.filter(s => s.type === 'database');
 
   const handleClose = () => {
     setStep('details');
@@ -397,7 +312,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onChange={e => setName(e.target.value)}
                         placeholder="e.g., Q3 Financial Overview"
                         autoFocus
-                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-lg text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
                       />
                     </div>
                     <div className="space-y-2">
@@ -409,7 +324,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onChange={e => setDescription(e.target.value)}
                         placeholder="Briefly describe the purpose of this dashboard..."
                         rows={4}
-                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-lg text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
                       />
                     </div>
                   </motion.div>
@@ -937,7 +852,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                 exit={{ opacity: 0 }}
                 transition={{ delay: i * 0.04 }}
                 onClick={() => onDashboardClick(dashboard.id)}
-                className={`glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col transition-shadow ${
+                className={`glass-card p-5 cursor-pointer group relative flex flex-col transition-shadow ${
                   focusedDashboardId === dashboard.id ? 'ring-2 ring-brand-400 shadow-lg' : ''
                 }`}
               >
@@ -1020,36 +935,18 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                       <Clock size={13} className="text-ink-400" />
                       <span className="text-[0.75rem] text-ink-400">{dashboard.timeAgo}</span>
                     </div>
-                    {(dashboard.dataSource || (dashboard.dataSourceNames && dashboard.dataSourceNames.length > 0)) && (
+                    {dashboardTags(dashboard).length > 0 && (
                       <div className="flex items-center gap-1 flex-wrap">
-                        {(() => {
-                          // Prefer the explicit dataSource field. For combo dashboards
-                          // (or legacy entries without it), fall back to inferring
-                          // each badge from the individual data-source name.
-                          const types = new Set<string>();
-                          const ds = dashboard.dataSource;
-                          if (ds === 'excel' || ds === 'csv') {
-                            types.add('file');
-                          } else if (ds === 'sql' || ds === 'query') {
-                            types.add(ds);
-                          } else {
-                            (dashboard.dataSourceNames || []).forEach(name => {
-                              if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) types.add('file');
-                              else if (name.includes('query')) types.add('query');
-                              else types.add('sql');
-                            });
-                          }
-                          return Array.from(types).map(t => (
-                            <span key={t} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold ${
-                              t === 'file' ? 'bg-green-50 text-green-700' :
-                              t === 'query' ? 'bg-amber-50 text-amber-700' :
-                              'bg-purple-50 text-purple-700'
-                            }`}>
-                              {t === 'file' ? <Upload size={8} /> : <Database size={8} />}
-                              {t === 'file' ? 'Excel / CSV' : t === 'query' ? 'Query' : 'SQL'}
-                            </span>
-                          ));
-                        })()}
+                        {dashboardTags(dashboard).map(t => (
+                          <span key={t} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold ${
+                            t === 'file' ? 'bg-green-50 text-green-700' :
+                            t === 'query' ? 'bg-amber-50 text-amber-700' :
+                            'bg-purple-50 text-purple-700'
+                          }`}>
+                            {t === 'file' ? <Upload size={8} /> : <Database size={8} />}
+                            {DASHBOARD_TAG_LABEL[t]}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1100,90 +997,62 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
       <div className="mt-8 mb-6">
         <h2 className="text-[0.8125rem] font-bold text-ink-500 uppercase tracking-wide mb-4">Sample Dashboards</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            onClick={() => onDashboardClick('excel')}
-            className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
-          >
-            {/* Icon */}
-            <div className="mb-4">
-              <div className="inline-flex p-2.5 rounded-lg bg-brand-50 text-brand-700">
-                <FileText size={18} />
-              </div>
-            </div>
-
-            {/* Title & Description */}
-            <div className="mb-4 flex-1">
-              <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
-                Excel Sample Example
-              </h3>
-              <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
-                Excel data quality — blank cells, duplicate rows, type mismatches, format errors, and sheet-level anomalies.
-              </p>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-canvas-border mt-auto">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Clock size={13} className="text-ink-400" />
-                  <span className="text-[0.75rem] text-ink-400">30 minutes ago</span>
+          {SAMPLE_DASHBOARDS.map((sample, i) => {
+            const SampleIcon = sample.dataSource === 'sql' ? Database : FileText;
+            return (
+              <motion.div
+                key={sample.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                onClick={() => onDashboardClick(sample.id)}
+                className="glass-card p-5 cursor-pointer group relative flex flex-col"
+              >
+                {/* Icon */}
+                <div className="mb-4">
+                  <div className={`inline-flex p-2.5 rounded-lg ${sample.accent}`}>
+                    <SampleIcon size={18} />
+                  </div>
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-green-50 text-green-700">
-                  <Upload size={8} />
-                  Excel
-                </span>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </div>
-          </motion.div>
 
-          {/* Live SQL — Vendor Risk (sample bound to db-02) */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.04 }}
-            onClick={() => onDashboardClick('sql')}
-            className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
-          >
-            <div className="mb-4">
-              <div className="inline-flex p-2.5 rounded-lg bg-purple-50 text-purple-700">
-                <Database size={18} />
-              </div>
-            </div>
-            <div className="mb-4 flex-1">
-              <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
-                Live SQL — Vendor Risk
-              </h3>
-              <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
-                Live database insights — vendor performance, invoice trends, risk distribution, and category-wise spend, sourced from Vendor Master (PostgreSQL).
-              </p>
-            </div>
-            <div className="flex items-center justify-between pt-3 border-t border-canvas-border mt-auto">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Clock size={13} className="text-ink-400" />
-                  <span className="text-[0.75rem] text-ink-400">Just now</span>
+                {/* Title & Description */}
+                <div className="mb-4 flex-1">
+                  <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
+                    {sample.name}
+                  </h3>
+                  <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
+                    {sample.description}
+                  </p>
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-purple-50 text-purple-700">
-                  <Database size={8} />
-                  SQL
-                </span>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </div>
-          </motion.div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-3 border-t border-canvas-border mt-auto">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={13} className="text-ink-400" />
+                      <span className="text-[0.75rem] text-ink-400">{sample.timeAgo}</span>
+                    </div>
+                    {dashboardTags(sample).map(t => (
+                      <span key={t} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold ${
+                        t === 'file' ? 'bg-green-50 text-green-700' :
+                        t === 'query' ? 'bg-amber-50 text-amber-700' :
+                        'bg-purple-50 text-purple-700'
+                      }`}>
+                        {t === 'file' ? <Upload size={8} /> : <Database size={8} />}
+                        {DASHBOARD_TAG_LABEL[t]}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
       </div>
@@ -1275,7 +1144,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                             addToast({ message: `Source changed to ${db.name}`, type: 'success' });
                             setChangeSourceDashboardId(null);
                           }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all cursor-pointer text-left ${
                             isCurrent ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                           }`}
                         >

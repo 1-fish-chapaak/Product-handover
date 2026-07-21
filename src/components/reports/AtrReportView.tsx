@@ -90,7 +90,8 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
-  status?: 'draft' | 'final';
+  /** Reports have no draft state — an ATR is issued, or frozen from edits. */
+  status?: 'final' | 'frozen';
   atrData: AtrReportData;
 }
 
@@ -135,7 +136,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
     // grows the version trail automatically (no separate "finalize" step).
     if (dirty) {
       const current = loadVersions(report.id, {
-        status: report.status === 'final' ? 'final' : 'draft',
+        status: report.status ?? 'final',
         by: report.generatedBy ?? draft.meta.preparedBy ?? 'You',
         at: report.generatedAt ?? draft.meta.generatedOn ?? nowStamp(),
         reviewedBy: draft.meta.reviewedBy,
@@ -255,7 +256,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
       <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         <button
           onClick={requestBack}
-          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           <ArrowLeft size={14} /> Back to Reports
         </button>
@@ -265,14 +266,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {dirty && <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mitigated-600 mr-1">Unsaved changes</span>}
               <button
                 onClick={requestCancel}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <X size={14} /> Cancel
               </button>
               <button
                 onClick={() => setConfirmingSave(true)}
                 disabled={!dirty}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check size={14} /> Save changes
               </button>
@@ -281,14 +282,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             <>
               <button
                 onClick={() => setReviewTab('comments')}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <History size={14} /> Activity
               </button>
               {onManageExceptions && (
                 <button
                   onClick={onManageExceptions}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <ShieldAlert size={14} /> Case Management
                 </button>
@@ -296,7 +297,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {editable && (
                 <button
                   onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Pencil size={14} /> Edit
                 </button>
@@ -304,14 +305,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {onShare && (
                 <button
                   onClick={onShare}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Share2 size={14} /> Share
                 </button>
               )}
               <button
                 onClick={() => setShowDownloadModal(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
               >
                 <Download size={14} /> Download
               </button>
@@ -323,7 +324,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
       {/* Reader workspace — outline rail + constrained document column. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
-          <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
+          <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-3.5">
             <div className="flex items-center gap-2 mb-3 px-1">
               <List size={13} className="text-ink-400" />
               <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">On this page</span>
@@ -337,7 +338,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
                     <button
                       onClick={() => scrollToSection(e.id)}
                       aria-current={isActive ? 'true' : undefined}
-                      className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+                      className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
                     >
                       <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${isActive ? 'text-brand-700' : 'text-brand-500'}`}>{String(i + 1).padStart(2, '0')}</span>
                       <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
@@ -390,7 +391,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             onClose={() => setReviewTab(null)}
             onTab={t => setReviewTab(t)}
             initialVersions={loadVersions(report.id, {
-              status: report.status === 'final' ? 'final' : 'draft',
+              status: report.status ?? 'final',
               by: report.generatedBy ?? meta.preparedBy ?? 'You',
               at: report.generatedAt ?? meta.generatedOn ?? nowStamp(),
               reviewedBy: meta.reviewedBy,

@@ -49,7 +49,7 @@ function KpiSkeletonGrid({ count }: { count: number }) {
   return (
     <div aria-hidden className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="glass-card rounded-xl px-5 py-4">
+        <div key={i} className="glass-card px-5 py-4">
           <div className="skeleton-cool h-2.5 w-2/3 rounded mb-3" />
           <div className="skeleton-cool h-6 w-1/2 rounded" />
         </div>

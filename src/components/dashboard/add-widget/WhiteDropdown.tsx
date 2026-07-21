@@ -162,9 +162,9 @@ export function WhiteDropdown({
             ref={buttonRef}
             type="button"
             onClick={openDropdown}
-            className={`w-full h-[32px] ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm flex items-center gap-2`}
+            className={`w-full h-[32px] ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-sm focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm flex items-center gap-2`}
           >
-            <div className="size-5 rounded-[4px] border border-[#e5e7eb]" style={{ backgroundColor: value || "#6a12cd" }} />
+            <div className="size-5 rounded-xs border border-[#e5e7eb]" style={{ backgroundColor: value || "#6a12cd" }} />
             <span className="text-[0.6875rem] font-medium text-[#26064a] flex-1 text-left">
               {value && value.startsWith("#") ? value : "#6a12cd"}
             </span>
@@ -179,7 +179,7 @@ export function WhiteDropdown({
             ref={buttonRef}
             type="button"
             onClick={openDropdown}
-            className={`w-full h-[32px] ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-[6px] text-left ${
+            className={`w-full h-[32px] ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-sm text-left ${
               hasValue ? "text-[#26064a]" : "text-[#cbd5e1]"
             } focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm flex items-center justify-between`}
           >
@@ -209,7 +209,7 @@ export function WhiteDropdown({
             scrollbarWidth: "thin",
             scrollbarColor: "#d1d5db #f9fafb"
           }}
-          className="bg-white rounded-[8px] shadow-2xl border border-[#e5e7eb] custom-scrollbar"
+          className="bg-white rounded-md shadow-2xl border border-[#e5e7eb] custom-scrollbar"
         >
           {mode === "colorpicker" ? (
             <div className="p-3">
@@ -245,7 +245,7 @@ export function WhiteDropdown({
                     }
                   }}
                   placeholder="#6a12cd"
-                  className="flex-1 min-w-0 px-2 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[4px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all font-mono"
+                  className="flex-1 min-w-0 px-2 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-xs text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all font-mono"
                 />
               </div>
             </div>
@@ -276,12 +276,12 @@ export function WhiteDropdown({
                           </span>
                           <div className="flex items-center gap-1 shrink-0">
                             {isInXAxis && (
-                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
+                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-xs border border-[#6a12cd]/20">
                                 X
                               </span>
                             )}
                             {isInYAxis && (
-                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
+                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-xs border border-[#0ea5e9]/20">
                                 Y
                               </span>
                             )}
@@ -315,12 +315,12 @@ export function WhiteDropdown({
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         {isInXAxis && (
-                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
+                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-xs border border-[#6a12cd]/20">
                             X
                           </span>
                         )}
                         {isInYAxis && (
-                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
+                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-xs border border-[#0ea5e9]/20">
                             Y
                           </span>
                         )}

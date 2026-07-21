@@ -15,18 +15,19 @@ import {
   derivePBCSummary, REQUEST_TYPES, PRIORITIES,
   type PBCRequest, type PBCRequestStatus, type PBCRequestType, type PBCPriority,
 } from './complianceRequestsData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const STATUS_CLS: Record<PBCRequestStatus, string> = {
-  Draft: 'bg-gray-100 text-gray-600',
+  Draft: 'bg-canvas text-ink-600',
   Sent: 'bg-blue-50 text-blue-700',
   Pending: 'bg-amber-50 text-amber-700',
   'Partially Received': 'bg-purple-50 text-purple-700',
   Received: 'bg-emerald-50 text-emerald-700',
   Overdue: 'bg-red-50 text-red-700',
-  Cancelled: 'bg-gray-50 text-gray-400',
+  Cancelled: 'bg-canvas text-ink-400',
 };
 const PRIORITY_CLS: Record<PBCPriority, string> = {
-  Low: 'bg-gray-100 text-gray-500',
+  Low: 'bg-canvas text-ink-500',
   Medium: 'bg-blue-50 text-blue-600',
   High: 'bg-amber-50 text-amber-700',
   Critical: 'bg-red-50 text-red-700',
@@ -46,6 +47,7 @@ const nowStamp = () => new Date().toLocaleString('en-US', { month: 'short', day:
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function ComplianceRequestsPBCTab({ engagement, requests, onCreateRequest, onUpdateRequest }: Props) {
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const isRiskOwner = currentUser?.roleId === 'role-risk';
 
@@ -77,6 +79,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
     onCreateRequest(req);
     setShowCreateForm(false);
     setToast(`Request ${req.id} created as Draft`);
+    logEvent({ action: 'Create', description: `Created PBC request "${req.title}" for ${req.requestedFrom}`, module: 'Engagements', entity: 'PBC Request' });
   };
 
   const handleRemind = (req: PBCRequest) => {
@@ -100,6 +103,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
       comments: [...req.comments, `Evidence uploaded by ${providerName} on ${nowStamp()}.`],
     });
     setToast(`Marked provided — ${mockFile} attached`);
+    logEvent({ action: 'Upload', description: `Provided evidence for PBC request "${req.title}" (${mockFile})`, module: 'Engagements', entity: 'PBC Request' });
   };
 
   return (
@@ -156,7 +160,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-[240px]">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests, controls, owner..."
             className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40" />
         </div>
@@ -165,7 +169,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
             .filter(f => !(isRiskOwner && f === 'Draft'))
             .map(f => (
               <button key={f} onClick={() => setStatusFilter(f)}
-                className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
                 {f}
               </button>
             ))}
@@ -202,7 +206,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-[0.75rem] text-gray-400">No requests match the current filter.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-[0.75rem] text-ink-400">No requests match the current filter.</td></tr>
             ) : filtered.map(req => {
               const isExpanded = expandedId === req.id;
               const isOverdue = req.status === 'Overdue';
@@ -210,7 +214,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
                 <React.Fragment key={req.id}>
                   <tr className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 transition-colors ${isExpanded ? 'bg-surface-2/20' : ''}`}
                     onClick={() => setExpandedId(isExpanded ? null : req.id)}>
-                    <td className="px-3 py-2.5 text-gray-400">
+                    <td className="px-3 py-2.5 text-ink-400">
                       {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     </td>
                     <td className="px-3 py-2.5">
@@ -234,12 +238,12 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
                     </td>
                     <td className="px-3 py-2.5 text-text">{isRiskOwner ? engagement.owner : req.requestedFrom}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`text-[0.6875rem] font-mono ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{req.dueDate}</span>
+                      <span className={`text-[0.6875rem] font-mono ${isOverdue ? 'text-red-600 font-semibold' : 'text-ink-500'}`}>{req.dueDate}</span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-bold whitespace-nowrap ${STATUS_CLS[req.status]}`}>{req.status}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-[0.6875rem] text-gray-500">
+                    <td className="px-3 py-2.5 text-center text-[0.6875rem] text-ink-500">
                       {req.progressText || (req.filesReceived.length > 0 ? `${req.filesReceived.length} file${req.filesReceived.length !== 1 ? 's' : ''}` : '—')}
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
@@ -262,7 +266,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-[0.75rem] font-medium shadow-lg">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ink-900 text-white text-[0.75rem] font-medium shadow-lg">
           <CheckCircle2 size={14} className="text-emerald-400" />{toast}
         </div>
       )}
@@ -277,9 +281,10 @@ function AuditorActions({ req, onUpdateRequest, onRemind }: {
   onUpdateRequest: (id: string, patch: Partial<PBCRequest>) => void;
   onRemind: (req: PBCRequest) => void;
 }) {
+  const logEvent = useAuditLog();
   if (req.status === 'Draft') {
     return (
-      <button onClick={() => onUpdateRequest(req.id, { status: 'Sent', sentAt: new Date().toISOString().slice(0, 10) })}
+      <button onClick={() => { onUpdateRequest(req.id, { status: 'Sent', sentAt: new Date().toISOString().slice(0, 10) }); logEvent({ action: 'Update', description: `Sent PBC request "${req.title}" to ${req.requestedFrom}`, module: 'Engagements', entity: 'PBC Request' }); }}
         className="inline-flex items-center gap-1 px-2 py-1 rounded text-[0.6875rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
         <Send size={10} />Mark Sent
       </button>
@@ -340,8 +345,8 @@ function RequestDetail({ req }: { req: PBCRequest }) {
         <div className="flex items-center gap-1">
           {stages.map((s, i) => (
             <React.Fragment key={s.label}>
-              {i > 0 && <div className={`flex-1 h-px ${s.done ? 'bg-emerald-400' : 'bg-gray-200'}`} />}
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+              {i > 0 && <div className={`flex-1 h-px ${s.done ? 'bg-emerald-400' : 'bg-canvas-border'}`} />}
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-400'}`}>
                 {s.done ? <CheckCircle2 size={9} /> : <Clock size={9} />}
                 {s.label}
               </div>
@@ -381,7 +386,7 @@ function RequestDetail({ req }: { req: PBCRequest }) {
           <h6 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1">Comments</h6>
           <div className="space-y-1">
             {req.comments.map((c, i) => (
-              <div key={i} className="text-[0.75rem] text-gray-500 pl-2 border-l-2 border-gray-200">{c}</div>
+              <div key={i} className="text-[0.75rem] text-ink-500 pl-2 border-l-2 border-canvas-border">{c}</div>
             ))}
           </div>
         </div>
@@ -438,7 +443,7 @@ function CreateRequestForm({ onSave, onCancel }: { onSave: (r: PBCRequest) => vo
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center justify-between mb-1">
         <h4 className="text-[0.8125rem] font-bold text-text">Create PBC Request</h4>
-        <button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
+        <button onClick={onCancel} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

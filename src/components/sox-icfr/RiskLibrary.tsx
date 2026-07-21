@@ -70,10 +70,10 @@ function ScoreBadge({ l, i }: { l: number; i: number }) {
   const b = band(l * i);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="w-6 h-6 rounded-md inline-flex items-center justify-center text-[11px] font-bold text-white tabular-nums" style={{ background: b.color }}>{l * i}</span>
+      <span className="w-6 h-6 rounded-md inline-flex items-center justify-center text-[0.6875rem] font-bold text-white tabular-nums" style={{ background: b.color }}>{l * i}</span>
       <span className="flex flex-col leading-none">
-        <span className="text-[11px] font-semibold text-ink-700">{b.label}</span>
-        <span className="text-[9.5px] text-ink-400 mt-0.5">L{l} × I{i}</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-700">{b.label}</span>
+        <span className="text-[0.59375rem] text-ink-400 mt-0.5">L{l} × I{i}</span>
       </span>
     </span>
   );
@@ -87,15 +87,15 @@ function Heatmap({ title, subtitle, risks, kind, sel, onSelect }: {
 }) {
   const at = (l: number, i: number) => risks.filter(r => (kind === 'inherent' ? r.l === l && r.i === i : r.rl === l && r.ri === i));
   return (
-    <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
       <div className="flex items-baseline justify-between gap-2 mb-3">
-        <h3 className="text-[13.5px] font-semibold text-ink-900">{title}</h3>
-        <span className="text-[11px] text-ink-400">{subtitle}</span>
+        <h3 className="text-[0.84375rem] font-semibold text-ink-900">{title}</h3>
+        <span className="text-[0.6875rem] text-ink-400">{subtitle}</span>
       </div>
       <div className="flex gap-1.5">
         {/* impact axis */}
         <div className="flex flex-col justify-between py-0.5 pr-1 text-right shrink-0 w-[64px]">
-          {[...I_LABELS].reverse().map(lb => <span key={lb} className="h-11 flex items-center justify-end text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
+          {[...I_LABELS].reverse().map(lb => <span key={lb} className="h-11 flex items-center justify-end text-[0.59375rem] font-semibold text-ink-400 leading-tight">{lb}</span>)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="grid grid-cols-5 gap-1">
@@ -109,13 +109,13 @@ function Heatmap({ title, subtitle, risks, kind, sel, onSelect }: {
                   title={`${I_LABELS[i - 1]} impact · ${L_LABELS[l - 1]?.toLowerCase()} — ${rs.length} risk${rs.length === 1 ? '' : 's'}`}
                   className={cn('h-11 rounded-lg flex items-center justify-center transition-all cursor-pointer', active && 'ring-2 ring-ink-900 ring-offset-1')}
                   style={{ background: `color-mix(in srgb, ${b.color} ${rs.length > 0 ? 82 : 16}%, ${rs.length > 0 ? 'transparent' : 'var(--color-canvas-elevated)'})` }}>
-                  {rs.length > 0 && <span className="text-[13px] font-bold text-white tabular-nums drop-shadow-sm">{rs.length}</span>}
+                  {rs.length > 0 && <span className="text-[0.8125rem] font-bold text-white tabular-nums drop-shadow-sm">{rs.length}</span>}
                 </button>
               );
             }))}
           </div>
           <div className="grid grid-cols-5 gap-1 mt-1">
-            {L_LABELS.map(lb => <span key={lb} className="text-center text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
+            {L_LABELS.map(lb => <span key={lb} className="text-center text-[0.59375rem] font-semibold text-ink-400 leading-tight">{lb}</span>)}
           </div>
         </div>
       </div>
@@ -157,8 +157,8 @@ export default function RiskLibrary() {
       {/* header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Risk library</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">
+          <h1 className="text-[1.375rem] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Risk library</h1>
+          <p className="text-[0.8125rem] text-ink-500 mt-0.5">
             {risks.length} risks derived from the engagement RACM · {counts.critical} critical residual · {counts.exceptions} with exceptions · {counts.mitigated} mitigated
           </p>
         </div>
@@ -173,22 +173,22 @@ export default function RiskLibrary() {
       {/* toolbar */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {cell && (
-          <button onClick={() => setCell(null)} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-ink-900 text-white text-[12px] font-semibold cursor-pointer">
+          <button onClick={() => setCell(null)} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-ink-900 text-white text-[0.75rem] font-semibold cursor-pointer">
             {cell.kind === 'inherent' ? 'Inherent' : 'Residual'} · {I_LABELS[cell.i - 1]} × {L_LABELS[cell.l - 1]} <X size={13} />
           </button>
         )}
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <ListFilter size={13} className="text-ink-400" />
-          <select value={process} onChange={e => setProcess(e.target.value)} className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
+          <select value={process} onChange={e => setProcess(e.target.value)} className="bg-transparent text-[0.78125rem] font-semibold text-ink-700 focus:outline-none cursor-pointer">
             {processes.map(p => <option key={p} value={p}>{p === 'All' ? 'All processes' : p}</option>)}
           </select>
         </div>
         <div className="flex-1" />
-        <span className="text-[11.5px] text-ink-400">Showing {filtered.length} of {risks.length} risks</span>
+        <span className="text-[0.71875rem] text-ink-400">Showing {filtered.length} of {risks.length} risks</span>
       </div>
 
       {/* register */}
@@ -216,10 +216,10 @@ export default function RiskLibrary() {
                     <td>{open ? <ChevronDown size={14} className="text-ink-400" /> : <ChevronRight size={14} className="text-ink-400" />}</td>
                     <td><span className="wp-ref">{r.id}</span></td>
                     <td className="tight">
-                      <span className="font-semibold text-ink-900 text-[12.5px] leading-snug line-clamp-2">{r.description}</span>
-                      <span className="block text-[11px] text-ink-400 mt-0.5">{r.subProcess} · {r.owner}</span>
+                      <span className="font-semibold text-ink-900 text-[0.78125rem] leading-snug line-clamp-2">{r.description}</span>
+                      <span className="block text-[0.6875rem] text-ink-400 mt-0.5">{r.subProcess} · {r.owner}</span>
                     </td>
-                    <td><span className="text-[11.5px] text-ink-600 font-medium">{r.process}</span></td>
+                    <td><span className="text-[0.71875rem] text-ink-600 font-medium">{r.process}</span></td>
                     <td><ScoreBadge l={r.l} i={r.i} /></td>
                     <td>
                       <span className="inline-flex items-center gap-1.5">
@@ -228,7 +228,7 @@ export default function RiskLibrary() {
                       </span>
                     </td>
                     <td>
-                      <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-600 font-medium">
+                      <span className="inline-flex items-center gap-1 text-[0.71875rem] text-ink-600 font-medium">
                         <ShieldCheck size={12} className="text-ink-400" /> {r.controls.filter(c => controlConclusion(c) === 'Effective').length}/{r.controls.length}
                       </span>
                     </td>
@@ -238,13 +238,13 @@ export default function RiskLibrary() {
                     <tr>
                       <td colSpan={8} className="!p-0">
                         <div className="bg-paper-50/50 border-b border-canvas-border px-5 py-3">
-                          <div className="text-[10.5px] font-bold uppercase tracking-wide text-ink-400 mb-2">Mitigating controls · {r.controls.length}</div>
+                          <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-2">Mitigating controls · {r.controls.length}</div>
                           <div className="space-y-1.5">
                             {r.controls.map(c => (
                               <button key={c.id} onClick={e => { e.stopPropagation(); openControl(c.id); }}
                                 className="w-full flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-left hover:border-brand-300 transition-colors cursor-pointer">
                                 <span className="wp-ref shrink-0">{c.wpRef}</span>
-                                <span className="flex-1 min-w-0 text-[12px] font-medium text-ink-800 truncate">{c.description}</span>
+                                <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-800 truncate">{c.description}</span>
                                 <Tickmark result={controlConclusion(c) === 'Effective' ? 'Pass' : controlConclusion(c) === 'Ineffective' ? 'Fail' : 'Not tested'} size={15} />
                               </button>
                             ))}
@@ -257,7 +257,7 @@ export default function RiskLibrary() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-16 text-ink-400 text-[13px]">
+              <tr><td colSpan={8} className="text-center py-16 text-ink-400 text-[0.8125rem]">
                 No risks match these filters. <button onClick={() => { setQ(''); setProcess('All'); setCell(null); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button>
               </td></tr>
             )}

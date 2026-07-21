@@ -76,18 +76,18 @@ export default function CommonDetailsStep({ patternType, details, onChange, revi
           <div>
             <label className={labelCls}>Planned Start Date</label>
             <DatePicker value={details.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)} className={inputCls} />
-            <p className="text-[0.5625rem] text-gray-400 mt-0.5">When work begins</p>
+            <p className="text-[0.5625rem] text-ink-400 mt-0.5">When work begins</p>
           </div>
           <div>
             <label className={labelCls}>Planned End Date</label>
             <DatePicker value={details.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)} className={inputCls} />
-            <p className="text-[0.5625rem] text-gray-400 mt-0.5">When work ends</p>
+            <p className="text-[0.5625rem] text-ink-400 mt-0.5">When work ends</p>
           </div>
         </div>
 
         <div>
           <label className="text-[0.6875rem] font-semibold text-text block mb-0.5">Data Period</label>
-          <p className="text-[0.625rem] text-gray-400 mb-2">Select the period of data that will be reviewed, tested, or analyzed.</p>
+          <p className="text-[0.625rem] text-ink-400 mb-2">Select the period of data that will be reviewed, tested, or analyzed.</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Data Period From</label>

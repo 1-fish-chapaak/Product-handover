@@ -232,7 +232,7 @@ export default function QueryClarificationCard({
                 {/* Marker — square checkbox for multi-select, round radio for single */}
                 <span
                   aria-hidden="true"
-                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-[5px]' : 'rounded-full'} ${
+                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-sm' : 'rounded-full'} ${
                     isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border group-hover/opt:border-brand-300'
                   }`}
                 >
@@ -259,7 +259,7 @@ export default function QueryClarificationCard({
                 >
                   {s.kind === 'source' && (
                     <>
-                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                       <span className="truncate max-w-[10rem]">{s.name}</span>
                     </>
                   )}

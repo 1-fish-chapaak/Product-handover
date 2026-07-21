@@ -10,21 +10,21 @@ import { PROCESSING_MESSAGES } from '../mockExtraction';
 export default function Step3Processing({ progress, step }: { progress: number; step: number }) {
   return (
     <div
-      className="rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden"
+      className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden"
       aria-busy="true"
       aria-live="polite"
     >
       {/* Live progress header */}
       <div className="px-6 pt-6 pb-5">
         <div className="flex items-center gap-3.5">
-          <span className="w-11 h-11 rounded-[12px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+          <span className="w-11 h-11 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
             <Loader2 size={20} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-semibold text-ink-900 leading-tight">Extracting your report</div>
-            <div className="text-[12.5px] text-ink-500 mt-0.5">{PROCESSING_MESSAGES[step]}</div>
+            <div className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Extracting your report</div>
+            <div className="text-[0.78125rem] text-ink-500 mt-0.5">{PROCESSING_MESSAGES[step]}</div>
           </div>
-          <span className="text-[15px] font-bold tabular-nums text-brand-700">{Math.round(progress)}%</span>
+          <span className="text-[0.9375rem] font-bold tabular-nums text-brand-700">{Math.round(progress)}%</span>
         </div>
 
         {/* Progress bar */}
@@ -38,7 +38,7 @@ export default function Step3Processing({ progress, step }: { progress: number; 
             const done = i < step;
             const active = i === step;
             return (
-              <li key={m} className="flex items-center gap-2.5 text-[12.5px]">
+              <li key={m} className="flex items-center gap-2.5 text-[0.78125rem]">
                 <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                   done ? 'bg-compliant text-white' : active ? 'bg-brand-600 text-white' : 'bg-canvas-border'
                 }`}>

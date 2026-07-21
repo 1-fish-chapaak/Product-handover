@@ -70,7 +70,7 @@ function EditableText({ value, onCommit, editable, className = '', placeholder, 
       data-ph={placeholder}
       onBlur={e => { const t = (e.currentTarget.textContent ?? '').trim(); if (t !== value) onCommit?.(t); }}
       onKeyDown={e => { if (!multiline && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLSpanElement).blur(); } }}
-      className={`atr-ed inline-block min-w-[32px] outline-none rounded-[3px] px-0.5 -mx-0.5 cursor-text hover:bg-brand-50/40 focus:bg-brand-50/60 focus:ring-2 focus:ring-brand-600/30 ${className}`}
+      className={`atr-ed inline-block min-w-[32px] outline-none rounded-xs px-0.5 -mx-0.5 cursor-text hover:bg-brand-50/40 focus:bg-brand-50/60 focus:ring-2 focus:ring-brand-600/30 ${className}`}
     >
       {value}
     </span>
@@ -176,7 +176,7 @@ export default function AtrDocument({
     process: n => (
       <>
         <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
-        <div className="overflow-hidden rounded-[10px] border border-canvas-border">
+        <div className="overflow-hidden rounded-lg border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="bg-brand-50/60 text-ink-700 text-left">
@@ -230,7 +230,7 @@ export default function AtrDocument({
         <ReportNumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
         <div className="space-y-3">
           {insights.map((ins, i) => (
-            <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-[10px] p-4 hover:border-brand-200 transition-colors">
+            <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-lg p-4 hover:border-brand-200 transition-colors">
               <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
               <div className="min-w-0 flex-1">
                 <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug"><EditableText value={ins.title} editable={editable} onCommit={v => setInsight(i, { ...ins, title: v })} /></div>
@@ -260,7 +260,7 @@ export default function AtrDocument({
             { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
             { Icon: Eye, role: 'Reviewed by', name: meta.reviewedBy ?? '' },
           ].map(c => (
-            <div key={c.role} className="rounded-[10px] border border-canvas-border p-5">
+            <div key={c.role} className="rounded-lg border border-canvas-border p-5">
               <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
                 <c.Icon size={12} /> {c.role}
               </div>
@@ -381,11 +381,11 @@ export default function AtrDocument({
 function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
-    <div className="border border-canvas-border rounded-[10px] overflow-hidden">
+    <div className="border border-canvas-border rounded-lg overflow-hidden">
       {/* Header */}
       <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <span className="shrink-0 w-7 h-7 rounded-[8px] bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
+          <span className="shrink-0 w-7 h-7 rounded-md bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
             <h3 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight"><EditableText value={obs.title} editable={editable} onCommit={v => onChange?.({ ...obs, title: v })} /></h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}

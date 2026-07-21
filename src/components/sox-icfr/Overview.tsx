@@ -75,13 +75,13 @@ export default function Overview() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Overview</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {eng.framework} · {eng.period} period</p>
+        <h1 className="text-[1.375rem] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Overview</h1>
+        <p className="text-[0.8125rem] text-ink-500 mt-0.5">{eng.controls.length} controls · {eng.framework} · {eng.period} period</p>
       </div>
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && (
-        <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
+        <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
           <RiskOwnerPortal />
         </section>
       )}
@@ -89,9 +89,9 @@ export default function Overview() {
       {/* progress rail */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {tiles.map(s => (
-          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
-            <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+          <div key={s.k} className="rounded-lg border border-canvas-border bg-canvas-elevated px-4 py-3">
+            <div className={cn('text-[1.25rem] font-bold tabular-nums', s.t)}>{s.v}</div>
+            <div className="text-[0.71875rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
         ))}
       </div>
@@ -99,29 +99,29 @@ export default function Overview() {
       {/* exceptions · handoffs · materiality */}
       <div className="grid md:grid-cols-3 gap-4">
         {/* exceptions */}
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> Exceptions</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {eng.deficiencies.length} total</span>
+            <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> Exceptions</h2>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{sev.open} open · {eng.deficiencies.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
             {SEV_META.map(s => (
               <div key={s.key} className="flex items-center gap-2">
                 <span className={cn('w-2 h-2 rounded-full', s.dot)} />
-                <span className="text-[12.5px] text-ink-600">{s.label}</span>
-                <span className={cn('ml-auto text-[15px] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
+                <span className="text-[0.78125rem] text-ink-600">{s.label}</span>
+                <span className={cn('ml-auto text-[0.9375rem] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
               </div>
             ))}
-            {sev.trivial > 0 && <div className="text-[11px] text-ink-400 pt-1">{sev.trivial} clearly trivial (logged, not evaluated)</div>}
+            {sev.trivial > 0 && <div className="text-[0.6875rem] text-ink-400 pt-1">{sev.trivial} clearly trivial (logged, not evaluated)</div>}
           </div>
-          <button onClick={() => setView('deficiencies')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage exceptions <ArrowRight size={13} /></button>
+          <button onClick={() => setView('deficiencies')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage exceptions <ArrowRight size={13} /></button>
         </div>
 
         {/* handoffs */}
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{openTasks.length} open</span>
+            <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{openTasks.length} open</span>
           </div>
           <div className="space-y-2 flex-1">
             {(Object.keys(HANDOFF_META) as TaskType[]).map(t => {
@@ -129,19 +129,19 @@ export default function Overview() {
               return (
                 <div key={t} className="flex items-center gap-2">
                   <m.Icon size={13} className={m.tone} />
-                  <span className="text-[12.5px] text-ink-600">{m.label}</span>
-                  <span className="ml-auto text-[15px] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
+                  <span className="text-[0.78125rem] text-ink-600">{m.label}</span>
+                  <span className="ml-auto text-[0.9375rem] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
                 </div>
               );
             })}
           </div>
-          <div className="mt-3 text-[12px] text-ink-500">{stats.waitingOnOwner} control{stats.waitingOnOwner === 1 ? '' : 's'} waiting on the risk owner</div>
+          <div className="mt-3 text-[0.75rem] text-ink-500">{stats.waitingOnOwner} control{stats.waitingOnOwner === 1 ? '' : 's'} waiting on the risk owner</div>
         </div>
 
         {/* materiality */}
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Materiality</h2>
+            <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Materiality</h2>
           </div>
           <div className="space-y-2 flex-1">
             {[
@@ -150,28 +150,28 @@ export default function Overview() {
               { k: 'Clearly trivial', v: eng.rules.clearlyTrivial },
             ].map(r => (
               <div key={r.k} className="flex items-center gap-2">
-                <span className="text-[12.5px] text-ink-600">{r.k}</span>
-                <span className="ml-auto text-[13.5px] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
+                <span className="text-[0.78125rem] text-ink-600">{r.k}</span>
+                <span className="ml-auto text-[0.84375rem] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
               </div>
             ))}
           </div>
-          <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
+          <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
         </div>
       </div>
 
       {/* by process */}
       <section>
-        <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
+        <h2 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {processes.map(p => {
             const notStarted = p.total - p.effective - p.ineffective - p.inProgress;
             const seg = (n: number, color: string) => n > 0 ? <span style={{ width: `${(n / p.total) * 100}%`, background: color }} className="h-full" /> : null;
             return (
-              <button key={p.name} onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
+              <button key={p.name} onClick={() => setTab('controls')} className="text-left rounded-lg border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
                 <div className="flex items-center gap-2 mb-2.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: spineColor(p.name) }} />
-                  <span className="text-[13.5px] font-semibold text-ink-900 truncate">{p.name}</span>
-                  <span className="ml-auto text-[11.5px] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
+                  <span className="text-[0.84375rem] font-semibold text-ink-900 truncate">{p.name}</span>
+                  <span className="ml-auto text-[0.71875rem] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
                 </div>
                 <div className="flex h-2 rounded-full overflow-hidden bg-paper-100 mb-2.5">
                   {seg(p.effective, 'var(--color-compliant-500)')}
@@ -179,7 +179,7 @@ export default function Overview() {
                   {seg(p.inProgress, 'var(--color-brand-400)')}
                   {seg(notStarted, 'var(--color-paper-300)')}
                 </div>
-                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-ink-500">
+                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[0.6875rem] text-ink-500">
                   <span><b className="text-compliant-700">{p.effective}</b> effective</span>
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
                   <span className="ml-auto tabular-nums">D {p.designDone}/{p.total} · O {p.operatingDone}/{p.total}</span>

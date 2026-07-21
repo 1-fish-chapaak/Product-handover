@@ -3611,12 +3611,12 @@ export function deriveControlTypeClass(type: string): string {
   if (type === 'Preventive') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if (type === 'Detective') return 'bg-blue-50 text-blue-700 border-blue-100';
   if (type === 'Corrective') return 'bg-purple-50 text-purple-700 border-purple-100';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+  return 'bg-canvas text-ink-600 border-canvas-border';
 }
 
 export function deriveControlNatureClass(nature: string): string {
   if (nature === 'Manual') return 'bg-amber-50 text-amber-700 border-amber-100';
   if (nature === 'Automated') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if ((nature || '').toLowerCase().includes('hybrid')) return 'bg-blue-50 text-blue-700 border-blue-100';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+  return 'bg-canvas text-ink-600 border-canvas-border';
 }

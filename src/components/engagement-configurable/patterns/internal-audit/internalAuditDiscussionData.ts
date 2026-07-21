@@ -84,7 +84,7 @@ export function deriveDiscussionSummary(state: InternalAuditDiscussionState) {
 }
 
 export const DISC_STATUS_CLS: Record<DiscussionItemStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600',
+  NOT_STARTED: 'bg-canvas text-ink-600',
   SENT_TO_MANAGEMENT: 'bg-blue-50 text-blue-700',
   RESPONSE_RECEIVED: 'bg-purple-50 text-purple-700',
   AGREED: 'bg-emerald-50 text-emerald-700',

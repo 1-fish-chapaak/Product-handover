@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuditLog } from '../../../context/AdminDataContext';
 import type { JobState, Stage } from './types';
 
 // ─── Mock job engine ─────────────────────────────────────────────────────────
 // Replaces the production axios + React-Query polling. `start(input)` walks
 // UPLOADING → PROCESSING (ticking progress across `stages`) → COMPLETED with
 // buildResult(input). No network. `cancel`/`reset` return to IDLE.
+//
+// Every start() writes a `Run` audit event. Logging lives here rather than in
+// each tool so a new Concierge tool cannot silently skip it — that gap is why
+// Platform Usage could not attribute AI use to a member.
 
 interface Cfg<I, R> {
   stages: Stage[];
   buildResult: (input: I) => R;
+  /** Tool name for the audit trail, e.g. 'RACM Generator'. */
+  toolName: string;
   /** Total processing time (ms) across all stages. Default 7000. */
   totalMs?: number;
   /** Brief UPLOADING phase (ms). Default 900. */
@@ -34,14 +41,21 @@ function initial<R>(): JobState<R> {
 }
 
 export function useConciergeJob<I, R>(cfg: Cfg<I, R>) {
-  const { stages, buildResult, totalMs = 7000, uploadMs = 900, messages } = cfg;
+  const { stages, buildResult, toolName, totalMs = 7000, uploadMs = 900, messages } = cfg;
   const [state, setState] = useState<JobState<R>>(() => initial<R>());
+  const logEvent = useAuditLog();
 
   const timers = useRef<number[]>([]);
   const interval = useRef<number | null>(null);
   // Keep the latest config in refs so the ticking closure never goes stale.
   const cfgRef = useRef({ stages, buildResult, totalMs, messages });
   cfgRef.current = { stages, buildResult, totalMs, messages };
+
+  /** Write the Run event for this tool. Also used by callers that skip the
+   *  staged animation and jump straight to a finished result. */
+  const logRun = useCallback(() => {
+    logEvent({ action: 'Run', description: `Ran ${toolName}`, module: 'AI Concierge', entity: toolName });
+  }, [logEvent, toolName]);
 
   const clearAll = useCallback(() => {
     timers.current.forEach((t) => window.clearTimeout(t));
@@ -73,6 +87,7 @@ export function useConciergeJob<I, R>(cfg: Cfg<I, R>) {
   const start = useCallback(
     (input: I) => {
       clearAll();
+      logRun();
       const startedAt = Date.now();
       const { stages: st } = cfgRef.current;
       setState({
@@ -128,8 +143,8 @@ export function useConciergeJob<I, R>(cfg: Cfg<I, R>) {
 
       timers.current.push(up);
     },
-    [clearAll, uploadMs],
+    [clearAll, uploadMs, logRun],
   );
 
-  return { state, start, cancel, reset, complete };
+  return { state, start, cancel, reset, complete, logRun };
 }

@@ -54,7 +54,7 @@ export default function ObservationExtractCard({
   };
 
   return (
-    <div className={`rounded-[12px] border overflow-hidden transition-colors ${obs.selected ? 'border-brand-300 ring-1 ring-brand-200 bg-brand-50/20' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'}`}>
+    <div className={`rounded-lg border overflow-hidden transition-colors ${obs.selected ? 'border-brand-300 ring-1 ring-brand-200 bg-brand-50/20' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'}`}>
       {/* Selected observations are highlighted (brand tint + ring) so it's clear
           which ones flow into the ATR. */}
       {/* Header row */}
@@ -63,10 +63,10 @@ export default function ObservationExtractCard({
 
         <button onClick={() => setOpen(o => !o)} className="flex-1 min-w-0 text-left cursor-pointer">
           <div className="flex items-baseline gap-2">
-            <span className="text-[11px] font-semibold tabular-nums text-ink-300 shrink-0">#{obs.number}</span>
-            <span className="text-[14px] font-semibold text-ink-900 truncate">{title}</span>
+            <span className="text-[0.6875rem] font-semibold tabular-nums text-ink-300 shrink-0">#{obs.number}</span>
+            <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{title}</span>
           </div>
-          <div className="mt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap text-[11.5px] text-ink-500">
+          <div className="mt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap text-[0.71875rem] text-ink-500">
             {metaParts.map((node, i) => (
               <span key={i} className="inline-flex items-center gap-2">
                 {i > 0 && <span className="text-ink-300" aria-hidden="true">·</span>}
@@ -77,8 +77,8 @@ export default function ObservationExtractCard({
         </button>
 
         <div className="flex items-center gap-3.5 shrink-0 pt-1">
-          <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-ink-400" title={`${obs.actionPlans.length} action plan${obs.actionPlans.length === 1 ? '' : 's'}`}><ClipboardList size={13} aria-hidden="true" />{obs.actionPlans.length}</span>
-          <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-ink-400" title={`${linkedRows} linked annexure row${linkedRows === 1 ? '' : 's'}${linkedAnnexures > 1 ? ` across ${linkedAnnexures} files` : ''}`}><Paperclip size={13} aria-hidden="true" />{linkedRows}{linkedAnnexures > 1 ? ` · ${linkedAnnexures}` : ''}</span>
+          <span className="inline-flex items-center gap-1 text-[0.71875rem] tabular-nums text-ink-400" title={`${obs.actionPlans.length} action plan${obs.actionPlans.length === 1 ? '' : 's'}`}><ClipboardList size={13} aria-hidden="true" />{obs.actionPlans.length}</span>
+          <span className="inline-flex items-center gap-1 text-[0.71875rem] tabular-nums text-ink-400" title={`${linkedRows} linked annexure row${linkedRows === 1 ? '' : 's'}${linkedAnnexures > 1 ? ` across ${linkedAnnexures} files` : ''}`}><Paperclip size={13} aria-hidden="true" />{linkedRows}{linkedAnnexures > 1 ? ` · ${linkedAnnexures}` : ''}</span>
           <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse' : 'Expand'} className="text-ink-300 hover:text-ink-700 cursor-pointer">
             <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="inline-block"><ChevronDown size={16} aria-hidden="true" /></motion.span>
           </button>
@@ -98,10 +98,10 @@ export default function ObservationExtractCard({
                 return (
                   <div key={field.key} className={isWide ? 'sm:col-span-2 lg:col-span-3' : ''}>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{field.label}</span>
-                      {mf?.state === 'missing' && <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wide text-risk-600 bg-risk-50 px-1.5 py-0.5 rounded-[5px]"><span className="w-1 h-1 rounded-full bg-risk-500" aria-hidden="true" />Missing</span>}
-                      {mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wide text-evidence bg-evidence-50 px-1.5 py-0.5 rounded-[5px]"><UserCheck size={10} aria-hidden="true" />Filled by you</span>}
-                      {mf?.state === 'skipped' && <span className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded-[5px]">Skipped · N/A</span>}
+                      <span className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">{field.label}</span>
+                      {mf?.state === 'missing' && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-risk-600 bg-risk-50 px-1.5 py-0.5 rounded-sm"><span className="w-1 h-1 rounded-full bg-risk-500" aria-hidden="true" />Missing</span>}
+                      {mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-evidence bg-evidence-50 px-1.5 py-0.5 rounded-sm"><UserCheck size={10} aria-hidden="true" />Filled by you</span>}
+                      {mf?.state === 'skipped' && <span className="text-[0.59375rem] font-semibold uppercase tracking-wide text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded-sm">Skipped · N/A</span>}
                     </div>
 
                     {isEditing ? (
@@ -109,12 +109,12 @@ export default function ObservationExtractCard({
                     ) : mf?.state === 'missing' ? (
                       <MissingFieldResolver onFill={() => startEdit(field.key)} onSkip={() => onResolve(field.key, 'skip')} />
                     ) : mf?.state === 'skipped' ? (
-                      <button onClick={() => onResolve(field.key, 'reset')} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-brand-700 hover:underline cursor-pointer">
+                      <button onClick={() => onResolve(field.key, 'reset')} className="inline-flex items-center gap-1.5 text-[0.71875rem] font-medium text-brand-700 hover:underline cursor-pointer">
                         <RotateCcw size={12} aria-hidden="true" /> Undo skip
                       </button>
                     ) : (
                       <div className="group flex items-start gap-2">
-                        <span className="text-[12.5px] text-ink-800 leading-relaxed flex-1">{value || <span className="text-ink-400">—</span>}</span>
+                        <span className="text-[0.78125rem] text-ink-800 leading-relaxed flex-1">{value || <span className="text-ink-400">—</span>}</span>
                         <button onClick={() => startEdit(field.key)} aria-label={`Edit ${field.label}`} className="opacity-0 group-hover:opacity-100 text-ink-400 hover:text-brand-700 cursor-pointer transition-opacity shrink-0 mt-0.5">
                           <Pencil size={12.5} aria-hidden="true" />
                         </button>
@@ -134,7 +134,7 @@ export default function ObservationExtractCard({
 function FieldEditor({ kind, value, onChange, onSave, onCancel }: {
   kind: FieldDef['kind']; value: string; onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
 }) {
-  const base = 'w-full text-[12.5px] text-ink-800 bg-canvas-elevated border border-brand-400 rounded-[6px] px-2.5 py-1.5 focus:outline-none focus:ring-4 focus:ring-brand-600/15';
+  const base = 'w-full text-[0.78125rem] text-ink-800 bg-canvas-elevated border border-brand-400 rounded-sm px-2.5 py-1.5 focus:outline-none focus:ring-4 focus:ring-brand-600/15';
   return (
     <div className="space-y-2">
       {kind === 'textarea' ? (
@@ -153,8 +153,8 @@ function FieldEditor({ kind, value, onChange, onSave, onCancel }: {
         <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder={kind === 'date' ? 'e.g. 30 Jun 2026' : ''} className={base} />
       )}
       <div className="flex items-center gap-2">
-        <button onClick={onSave} className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[6px] cursor-pointer"><Check size={12} aria-hidden="true" /> Save</button>
-        <button onClick={onCancel} className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-semibold text-ink-600 hover:text-ink-800 cursor-pointer"><X size={12} aria-hidden="true" /> Cancel</button>
+        <button onClick={onSave} className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-sm cursor-pointer"><Check size={12} aria-hidden="true" /> Save</button>
+        <button onClick={onCancel} className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-800 cursor-pointer"><X size={12} aria-hidden="true" /> Cancel</button>
       </div>
     </div>
   );

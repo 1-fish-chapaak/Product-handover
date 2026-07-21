@@ -206,8 +206,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
       <div>
         <ul className="space-y-2">
           {reportFiles.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
-              <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+            <li key={`${f.name}-${i}`} className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-lg bg-canvas">
+              <div className="w-9 h-9 rounded-md bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-ink-900 truncate">{f.name}</div>
                 <div className="text-xs text-ink-500 flex items-center gap-1.5"><CheckCircle2 size={11} className="text-compliant" /> Ready · {formatBytes(f.size)}</div>
@@ -223,11 +223,11 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
     ) : (
       <div>
         <button type="button" onClick={() => setMainUploadOpen(true)}
-          className={`w-full flex flex-col items-center justify-center text-center py-10 px-6 rounded-[12px] border-2 border-dashed transition-colors cursor-pointer ${fileError ? 'border-risk/60 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40'}`}>
+          className={`w-full flex flex-col items-center justify-center text-center py-10 px-6 rounded-lg border-2 border-dashed transition-colors cursor-pointer ${fileError ? 'border-risk/60 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40'}`}>
           <Upload size={28} className={`mb-2 ${fileError ? 'text-risk-700' : 'text-ink-400'}`} aria-hidden="true" />
           <span className="text-sm font-semibold text-ink-800">Upload {label}</span>
           <span className="text-xs text-ink-500 mt-0.5">{hint}</span>
-          <span className="inline-flex items-center gap-2 mt-3 px-4 h-9 rounded-md bg-brand-600 text-white text-[13px] font-semibold"><Upload size={14} aria-hidden="true" /> Choose files</span>
+          <span className="inline-flex items-center gap-2 mt-3 px-4 h-9 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold"><Upload size={14} aria-hidden="true" /> Choose files</span>
         </button>
         {fileError && <div className="text-xs text-risk-700 mt-1.5 flex items-center gap-1"><AlertTriangle size={11} aria-hidden="true" /> Please upload a file to continue.</div>}
       </div>
@@ -244,14 +244,14 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
       {(embeddedAnnex.length > 0 || annexFiles.length > 0) && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {embeddedAnnex.map(a => (
-            <span key={a.id} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-compliant-50 border border-compliant/30 text-xs text-compliant-700">
+            <span key={a.id} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-sm bg-compliant-50 border border-compliant/30 text-xs text-compliant-700">
               <FileSpreadsheet size={11} /><span className="truncate max-w-[150px]" title={a.name}>{a.name.replace(" (from report)", "")}</span>
               <span className="text-xs font-semibold bg-compliant/15 px-1 rounded-full">from report · {a.rows}</span>
               <button onClick={() => setEmbeddedAnnex(prev => prev.filter(x => x.id !== a.id))} className="w-4 h-4 rounded-full text-compliant-700/60 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
             </span>
           ))}
           {annexFiles.map((a, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-paper-50 border border-canvas-border text-xs text-ink-700">
+            <span key={i} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-sm bg-paper-50 border border-canvas-border text-xs text-ink-700">
               <FileSpreadsheet size={11} className="text-compliant-700" /><span className="truncate max-w-[160px]" title={a.name}>{a.name}</span>
               <button onClick={() => setAnnexFiles(prev => prev.filter((_, j) => j !== i))} className="w-4 h-4 rounded-full text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
             </span>
@@ -260,9 +260,9 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
       )}
       <button
         onClick={() => setAnnexUploadOpen(true)}
-        className="group w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-[12px] border border-dashed border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+        className="group w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-lg border border-dashed border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
       >
-        <span className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 transition-colors group-hover:bg-brand-100">
+        <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 transition-colors group-hover:bg-brand-100">
           <Upload size={16} />
         </span>
         <span className="text-left leading-tight">
@@ -414,14 +414,14 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
         ref={containerRef}
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog" aria-modal="true" aria-label="ATR Builder" tabIndex={-1}
       >
         {/* Header + inline stepper — one compact row so the header stays tight
             (mirrors the report wizard). The step rail sits inline on the right;
             done steps stay clickable to jump back. */}
         <header className="shrink-0 px-6 py-3 border-b border-canvas-border flex items-center gap-4">
-          <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60"><Sparkles size={16} /></div>
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60"><Sparkles size={16} /></div>
           <div className="min-w-0 flex-1">
             <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight truncate">Build an Action Taken Report</h2>
             <p className="text-[0.75rem] text-ink-500 leading-snug truncate">Start from a template or report, validate, link annexures, then generate.</p>
@@ -478,9 +478,9 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                 ]).map(c => {
                   const active = startMode === c.mode;
                   return (
-                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`group relative flex flex-col rounded-[12px] border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'border-brand-600 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-canvas'}`}>
+                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`group relative flex flex-col rounded-lg border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'border-brand-600 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-canvas'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 transition-colors ${active ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 group-hover:bg-brand-100'}`}><c.icon size={18} strokeWidth={2} /></span>
+                        <span className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${active ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 group-hover:bg-brand-100'}`}><c.icon size={18} strokeWidth={2} /></span>
                         {c.rec && <span className="inline-flex items-center h-5 px-2 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-[0.625rem] font-semibold uppercase tracking-[0.08em]">Recommended</span>}
                         {active && !c.rec && <Check size={16} className="text-brand-600 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
                       </div>
@@ -497,7 +497,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               <div className="mt-4 grid grid-cols-[1.35fr_1fr] gap-4 items-stretch">
                 {/* Left — the one thing this path needs */}
                 {startMode === 'template' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full">
+                  <div className="rounded-lg border border-canvas-border bg-canvas p-4 h-full">
                     <div className="text-[0.8125rem] font-semibold text-ink-900">Download the template</div>
                     <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5 mb-3">Fill one row per observation, then upload it on the next step.</p>
                     <div className="space-y-1.5">
@@ -509,8 +509,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                         const done = downloadedTmpls.has(opt.key);
                         return (
                           <button key={opt.key} onClick={opt.onClick}
-                            className={`group flex items-center gap-3 w-full h-11 pl-2.5 pr-3 rounded-[10px] border transition-colors cursor-pointer text-left ${done ? 'border-compliant-200 bg-compliant-50/50' : `bg-canvas-elevated hover:border-brand-300 hover:bg-canvas ${opt.dashed ? 'border-dashed border-canvas-border' : 'border-canvas-border'}`}`}>
-                            <span className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 ${opt.tint}`}><opt.icon size={16} /></span>
+                            className={`group flex items-center gap-3 w-full h-11 pl-2.5 pr-3 rounded-lg border transition-colors cursor-pointer text-left ${done ? 'border-compliant-200 bg-compliant-50/50' : `bg-canvas-elevated hover:border-brand-300 hover:bg-canvas ${opt.dashed ? 'border-dashed border-canvas-border' : 'border-canvas-border'}`}`}>
+                            <span className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${opt.tint}`}><opt.icon size={16} /></span>
                             <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-800 truncate">{opt.title} <span className="text-ink-400 font-normal">· {opt.ext}</span></span>
                             {done
                               ? <span className="text-[0.75rem] font-semibold text-compliant-700 flex items-center gap-1 shrink-0"><Check size={13} /> Downloaded</span>
@@ -522,13 +522,13 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                   </div>
                 )}
                 {startMode === 'upload' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
+                  <div className="rounded-lg border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
                     <FileCheck2 size={16} className="text-brand-600 shrink-0 mt-0.5" />
                     <p className="text-[0.75rem] text-ink-600 leading-relaxed">Upload any PDF, Word, Excel or CSV report on the next step. We'll extract the observations, risks, recommendations and evidence — you'll review everything before it's finalized.</p>
                   </div>
                 )}
                 {startMode === 'manual' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
+                  <div className="rounded-lg border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
                     <PencilLine size={16} className="text-brand-600 shrink-0 mt-0.5" />
                     <p className="text-[0.75rem] text-ink-600 leading-relaxed">Add observations row by row on the next step — title, risk, classification, status and action plans. Each row becomes one observation.</p>
                   </div>
@@ -536,7 +536,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
 
                 {/* Right — what every observation captures. Neutral card; a small
                     brand check per field reads as a spec, not a decorated panel. */}
-                <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full">
+                <div className="rounded-lg border border-canvas-border bg-canvas p-4 h-full">
                   <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-400 mb-3">Each observation captures</div>
                   <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
                     {[REQUIRED_FIELDS[0].label, 'Category / Area', ...REQUIRED_FIELDS.slice(1).map(f => f.label)].map(label => (
@@ -589,8 +589,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                     ['Overdue', st.Overdue, 'bg-risk-50 text-risk-700'],
                   ] as const).filter(([, c]) => c > 0);
                   return (
-                    <button key={eng.id} onClick={() => importEngagement(eng.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30 transition-colors cursor-pointer text-left">
-                      <span className="w-9 h-9 rounded-[10px] bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><Briefcase size={17} /></span>
+                    <button key={eng.id} onClick={() => importEngagement(eng.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30 transition-colors cursor-pointer text-left">
+                      <span className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><Briefcase size={17} /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-ink-900 truncate">{eng.name}</span>
                         <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
@@ -613,7 +613,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {stage === 'manual-edit' && (
             <div>
               <div className="px-6 pt-5 pb-1">
-                <div className="flex items-start gap-2 text-xs text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2">
+                <div className="flex items-start gap-2 text-xs text-ink-500 border border-canvas-border bg-canvas rounded-md px-3 py-2">
                   <PencilLine size={14} className="mt-0.5 shrink-0 text-brand-600" />
                   <span>Enter your observations directly. Add as many as you need — each becomes a section in the ATR.</span>
                 </div>
@@ -647,20 +647,20 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               <p className="text-sm text-ink-500 mb-6">{selForAnnex.length} observation{selForAnnex.length === 1 ? '' : 's'} · {linkedRows} linked exception row{linkedRows === 1 ? '' : 's'}.</p>
               <div className="grid grid-cols-2 gap-4 max-w-[720px] items-stretch">
                 <button onClick={() => setDecisionChoice('generate')} aria-pressed={decisionChoice === 'generate'}
-                  className={`relative flex flex-col text-left rounded-[16px] border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${decisionChoice === 'generate' ? 'border-brand-500 bg-brand-50/50 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
-                  <span className={`w-12 h-12 rounded-[13px] flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'generate' ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.03]' : 'bg-brand-50 text-brand-700'}`}><FileText size={21} /></span>
+                  className={`relative flex flex-col text-left rounded-xl border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${decisionChoice === 'generate' ? 'border-brand-500 bg-brand-50/50 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
+                  <span className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'generate' ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.03]' : 'bg-brand-50 text-brand-700'}`}><FileText size={21} /></span>
                   <div className="text-base font-semibold text-ink-900 mb-1">Generate ATR only</div>
                   <p className="text-xs text-ink-500 leading-relaxed">Skip case management and go straight to the ATR preview. You can come back and manage exceptions later.</p>
-                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 bg-brand-50 rounded-[6px] px-2 py-1">
+                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 bg-brand-50 rounded-sm px-2 py-1">
                     <ArrowRight size={11} className="shrink-0" /> Goes straight to the ATR preview.
                   </p>
                 </button>
                 <button onClick={() => setDecisionChoice('manage')} aria-pressed={decisionChoice === 'manage'}
-                  className={`relative flex flex-col text-left rounded-[16px] border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-evidence-600/40 ${decisionChoice === 'manage' ? 'border-evidence-500 bg-evidence-50/40 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-evidence-300 hover:bg-evidence-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
-                  <span className={`w-12 h-12 rounded-[13px] flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'manage' ? 'bg-evidence-600 text-white shadow-md shadow-evidence-600/30 scale-[1.03]' : 'bg-evidence-50 text-evidence-700'}`}><ListChecks size={21} /></span>
+                  className={`relative flex flex-col text-left rounded-xl border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-evidence-600/40 ${decisionChoice === 'manage' ? 'border-evidence-500 bg-evidence-50/40 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-evidence-300 hover:bg-evidence-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
+                  <span className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'manage' ? 'bg-evidence-600 text-white shadow-md shadow-evidence-600/30 scale-[1.03]' : 'bg-evidence-50 text-evidence-700'}`}><ListChecks size={21} /></span>
                   <div className="text-base font-semibold text-ink-900 mb-1">Manage exceptions first</div>
                   <p className="text-xs text-ink-500 leading-relaxed">Review the exception cases linked to observations before generating. Classify, assign action plans, and review evidence.</p>
-                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-evidence-700 bg-evidence-50 rounded-[6px] px-2 py-1">
+                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-evidence-700 bg-evidence-50 rounded-sm px-2 py-1">
                     <ArrowRight size={11} className="shrink-0" /> Opens Manage Exceptions — generate the ATR after reviewing.
                   </p>
                 </button>
@@ -682,35 +682,35 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                     <span>Audit Title <span className="text-ink-400 font-normal">· report name</span></span>
                     {!auditTitle && <button onClick={() => setAuditTitle(`Action Taken Report — ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`)} className="text-xs font-semibold text-brand-700 hover:underline cursor-pointer">Suggest a name</button>}
                   </label>
-                  <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procure-to-Pay Controls Review" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procure-to-Pay Controls Review" className="w-full px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                   <div className="text-xs text-ink-500 mt-1">Saved to My Reports as this name.</div>
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Audit Entity</label>
-                  <input value={auditEntity} onChange={e => setAuditEntity(e.target.value)} placeholder="e.g. Acme Corp — Internal Audit" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <input value={auditEntity} onChange={e => setAuditEntity(e.target.value)} placeholder="e.g. Acme Corp — Internal Audit" className="w-full px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Calendar size={12} /> Audit Period</label>
                   <div className="flex items-center gap-2">
-                    <input type="date" value={periodFrom} onChange={e => setPeriod(e.target.value, periodTo)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                    <input type="date" value={periodFrom} onChange={e => setPeriod(e.target.value, periodTo)} className="flex-1 px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                     <span className="text-ink-400 text-xs">to</span>
-                    <input type="date" value={periodTo} onChange={e => setPeriod(periodFrom, e.target.value)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                    <input type="date" value={periodTo} onChange={e => setPeriod(periodFrom, e.target.value)} className="flex-1 px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                   </div>
                   {auditPeriod && <div className="text-xs text-ink-500 mt-1">Shows as: <span className="font-medium text-ink-700">{auditPeriod}</span></div>}
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Prepared By</label>
-                  <input value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Internal Audit Team" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <input value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Internal Audit Team" className="w-full px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                 </div>
                 <div className="relative">
                   <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Reviewed By</label>
-                  <input value={reviewedBy} onChange={e => { setReviewedBy(e.target.value); setReviewerOpen(true); }} onFocus={() => setReviewerOpen(true)} placeholder="Search team members…" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <input value={reviewedBy} onChange={e => { setReviewedBy(e.target.value); setReviewerOpen(true); }} onFocus={() => setReviewerOpen(true)} placeholder="Search team members…" className="w-full px-3 py-2.5 rounded-md border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                   {reviewerOpen && reviewerMatches.length > 0 && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setReviewerOpen(false)} />
-                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[70] max-h-44 overflow-y-auto bg-white border border-canvas-border shadow-xl rounded-[10px] p-1">
+                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[70] max-h-44 overflow-y-auto bg-white border border-canvas-border shadow-xl rounded-lg p-1">
                         {reviewerMatches.map(p => (
-                          <button key={p.id} onClick={() => { setReviewedBy(p.name); setReviewerOpen(false); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
+                          <button key={p.id} onClick={() => { setReviewedBy(p.name); setReviewerOpen(false); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-sm hover:bg-brand-50 text-left cursor-pointer">
                             <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center shrink-0">{p.initials}</span>
                             <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-ink-800 truncate">{p.name}</span><span className="block text-xs text-ink-400">{p.role}</span></span>
                           </button>
@@ -727,9 +727,9 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                 <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Palette size={12} /> Brand color</label>
                 <div className="flex items-center gap-2 flex-wrap">
                   {THEME_PRESETS.map(t => (
-                    <button key={t.color} onClick={() => pickBrand(t.color)} title={t.name} className={`w-9 h-9 rounded-[8px] border-2 transition-transform ${brandColor === t.color ? 'border-ink-900 scale-105' : 'border-transparent'}`} style={{ backgroundColor: t.color }} />
+                    <button key={t.color} onClick={() => pickBrand(t.color)} title={t.name} className={`w-9 h-9 rounded-md border-2 transition-transform ${brandColor === t.color ? 'border-ink-900 scale-105' : 'border-transparent'}`} style={{ backgroundColor: t.color }} />
                   ))}
-                  <div className="flex items-center gap-1.5 ml-1 pl-1.5 pr-2.5 h-9 rounded-[8px] border border-canvas-border">
+                  <div className="flex items-center gap-1.5 ml-1 pl-1.5 pr-2.5 h-9 rounded-md border border-canvas-border">
                     <input type="color" value={brandColor || '#6a12cd'} onChange={e => pickBrand(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" aria-label="Pick a color" />
                     <input type="text" value={hexDraft} onChange={e => onHexChange(e.target.value)} placeholder="#6a12cd" maxLength={7} spellCheck={false} className="w-[74px] text-xs font-mono text-ink-700 bg-transparent focus:outline-none placeholder:text-ink-400" aria-label="Hex color code" />
                   </div>
@@ -742,13 +742,13 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                 <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><ImageIcon size={12} /> Company logo</label>
                 <input ref={logoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => onLogoPick(e.target.files?.[0])} />
                 {logoDataUrl ? (
-                  <div className="flex items-center gap-3 px-3 py-2.5 border border-canvas-border rounded-[10px] bg-canvas">
+                  <div className="flex items-center gap-3 px-3 py-2.5 border border-canvas-border rounded-lg bg-canvas">
                     <img src={logoDataUrl} alt="Logo preview" className="h-8 max-w-[120px] object-contain" />
                     <span className="text-xs text-ink-600 flex-1">Logo added — shows on the cover.</span>
                     <button onClick={() => setLogoDataUrl('')} className="text-xs text-ink-500 hover:text-risk-700 cursor-pointer">Remove</button>
                   </div>
                 ) : (
-                  <button onClick={() => logoInputRef.current?.click()} className="w-full py-3 rounded-[10px] border border-dashed border-canvas-border text-xs font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">+ Upload logo (PNG / JPG / SVG)</button>
+                  <button onClick={() => logoInputRef.current?.click()} className="w-full py-3 rounded-lg border border-dashed border-canvas-border text-xs font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">+ Upload logo (PNG / JPG / SVG)</button>
                 )}
               </div>
             </div>
@@ -761,13 +761,13 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               : (
                 <div className="bg-draft-50 min-h-full">
                   {resumeDraft && (
-                    <div className="mx-6 mt-4 flex items-center gap-2 border border-compliant/30 bg-compliant-50 rounded-[8px] px-3 py-2 text-xs text-compliant-700">
+                    <div className="mx-6 mt-4 flex items-center gap-2 border border-compliant/30 bg-compliant-50 rounded-md px-3 py-2 text-xs text-compliant-700">
                       <CheckCircle2 size={14} className="shrink-0" />
                       <span><span className="font-semibold">Exceptions reviewed.</span> Your ATR is ready — finalize or save it below.</span>
                     </div>
                   )}
                   <div className="flex items-center justify-end px-6 pt-4">
-                    <button onClick={regenInsights} className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-brand-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 transition-colors cursor-pointer" title="Regenerate just the Key Insights section">
+                    <button onClick={regenInsights} className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-brand-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-300 transition-colors cursor-pointer" title="Regenerate just the Key Insights section">
                       <RefreshCw size={13} /> Regenerate Key Insights
                     </button>
                   </div>
@@ -782,22 +782,22 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           <footer className="shrink-0 px-6 py-3.5 border-t border-canvas-border flex items-center justify-between gap-2">
             {/* Left / back */}
             {stage === 'entry' ? (
-              <button onClick={requestClose} className="h-10 px-5 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
+              <button onClick={requestClose} className="h-10 px-5 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
             ) : (
-              <button onClick={goBack} className="inline-flex items-center gap-1.5 h-10 px-4 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><ArrowLeft size={14} /> Back</button>
+              <button onClick={goBack} className="inline-flex items-center gap-1.5 h-10 px-4 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"><ArrowLeft size={14} /> Back</button>
             )}
 
             {/* Right / primary */}
             {stage === 'entry' && (
-              <button onClick={() => setStage(startMode === 'template' ? 'template-upload' : startMode === 'upload' ? 'report-upload' : startMode === 'manual' ? 'manual-edit' : 'engagement-pick')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
+              <button onClick={() => setStage(startMode === 'template' ? 'template-upload' : startMode === 'upload' ? 'report-upload' : startMode === 'manual' ? 'manual-edit' : 'engagement-pick')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer">
                 {startMode === 'template' ? 'Next: Upload filled template' : startMode === 'upload' ? 'Next: Upload report' : startMode === 'manual' ? 'Next: Enter observations' : 'Next: Pick engagement'} <ArrowRight size={14} />
               </button>
             )}
             {stage === 'manual-edit' && (
-              <button onClick={continueManual} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Continue <ArrowRight size={14} /></button>
+              <button onClick={continueManual} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer">Continue <ArrowRight size={14} /></button>
             )}
             {stage === 'customize' && (
-              <button onClick={goPreview} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Preview ATR <ArrowRight size={14} /></button>
+              <button onClick={goPreview} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer">Preview ATR <ArrowRight size={14} /></button>
             )}
             {(stage === 'template-upload' || stage === 'report-upload') && (
               <div className="flex items-center gap-2.5">
@@ -807,40 +807,40 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                   disabled={reportFiles.length === 0}
                   title={reportFiles.length === 0 ? 'Upload a file to continue' : undefined}
                   aria-disabled={reportFiles.length === 0}
-                  className={`inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold rounded-[8px] transition-colors ${reportFiles.length > 0 ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer' : 'text-ink-400 bg-draft-50 cursor-not-allowed'}`}
+                  className={`inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold rounded-md transition-colors ${reportFiles.length > 0 ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer' : 'text-ink-400 bg-draft-50 cursor-not-allowed'}`}
                 ><Sparkles size={14} /> Extract observations</button>
               </div>
             )}
             {stage === 'validation' && (
               <div className="flex items-center gap-2.5">
                 {!canContinueValidation && <span className="text-xs text-ink-500 flex items-center gap-1"><AlertTriangle size={11} className="text-risk" /> {selectedCount(workObs) === 0 ? 'Select at least one' : 'Resolve missing fields'}</span>}
-                <button onClick={() => setStage('annexures')} disabled={!canContinueValidation} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Continue <ArrowRight size={14} /></button>
+                <button onClick={() => setStage('annexures')} disabled={!canContinueValidation} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Continue <ArrowRight size={14} /></button>
               </div>
             )}
             {stage === 'annexures' && (
               <div className="flex items-center gap-2.5">
                 <button onClick={() => setStage('decision')} className="h-10 px-4 text-sm font-medium text-ink-600 hover:text-ink-900 cursor-pointer" title="Manage Exceptions will not be available without annexures">Skip annexures</button>
-                <button onClick={() => setStage('decision')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><CheckCircle2 size={14} /> Confirm annexure mapping</button>
+                <button onClick={() => setStage('decision')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer"><CheckCircle2 size={14} /> Confirm annexure mapping</button>
               </div>
             )}
             {stage === 'preview' && (
               <div className="flex items-center gap-2.5">
                 {onManageExceptions && !resumeDraft && (
-                  <button onClick={() => goManageExceptions(previewObs)} title="Park this ATR and review exception cases first" className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
+                  <button onClick={() => goManageExceptions(previewObs)} title="Park this ATR and review exception cases first" className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-md hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
                 )}
-                <button onClick={() => setPreviewEditing(e => !e)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><FilePenLine size={14} /> {previewEditing ? 'Done editing' : 'Edit items'}</button>
+                <button onClick={() => setPreviewEditing(e => !e)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"><FilePenLine size={14} /> {previewEditing ? 'Done editing' : 'Edit items'}</button>
                 <div className="relative">
-                  <button onClick={() => setShowFormats(s => !s)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Download size={14} /> Preview &amp; Download <ChevronDown size={12} className={showFormats ? 'rotate-180' : ''} /></button>
+                  <button onClick={() => setShowFormats(s => !s)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"><Download size={14} /> Preview &amp; Download <ChevronDown size={12} className={showFormats ? 'rotate-180' : ''} /></button>
                   {showFormats && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setShowFormats(false)} />
-                      <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-2 w-60 rounded-[10px] overflow-hidden">
+                      <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-2 w-60 rounded-lg overflow-hidden">
                         {/* PDF page options */}
                         <div className="px-3 pb-2 mb-1 border-b border-canvas-border">
                           <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-ink-500 mb-2"><SlidersHorizontal size={11} /> PDF options</div>
                           <div className="flex gap-1.5 mb-2">
                             {(['portrait', 'landscape'] as const).map(o => (
-                              <button key={o} onClick={() => setPdfOrientation(o)} className={`flex-1 h-7 rounded-[6px] text-xs font-semibold capitalize transition-colors cursor-pointer ${pdfOrientation === o ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`}>{o}</button>
+                              <button key={o} onClick={() => setPdfOrientation(o)} className={`flex-1 h-7 rounded-sm text-xs font-semibold capitalize transition-colors cursor-pointer ${pdfOrientation === o ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`}>{o}</button>
                             ))}
                           </div>
                           <div className="flex items-center gap-2">
@@ -856,28 +856,28 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                     </>
                   )}
                 </div>
-                {onAddToReport && <button onClick={() => onAddToReport(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Save size={14} /> Save Version</button>}
-                {onFreeze && <button onClick={() => onFreeze(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><Lock size={14} /> Finalize &amp; Sign-off</button>}
+                {onAddToReport && <button onClick={() => onAddToReport(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"><Save size={14} /> Save Version</button>}
+                {onFreeze && <button onClick={() => onFreeze(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer"><Lock size={14} /> Finalize &amp; Sign-off</button>}
               </div>
             )}
             {stage === 'engagement-pick' && <span />}
             {stage === 'decision' && (
               decisionChoice === 'generate'
-                ? <button onClick={() => setStage('customize')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><FileText size={14} /> Generate ATR <ArrowRight size={14} /></button>
-                : <button onClick={() => goManageExceptions(toAtrObservations(workObs))} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-evidence-600 hover:bg-evidence-700 rounded-[8px] transition-colors cursor-pointer"><ListChecks size={14} /> Manage exceptions first <ArrowRight size={14} /></button>
+                ? <button onClick={() => setStage('customize')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer"><FileText size={14} /> Generate ATR <ArrowRight size={14} /></button>
+                : <button onClick={() => goManageExceptions(toAtrObservations(workObs))} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-evidence-600 hover:bg-evidence-700 rounded-md transition-colors cursor-pointer"><ListChecks size={14} /> Manage exceptions first <ArrowRight size={14} /></button>
             )}
           </footer>
         )}
 
         {/* Discard-draft confirmation */}
         {confirmClose && (
-          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-ink-900/40 rounded-[16px]">
-            <div className="w-[344px] bg-canvas-elevated rounded-[14px] border border-canvas-border shadow-xl p-5">
+          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-ink-900/40 rounded-xl">
+            <div className="w-[344px] bg-canvas-elevated rounded-lg border border-canvas-border shadow-xl p-5">
               <div className="text-base font-semibold text-ink-900 mb-1">Discard this ATR draft?</div>
               <p className="text-sm text-ink-500 mb-4">Your progress in this builder will be lost. This can't be undone.</p>
               <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setConfirmClose(false)} className="h-9 px-4 text-sm font-medium text-ink-700 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer">Keep editing</button>
-                <button onClick={() => { setConfirmClose(false); onClose(); }} className="h-9 px-4 text-sm font-semibold text-white bg-risk rounded-[8px] hover:bg-risk-700 cursor-pointer">Discard</button>
+                <button onClick={() => setConfirmClose(false)} className="h-9 px-4 text-sm font-medium text-ink-700 bg-canvas border border-canvas-border rounded-md hover:border-brand-200 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setConfirmClose(false); onClose(); }} className="h-9 px-4 text-sm font-semibold text-white bg-risk rounded-md hover:bg-risk-700 cursor-pointer">Discard</button>
               </div>
             </div>
           </div>

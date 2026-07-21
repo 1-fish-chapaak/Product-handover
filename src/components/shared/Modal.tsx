@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
 
@@ -9,6 +10,19 @@ import { X } from 'lucide-react';
  *
  * Wrap the mount in <AnimatePresence> for the exit animation to play. Mirrors
  * the Drawer's fragment-with-two-motion-children structure so exit propagates.
+ *
+ * PORTALLED TO THE BODY, AND IT HAS TO BE. `fixed inset-0 z-[60]` only reaches
+ * the viewport's top layer if every ancestor is in the root stacking context,
+ * and a modal is opened from wherever its caller happens to sit — which is
+ * usually deep inside a scroll region. Platform Usage's scroller carries a
+ * `mask-image` (the fade under its pinned toolbar); a mask other than `none`
+ * opens a stacking context, so z-[60] was being resolved INSIDE the scroller
+ * and every modal launched from that tab painted underneath the page header:
+ * no title, no close button, the top of the content sliced off. The same trap
+ * is waiting behind any ancestor with a transform, filter, opacity or
+ * will-change, so the fix belongs here rather than in the one caller that
+ * happened to hit it. Context still flows through a portal, so AnimatePresence
+ * exits and every caller's props keep working untouched.
  */
 interface ModalProps {
   title: string;
@@ -46,7 +60,7 @@ export default function Modal({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <>
       <motion.div
         initial={{ opacity: 0 }}
@@ -95,6 +109,7 @@ export default function Modal({
           )}
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body,
   );
 }

@@ -40,7 +40,7 @@ export function SkeletonRow({ className = '' }: { className?: string }) {
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`border border-canvas-border rounded-[10px] p-5 space-y-3 ${className}`}
+      className={`border border-canvas-border rounded-lg p-5 space-y-3 ${className}`}
     >
       <Skeleton width="w-1/3" height="h-3" />
       <Skeleton width="w-3/4" height="h-4" />

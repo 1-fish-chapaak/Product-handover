@@ -40,12 +40,12 @@ export default function ColumnPermissionMatrix({
   const visibleCount = permissions.filter(p => p.visible).length;
 
   return (
-    <div className="border border-canvas-border rounded-[10px] overflow-hidden">
+    <div className="border border-canvas-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-3.5 py-2.5 bg-[#FAFAFB] border-b border-canvas-border">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500">Column visibility & edit rights</span>
-        <span className="text-[11px] text-ink-500 tabular-nums">{visibleCount}/{permissions.length} visible</span>
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">Column visibility & edit rights</span>
+        <span className="text-[0.6875rem] text-ink-500 tabular-nums">{visibleCount}/{permissions.length} visible</span>
       </div>
-      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 border-b border-canvas-border">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3.5 py-1.5 text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 border-b border-canvas-border">
         <span>Column</span>
         <span className="flex items-center gap-1 justify-self-center w-[80px] justify-center"><Eye size={11} /> Visible</span>
         <span className="flex items-center gap-1 justify-self-center w-[80px] justify-center"><Pencil size={11} /> Editable</span>
@@ -53,7 +53,7 @@ export default function ColumnPermissionMatrix({
       <div className="max-h-[260px] overflow-y-auto divide-y divide-canvas-border">
         {permissions.map(p => (
           <div key={p.key} className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3.5 py-2">
-            <span className="text-[12.5px] text-ink-800 flex items-center gap-1.5">
+            <span className="text-[0.78125rem] text-ink-800 flex items-center gap-1.5">
               {p.key === 'id' && <Lock size={11} className="text-ink-400" />}
               {p.label}
             </span>

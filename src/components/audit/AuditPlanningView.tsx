@@ -12,6 +12,7 @@ import {
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import EngagementSetupPanel from '../engagement/EngagementSetupPanel';
 import RacmMappingWorkspace from './RacmMappingWorkspace';
 import { computeRacmState, RACM_STATUS_STYLES, RACM_READINESS_STYLES, RACM_ACTION_STYLES, type RacmSummaryInput, type ComputedRacmState } from './racmStateEngine';
@@ -237,12 +238,12 @@ function getRacmDisplayName(eng: { businessProcess: ProcessType; auditType: Audi
 }
 
 const PROCESS_BADGE_COLORS: Record<ProcessType, string> = {
-  P2P: 'bg-gray-100 text-gray-600 border-gray-200/60',
-  O2C: 'bg-gray-100 text-gray-600 border-gray-200/60',
-  R2R: 'bg-gray-100 text-gray-600 border-gray-200/60',
-  S2C: 'bg-gray-100 text-gray-600 border-gray-200/60',
-  ITGC: 'bg-gray-100 text-gray-600 border-gray-200/60',
-  Cross: 'bg-gray-100 text-gray-600 border-gray-200/60',
+  P2P: 'bg-canvas text-ink-600 border-canvas-border/60',
+  O2C: 'bg-canvas text-ink-600 border-canvas-border/60',
+  R2R: 'bg-canvas text-ink-600 border-canvas-border/60',
+  S2C: 'bg-canvas text-ink-600 border-canvas-border/60',
+  ITGC: 'bg-canvas text-ink-600 border-canvas-border/60',
+  Cross: 'bg-canvas text-ink-600 border-canvas-border/60',
 };
 
 function getCurrentMonth(): number { return 11; }
@@ -267,14 +268,14 @@ function lifecycleLabel(s: EngagementLifecycle): string {
 
 function lifecycleTone(s: EngagementLifecycle): string {
   const map: Record<EngagementLifecycle, string> = {
-    'draft': 'bg-gray-100 text-gray-600',
-    'planned': 'bg-gray-100 text-gray-600',
+    'draft': 'bg-canvas text-ink-600',
+    'planned': 'bg-canvas text-ink-600',
     'frozen': 'bg-blue-50 text-blue-700',
     'signed-off': 'bg-emerald-50 text-emerald-700',
     'active': 'bg-emerald-50 text-emerald-700',
     'in-progress': 'bg-blue-50 text-blue-700',
     'pending-review': 'bg-amber-50 text-amber-700',
-    'closed': 'bg-gray-100 text-gray-500',
+    'closed': 'bg-canvas text-ink-500',
   };
   return map[s];
 }
@@ -356,7 +357,7 @@ function KpiCard({ label, value, icon: Icon, color, index }: {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 + index * 0.06 }}
-      className="glass-card rounded-2xl p-5 hover:border-primary/20 transition-all duration-300 cursor-default"
+      className="glass-card p-5 hover:border-primary/20 transition-all duration-300 cursor-default"
     >
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2 rounded-lg ${color} transition-transform duration-300`}>
@@ -397,7 +398,7 @@ function getMappingStatus(racm: RacmEntry): MappingStatus {
   return 'Complete';
 }
 const MAPPING_STYLES: Record<MappingStatus, string> = {
-  'Not Started': 'bg-gray-100 text-gray-500',
+  'Not Started': 'bg-canvas text-ink-500',
   'In Progress': 'bg-amber-50 text-amber-600',
   'Complete': 'bg-emerald-50 text-emerald-600',
 };
@@ -525,7 +526,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                       <span className="text-[0.75rem] text-compliant-700/70 ml-2">{fileName} — {MOCK_PARSED_ROWS.length} rows, {previewHeaders.length} columns detected</span>
                     </div>
                   </div>
-                  <div className="glass-card rounded-xl overflow-hidden">
+                  <div className="glass-card overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-[0.6875rem]">
                         <thead><tr className="border-b border-border bg-surface-2/50">
@@ -581,7 +582,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                     <p className="text-[0.75rem] text-text-muted">{MOCK_PARSED_ROWS.length} rows ready for import</p>
                     <span className="px-2.5 h-5 rounded-full text-[0.625rem] font-semibold bg-evidence-50 text-evidence-700 inline-flex items-center">All unmapped — mapping happens after import</span>
                   </div>
-                  <div className="glass-card rounded-xl overflow-hidden">
+                  <div className="glass-card overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-[0.6875rem]">
                         <thead><tr className="border-b border-border bg-surface-2/50">
@@ -596,7 +597,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                             <td className="px-3 py-2 text-[0.6875rem] text-text">{r.process}</td>
                             <td className="px-3 py-2 text-[0.625rem] text-text-secondary truncate max-w-[180px]">{r.controlText}</td>
                             <td className="px-3 py-2 text-[0.625rem] text-text-muted">{r.controlOwner}</td>
-                            <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
+                            <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-500'}`}>{r.controlType}</span></td>
                             <td className="px-3 py-2"><span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-draft-50 text-draft-700 inline-flex items-center">Not Mapped</span></td>
                           </tr>
                         ))}</tbody>
@@ -612,7 +613,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
               {/* Step 4: Confirm */}
               {step === 4 && (
                 <div className="space-y-5">
-                  <div className="glass-card rounded-2xl p-6 text-center">
+                  <div className="glass-card p-6 text-center">
                     <CheckCircle2 size={36} className="mx-auto text-compliant-700 mb-3" />
                     <h3 className="text-[1rem] font-bold text-text mb-1">Ready to Import</h3>
                     <p className="text-[0.8125rem] text-text-muted mb-4">This will create {MOCK_PARSED_ROWS.length} risk-control rows from {fileName}</p>
@@ -667,6 +668,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
 function RacmDashboard({ engagements, onGoToExecution }: { engagements: { sourceRacmVersionId: string }[]; onGoToExecution: () => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [showImportDrawer, setShowImportDrawer] = useState(false);
   const [importedRows, setImportedRows] = useState<ImportedRacmRow[]>([]);
   const [showMappingWorkspace, setShowMappingWorkspace] = useState(false);
@@ -679,11 +681,14 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
     setImportedRows(rows);
     setShowImportDrawer(false);
     addToast({ message: `${rows.length} rows imported — review and map controls below`, type: 'success' });
+    logEvent({ action: 'Create', description: `Imported ${rows.length} RACM rows from file`, module: 'Governance', entity: 'RACM' });
   };
 
   const handleMapRow = (idx: number) => {
+    const row = importedRows[idx];
     setImportedRows(prev => prev.map((r, i) => i === idx ? { ...r, mappingStatus: 'Mapped' } : r));
     addToast({ message: `Control mapped to Control Library`, type: 'success' });
+    logEvent({ action: 'Create', description: `Mapped control for risk "${row?.riskName ?? 'Unknown'}" to the Control Library`, module: 'Control Library', entity: 'Control' });
   };
 
   // Summary KPIs (all derived from data)
@@ -763,7 +768,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
           { label: 'Workflow Coverage', value: `${avgCoverage}%`, color: 'text-brand-700 bg-brand-50' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            className="glass-card rounded-xl p-3 text-center">
+            className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${kpi.color.split(' ')[0]}`}>{kpi.value}</div>
             <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
           </motion.div>
@@ -771,7 +776,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
       </div>
 
       {/* RACM table */}
-      <div className="glass-card rounded-xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[0.75rem]">
             <thead>
@@ -787,20 +792,20 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
                 const readiness = getReadiness(racm);
                 return (
                   <motion.tr key={racm.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                    className="border-b border-border/50 hover:bg-gray-50/60 transition-colors">
+                    className="border-b border-border/50 hover:bg-canvas/60 transition-colors">
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
-                        {racm.linkedToEngagement && <Lock size={10} className="text-gray-400 shrink-0" />}
+                        {racm.linkedToEngagement && <Lock size={10} className="text-ink-400 shrink-0" />}
                         <span className="text-[0.75rem] font-medium text-text">{racm.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{racm.process}</span>
+                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-canvas text-ink-600 border border-canvas-border/60">{racm.process}</span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-gray-500">{racm.framework}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-ink-500">{racm.framework}</span></td>
                     <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.risks}</span></td>
                     <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.controls}</span></td>
-                    <td className="px-3 py-3"><span className="text-[0.75rem] text-gray-500 tabular-nums">{racm.keyControls}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-ink-500 tabular-nums">{racm.keyControls}</span></td>
                     <td className="px-3 py-3">
                       <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${MAPPING_STYLES[mapping]}`}>{mapping}</span>
                     </td>
@@ -809,7 +814,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
                     </td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => { setMappingRacm(racm); setShowMappingWorkspace(true); }}
-                        className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
+                        className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-canvas text-ink-600 hover:bg-canvas-border/70">
                         View<ChevronRight size={8} />
                       </button>
                     </td>
@@ -836,7 +841,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
               <span className="text-draft-700 font-medium">{unmappedImportCount} unmapped</span>
             </div>
           </div>
-          <div className="glass-card rounded-xl overflow-hidden">
+          <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-[0.6875rem]">
                 <thead><tr className="border-b border-border bg-surface-2/50">
@@ -854,7 +859,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
                     <td className="px-3 py-2 text-[0.6875rem] text-text">{r.process}</td>
                     <td className="px-3 py-2 text-[0.625rem] text-text-secondary max-w-[180px]"><span className="line-clamp-2">{r.controlText}</span></td>
                     <td className="px-3 py-2 text-[0.625rem] text-text-muted">{r.controlOwner}</td>
-                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
+                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-500'}`}>{r.controlType}</span></td>
                     <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${MAP_STATUS_CLS[r.mappingStatus]}`}>{r.mappingStatus}</span></td>
                     <td className="px-3 py-2">
                       {r.mappingStatus === 'Not Mapped' ? (
@@ -904,6 +909,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
               setRacmList(prev => [newRacm, ...prev]);
               setShowCreateRacmModal(false);
               addToast({ message: `RACM "${newRacm.name}" created — status: Draft`, type: 'success' });
+              logEvent({ action: 'Create', description: `Created RACM "${newRacm.name}"`, module: 'Governance', entity: 'RACM' });
               setSelectedRacmId(newRacm.id);
             }}
           />
@@ -925,6 +931,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
 }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const computed = getRacmComputed(racm);
   const statusCls = RACM_STATUS_STYLES[computed.status];
 
@@ -950,6 +957,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
     setLocalRisks(prev => [...prev, { id, name: riskName, description: riskDesc, process: racm.process, sourceRow: 'Manual' }]);
     setRiskName(''); setRiskDesc(''); setShowAddRisk(false);
     addToast({ message: `Risk "${riskName}" added`, type: 'success' });
+    logEvent({ action: 'Create', description: `Added risk "${riskName}" to RACM "${racm.name}"`, module: 'Risk Register', entity: 'Risk' });
   };
 
   const handleImportRisks = () => {
@@ -963,6 +971,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
     ];
     setLocalRisks(prev => [...prev, ...imported]);
     addToast({ message: `5 risks imported from file — ready for mapping`, type: 'success' });
+    logEvent({ action: 'Create', description: `Imported ${imported.length} risks from file into RACM "${racm.name}"`, module: 'Risk Register', entity: 'Risk' });
   };
 
   const handleProceedToMapping = () => {
@@ -999,7 +1008,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
       <div className="grid grid-cols-6 gap-3">
         {kpis.map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            className="glass-card rounded-xl p-3 text-center">
+            className="glass-card p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${kpi.color}`}>{kpi.value}</div>
             <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
           </motion.div>
@@ -1036,7 +1045,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
       <AnimatePresence>
         {showAddRisk && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <div className="glass-card rounded-xl p-4 space-y-3">
+            <div className="glass-card p-4 space-y-3">
               <div className="text-[0.75rem] font-bold text-brand-700">Add Risk</div>
               <div>
                 <label className="text-[0.75rem] font-semibold text-text-muted block mb-1">Risk Name *</label>
@@ -1066,7 +1075,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
 
       {/* Risks table / empty state */}
       {isEmpty && !showAddRisk ? (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-10 text-center">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-10 text-center">
           <AlertTriangle size={36} className="mx-auto text-ink-300 mb-3" />
           <p className="text-[0.9375rem] font-semibold text-ink-600 mb-1">No risks added yet</p>
           <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">Start by adding risks manually or importing a RACM file with existing risk and control data.</p>
@@ -1076,7 +1085,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
           </div>
         </motion.div>
       ) : localRisks.length > 0 ? (
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-[0.75rem]">
               <thead><tr className="border-b border-border bg-surface-2/50">
@@ -1108,7 +1117,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
           </div>
         </div>
       ) : racm.risks > 0 ? (
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Existing Risks ({racm.risks})</h3>
           <p className="text-[0.75rem] text-ink-400">This RACM has {racm.risks} risks from seed data.</p>
           <button onClick={handleProceedToMapping}
@@ -1180,7 +1189,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: 480 }}>
             {/* Section 1: Basic Info */}
             <div className="space-y-3">
-              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
+              <h3 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Basic Info</h3>
               <div>
                 <label className={labelCls}>RACM Name <span className="text-red-400">*</span></label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P — Vendor Payment" className={fieldCls} autoFocus />
@@ -1193,7 +1202,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
             {/* Section 2: Audit Context */}
             <div className="space-y-3">
-              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Audit Context</h3>
+              <h3 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Audit Context</h3>
               <div>
                 <label className={labelCls}>Business Process <span className="text-red-400">*</span></label>
                 <select value={process} onChange={e => setProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
@@ -1226,7 +1235,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
             {/* Section 3: Ownership */}
             <div className="space-y-3">
-              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Ownership</h3>
+              <h3 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Ownership</h3>
               <div>
                 <label className={labelCls}>RACM Owner <span className="text-red-400">*</span></label>
                 <input value={owner} onChange={e => setOwner(e.target.value)} className={fieldCls} />
@@ -1330,7 +1339,7 @@ function GanttChart({
   });
 
   return (
-    <div className="glass-card rounded-2xl p-5 overflow-hidden">
+    <div className="glass-card p-5 overflow-hidden">
       <div className="relative">
         {/* Month headers */}
         <div className="flex border-b border-border-light pb-2 mb-3">
@@ -1404,7 +1413,7 @@ function GanttChart({
 function MilestonesStrip() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-3">
-      <div className="glass-card rounded-2xl px-5 py-3">
+      <div className="glass-card px-5 py-3">
         <div className="flex items-center">
           {MILESTONES.map((ms, i) => {
             const Icon = ms.icon;
@@ -1612,7 +1621,7 @@ function EngagementDrawer({
                 {form.framework === 'SOX ICFR' ? (
                   <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-bold bg-brand-100 text-brand-700">Enabled</span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-gray-100 text-gray-500">Disabled</span>
+                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-canvas text-ink-500">Disabled</span>
                 )}
               </div>
               {form.framework === 'SOX ICFR' ? (
@@ -1966,6 +1975,7 @@ interface Props {
 
 export default function AuditPlanningView({ onNavigateToExecution, embedded = false }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [plan, setPlan] = useState<AuditEngagement[]>(INITIAL_AUDIT_PLAN);
   const [planFrozen, setPlanFrozen] = useState(false);
   const [signedOff, setSignedOff] = useState(false);
@@ -2024,6 +2034,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     ));
     setShowFreezeModal(false);
     addToast({ type: 'success', message: 'Audit plan frozen — scheduling locked' });
+    logEvent({ action: 'Update', description: 'Froze audit plan', module: 'Engagements', entity: 'Audit Plan' });
   };
 
   const handleSignOff = () => {
@@ -2040,6 +2051,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     setShowSignOffModal(false);
     setSignOffComment('');
     addToast({ type: 'success', message: 'Audit plan signed off — engagements ready for activation' });
+    logEvent({ action: 'Update', description: 'Signed off audit plan', module: 'Engagements', entity: 'Audit Plan' });
   };
 
   const handleActivate = (id: string) => {
@@ -2199,17 +2211,21 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     if (drawerIsCreate) {
       setPlan(prev => [...prev, updated]);
       addToast({ type: 'success', message: `"${updated.name}" created as Draft` });
+      logEvent({ action: 'Create', description: `Created engagement "${updated.name}" as Draft`, module: 'Engagements', entity: 'Engagement' });
     } else {
       setPlan(prev => prev.map(p => p.id === updated.id ? updated : p));
       addToast({ type: 'success', message: `"${updated.name}" updated` });
+      logEvent({ action: 'Update', description: `Updated engagement "${updated.name}"`, module: 'Engagements', entity: 'Engagement' });
     }
     setDrawerEngagement(null);
   };
 
   const handleMoveToPlanned = (id: string) => {
+    const item = plan.find(p => p.id === id);
     setPlan(prev => prev.map(p => p.id === id ? { ...p, status: 'planned' as EngagementLifecycle } : p));
     setSetupPanelEngagement(null);
     addToast({ type: 'success', message: 'Engagement moved to Planned — ready for review and activation' });
+    logEvent({ action: 'Update', description: `Moved engagement "${item?.name ?? id}" to Planned`, module: 'Engagements', entity: 'Engagement' });
   };
 
   const handleSetupActivate = (id: string) => {
@@ -2226,6 +2242,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     const item = plan.find(p => p.id === id);
     setPlan(prev => prev.filter(p => p.id !== id));
     addToast({ type: 'warning', message: `"${item?.name}" removed from plan` });
+    logEvent({ action: 'Delete', description: `Removed engagement "${item?.name ?? id}" from the audit plan`, module: 'Engagements', entity: 'Engagement' });
     setDrawerEngagement(null);
   };
 
@@ -2421,19 +2438,19 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
               if (eng.isOverdue) return { label: 'Overdue', cls: 'bg-red-50 text-red-700' };
               if (eng.controlsFailed > 0) return { label: 'Failed Controls', cls: 'bg-red-50 text-red-600' };
               if (eng.pendingReview > 0) return { label: 'Needs Review', cls: 'bg-amber-50 text-amber-700' };
-              if (!isExecutionPhase(eng.status)) return { label: 'Not Started', cls: 'bg-gray-50 text-gray-400' };
+              if (!isExecutionPhase(eng.status)) return { label: 'Not Started', cls: 'bg-canvas text-ink-400' };
               if (eng.riskStatus === 'at-risk') return { label: 'At Risk', cls: 'bg-amber-50 text-amber-700' };
               return { label: 'On Track', cls: 'bg-emerald-50 text-emerald-700' };
             };
 
             const getNextAction = (eng: AuditEngagement): { label: string; cls: string } => {
-              if (eng.status === 'draft') return { label: 'Configure', cls: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70' };
+              if (eng.status === 'draft') return { label: 'Configure', cls: 'bg-canvas text-ink-600 hover:bg-canvas-border/70' };
               if (['planned', 'frozen', 'signed-off'].includes(eng.status)) return { label: 'Activate', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
               if (eng.controlsFailed > 0) return { label: 'View Findings', cls: 'bg-red-50 text-red-700 hover:bg-red-100/70' };
               if (eng.pendingReview > 0) return { label: 'Review Pending', cls: 'bg-amber-50 text-amber-700 hover:bg-amber-100/70' };
               if (eng.controlsTested === 0 && isExecutionPhase(eng.status)) return { label: 'Start Testing', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
               if (eng.controlsTested < eng.controls) return { label: 'Continue Testing', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
-              if (eng.status === 'closed') return { label: 'View Report', cls: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70' };
+              if (eng.status === 'closed') return { label: 'View Report', cls: 'bg-canvas text-ink-600 hover:bg-canvas-border/70' };
               return { label: 'View Engagement', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
             };
 
@@ -2443,7 +2460,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
               { label: 'Active / In Execution', value: plan.filter(p => isExecutionPhase(p.status)).length, cls: 'text-emerald-700 bg-emerald-50' },
               { label: 'Pending Review', value: plan.filter(p => p.pendingReview > 0).length, cls: 'text-amber-700 bg-amber-50' },
               { label: 'At Risk / Failed', value: plan.filter(p => p.riskStatus === 'at-risk' || p.controlsFailed > 0).length, cls: 'text-red-700 bg-red-50' },
-              { label: 'Planned', value: plan.filter(p => ['planned', 'frozen', 'signed-off'].includes(p.status)).length, cls: 'text-gray-600 bg-gray-100' },
+              { label: 'Planned', value: plan.filter(p => ['planned', 'frozen', 'signed-off'].includes(p.status)).length, cls: 'text-ink-600 bg-canvas' },
             ];
 
             const formatAuditPeriod = (start: string, end: string) => {
@@ -2459,7 +2476,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                 <div className="grid grid-cols-5 gap-2.5 mb-4">
                   {summaryCards.map((card, i) => (
                     <motion.div key={card.label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                      className="glass-card rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                      className="glass-card px-3 py-2.5 flex items-center gap-2.5">
                       <div className={`text-lg font-bold tabular-nums ${card.cls.split(' ')[0]}`}>{card.value}</div>
                       <div className="text-[0.625rem] text-text-muted leading-tight">{card.label}</div>
                     </motion.div>
@@ -2499,7 +2516,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
 
                 {/* Engagement Table */}
                 {filteredPlan.length === 0 ? (
-                  <div className="glass-card rounded-xl p-12 text-center">
+                  <div className="glass-card p-12 text-center">
                     <ClipboardList size={32} className="text-text-muted mx-auto mb-3" />
                     <p className="text-[0.875rem] font-semibold text-text mb-1">
                       {plan.length === 0 ? 'No engagements planned yet' : 'No engagements match this filter'}
@@ -2525,7 +2542,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                   </p>
                 </div>
 
-                <div className="glass-card rounded-xl overflow-hidden">
+                <div className="glass-card overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-[0.75rem]">
                       <thead>
@@ -2591,7 +2608,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                                     </span>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); setExpandedEngId(isExpanded ? null : eng.id); }}
-                                      className="p-1 rounded hover:bg-gray-100 text-text-muted/50 hover:text-text transition-colors cursor-pointer"
+                                      className="p-1 rounded hover:bg-canvas text-text-muted/50 hover:text-text transition-colors cursor-pointer"
                                       title="Show details"
                                     >
                                       <ChevronDown size={11} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -2641,7 +2658,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
               {plan.some(p => isExecutionPhase(p.status)) && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="mt-6">
                   <h2 className="text-[0.9375rem] font-semibold text-text mb-3">Execution Progress</h2>
-                  <div className="glass-card rounded-2xl p-5">
+                  <div className="glass-card p-5">
                     <div className="space-y-4">
                       {plan.filter(p => isExecutionPhase(p.status)).map((eng, i) => {
                         const progressMap: Record<string, number> = { 'ap-1': 72, 'ap-2': 44, 'ap-3': 85, 'ap-6': 60 };

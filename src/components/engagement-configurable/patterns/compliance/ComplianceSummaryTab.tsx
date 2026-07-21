@@ -11,6 +11,7 @@ import { getOrCreateControlReview } from './complianceReviewData';
 import { getOrCreateControlConclusion, CONCLUSION_DISPLAY, type ConclusionValue } from './complianceConclusionData';
 import { SEVERITY_DISPLAY, type DeficiencySeverity } from './complianceSeverityData';
 import { downloadComplianceSummaryReport } from './complianceExports';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function ComplianceSummaryTab({ engagement, complianceState }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const testItems = complianceState.samplesEvidence.batches.flatMap(b => b.testItems);
   const results = complianceState.attributeTesting.results;
@@ -74,7 +76,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Engagement Summary</h3>
           <p className="text-[0.75rem] text-text-muted">Roll-up view of compliance control testing status, review progress, and conclusions.</p>
         </div>
-        <button onClick={() => downloadComplianceSummaryReport(engagement, complianceState)}
+        <button onClick={() => { downloadComplianceSummaryReport(engagement, complianceState); logEvent({ action: 'Export', description: `Exported compliance summary report (.xlsx) for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shrink-0">
           <Download size={13} />Export Summary Report (.xlsx)
         </button>
@@ -83,16 +85,16 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
       {/* Engagement context */}
       <div className="rounded-lg border border-border-light p-4">
         <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
-          <div><span className="text-gray-400 block text-[0.6875rem]">Engagement</span><span className="text-text font-medium">{engagement.name}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Framework</span><span className="text-text font-medium">{cfg.framework.replace(/_/g, ' ')}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Audit Period</span><span className="text-text font-medium">{cfg.auditPeriodStart || '—'} to {cfg.auditPeriodEnd || '—'}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Owner / Reviewer</span><span className="text-text font-medium">{engagement.owner} / {engagement.reviewer || '—'}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Engagement</span><span className="text-text font-medium">{engagement.name}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Framework</span><span className="text-text font-medium">{cfg.framework.replace(/_/g, ' ')}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Audit Period</span><span className="text-text font-medium">{cfg.auditPeriodStart || '—'} to {cfg.auditPeriodEnd || '—'}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Owner / Reviewer</span><span className="text-text font-medium">{engagement.owner} / {engagement.reviewer || '—'}</span></div>
         </div>
       </div>
 
       {/* KPIs — Scope & Testing */}
       <div>
-        <h4 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Scope & Testing</h4>
+        <h4 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Scope & Testing</h4>
         <div className="grid grid-cols-5 gap-2">
           {[
             { label: 'Total Controls', value: totalControls },
@@ -103,7 +105,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           ].map(s => (
             <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
               <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-              <div className="text-[0.6875rem] text-gray-400 font-medium">{s.label}</div>
+              <div className="text-[0.6875rem] text-ink-400 font-medium">{s.label}</div>
             </div>
           ))}
         </div>
@@ -111,7 +113,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
 
       {/* KPIs — Review & Conclusion */}
       <div>
-        <h4 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Review & Conclusion</h4>
+        <h4 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Review & Conclusion</h4>
         <div className="grid grid-cols-5 gap-2">
           {[
             { label: 'Approved', value: approvedReviews, cls: 'text-emerald-600' },
@@ -122,7 +124,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           ].map(s => (
             <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
               <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-              <div className="text-[0.6875rem] text-gray-400 font-medium">{s.label}</div>
+              <div className="text-[0.6875rem] text-ink-400 font-medium">{s.label}</div>
             </div>
           ))}
         </div>
@@ -132,15 +134,15 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
       <div className="rounded-lg border border-border-light p-4">
         <h4 className="text-[0.6875rem] font-bold text-text mb-2">Testing Progress</h4>
         <div className="grid grid-cols-6 gap-3 text-[0.6875rem] mb-2">
-          <div><span className="text-gray-400 block text-[0.6875rem]">Total Checks</span><span className="text-text font-medium tabular-nums">{totalTestingSummary.totalChecks}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Completed</span><span className="text-text font-medium tabular-nums">{totalTestingSummary.completedChecks}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Passed</span><span className="text-emerald-600 font-medium tabular-nums">{totalTestingSummary.passedChecks}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Failed</span><span className={`font-medium tabular-nums ${totalTestingSummary.failedChecks > 0 ? 'text-red-600' : 'text-gray-400'}`}>{totalTestingSummary.failedChecks}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Pending</span><span className={`font-medium tabular-nums ${totalTestingSummary.pendingChecks > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{totalTestingSummary.pendingChecks}</span></div>
-          <div><span className="text-gray-400 block text-[0.6875rem]">Progress</span><span className={`font-medium ${totalTestingSummary.completionPercent === 100 ? 'text-emerald-600' : 'text-text'}`}>{totalTestingSummary.completionPercent}%</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Total Checks</span><span className="text-text font-medium tabular-nums">{totalTestingSummary.totalChecks}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Completed</span><span className="text-text font-medium tabular-nums">{totalTestingSummary.completedChecks}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Passed</span><span className="text-emerald-600 font-medium tabular-nums">{totalTestingSummary.passedChecks}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Failed</span><span className={`font-medium tabular-nums ${totalTestingSummary.failedChecks > 0 ? 'text-red-600' : 'text-ink-400'}`}>{totalTestingSummary.failedChecks}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Pending</span><span className={`font-medium tabular-nums ${totalTestingSummary.pendingChecks > 0 ? 'text-amber-600' : 'text-ink-400'}`}>{totalTestingSummary.pendingChecks}</span></div>
+          <div><span className="text-ink-400 block text-[0.6875rem]">Progress</span><span className={`font-medium ${totalTestingSummary.completionPercent === 100 ? 'text-emerald-600' : 'text-text'}`}>{totalTestingSummary.completionPercent}%</span></div>
         </div>
         {totalTestingSummary.totalChecks > 0 && (
-          <div className="w-full bg-gray-100 rounded-full h-2">
+          <div className="w-full bg-canvas rounded-full h-2">
             <div className={`h-2 rounded-full transition-all ${totalTestingSummary.completionPercent === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
               style={{ width: `${totalTestingSummary.completionPercent}%` }} />
           </div>
@@ -154,7 +156,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
         </div>
         <table className="w-full text-[0.75rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
               <th className="px-3 py-1.5 text-left">Control</th>
               <th className="px-3 py-1.5 text-center">Readiness</th>
               <th className="px-3 py-1.5 text-center">Items</th>
@@ -169,23 +171,23 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <tbody>
             {controlRollup.map(r => {
               const testingLabel = r.testing.totalChecks === 0 ? 'Not Started' : r.testing.completionPercent === 100 ? 'Complete' : 'In Progress';
-              const testingCls = testingLabel === 'Complete' ? 'bg-emerald-50 text-emerald-700' : testingLabel === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500';
-              const reviewCls = r.review.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' : r.review.status === 'REJECTED' ? 'bg-red-50 text-red-700' : r.review.status === 'PENDING_REVIEW' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-500';
+              const testingCls = testingLabel === 'Complete' ? 'bg-emerald-50 text-emerald-700' : testingLabel === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-canvas text-ink-500';
+              const reviewCls = r.review.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' : r.review.status === 'REJECTED' ? 'bg-red-50 text-red-700' : r.review.status === 'PENDING_REVIEW' ? 'bg-purple-50 text-purple-700' : 'bg-canvas text-ink-500';
               const conclusionLabel = r.conclusion.finalConclusion ? CONCLUSION_DISPLAY[r.conclusion.finalConclusion].label : r.review.status === 'APPROVED' ? 'Pending' : 'Locked';
-              const conclusionCls = r.conclusion.finalConclusion ? CONCLUSION_DISPLAY[r.conclusion.finalConclusion].cls : 'bg-gray-100 text-gray-500';
+              const conclusionCls = r.conclusion.finalConclusion ? CONCLUSION_DISPLAY[r.conclusion.finalConclusion].cls : 'bg-canvas text-ink-500';
               const nextAction = deriveNextAction(r);
               return (
                 <tr key={r.ctrl.id} className="border-b border-border-light/50">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-gray-400">{r.ctrl.id}</span>
+                      <span className="font-mono text-ink-400">{r.ctrl.id}</span>
                       <span className="text-text font-medium truncate max-w-[150px]">{r.ctrl.name}</span>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${r.readiness.severity === 'success' ? 'bg-emerald-50 text-emerald-700' : r.readiness.severity === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>{r.readiness.label}</span></td>
                   <td className="px-3 py-2 text-center font-medium tabular-nums">{r.ctrlItems.length}</td>
                   <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${testingCls}`}>{testingLabel}</span></td>
-                  <td className="px-3 py-2 text-center"><span className={`font-medium tabular-nums ${r.failedChecks > 0 ? 'text-red-600' : 'text-gray-400'}`}>{r.failedChecks}</span></td>
+                  <td className="px-3 py-2 text-center"><span className={`font-medium tabular-nums ${r.failedChecks > 0 ? 'text-red-600' : 'text-ink-400'}`}>{r.failedChecks}</span></td>
                   <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${reviewCls}`}>{r.review.status.replace(/_/g, ' ')}</span></td>
                   <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold border ${conclusionCls}`}>{conclusionLabel}</span></td>
                   <td className="px-3 py-2 text-center">
@@ -196,7 +198,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
                     ) : r.failedChecks > 0 ? (
                       <span className="text-[0.6875rem] text-amber-600 font-medium">Unclassified</span>
                     ) : (
-                      <span className="text-[0.6875rem] text-gray-300">—</span>
+                      <span className="text-[0.6875rem] text-ink-300">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-center"><span className="text-[0.6875rem] text-primary font-medium">{nextAction}</span></td>
@@ -213,13 +215,13 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <h4 className="text-[0.6875rem] font-bold text-text">Exceptions & Failed Attributes ({allFailedAttrs.length})</h4>
         </div>
         {allFailedAttrs.length === 0 ? (
-          <div className="px-4 py-4 text-[0.6875rem] text-gray-400 italic flex items-center gap-2">
+          <div className="px-4 py-4 text-[0.6875rem] text-ink-400 italic flex items-center gap-2">
             <CheckCircle2 size={12} className="text-emerald-500" />No failed attributes identified.
           </div>
         ) : (
           <table className="w-full text-[0.75rem]">
             <thead>
-              <tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+              <tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
                 <th className="px-3 py-1.5 text-left">Control</th>
                 <th className="px-3 py-1.5 text-left">Sample</th>
                 <th className="px-3 py-1.5 text-left">Attr</th>
@@ -230,11 +232,11 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
             <tbody>
               {allFailedAttrs.slice(0, 20).map((fa, i) => (
                 <tr key={i} className="border-b border-border-light/50">
-                  <td className="px-3 py-1.5 text-gray-500">{fa.controlId}</td>
-                  <td className="px-3 py-1.5 font-mono text-gray-500">{fa.testItemRef}</td>
+                  <td className="px-3 py-1.5 text-ink-500">{fa.controlId}</td>
+                  <td className="px-3 py-1.5 font-mono text-ink-500">{fa.testItemRef}</td>
                   <td className="px-3 py-1.5 font-bold text-red-600">{fa.attrCode}</td>
                   <td className="px-3 py-1.5 text-text">{fa.attrName}</td>
-                  <td className="px-3 py-1.5 text-gray-500 truncate max-w-[200px]">{fa.notes || '—'}</td>
+                  <td className="px-3 py-1.5 text-ink-500 truncate max-w-[200px]">{fa.notes || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -255,7 +257,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
               </div>
             );
           })}
-          <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 flex items-center gap-2">
+          <div className="px-3 py-2 rounded-lg border border-canvas-border bg-canvas text-ink-500 flex items-center gap-2">
             <span className="text-[1rem] font-bold tabular-nums">{totalControls - finalized}</span>
             <span className="text-[0.6875rem] font-medium">Pending</span>
           </div>
@@ -266,7 +268,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5 mt-2">Deficiency Severity</h5>
           <div className="flex flex-wrap gap-2">
             {severityCounts.map(({ sev, count }) => (
-              <div key={sev} className={`px-3 py-2 rounded-lg border flex items-center gap-2 ${count > 0 ? SEVERITY_DISPLAY[sev].cls : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
+              <div key={sev} className={`px-3 py-2 rounded-lg border flex items-center gap-2 ${count > 0 ? SEVERITY_DISPLAY[sev].cls : 'border-canvas-border bg-canvas text-ink-400'}`}>
                 <span className="text-[1rem] font-bold tabular-nums">{count}</span>
                 <span className="text-[0.6875rem] font-medium">{SEVERITY_DISPLAY[sev].label}</span>
               </div>
@@ -301,9 +303,9 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
       <div className="rounded-lg border border-border-light p-4 flex items-center justify-between gap-4">
         <div>
           <h4 className="text-[0.75rem] font-bold text-text mb-1">Compliance Summary Report</h4>
-          <p className="text-[0.6875rem] text-gray-500">Excel workbook with KPIs, control rollup, exceptions, and deficiency severity sheets.</p>
+          <p className="text-[0.6875rem] text-ink-500">Excel workbook with KPIs, control rollup, exceptions, and deficiency severity sheets.</p>
         </div>
-        <button onClick={() => downloadComplianceSummaryReport(engagement, complianceState)}
+        <button onClick={() => { downloadComplianceSummaryReport(engagement, complianceState); logEvent({ action: 'Export', description: `Exported compliance summary report (.xlsx) for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.75rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors shrink-0">
           <Download size={12} />Download .xlsx
         </button>

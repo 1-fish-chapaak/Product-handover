@@ -72,9 +72,10 @@ test('multiple-choice question accepts several ticks', async ({ page }) => {
   await page.screenshot({ path: 'test-results/clarification-multi.png' });
 });
 
-test('corner ✕ cancels the card without running', async ({ page }) => {
+test('Escape cancels the card without running', async ({ page }) => {
   await openClarification(page);
-  await page.getByRole('button', { name: 'Close clarification' }).click();
+  // The old corner ✕ was replaced by Back/Next; Escape now cancels the card.
+  await page.keyboard.press('Escape');
   // Card is gone and no audit run started.
   await expect(page.getByText('Question 1 of 4')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Stop generating' })).toHaveCount(0);

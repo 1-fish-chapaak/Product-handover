@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -208,7 +209,7 @@ function buildResult(files: PickedFile[]): EdaResult {
 
 function ChartCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <p className="text-[0.8125rem] font-semibold text-ink-800">{title}</p>
         {hint && <span className="text-[0.6875rem] text-ink-400">{hint}</span>}
@@ -230,8 +231,8 @@ const tooltipStyle = {
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof Rows3; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-[14px] border border-canvas-border bg-canvas-elevated px-4 py-3.5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-brand-50">
+    <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas-elevated px-4 py-3.5">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50">
         <Icon size={18} className="text-brand-600" strokeWidth={1.75} />
       </span>
       <div className="min-w-0">
@@ -268,7 +269,7 @@ function UnderstandingView({ result }: { result: EdaResult }) {
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-[14px] border border-canvas-border">
+      <div className="overflow-hidden rounded-lg border border-canvas-border">
         <div className="max-h-[22rem] overflow-y-auto">
           <table className="w-full text-left">
             <thead className="sticky top-0 z-10 bg-paper-50">
@@ -351,7 +352,7 @@ function AnomalyView({ result }: { result: EdaResult }) {
         {result.anomalies.map((a) => {
           const sm = SEVERITY_META[a.severity];
           return (
-            <div key={a.title} className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+            <div key={a.title} className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2.5 min-w-0">
                   <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: sm.hex }} />
@@ -412,7 +413,7 @@ function HeuristicsView({ result }: { result: EdaResult }) {
         {(['pass', 'warn', 'fail'] as RuleResult[]).map((k) => {
           const m = RULE_META[k];
           return (
-            <div key={k} className="flex items-center gap-2.5 rounded-[14px] border border-canvas-border bg-canvas-elevated px-4 py-3">
+            <div key={k} className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-4 py-3">
               <m.Icon size={18} style={{ color: m.hex }} />
               <div>
                 <p className="text-[1.25rem] font-semibold leading-none text-ink-900 tabular-nums">{tally[k]}</p>
@@ -423,7 +424,7 @@ function HeuristicsView({ result }: { result: EdaResult }) {
         })}
       </div>
 
-      <ul className="divide-y divide-canvas-border overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated">
+      <ul className="divide-y divide-canvas-border overflow-hidden rounded-lg border border-canvas-border bg-canvas-elevated">
         {result.heuristics.map((h) => {
           const m = RULE_META[h.result];
           return (
@@ -464,7 +465,7 @@ function ResultBody({ result }: { result: EdaResult }) {
         <StatCard icon={Files} label="Files" value={nf.format(result.summary.files_analyzed)} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-canvas-border bg-paper-50/60 px-4 py-2.5 text-[0.8125rem] text-ink-600">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/60 px-4 py-2.5 text-[0.8125rem] text-ink-600">
         <Sigma size={15} className="text-brand-600" />
         <span>
           Profiled <span className="font-semibold text-ink-800">{result.summary.total_columns}</span> columns and flagged{' '}
@@ -473,14 +474,14 @@ function ResultBody({ result }: { result: EdaResult }) {
         </span>
       </div>
 
-      <div className="inline-flex rounded-[11px] border border-canvas-border bg-canvas-elevated p-1">
+      <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-1">
         {SUB_TABS.map((t) => {
           const active = t.id === sub;
           return (
             <button
               key={t.id}
               onClick={() => setSub(t.id)}
-              className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                 active ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800'
               }`}
             >
@@ -501,6 +502,7 @@ function ResultBody({ result }: { result: EdaResult }) {
 // ─── Tool ────────────────────────────────────────────────────────────────────
 
 export default function InsightsAnomalyView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<EdaResult>
       title="Insights & Anomaly Report"
@@ -545,19 +547,33 @@ export default function InsightsAnomalyView({ onBack }: { onBack: () => void }) 
       resultActions={(result) => (
         <>
           <button
-            onClick={() =>
+            onClick={() => {
               downloadBlob(
                 'insights-anomaly-report.json',
                 JSON.stringify(result, null, 2),
                 'application/json',
-              )
-            }
+              );
+              logEvent({
+                action: 'Export',
+                description: 'Exported Insights & Anomaly report as JSON',
+                module: 'AI Concierge',
+                entity: 'Insights & Anomaly Report',
+              });
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 cursor-pointer"
           >
             <FileDown size={14} /> Export JSON
           </button>
           <button
-            onClick={() => downloadBlob('column-profile.csv', columnsToCsv(result.understanding.columns), 'text/csv')}
+            onClick={() => {
+              downloadBlob('column-profile.csv', columnsToCsv(result.understanding.columns), 'text/csv');
+              logEvent({
+                action: 'Export',
+                description: 'Exported Insights & Anomaly column profile as CSV',
+                module: 'AI Concierge',
+                entity: 'Insights & Anomaly Report',
+              });
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 cursor-pointer"
           >
             <FileDown size={14} /> Export CSV

@@ -302,7 +302,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[860px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[860px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-xl z-[60] flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label="Bulk Assign"
@@ -311,14 +311,14 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
         {/* Header */}
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               <UserPlus size={18} />
             </div>
             <div>
-              <h2 className="text-[17px] font-semibold text-ink-900 leading-tight">
+              <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">
                 Assign <span className="tabular-nums">{checkedCount}</span> Case{checkedCount === 1 ? '' : 's'}
               </h2>
-              <p className="text-[12.5px] text-ink-500 mt-1 leading-snug">
+              <p className="text-[0.78125rem] text-ink-500 mt-1 leading-snug">
                 Pick the owner who'll triage these cases. Uncheck any rows you want to exclude.
               </p>
             </div>
@@ -338,7 +338,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
           {reassignedCount > 0 && (
             <div
               role="status"
-              className="flex items-start gap-2.5 px-3 py-2.5 bg-mitigated-50 border border-mitigated-200 rounded-[10px] text-[12.5px] text-mitigated-800"
+              className="flex items-start gap-2.5 px-3 py-2.5 bg-mitigated-50 border border-mitigated-200 rounded-lg text-[0.78125rem] text-mitigated-800"
             >
               <AlertTriangle size={15} className="text-mitigated-700 shrink-0 mt-px" aria-hidden="true" />
               <span className="leading-snug">
@@ -354,7 +354,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
           {conflictingPicks.length > 0 && (
             <div
               role="alert"
-              className="flex items-start gap-2.5 px-3 py-2.5 bg-risk-50 border border-risk-200 rounded-[10px] text-[12.5px] text-risk-800"
+              className="flex items-start gap-2.5 px-3 py-2.5 bg-risk-50 border border-risk-200 rounded-lg text-[0.78125rem] text-risk-800"
             >
               <AlertTriangle size={15} className="text-risk-700 shrink-0 mt-px" aria-hidden="true" />
               <span className="leading-snug">
@@ -367,9 +367,9 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
 
           {/* Cases Preview */}
           <section>
-            <h3 className="text-[12.5px] font-semibold text-ink-800 mb-3">Cases Preview</h3>
-            <div className="border border-canvas-border rounded-[10px] overflow-hidden">
-              <table className="w-full text-[12.5px]">
+            <h3 className="text-[0.78125rem] font-semibold text-ink-800 mb-3">Cases Preview</h3>
+            <div className="border border-canvas-border rounded-lg overflow-hidden">
+              <table className="w-full text-[0.78125rem]">
                 <thead>
                   <tr className="text-left text-ink-500 uppercase tracking-wider border-b border-canvas-border">
                     <th className="px-3 py-2.5 w-[44px]">
@@ -382,9 +382,9 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                         aria-label="Toggle all on this page"
                       />
                     </th>
-                    <th className="px-3 py-2.5 font-medium text-[10.5px]">Exception ID</th>
-                    <th className="px-3 py-2.5 font-medium text-[10.5px]">Assigned to</th>
-                    <th className="px-3 py-2.5 font-medium text-[10.5px]">Status</th>
+                    <th className="px-3 py-2.5 font-medium text-[0.65625rem]">Exception ID</th>
+                    <th className="px-3 py-2.5 font-medium text-[0.65625rem]">Assigned to</th>
+                    <th className="px-3 py-2.5 font-medium text-[0.65625rem]">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -404,7 +404,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                             aria-label={`Toggle ${ex.id}`}
                           />
                         </td>
-                        <td className="px-3 py-2.5 align-middle font-mono text-[12px] text-brand-700">{ex.id}</td>
+                        <td className="px-3 py-2.5 align-middle font-mono text-[0.75rem] text-brand-700">{ex.id}</td>
                         <td className="px-3 py-2.5 align-middle">
                           {(() => {
                             const allAssignees = ex.assignees ?? (ex.assignedTo ? [ex.assignedTo] : []);
@@ -418,12 +418,12 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                                   {visible.map((a, i) => (
                                     <span
                                       key={`${a.name}-${i}`}
-                                      className={`group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
+                                      className={`group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
                                       aria-label={a.name}
                                     >
                                       {a.initials}
                                       <span
-                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
                                         role="tooltip"
                                       >
                                         {a.name}
@@ -432,12 +432,12 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                                   ))}
                                   {overflow > 0 && (
                                     <span
-                                      className="group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
+                                      className="group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
                                       aria-label={`${overflow} more: ${overflowNames}`}
                                     >
                                       +{overflow}
                                       <span
-                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
                                         role="tooltip"
                                       >
                                         {overflowNames}
@@ -455,7 +455,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                           })()}
                         </td>
                         <td className="px-3 py-2.5 align-middle">
-                          <span className={`inline-flex items-center h-6 px-2 rounded-full text-[11px] font-medium ${STATUS_STYLE[ex.status]}`}>
+                          <span className={`inline-flex items-center h-6 px-2 rounded-full text-[0.6875rem] font-medium ${STATUS_STYLE[ex.status]}`}>
                             {STATUS_LABEL[ex.status]}
                           </span>
                         </td>
@@ -466,7 +466,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
               </table>
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-canvas-border text-[11.5px] text-ink-500">
+                <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-canvas-border text-[0.71875rem] text-ink-500">
                   <span className="tabular-nums">Page {safePage} of {totalPages}</span>
                   <button
                     type="button"
@@ -494,12 +494,12 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
           {/* Assigned to + Note — two-column grid */}
           <section className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
+              <label className="block text-[0.75rem] font-medium text-ink-700 mb-1.5">
                 Assigned to <span className="text-risk">*</span>
               </label>
               <div className="relative" ref={assigneeRef}>
                 <div
-                  className="h-10 w-full px-2 bg-canvas-elevated border border-canvas-border rounded-[8px] flex items-center gap-1.5 overflow-x-auto whitespace-nowrap focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-600/15 cursor-text"
+                  className="h-10 w-full px-2 bg-canvas-elevated border border-canvas-border rounded-md flex items-center gap-1.5 overflow-x-auto whitespace-nowrap focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-600/15 cursor-text"
                   onClick={() => {
                     assigneeInputRef.current?.focus();
                     setAssigneeOpen(true);
@@ -508,9 +508,9 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                   {resolvedAssignees.map(a => (
                     <span
                       key={a.name}
-                      className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2 rounded-full bg-brand-50 text-brand-700 text-[12px] shrink-0"
+                      className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] shrink-0"
                     >
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[9px] font-semibold">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[0.5625rem] font-semibold">
                         {a.initials}
                       </span>
                       <span className="leading-none">{a.name}</span>
@@ -544,7 +544,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                     placeholder={resolvedAssignees.length === 0 ? 'Select user or type email' : ''}
                     aria-haspopup="listbox"
                     aria-expanded={assigneeOpen}
-                    className="flex-1 min-w-[140px] h-7 px-1 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none shrink-0"
+                    className="flex-1 min-w-[140px] h-7 px-1 bg-transparent text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none shrink-0"
                   />
                 </div>
                 {assigneeOpen && (assigneeMatches.length > 0 || canUseFreeEmail) && createPortal(
@@ -553,7 +553,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                     role="listbox"
                     aria-multiselectable="true"
                     style={menuStyle}
-                    className="max-h-[240px] overflow-y-auto bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-xl py-1"
+                    className="max-h-[240px] overflow-y-auto bg-canvas-elevated border border-canvas-border rounded-lg shadow-xl py-1"
                   >
                     {assigneeMatches.map(u => {
                       const isSelected = pickedUserIds.has(u.id);
@@ -568,14 +568,14 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                           disabled={inChain}
                           onClick={() => { if (!inChain) handleTogglePickUser(u.id); }}
                           title={inChain ? `${u.name} is in this case's approval chain and can't also be the assignee.` : undefined}
-                          className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-[12.5px] ${inChain ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#FAFAFB] cursor-pointer'}`}
+                          className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-[0.78125rem] ${inChain ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#FAFAFB] cursor-pointer'}`}
                         >
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold shrink-0">
                             {u.initials}
                           </span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-ink-900 truncate">{u.name}</span>
-                            <span className="block text-ink-500 text-[11px] truncate">
+                            <span className="block text-ink-500 text-[0.6875rem] truncate">
                               {inChain ? 'In the approval chain — can’t be the assignee' : `${u.role} · ${u.email}`}
                             </span>
                           </span>
@@ -589,14 +589,14 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                       <button
                         type="button"
                         onClick={handlePickFreeEmail}
-                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-[12.5px] hover:bg-[#FAFAFB] cursor-pointer border-t border-canvas-border/60"
+                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-[0.78125rem] hover:bg-[#FAFAFB] cursor-pointer border-t border-canvas-border/60"
                       >
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-paper-50 text-ink-500 text-[10px] font-semibold shrink-0">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-paper-50 text-ink-500 text-[0.625rem] font-semibold shrink-0">
                           @
                         </span>
                         <span className="flex-1 min-w-0">
                           <span className="block text-ink-900 truncate">Invite "{assigneeInput.trim()}"</span>
-                          <span className="block text-ink-500 text-[11px]">External email</span>
+                          <span className="block text-ink-500 text-[0.6875rem]">External email</span>
                         </span>
                       </button>
                     )}
@@ -606,7 +606,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
               </div>
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
+              <label className="block text-[0.75rem] font-medium text-ink-700 mb-1.5">
                 Assignment Note <span className="text-ink-400 font-normal">(Optional)</span>
               </label>
               <input
@@ -614,7 +614,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Add a note…"
-                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-600/15"
+                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-600/15"
               />
             </div>
           </section>
@@ -625,7 +625,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
           <button
             type="button"
             onClick={onClose}
-            className="h-9 px-4 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors"
+            className="h-9 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-[#F4F2F7] cursor-pointer transition-colors"
           >
             Cancel
           </button>
@@ -634,7 +634,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
             type="button"
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 disabled:bg-brand-300 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            className="h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-500 disabled:bg-brand-300 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             Confirm
           </button>

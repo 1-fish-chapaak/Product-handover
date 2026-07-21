@@ -24,6 +24,7 @@ import {
   deriveEvidenceMatrixReadiness,
   type StepAvailability, type DerivedControlType,
 } from './helpers';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Step Definition ──────────────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[0.6875rem] font-mono text-gray-400">{ctrl.id.replace('exec-', '')}</span>
+              <span className="text-[0.6875rem] font-mono text-ink-400">{ctrl.id.replace('exec-', '')}</span>
               <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${typeDisplay.bg} ${typeDisplay.text}`}>{typeDisplay.label}</span>
               <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${statusDisplay.bg} ${statusDisplay.text}`}>{statusDisplay.label}</span>
               {conclusionDisplay && (
@@ -108,11 +109,11 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
               {coverage.unmappedAttributes > 0 && (
                 <span className="text-amber-600 flex items-center gap-0.5"><AlertTriangle size={10} />{coverage.unmappedAttributes} unmapped</span>
               )}
-              <span className="text-gray-300">|</span>
+              <span className="text-ink-300">|</span>
               <span>Next: <strong className="text-primary">{nextAction}</strong></span>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"><X size={16} /></button>
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-600 cursor-pointer p-1"><X size={16} /></button>
         </div>
       </div>
 
@@ -132,8 +133,8 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
                   isActive
                     ? 'border-primary text-primary'
                     : isLocked
-                      ? 'border-transparent text-gray-400'
-                      : 'border-transparent text-text-muted hover:text-text-secondary hover:border-gray-200'
+                      ? 'border-transparent text-ink-400'
+                      : 'border-transparent text-text-muted hover:text-text-secondary hover:border-canvas-border'
                 }`}>
                 {isLocked ? <Lock size={11} className="shrink-0" /> : <Icon size={11} className="shrink-0" />}
                 {step.label}
@@ -284,19 +285,19 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
   return (
     <div className="space-y-5">
       {/* ═══ Control Summary Card ═══ */}
-      <div className="rounded-xl border border-border-light bg-white p-5">
+      <div className="rounded-lg border border-border-light bg-white p-5">
         <div className="flex items-start gap-5">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[0.625rem] font-mono text-gray-400">{ctrl.id}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${ctrl.importanceClass === 'KEY' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{ctrl.importanceClass === 'KEY' ? 'Key Control' : 'Non-Key'}</span>
+              <span className="text-[0.625rem] font-mono text-ink-400">{ctrl.id}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${ctrl.importanceClass === 'KEY' ? 'bg-amber-50 text-amber-700' : 'bg-canvas text-ink-500'}`}>{ctrl.importanceClass === 'KEY' ? 'Key Control' : 'Non-Key'}</span>
               <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${ctrl.natureClass === 'PREVENTIVE' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>{ctrl.natureClass.charAt(0) + ctrl.natureClass.slice(1).toLowerCase()}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${controlType === 'Automated' ? 'bg-emerald-50 text-emerald-700' : controlType === 'Hybrid' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{controlType.charAt(0) + controlType.slice(1).toLowerCase()}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${controlType === 'Automated' ? 'bg-emerald-50 text-emerald-700' : controlType === 'Hybrid' ? 'bg-evidence-50 text-evidence-700' : 'bg-canvas text-ink-600'}`}>{controlType.charAt(0) + controlType.slice(1).toLowerCase()}</span>
             </div>
             <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-3">{ctrl.description}</p>
             <div className="flex items-center gap-4 text-[0.6875rem]">
-              <span className="text-gray-400">Process: <span className="text-text font-medium">{ctrl.process}</span></span>
-              <span className="text-gray-400">Owner: <span className="text-text font-medium">{ctrl.owner}</span></span>
+              <span className="text-ink-400">Process: <span className="text-text font-medium">{ctrl.process}</span></span>
+              <span className="text-ink-400">Owner: <span className="text-text font-medium">{ctrl.owner}</span></span>
             </div>
           </div>
           {/* Next Action */}
@@ -318,11 +319,11 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
           { label: 'Attributes', value: totalAttrs, color: 'text-text' },
           { label: 'Linked Workflows', value: coverage.linkedWorkflowCount, color: coverage.linkedWorkflowCount > 0 ? 'text-emerald-600' : 'text-amber-600' },
           { label: 'Mapped to Workflow', value: `${mappedAttrs}/${totalAttrs}`, color: mappedAttrs === totalAttrs && totalAttrs > 0 ? 'text-emerald-600' : 'text-amber-600' },
-          { label: 'Automated', value: `${automatedAttrs}/${totalAttrs}`, color: automatedAttrs > 0 ? 'text-emerald-600' : 'text-gray-400' },
+          { label: 'Automated', value: `${automatedAttrs}/${totalAttrs}`, color: automatedAttrs > 0 ? 'text-emerald-600' : 'text-ink-400' },
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light bg-white p-2.5 text-center">
             <div className={`text-[1rem] font-bold tabular-nums ${s.color}`}>{s.value}</div>
-            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -353,7 +354,7 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
             <div className="flex gap-1.5">
               <button onClick={handleAddAssertion} disabled={!newAssertionName.trim() || ctrl.assertions.some(a => a.name.toLowerCase() === newAssertionName.trim().toLowerCase())}
                 className="px-2.5 py-1 rounded bg-primary text-white text-[0.625rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Save</button>
-              <button onClick={() => { setShowAddAssertion(false); setNewAssertionName(''); }} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-gray-500 cursor-pointer">Cancel</button>
+              <button onClick={() => { setShowAddAssertion(false); setNewAssertionName(''); }} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-ink-500 cursor-pointer">Cancel</button>
             </div>
           </div>
         )}
@@ -366,14 +367,14 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center"><Shield size={11} className="text-primary" /></div>
                   <span className="text-[0.6875rem] font-bold text-text">{group.assertion.name}</span>
-                  <span className="text-[0.625rem] text-gray-400">{group.attrs.length} attribute{group.attrs.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[0.625rem] text-ink-400">{group.attrs.length} attribute{group.attrs.length !== 1 ? 's' : ''}</span>
                 </div>
                 <button onClick={() => { setAddAttrAssertionId(group.assertion.id); setAttrName(''); setAttrDesc(''); setAttrType('MANUAL'); setAttrRequired(true); setAttrEvTypes([]); setAttrWfId(''); }}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={9} />Add Attribute</button>
               </div>
               <div className="divide-y divide-border-light/50">
                 {group.attrs.length === 0 && (
-                  <div className="px-3 py-3 text-[0.625rem] text-gray-400 italic">No attributes added yet.</div>
+                  <div className="px-3 py-3 text-[0.625rem] text-ink-400 italic">No attributes added yet.</div>
                 )}
                 {group.attrs.map(attr => {
                   const wm = ctrl.workflowMappings.find(w => w.mappedAttributeIds.includes(attr.id));
@@ -384,11 +385,11 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="text-[0.75rem] font-medium text-text">{attr.name}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attr.type === 'AUTOMATED' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attr.type === 'AUTOMATED' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-600'}`}>
                               {attr.type === 'AUTOMATED' ? 'Automated' : 'Manual'}
                             </span>
                           </div>
-                          {attr.description && <p className="text-[0.625rem] text-gray-500 mb-1">{attr.description}</p>}
+                          {attr.description && <p className="text-[0.625rem] text-ink-500 mb-1">{attr.description}</p>}
                           {wm ? (
                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-[0.625rem] text-emerald-700 font-medium">
                               <Workflow size={10} className="shrink-0" />Linked: {wm.workflowName} <span className="text-emerald-500">{wm.version}</span>
@@ -410,7 +411,7 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                             {ctrl.workflowMappings.map(w => <option key={w.workflowId} value={w.workflowId}>{w.workflowName}</option>)}
                           </select>
                           <button onClick={handleLinkWorkflow} className="px-2 py-1 rounded bg-primary text-white text-[0.5625rem] font-semibold cursor-pointer">Save</button>
-                          <button onClick={() => setLinkAttrId(null)} className="px-2 py-1 rounded border border-border text-[0.5625rem] text-gray-500 cursor-pointer">Cancel</button>
+                          <button onClick={() => setLinkAttrId(null)} className="px-2 py-1 rounded border border-border text-[0.5625rem] text-ink-500 cursor-pointer">Cancel</button>
                         </div>
                       )}
                     </div>
@@ -440,14 +441,14 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                   <div className="flex gap-1.5">
                     <button onClick={handleAddAttribute} disabled={!attrName.trim()}
                       className="px-2.5 py-1 rounded bg-primary text-white text-[0.625rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Add Attribute</button>
-                    <button onClick={() => setAddAttrAssertionId(null)} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-gray-500 cursor-pointer">Cancel</button>
+                    <button onClick={() => setAddAttrAssertionId(null)} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-ink-500 cursor-pointer">Cancel</button>
                   </div>
                 </div>
               )}
             </div>
           ))}
           {assertionGroups.length === 0 && !showAddAssertion && (
-            <div className="text-[0.6875rem] text-gray-400 italic">No assertions defined. Add an assertion to start.</div>
+            <div className="text-[0.6875rem] text-ink-400 italic">No assertions defined. Add an assertion to start.</div>
           )}
         </div>
 
@@ -481,10 +482,10 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
               </select>
             </div>
             <div>
-              <span className="text-[0.5625rem] text-gray-500 block mb-1">Map attributes to this workflow:</span>
+              <span className="text-[0.5625rem] text-ink-500 block mb-1">Map attributes to this workflow:</span>
               <div className="flex flex-wrap gap-1.5">
                 {ctrl.attributes.map(a => (
-                  <label key={a.id} className={`flex items-center gap-1 px-2 py-1 rounded border cursor-pointer text-[0.5625rem] transition-colors ${newWfAttrIds.has(a.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border-light text-gray-500 hover:border-primary/30'}`}>
+                  <label key={a.id} className={`flex items-center gap-1 px-2 py-1 rounded border cursor-pointer text-[0.5625rem] transition-colors ${newWfAttrIds.has(a.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border-light text-ink-500 hover:border-primary/30'}`}>
                     <input type="checkbox" checked={newWfAttrIds.has(a.id)} onChange={() => setNewWfAttrIds(prev => { const n = new Set(prev); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })}
                       className="w-3 h-3 accent-primary cursor-pointer" />{a.name}
                   </label>
@@ -494,7 +495,7 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
             <div className="flex gap-1.5">
               <button onClick={handleAddWorkflow} disabled={!newWfName.trim()}
                 className="px-2.5 py-1 rounded bg-primary text-white text-[0.625rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Add Workflow</button>
-              <button onClick={() => { setShowAddWorkflow(false); setNewWfName(''); setNewWfAttrIds(new Set()); }} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-gray-500 cursor-pointer">Cancel</button>
+              <button onClick={() => { setShowAddWorkflow(false); setNewWfName(''); setNewWfAttrIds(new Set()); }} className="px-2.5 py-1 rounded border border-border text-[0.625rem] text-ink-500 cursor-pointer">Cancel</button>
             </div>
           </div>
         )}
@@ -507,11 +508,11 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[0.6875rem]">
               <thead><tr className="border-b border-border-light bg-surface-2/30">
-                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Workflow</th>
-                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Version</th>
-                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Status</th>
-                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Attributes Covered</th>
-                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Assertions</th>
+                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Workflow</th>
+                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Version</th>
+                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Status</th>
+                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Attributes Covered</th>
+                <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Assertions</th>
               </tr></thead>
               <tbody>
                 {ctrl.workflowMappings.map(wm => {
@@ -520,9 +521,9 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                   return (
                     <tr key={wm.workflowId} className="border-b border-border-light/50">
                       <td className="px-3 py-1.5"><span className="text-text font-medium flex items-center gap-1.5"><Workflow size={10} className="text-primary shrink-0" />{wm.workflowName}</span></td>
-                      <td className="px-3 py-1.5 text-gray-500">{wm.version}</td>
-                      <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wm.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{wm.status}</span></td>
-                      <td className="px-3 py-1.5 text-gray-500">{mappedAttrs.length > 0 ? mappedAttrs.map(a => a.name).join(', ') : '—'}</td>
+                      <td className="px-3 py-1.5 text-ink-500">{wm.version}</td>
+                      <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wm.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-500'}`}>{wm.status}</span></td>
+                      <td className="px-3 py-1.5 text-ink-500">{mappedAttrs.length > 0 ? mappedAttrs.map(a => a.name).join(', ') : '—'}</td>
                       <td className="px-3 py-1.5"><div className="flex flex-wrap gap-0.5">{assertions.map(a => <span key={a} className="px-1 py-0.5 rounded bg-primary/10 text-primary text-[0.4375rem] font-bold">{a}</span>)}</div></td>
                     </tr>
                   );
@@ -585,6 +586,7 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
 }) {
   const pop = ctrl.execution.population;
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[] | null>(null);
+  const logEvent = useAuditLog();
 
   // State 3: Locked
   if (pop && pop.locked) {
@@ -599,12 +601,12 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
           <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
           <div className="space-y-2 text-[0.75rem]">
             <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-              <div><span className="text-gray-500">Snapshot ID:</span> <span className="font-mono text-text">{pop.id}</span></div>
-              <div><span className="text-gray-500">Source:</span> <span className="text-text">{pop.source}</span></div>
-              <div><span className="text-gray-500">Row Count:</span> <span className="text-text font-medium tabular-nums">{pop.rowCount}</span></div>
-              <div><span className="text-gray-500">Test Unit:</span> <span className="text-text">{pop.testUnit}</span></div>
-              <div><span className="text-gray-500">Locked At:</span> <span className="text-text">{pop.lockedAt}</span></div>
-              <div><span className="text-gray-500">Checksum:</span> <span className="font-mono text-gray-400 text-[0.625rem]">{pop.checksum}</span></div>
+              <div><span className="text-ink-500">Snapshot ID:</span> <span className="font-mono text-text">{pop.id}</span></div>
+              <div><span className="text-ink-500">Source:</span> <span className="text-text">{pop.source}</span></div>
+              <div><span className="text-ink-500">Row Count:</span> <span className="text-text font-medium tabular-nums">{pop.rowCount}</span></div>
+              <div><span className="text-ink-500">Test Unit:</span> <span className="text-text">{pop.testUnit}</span></div>
+              <div><span className="text-ink-500">Locked At:</span> <span className="text-text">{pop.lockedAt}</span></div>
+              <div><span className="text-ink-500">Checksum:</span> <span className="font-mono text-ink-400 text-[0.625rem]">{pop.checksum}</span></div>
             </div>
           </div>
         </div>
@@ -640,6 +642,7 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
         ...prev,
         execution: { ...prev.execution, population: snapshot, status: ControlExecStatus.POPULATION_READY },
       }));
+      logEvent({ action: 'Update', description: `Locked control scope for testing on "${ctrl.name}" (${previewRows.length} rows)`, module: 'Engagement Execution', entity: 'Control' });
     };
 
     return (
@@ -654,7 +657,7 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
             <table className="w-full text-[0.6875rem]">
               <thead className="sticky top-0 bg-white z-10"><tr className="border-b border-border-light">
                 {columns.map(col => (
-                  <th key={col} className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                  <th key={col} className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -704,13 +707,13 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
         </button>
 
         <div className="p-4 rounded-xl border-2 border-border-light opacity-60 cursor-not-allowed text-left">
-          <Upload size={18} className="text-gray-400 mb-2" />
+          <Upload size={18} className="text-ink-400 mb-2" />
           <div className="text-[0.75rem] font-semibold text-text">Upload File</div>
           <div className="text-[0.625rem] text-text-muted mt-0.5">Upload CSV/Excel dataset. Coming soon.</div>
         </div>
 
         <div className="p-4 rounded-xl border-2 border-border-light opacity-60 cursor-not-allowed text-left">
-          <Layers size={18} className="text-gray-400 mb-2" />
+          <Layers size={18} className="text-ink-400 mb-2" />
           <div className="text-[0.75rem] font-semibold text-text">Population Builder</div>
           <div className="text-[0.625rem] text-text-muted mt-0.5">Query connected data sources. Coming soon.</div>
         </div>
@@ -753,6 +756,7 @@ function ExecutionModeStep({ ctrl, controlType, onUpdateControl, onNavigate }: {
   const pop = ctrl.execution.population;
   const mode = ctrl.execution.executionMode;
   const hasTestItems = ctrl.execution.testItems.length > 0;
+  const logEvent = useAuditLog();
 
   // Already chosen
   if (mode && hasTestItems) {
@@ -796,6 +800,7 @@ function ExecutionModeStep({ ctrl, controlType, onUpdateControl, onNavigate }: {
         status: ControlExecStatus.TEST_ITEMS_READY,
       },
     }));
+    logEvent({ action: 'Create', description: `Selected full population for testing on "${ctrl.name}" (${items.length} test items)`, module: 'Engagement Execution', entity: 'Sample' });
   };
 
   const handleSelectSampling = () => {
@@ -827,7 +832,7 @@ function ExecutionModeStep({ ctrl, controlType, onUpdateControl, onNavigate }: {
           <Shuffle size={20} className="text-primary mb-3" />
           <div className="text-[0.8125rem] font-semibold text-text">Use Sampling</div>
           <div className="text-[0.6875rem] text-text-muted mt-1">Select a subset of transactions based on sampling method and size.</div>
-          <div className="mt-3 text-[0.625rem] text-gray-400 font-medium">Configure sample size in next step</div>
+          <div className="mt-3 text-[0.625rem] text-ink-400 font-medium">Configure sample size in next step</div>
         </button>
       </div>
     </div>
@@ -882,6 +887,7 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
   const [sampleSize, setSampleSize] = useState(Math.min(5, pop.rowCount));
   const maxSize = pop.rowCount;
   const previewCount = Math.min(sampleSize, 5);
+  const logEvent = useAuditLog();
 
   // Random sample preview
   const previewIndices = Array.from({ length: previewCount }, (_, i) => Math.floor((i * pop.rowCount) / previewCount));
@@ -906,6 +912,7 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
         status: ControlExecStatus.TEST_ITEMS_READY,
       },
     }));
+    logEvent({ action: 'Create', description: `Generated samples (Random) — ${items.length} of ${pop.rowCount} rows for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
   };
 
   return (
@@ -917,7 +924,7 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
 
       {/* Method selection */}
       <div>
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Sampling Method</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Sampling Method</h5>
         <div className="grid grid-cols-4 gap-2">
           <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5 text-left">
             <Shuffle size={14} className="text-primary mb-1" />
@@ -926,8 +933,8 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
           </div>
           {['Systematic', 'Value-based', 'Manual Selection'].map(m => (
             <div key={m} className="p-3 rounded-lg border-2 border-border-light opacity-50 cursor-not-allowed text-left">
-              <div className="text-[0.6875rem] font-semibold text-gray-400">{m}</div>
-              <div className="text-[0.5625rem] text-gray-400 mt-0.5">Coming soon</div>
+              <div className="text-[0.6875rem] font-semibold text-ink-400">{m}</div>
+              <div className="text-[0.5625rem] text-ink-400 mt-0.5">Coming soon</div>
             </div>
           ))}
         </div>
@@ -935,26 +942,26 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
 
       {/* Sample size */}
       <div>
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Sample Size</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Sample Size</h5>
         <div className="flex items-center gap-3">
           <input type="number" value={sampleSize} min={1} max={maxSize}
             onChange={e => setSampleSize(Math.max(1, Math.min(maxSize, parseInt(e.target.value) || 1)))}
             className="w-24 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text outline-none focus:border-primary/40 tabular-nums" />
           <span className="text-[0.6875rem] text-text-muted">of {pop.rowCount} transactions</span>
-          <span className="text-[0.6875rem] text-gray-400">({Math.round((sampleSize / pop.rowCount) * 100)}%)</span>
+          <span className="text-[0.6875rem] text-ink-400">({Math.round((sampleSize / pop.rowCount) * 100)}%)</span>
         </div>
       </div>
 
       {/* Preview */}
       {previewRows.length > 0 && (
         <div>
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Preview (first {previewCount} of {sampleSize})</h5>
+          <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Preview (first {previewCount} of {sampleSize})</h5>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-[0.6875rem]">
                 <thead><tr className="border-b border-border-light bg-surface-2/30">
                   {previewColumns.map(col => (
-                    <th key={col} className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase whitespace-nowrap">{col}</th>
+                    <th key={col} className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase whitespace-nowrap">{col}</th>
                   ))}
                 </tr></thead>
                 <tbody>
@@ -990,23 +997,23 @@ function TestItemsTable({ items, attrCount }: { items: TestItem[]; attrCount: nu
       <div className="overflow-x-auto" style={{ maxHeight: 300 }}>
         <table className="w-full text-[0.6875rem]">
           <thead className="sticky top-0 bg-white z-10"><tr className="border-b border-border-light">
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">#</th>
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Ref ID</th>
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Description</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Attributes</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Evidence</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Result</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">#</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Ref ID</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Description</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Attributes</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Evidence</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Result</th>
           </tr></thead>
           <tbody>
             {preview.map((item, i) => (
               <tr key={item.id} className="border-b border-border-light/50">
-                <td className="px-3 py-1.5 text-gray-400 tabular-nums">{i + 1}</td>
-                <td className="px-3 py-1.5 font-mono text-gray-500">{item.referenceId}</td>
+                <td className="px-3 py-1.5 text-ink-400 tabular-nums">{i + 1}</td>
+                <td className="px-3 py-1.5 font-mono text-ink-500">{item.referenceId}</td>
                 <td className="px-3 py-1.5 text-text max-w-[250px] truncate">{item.description}</td>
-                <td className="px-3 py-1.5 text-center text-gray-500 tabular-nums">{item.attributeResults.length}</td>
-                <td className="px-3 py-1.5 text-center text-gray-500 tabular-nums">{item.evidence.length}</td>
+                <td className="px-3 py-1.5 text-center text-ink-500 tabular-nums">{item.attributeResults.length}</td>
+                <td className="px-3 py-1.5 text-center text-ink-500 tabular-nums">{item.evidence.length}</td>
                 <td className="px-3 py-1.5 text-center">
-                  <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-500">Pending</span>
+                  <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-canvas text-ink-500">Pending</span>
                 </td>
               </tr>
             ))}
@@ -1057,7 +1064,7 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Lock size={20} className="text-gray-400 mb-3" />
+        <Lock size={20} className="text-ink-400 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">No test items yet</h4>
         <p className="text-[0.75rem] text-text-muted">Create or select samples before collecting evidence.</p>
       </div>
@@ -1176,7 +1183,7 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
   const evStatusStyle = (s: string) =>
     s === 'Ready' ? 'bg-emerald-50 text-emerald-700' :
     s === 'Partial' ? 'bg-amber-50 text-amber-600' :
-    'bg-gray-100 text-gray-500';
+    'bg-canvas text-ink-500';
 
   return (
     <div className="space-y-4">
@@ -1191,11 +1198,11 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
       <div className="rounded-lg border border-border-light overflow-hidden">
         <table className="w-full text-[0.6875rem]">
           <thead><tr className="border-b border-border-light bg-surface-2/30">
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Sample</th>
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Reference</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Files</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Status</th>
-            <th className="px-3 py-2 text-right text-[0.5625rem] font-semibold text-gray-400 uppercase">Action</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Sample</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Reference</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Files</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Status</th>
+            <th className="px-3 py-2 text-right text-[0.5625rem] font-semibold text-ink-400 uppercase">Action</th>
           </tr></thead>
           <tbody>
             {items.map((item, idx) => {
@@ -1205,8 +1212,8 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
                 <React.Fragment key={item.id}>
                   <tr className={`border-b border-border-light/50 cursor-pointer ${isExpanded ? 'bg-primary/5' : 'hover:bg-surface-2/40'}`}
                     onClick={() => setExpandedItemId(isExpanded ? null : item.id)}>
-                    <td className="px-3 py-2 text-gray-400 tabular-nums">{idx + 1}</td>
-                    <td className="px-3 py-2 font-mono text-gray-500">{item.referenceId}</td>
+                    <td className="px-3 py-2 text-ink-400 tabular-nums">{idx + 1}</td>
+                    <td className="px-3 py-2 font-mono text-ink-500">{item.referenceId}</td>
                     <td className="px-3 py-2 text-center tabular-nums text-text">{item.evidence.length}</td>
                     <td className="px-3 py-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${evStatusStyle(evStatus)}`}>{evStatus}</span>
@@ -1218,7 +1225,7 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
                           <Upload size={9} />Upload
                         </button>
                         <button onClick={() => addDemoEvidence(item.id)}
-                          className="px-2 py-1 rounded text-[0.5625rem] font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer">
+                          className="px-2 py-1 rounded text-[0.5625rem] font-semibold bg-canvas text-ink-600 hover:bg-canvas-border/70 cursor-pointer">
                           Demo
                         </button>
                       </div>
@@ -1230,12 +1237,12 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
                       <div className="px-6 py-3 bg-surface-2/10 border-b border-border-light/50 space-y-1.5">
                         {item.evidence.map(ev => (
                           <div key={ev.id} className="flex items-center gap-3 text-[0.625rem] py-1">
-                            <Paperclip size={10} className="text-gray-400 shrink-0" />
+                            <Paperclip size={10} className="text-ink-400 shrink-0" />
                             <span className="text-text font-medium flex-1">{ev.fileName}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-500">{ev.evidenceType}</span>
-                            <span className="text-gray-400">{ev.mappedAttributeIds.length} attr{ev.mappedAttributeIds.length !== 1 ? 's' : ''}</span>
-                            <span className="text-gray-400">{ev.uploadedAt}</span>
-                            <button onClick={() => removeEvidence(item.id, ev.id)} className="text-gray-400 hover:text-red-500 cursor-pointer"><Trash2 size={10} /></button>
+                            <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-canvas text-ink-500">{ev.evidenceType}</span>
+                            <span className="text-ink-400">{ev.mappedAttributeIds.length} attr{ev.mappedAttributeIds.length !== 1 ? 's' : ''}</span>
+                            <span className="text-ink-400">{ev.uploadedAt}</span>
+                            <button onClick={() => removeEvidence(item.id, ev.id)} className="text-ink-400 hover:text-red-500 cursor-pointer"><Trash2 size={10} /></button>
                           </div>
                         ))}
                       </div>
@@ -1243,7 +1250,7 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
                   )}
                   {isExpanded && item.evidence.length === 0 && (
                     <tr><td colSpan={5} className="p-0">
-                      <div className="px-6 py-4 bg-surface-2/10 border-b border-border-light/50 text-center text-[0.6875rem] text-gray-400">
+                      <div className="px-6 py-4 bg-surface-2/10 border-b border-border-light/50 text-center text-[0.6875rem] text-ink-400">
                         No evidence uploaded for this sample yet.
                       </div>
                     </td></tr>
@@ -1261,7 +1268,7 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
           <h5 className="text-[0.75rem] font-bold text-text">Upload Evidence for {items.find(i => i.id === uploadingItemId)?.referenceId || 'Sample'}</h5>
 
           <div>
-            <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Evidence Type <span className="text-red-400">*</span></label>
+            <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Evidence Type <span className="text-red-400">*</span></label>
             <select value={selectedEvidenceType} onChange={e => handleTypeChange(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 cursor-pointer">
               <option value="">Select type...</option>
@@ -1271,14 +1278,14 @@ function EvidenceStep({ ctrl, onUpdateControl, onNavigate }: {
 
           {selectedEvidenceType && (
             <div>
-              <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1.5">Map to Attributes</label>
+              <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1.5">Map to Attributes</label>
               <div className="space-y-1">
                 {ctrl.attributes.map(attr => (
                   <label key={attr.id} className="flex items-center gap-2 text-[0.6875rem] cursor-pointer hover:bg-white rounded px-2 py-1 transition-colors">
                     <input type="checkbox" checked={mappedAttrIds.has(attr.id)} onChange={() => toggleAttrMapping(attr.id)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 accent-primary cursor-pointer" />
+                      className="w-3.5 h-3.5 rounded border-ink-300 accent-primary cursor-pointer" />
                     <span className="text-text">{attr.name}</span>
-                    <span className="text-[0.5625rem] text-gray-400 ml-auto">{attr.assertionName}</span>
+                    <span className="text-[0.5625rem] text-ink-400 ml-auto">{attr.assertionName}</span>
                   </label>
                 ))}
               </div>
@@ -1409,7 +1416,7 @@ function RequestPBCStep({ ctrl, onNavigate }: {
         ].map(k => (
           <div key={k.label} className="bg-surface-2/40 rounded-lg border border-border-light px-3 py-2">
             <span className={`text-[1.125rem] font-bold ${k.color} block tabular-nums`}>{k.value}</span>
-            <span className="text-[0.5625rem] text-gray-400 font-medium">{k.label}</span>
+            <span className="text-[0.5625rem] text-ink-400 font-medium">{k.label}</span>
           </div>
         ))}
       </div>
@@ -1477,7 +1484,7 @@ function RequestPBCStep({ ctrl, onNavigate }: {
                   <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${statusStyles[req.status]}`}>{req.status}</span>
                 </td>
                 <td className="px-3 py-2.5 text-center">
-                  <span className={`text-[0.625rem] tabular-nums ${req.attachments === 0 ? 'text-gray-300' : 'text-text'}`}>{req.attachments || '—'}</span>
+                  <span className={`text-[0.625rem] tabular-nums ${req.attachments === 0 ? 'text-ink-300' : 'text-text'}`}>{req.attachments || '—'}</span>
                 </td>
                 <td className="px-3 py-2.5 text-right">
                   <button className="px-2 py-1 rounded text-[0.5625rem] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">
@@ -1512,6 +1519,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const hasSamples = ctrl.execution.testItems.length > 0;
   const anyTested = ctrl.execution.testItems.some(ti => ti.attributeResults.some(ar => ar.result !== AttrResult.NOT_TESTED));
+  const logEvent = useAuditLog();
 
   // Upload handler: trigger file picker, then create testItems from control-specific mock rows
   const handleUpload = () => {
@@ -1528,6 +1536,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
         ...prev,
         execution: { ...prev.execution, testItems: items, status: ControlExecStatus.TEST_ITEMS_READY },
       }));
+      logEvent({ action: 'Upload', description: `Uploaded sample data "${fileName}" (${items.length} samples) for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     };
     input.click();
   };
@@ -1562,6 +1571,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
       const newStatus = completedChecks === totalChecks && totalChecks > 0 ? ControlExecStatus.TESTING_COMPLETE : ControlExecStatus.TESTING_IN_PROGRESS;
       return { ...prev, execution: { ...prev.execution, testItems: updatedItems, status: newStatus } };
     });
+    logEvent({ action: 'Run', description: `Ran attribute testing on "${ctrl.name}" (${ctrl.execution.testItems.length} samples)`, module: 'Engagement Execution', entity: 'Test Result' });
     onNavigate('attr-testing');
   };
 
@@ -1570,7 +1580,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
     return (
       <div className="space-y-5">
         <div className="rounded-xl border-2 border-dashed border-border-light p-10 text-center hover:border-primary/30 hover:bg-primary/5 transition-all">
-          <Upload size={32} className="mx-auto text-gray-300 mb-3" />
+          <Upload size={32} className="mx-auto text-ink-300 mb-3" />
           <h4 className="text-[0.9375rem] font-bold text-text mb-1">Upload Sample Data</h4>
           <p className="text-[0.75rem] text-text-muted max-w-md mx-auto leading-relaxed mb-4">
             Upload the sample file that should be tested for this control. Once uploaded, testing can be executed against these samples.
@@ -1579,7 +1589,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
             className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-2">
             <Upload size={15} />Upload Sample Data
           </button>
-          <p className="text-[0.625rem] text-gray-400 mt-3">CSV, XLSX supported · The uploaded rows will become test items for this control.</p>
+          <p className="text-[0.625rem] text-ink-400 mt-3">CSV, XLSX supported · The uploaded rows will become test items for this control.</p>
         </div>
       </div>
     );
@@ -1610,23 +1620,23 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
       <div className="rounded-lg border border-border-light overflow-hidden">
         <table className="w-full text-[0.6875rem]">
           <thead><tr className="border-b border-border-light bg-surface-2/30">
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase w-8">#</th>
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Sample ID</th>
-            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Reference / Description</th>
-            <th className="px-3 py-2 text-right text-[0.5625rem] font-semibold text-gray-400 uppercase">Value</th>
-            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Status</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase w-8">#</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Sample ID</th>
+            <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Reference / Description</th>
+            <th className="px-3 py-2 text-right text-[0.5625rem] font-semibold text-ink-400 uppercase">Value</th>
+            <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Status</th>
           </tr></thead>
           <tbody>
             {ctrl.execution.testItems.slice(0, 10).map((item, i) => {
               const rowData = sampleRows[i];
               return (
                 <tr key={item.id} className="border-b border-border-light/50">
-                  <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2 font-mono text-gray-500">{item.referenceId}</td>
+                  <td className="px-3 py-2 text-ink-400 tabular-nums">{i + 1}</td>
+                  <td className="px-3 py-2 font-mono text-ink-500">{item.referenceId}</td>
                   <td className="px-3 py-2 text-text">{item.description}</td>
                   <td className="px-3 py-2 text-right text-text tabular-nums">{rowData?.value || '—'}</td>
                   <td className="px-3 py-2 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${item.sampleResult === 'PASS' ? 'bg-emerald-50 text-emerald-700' : item.sampleResult === 'FAIL' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${item.sampleResult === 'PASS' ? 'bg-emerald-50 text-emerald-700' : item.sampleResult === 'FAIL' ? 'bg-red-50 text-red-700' : 'bg-canvas text-ink-500'}`}>
                       {item.sampleResult === 'PASS' ? 'Passed' : item.sampleResult === 'FAIL' ? 'Failed' : 'Not Tested'}
                     </span>
                   </td>
@@ -1830,11 +1840,12 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
   const [retestIds, setRetestIds] = useState<Set<string>>(new Set());
   const [showAllPreview, setShowAllPreview] = useState(false);
   const [retestCompletedIds, setRetestCompletedIds] = useState<Set<string>>(new Set());
+  const logEvent = useAuditLog();
 
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Lock size={20} className="text-gray-400 mb-3" />
+        <Lock size={20} className="text-ink-400 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">No test items</h4>
         <p className="text-[0.75rem] text-text-muted">Select transactions or create samples before attribute testing.</p>
       </div>
@@ -1924,6 +1935,10 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
   // For prototype: auto-generate evidence for every sample × required attribute
   const autoAttachAllEvidence = () => {
     const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const attachedCount = ctrl.execution.testItems.reduce((s, ti) => s + ti.attributeResults.filter(ar => {
+      const attr = ctrl.attributes.find(a => a.id === ar.attributeId);
+      return attr?.required && ar.evidenceIds.length === 0;
+    }).length, 0);
     onUpdateControl(prev => {
       const updatedItems = prev.execution.testItems.map(ti => {
         const newEvidence = [...ti.evidence];
@@ -1950,6 +1965,9 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
       });
       return { ...prev, execution: { ...prev.execution, testItems: updatedItems } };
     });
+    if (attachedCount > 0) {
+      logEvent({ action: 'Upload', description: `Bulk-uploaded ${attachedCount} evidence files for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Evidence' });
+    }
   };
 
   const applyBulkMappings = () => {
@@ -2065,7 +2083,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
     });
     if (allEvidenceReady) return { label: 'Evidence Ready', cls: 'bg-emerald-50 text-emerald-600' };
     if (item.evidence.length > 0) return { label: 'Evidence Partial', cls: 'bg-amber-50 text-amber-600' };
-    return { label: 'Pending', cls: 'bg-gray-100 text-gray-500' };
+    return { label: 'Pending', cls: 'bg-canvas text-ink-500' };
   };
 
   return (
@@ -2076,30 +2094,30 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
           {[
             { label: 'Samples', value: items.length, color: 'text-text' },
             { label: 'Total Checks', value: progress.totalAttributeChecks, color: 'text-text' },
-            { label: 'Completed', value: progress.completedAttributeChecks, color: progress.completedAttributeChecks > 0 ? 'text-emerald-700' : 'text-gray-400' },
+            { label: 'Completed', value: progress.completedAttributeChecks, color: progress.completedAttributeChecks > 0 ? 'text-emerald-700' : 'text-ink-400' },
             { label: 'Manual Pending', value: progress.manualPending, color: progress.manualPending > 0 ? 'text-amber-700' : 'text-emerald-700' },
             { label: 'Auto Pending', value: progress.automatedPending, color: progress.automatedPending > 0 ? 'text-blue-700' : 'text-emerald-700' },
-            { label: 'Failed', value: progress.failedAttributeChecks, color: progress.failedAttributeChecks > 0 ? 'text-red-700' : 'text-gray-400' },
+            { label: 'Failed', value: progress.failedAttributeChecks, color: progress.failedAttributeChecks > 0 ? 'text-red-700' : 'text-ink-400' },
           ].map(s => (
             <div key={s.label}>
               <span className={`text-[1.125rem] font-bold ${s.color} block tabular-nums`}>{s.value}</span>
-              <span className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</span>
+              <span className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</span>
             </div>
           ))}
         </div>
         {progress.totalAttributeChecks > 0 && (
           <div className="mt-3">
-            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-canvas-border rounded-full overflow-hidden">
               <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70 transition-all" style={{ width: `${progress.completionPercent}%` }} />
             </div>
-            <span className="text-[0.625rem] text-gray-400 mt-1 block">{progress.completionPercent}% complete</span>
+            <span className="text-[0.625rem] text-ink-400 mt-1 block">{progress.completionPercent}% complete</span>
           </div>
         )}
       </div>
 
       {/* Sample-wise Testing Preview */}
       {ctrl.attributes.length > 0 && (
-        <div className="rounded-xl border border-border-light bg-white p-4 space-y-3">
+        <div className="rounded-lg border border-border-light bg-white p-4 space-y-3">
           {/* Quick actions at top of preview */}
           <div className="flex items-center justify-between">
             <h4 className="text-[0.75rem] font-bold text-text mb-0">Sample-wise Testing Preview</h4>
@@ -2126,13 +2144,13 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
             <table className="text-[0.625rem] w-full border-collapse">
               <thead>
                 <tr className="bg-surface-2/30">
-                  <th className="text-left px-3 py-2 text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider border-b border-border-light">Sample</th>
+                  <th className="text-left px-3 py-2 text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider border-b border-border-light">Sample</th>
                   {ctrl.attributes.map((attr, ai) => (
                     <th key={attr.id} className="px-2 py-2 text-center border-b border-border-light" title={attr.name}>
-                      <span className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider">Attribute {String.fromCharCode(65 + ai)}</span>
+                      <span className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider">Attribute {String.fromCharCode(65 + ai)}</span>
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider border-b border-border-light">Sample Result</th>
+                  <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider border-b border-border-light">Sample Result</th>
                 </tr>
               </thead>
               <tbody>
@@ -2143,10 +2161,10 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                     <tr key={ti.id} className="border-b border-border-light/30 hover:bg-surface-2/10">
                       <td className="px-3 py-2">
                         <span className="text-[0.625rem] font-semibold text-text">{ti.referenceId || ti.id}</span>
-                        {ti.description && <span className="text-[0.5625rem] text-gray-400 block mt-0.5 truncate max-w-[140px]">{ti.description}</span>}
+                        {ti.description && <span className="text-[0.5625rem] text-ink-400 block mt-0.5 truncate max-w-[140px]">{ti.description}</span>}
                       </td>
                       {ti.attributeResults.map(ar => {
-                        const bg = ar.result === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ar.result === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : ar.evidenceIds.length > 0 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-400 border-gray-200';
+                        const bg = ar.result === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ar.result === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : ar.evidenceIds.length > 0 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-canvas text-ink-400 border-canvas-border';
                         const label = ar.result === 'PASS' ? 'Passed' : ar.result === 'FAIL' ? 'Failed' : ar.evidenceIds.length > 0 ? 'Evidence Ready' : 'Not Tested';
                         return (
                           <td key={ar.attributeId} className="px-2 py-2 text-center">
@@ -2155,7 +2173,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                         );
                       })}
                       <td className="px-3 py-2 text-center">
-                        <span className={`inline-flex items-center justify-center px-2 h-5 rounded-full text-[0.5rem] font-bold ${sampleDone ? (sampleFailed ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200') : 'bg-gray-50 text-gray-400 border border-gray-200'}`}>
+                        <span className={`inline-flex items-center justify-center px-2 h-5 rounded-full text-[0.5rem] font-bold ${sampleDone ? (sampleFailed ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200') : 'bg-canvas text-ink-400 border border-canvas-border'}`}>
                           {sampleDone ? (sampleFailed ? 'Failed' : 'Passed') : 'Pending'}
                         </span>
                       </td>
@@ -2170,7 +2188,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
               </button>
             )}
             {items.length > 3 && showAllPreview && (
-              <button onClick={() => setShowAllPreview(false)} className="text-[0.5625rem] text-gray-400 font-semibold mt-1.5 px-3 cursor-pointer hover:underline">
+              <button onClick={() => setShowAllPreview(false)} className="text-[0.5625rem] text-ink-400 font-semibold mt-1.5 px-3 cursor-pointer hover:underline">
                 Show fewer
               </button>
             )}
@@ -2178,7 +2196,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
 
           {/* Attribute Legend */}
           <div className="pt-2 border-t border-border-light/30">
-            <span className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Attributes</span>
+            <span className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1.5">Attributes</span>
             <div className="space-y-1">
               {ctrl.attributes.map((attr, ai) => (
                 <div key={attr.id} className="flex items-center gap-2 text-[0.625rem]">
@@ -2194,13 +2212,13 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
 
       {/* Bulk Upload Review Panel */}
       {bulkMappings && (
-        <div className="rounded-xl border border-primary/20 bg-white p-4 space-y-3 shadow-sm">
+        <div className="rounded-lg border border-primary/20 bg-white p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h5 className="text-[0.75rem] font-bold text-text">{bulkMappings.length} file{bulkMappings.length !== 1 ? 's' : ''} — review mappings</h5>
             <div className="flex items-center gap-3 text-[0.5625rem]">
               <span className="text-emerald-700 font-semibold">{bulkMappings.filter(m => deriveBulkStatus(m) === 'Matched').length} matched</span>
               <span className="text-amber-600 font-semibold">{bulkMappings.filter(m => deriveBulkStatus(m) === 'Needs Review').length} needs review</span>
-              <span className="text-gray-400">{bulkMappings.filter(m => deriveBulkStatus(m) === 'Unmatched').length} unmatched</span>
+              <span className="text-ink-400">{bulkMappings.filter(m => deriveBulkStatus(m) === 'Unmatched').length} unmatched</span>
             </div>
           </div>
           {bulkMappings.some(m => deriveBulkStatus(m) === 'Unmatched') && (
@@ -2211,11 +2229,11 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
           <div className="rounded-lg border border-border-light overflow-hidden" style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table className="w-full text-[0.625rem]">
               <thead className="sticky top-0 bg-white z-10"><tr className="border-b border-border-light">
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">File</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase w-[90px]">Sample</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase w-[100px]">Evidence Type</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase w-[140px]">Mapped Attributes</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase w-[65px]">Status</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">File</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase w-[90px]">Sample</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase w-[100px]">Evidence Type</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase w-[140px]">Mapped Attributes</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase w-[65px]">Status</th>
               </tr></thead>
               <tbody>
                 {bulkMappings.map((m, i) => {
@@ -2224,7 +2242,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                   <tr key={i} className={`border-b border-border-light/50 ${st === 'Unmatched' ? 'bg-red-50/10' : ''}`}>
                     <td className="px-2 py-1.5">
                       <span className="text-text block truncate max-w-[160px]">{m.fileName}</span>
-                      {m.relativePath !== m.fileName && <span className="text-[0.5rem] text-gray-400 block truncate max-w-[160px]">{m.relativePath}</span>}
+                      {m.relativePath !== m.fileName && <span className="text-[0.5rem] text-ink-400 block truncate max-w-[160px]">{m.relativePath}</span>}
                     </td>
                     <td className="px-2 py-1.5">
                       <select value={m.matchedItemId} onChange={e => {
@@ -2256,7 +2274,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                                 const ids = selected ? x.mappedAttrIds.filter(id => id !== a.id) : [...x.mappedAttrIds, a.id];
                                 return { ...x, mappedAttrIds: ids };
                               }));
-                            }} className={`px-1 py-0.5 rounded text-[0.4375rem] font-bold cursor-pointer transition-colors ${selected ? 'bg-primary/15 text-primary ring-1 ring-primary/30' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                            }} className={`px-1 py-0.5 rounded text-[0.4375rem] font-bold cursor-pointer transition-colors ${selected ? 'bg-primary/15 text-primary ring-1 ring-primary/30' : 'bg-canvas text-ink-400 hover:bg-canvas'}`}>
                               {a.name.length > 12 ? a.name.slice(0, 11) + '…' : a.name}
                             </button>
                           );
@@ -2282,7 +2300,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
               <button onClick={() => setBulkMappings(null)}
                 className="px-3 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-white cursor-pointer transition-colors">Cancel</button>
             </div>
-            <span className="text-[0.5625rem] text-gray-400">{bulkMappings.filter(m => deriveBulkStatus(m) !== 'Matched').length} file{bulkMappings.filter(m => deriveBulkStatus(m) !== 'Matched').length !== 1 ? 's' : ''} need attention</span>
+            <span className="text-[0.5625rem] text-ink-400">{bulkMappings.filter(m => deriveBulkStatus(m) !== 'Matched').length} file{bulkMappings.filter(m => deriveBulkStatus(m) !== 'Matched').length !== 1 ? 's' : ''} need attention</span>
           </div>
         </div>
       )}
@@ -2315,8 +2333,8 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
               <button onClick={() => setExpandedSampleId(isExpanded ? null : item.id)}
                 className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-surface-2/30 transition-colors cursor-pointer text-left">
                 <div className="flex items-center gap-3">
-                  <span className="text-[0.6875rem] text-gray-400 tabular-nums w-6">{sampleIdx + 1}</span>
-                  <span className="text-[0.75rem] font-mono text-gray-500">{item.referenceId}</span>
+                  <span className="text-[0.6875rem] text-ink-400 tabular-nums w-6">{sampleIdx + 1}</span>
+                  <span className="text-[0.75rem] font-mono text-ink-500">{item.referenceId}</span>
                   <span className="text-[0.6875rem] text-text-muted truncate max-w-[200px]">{item.description}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2326,10 +2344,10 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                   {(() => { const s = getSampleDisplayStatus(item); return (
                     <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${s.cls}`}>{s.label}</span>
                   ); })()}
-                  <span className="text-[0.625rem] text-gray-400 tabular-nums">
+                  <span className="text-[0.625rem] text-ink-400 tabular-nums">
                     {item.attributeResults.filter(r => r.result !== AttrResult.NOT_TESTED).length}/{item.attributeResults.length}
                   </span>
-                  {isExpanded ? <ChevronRight size={12} className="text-gray-400 rotate-90" /> : <ChevronRight size={12} className="text-gray-400" />}
+                  {isExpanded ? <ChevronRight size={12} className="text-ink-400 rotate-90" /> : <ChevronRight size={12} className="text-ink-400" />}
                 </div>
               </button>
 
@@ -2341,7 +2359,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
                       <div className="flex items-center gap-1.5 mb-2">
                         <Shield size={10} className="text-primary" />
                         <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">{group.assertionName}</span>
-                        <span className="text-[0.5625rem] text-gray-400">({group.attrs.length})</span>
+                        <span className="text-[0.5625rem] text-ink-400">({group.attrs.length})</span>
                       </div>
                       <div className="space-y-1">
                         {group.attrs.map(attr => {
@@ -2424,9 +2442,9 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
               return (
                 <label key={item.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${selected ? 'bg-amber-50 border border-amber-200/50' : 'border border-border-light hover:bg-surface-2/30'}`}>
                   <input type="checkbox" checked={selected} onChange={() => setRetestIds(prev => { const n = new Set(prev); if (n.has(item.id)) n.delete(item.id); else n.add(item.id); return n; })}
-                    className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" />
-                  <span className="text-[0.6875rem] text-gray-400 tabular-nums w-5">{i + 1}</span>
-                  <span className="text-[0.6875rem] font-mono text-gray-500">{item.referenceId}</span>
+                    className="w-4 h-4 rounded border-ink-300 accent-primary cursor-pointer" />
+                  <span className="text-[0.6875rem] text-ink-400 tabular-nums w-5">{i + 1}</span>
+                  <span className="text-[0.6875rem] font-mono text-ink-500">{item.referenceId}</span>
                   <span className="text-[0.6875rem] text-text flex-1">{item.description}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${ds.cls}`}>{ds.label}</span>
                 </label>
@@ -2435,7 +2453,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
           </div>
           <div className="flex items-center gap-2 pt-1">
             <button onClick={() => setRetestIds(new Set(items.map(i => i.id)))} className="text-[0.625rem] text-primary font-semibold cursor-pointer hover:underline">Select All</button>
-            <button onClick={() => setRetestIds(new Set())} className="text-[0.625rem] text-gray-500 font-medium cursor-pointer hover:underline">Deselect All</button>
+            <button onClick={() => setRetestIds(new Set())} className="text-[0.625rem] text-ink-500 font-medium cursor-pointer hover:underline">Deselect All</button>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => {
@@ -2481,8 +2499,8 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
               const ds = getSampleDisplayStatus(item);
               return (
                 <div key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light">
-                  <span className="text-[0.6875rem] text-gray-400 tabular-nums w-5">{i + 1}</span>
-                  <span className="text-[0.6875rem] font-mono text-gray-500">{item.referenceId}</span>
+                  <span className="text-[0.6875rem] text-ink-400 tabular-nums w-5">{i + 1}</span>
+                  <span className="text-[0.6875rem] font-mono text-ink-500">{item.referenceId}</span>
                   <span className="text-[0.6875rem] text-text flex-1">{item.description}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${ds.cls}`}>{ds.label}</span>
                 </div>
@@ -2593,7 +2611,7 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
   const resultStyle = (r: AttrResult) =>
     r === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
     r === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' :
-    'bg-gray-50 text-gray-500 border-gray-200';
+    'bg-canvas text-ink-500 border-canvas-border';
 
   const hasEvidence = evidenceCount > 0;
 
@@ -2603,13 +2621,13 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className="text-[0.6875rem] font-medium text-text">{attr.name}</span>
-            <span className={`px-1 py-0.5 rounded text-[0.4375rem] font-bold ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
+            <span className={`px-1 py-0.5 rounded text-[0.4375rem] font-bold ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-canvas text-ink-600'}`}>
               {isAuto ? 'AUTO' : 'MANUAL'}
             </span>
             {attr.required && <span className="text-[0.4375rem] font-bold text-red-400">REQ</span>}
             {hasEvidence && <span className="px-1 py-0.5 rounded text-[0.4375rem] font-bold bg-emerald-50 text-emerald-700 flex items-center gap-0.5"><CheckCircle2 size={7} />{evidenceCount} evidence</span>}
           </div>
-          <div className="flex items-center gap-2 text-[0.5625rem] text-gray-400">
+          <div className="flex items-center gap-2 text-[0.5625rem] text-ink-400">
             {workflowName && <span>{workflowName}</span>}
           </div>
         </div>
@@ -2617,7 +2635,7 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
         <div className="flex items-center gap-1 shrink-0">
           {/* Evidence attach button */}
           <button onClick={() => setShowAttach(!showAttach)}
-            className="px-1.5 py-0.5 rounded text-[0.5rem] font-semibold text-gray-400 hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors flex items-center gap-0.5"
+            className="px-1.5 py-0.5 rounded text-[0.5rem] font-semibold text-ink-400 hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors flex items-center gap-0.5"
             title={isAuto ? 'Attach Supporting Evidence' : 'Upload Evidence'}>
             <Upload size={8} />{isAuto ? 'Attach' : 'Evidence'}
           </button>
@@ -2636,7 +2654,7 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
               )}
               {isManual && result !== AttrResult.NOT_TESTED && (
                 <button onClick={() => setEditing(true)}
-                  className="px-1.5 py-0.5 rounded text-[0.5rem] text-gray-400 hover:text-primary cursor-pointer">
+                  className="px-1.5 py-0.5 rounded text-[0.5rem] text-ink-400 hover:text-primary cursor-pointer">
                   Edit
                 </button>
               )}
@@ -2644,9 +2662,9 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
           ) : (
             <div className="flex items-center gap-1.5">
               <button onClick={() => setLocalResult(AttrResult.PASS)}
-                className={`px-2 py-1 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors ${localResult === 'PASS' ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
+                className={`px-2 py-1 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors ${localResult === 'PASS' ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300' : 'bg-canvas text-ink-500 hover:bg-emerald-50'}`}>Pass</button>
               <button onClick={() => setLocalResult(AttrResult.FAIL)}
-                className={`px-2 py-1 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors ${localResult === 'FAIL' ? 'bg-red-100 text-red-800 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
+                className={`px-2 py-1 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors ${localResult === 'FAIL' ? 'bg-red-100 text-red-800 ring-1 ring-red-300' : 'bg-canvas text-ink-500 hover:bg-red-50'}`}>Fail</button>
             </div>
           )}
         </div>
@@ -2661,7 +2679,7 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
           </select>
           <button onClick={handleAttach} disabled={!attachType}
             className="px-2 py-1 rounded bg-primary text-white text-[0.5625rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5"><Upload size={8} />Add</button>
-          <button onClick={() => { setShowAttach(false); setAttachType(''); }} className="px-2 py-1 rounded border border-border text-[0.5625rem] text-gray-500 cursor-pointer">Cancel</button>
+          <button onClick={() => { setShowAttach(false); setAttachType(''); }} className="px-2 py-1 rounded border border-border text-[0.5625rem] text-ink-500 cursor-pointer">Cancel</button>
         </div>
       )}
 
@@ -2685,7 +2703,7 @@ function AttributeTestRow({ attr, result, notes, isManual, isAuto, evidenceCount
       )}
 
       {!editing && notes && (
-        <p className="mt-1 text-[0.625rem] text-gray-500 italic">{notes}</p>
+        <p className="mt-1 text-[0.625rem] text-ink-500 italic">{notes}</p>
       )}
     </div>
   );
@@ -2712,7 +2730,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
   if (!hasItems) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <FileText size={24} className="text-gray-300 mb-3" />
+        <FileText size={24} className="text-ink-300 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Working Paper</h4>
         <p className="text-[0.75rem] text-text-muted">Working paper will be generated as testing progresses.</p>
       </div>
@@ -2746,17 +2764,17 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
   );
 
   const attrResultStyle = (r: string) =>
-    r === 'PASS' ? 'text-emerald-700 bg-emerald-50' : r === 'FAIL' ? 'text-red-700 bg-red-50' : r === 'NOT_APPLICABLE' ? 'text-blue-600 bg-blue-50' : 'text-gray-500 bg-gray-50';
+    r === 'PASS' ? 'text-emerald-700 bg-emerald-50' : r === 'FAIL' ? 'text-red-700 bg-red-50' : r === 'NOT_APPLICABLE' ? 'text-blue-600 bg-blue-50' : 'text-ink-500 bg-canvas';
   const attrResultLabel = (r: string) =>
     r === 'PASS' ? 'P' : r === 'FAIL' ? 'F' : r === 'NOT_APPLICABLE' ? 'N/A' : '—';
 
   const sampleResultStyle = (r: string) =>
-    r === 'PASS' ? 'bg-emerald-50 text-emerald-700' : r === 'FAIL' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500';
+    r === 'PASS' ? 'bg-emerald-50 text-emerald-700' : r === 'FAIL' ? 'bg-red-50 text-red-700' : 'bg-canvas text-ink-500';
   const sampleResultLabel = (r: string) =>
     r === 'PASS' ? 'Pass' : r === 'FAIL' ? 'Fail' : 'Pending';
 
   const reviewLabel = exec.review.status === 'APPROVED' ? 'Approved' : exec.review.status === 'REJECTED' ? 'Rejected' : exec.review.status === 'PENDING' ? 'Pending' : 'Not Submitted';
-  const reviewStyle = exec.review.status === 'APPROVED' ? 'text-emerald-700' : exec.review.status === 'REJECTED' ? 'text-red-700' : 'text-gray-500';
+  const reviewStyle = exec.review.status === 'APPROVED' ? 'text-emerald-700' : exec.review.status === 'REJECTED' ? 'text-red-700' : 'text-ink-500';
   const conclusionLabel = exec.conclusion.value === 'EFFECTIVE' ? 'Effective' : exec.conclusion.value === 'INEFFECTIVE' ? 'Ineffective' : 'Pending';
 
   return (
@@ -2768,7 +2786,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
         <div>
           <div className="flex items-center gap-2 mb-0.5">
             <h4 className="text-[0.875rem] font-bold text-text">Working Paper</h4>
-            <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${isReviewed ? 'bg-emerald-50 text-emerald-700' : isRejected ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+            <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${isReviewed ? 'bg-emerald-50 text-emerald-700' : isRejected ? 'bg-red-50 text-red-700' : 'bg-canvas text-ink-500'}`}>
               {isReviewed ? 'Reviewed' : isRejected ? 'Rejected' : 'Not Reviewed'}
             </span>
           </div>
@@ -2797,7 +2815,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
               a.click();
               document.body.removeChild(a);
             }}
-            className={`px-3 py-1.5 rounded-lg text-[0.6875rem] font-semibold flex items-center gap-1.5 transition-colors ${isConcluded ? 'bg-primary hover:bg-primary/90 text-white cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`}
+            className={`px-3 py-1.5 rounded-lg text-[0.6875rem] font-semibold flex items-center gap-1.5 transition-colors ${isConcluded ? 'bg-primary hover:bg-primary/90 text-white cursor-pointer' : 'bg-canvas text-ink-400 cursor-not-allowed opacity-50'}`}
             title={isConcluded ? 'Download final working paper' : 'Final download available after conclusion'}>
             <Download size={12} />Final
           </button>
@@ -2806,30 +2824,30 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
 
       {/* Summary chips */}
       <div className="flex flex-wrap gap-2">
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-text font-medium">Samples: <span className="font-bold tabular-nums">{items.length}</span></span>
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-text font-medium">Attributes: <span className="font-bold tabular-nums">{ctrl.attributes.length}</span></span>
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-text font-medium">Checks: <span className="font-bold tabular-nums">{totalChecks}</span></span>
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-text font-medium">Evidence: <span className="font-bold tabular-nums">{totalEvidence} files</span></span>
-        <span className={`px-2.5 py-1 rounded-lg border text-[0.625rem] font-medium ${isReviewed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : isRejected ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-border-light text-gray-500'}`}>
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-text font-medium">Samples: <span className="font-bold tabular-nums">{items.length}</span></span>
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-text font-medium">Attributes: <span className="font-bold tabular-nums">{ctrl.attributes.length}</span></span>
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-text font-medium">Checks: <span className="font-bold tabular-nums">{totalChecks}</span></span>
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-text font-medium">Evidence: <span className="font-bold tabular-nums">{totalEvidence} files</span></span>
+        <span className={`px-2.5 py-1 rounded-lg border text-[0.625rem] font-medium ${isReviewed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : isRejected ? 'bg-red-50 border-red-200 text-red-700' : 'bg-canvas border-border-light text-ink-500'}`}>
           Result: <span className="font-bold">{reviewLabel}</span>
         </span>
-        <span className={`px-2.5 py-1 rounded-lg border text-[0.625rem] font-medium ${exec.conclusion.value === 'EFFECTIVE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : exec.conclusion.value === 'INEFFECTIVE' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-border-light text-gray-500'}`}>
+        <span className={`px-2.5 py-1 rounded-lg border text-[0.625rem] font-medium ${exec.conclusion.value === 'EFFECTIVE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : exec.conclusion.value === 'INEFFECTIVE' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-canvas border-border-light text-ink-500'}`}>
           Conclusion: <span className="font-bold">{conclusionLabel}</span>
         </span>
       </div>
 
       {/* Paper content */}
-      <div className="rounded-xl border border-border-light bg-white p-5 space-y-4">
+      <div className="rounded-lg border border-border-light bg-white p-5 space-y-4">
 
         {/* 1. Header */}
         <Section num={1} title="Header">
           <div className="grid grid-cols-3 gap-3 text-[0.6875rem]">
-            <div><span className="text-gray-400 block text-[0.625rem]">Control</span><span className="text-text font-medium">{ctrl.id.replace('exec-', '')} — {ctrl.name}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Process</span><span className="text-text font-medium">{ctrl.process}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Owner</span><span className="text-text font-medium">{ctrl.owner}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Importance</span><span className="text-text font-medium">{ctrl.importanceClass === 'KEY' ? 'Key' : 'Non-Key'}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Nature</span><span className="text-text font-medium">{ctrl.natureClass.charAt(0) + ctrl.natureClass.slice(1).toLowerCase()}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Control Type</span><span className="text-text font-medium">{controlType}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Control</span><span className="text-text font-medium">{ctrl.id.replace('exec-', '')} — {ctrl.name}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Process</span><span className="text-text font-medium">{ctrl.process}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Owner</span><span className="text-text font-medium">{ctrl.owner}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Importance</span><span className="text-text font-medium">{ctrl.importanceClass === 'KEY' ? 'Key' : 'Non-Key'}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Nature</span><span className="text-text font-medium">{ctrl.natureClass.charAt(0) + ctrl.natureClass.slice(1).toLowerCase()}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Control Type</span><span className="text-text font-medium">{controlType}</span></div>
           </div>
         </Section>
 
@@ -2842,7 +2860,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
         <Section num={3} title="Test Design">
           <div className="space-y-2 text-[0.6875rem]">
             <div>
-              <span className="text-gray-400 text-[0.625rem]">Assertions:</span>
+              <span className="text-ink-400 text-[0.625rem]">Assertions:</span>
               <div className="flex flex-wrap gap-1 mt-0.5">
                 {ctrl.assertions.map(a => (
                   <span key={a.id} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-bold">{a.name}</span>
@@ -2850,7 +2868,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
               </div>
             </div>
             <div>
-              <span className="text-gray-400 text-[0.625rem]">Workflows ({ctrl.workflowMappings.length}):</span>
+              <span className="text-ink-400 text-[0.625rem]">Workflows ({ctrl.workflowMappings.length}):</span>
               <div className="mt-1 space-y-0.5">
                 {ctrl.workflowMappings.map(wm => (
                   <div key={wm.workflowId} className="text-[0.625rem] text-text">{wm.workflowName} {wm.version} — {wm.mappedAttributeIds.length} attribute{wm.mappedAttributeIds.length !== 1 ? 's' : ''}</div>
@@ -2862,20 +2880,20 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
 
         {/* 4. Attribute-Level Testing Summary */}
         <Section num={4} title="Attribute-Level Testing Summary">
-          <p className="text-[0.5625rem] text-gray-400 mb-3">Testing was performed sample-wise. This summary shows how each required attribute performed across all tested samples.</p>
+          <p className="text-[0.5625rem] text-ink-400 mb-3">Testing was performed sample-wise. This summary shows how each required attribute performed across all tested samples.</p>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[0.625rem]">
               <thead><tr className="border-b border-border-light bg-surface-2/30">
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase w-8">Code</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Assertion</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Attribute</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Workflow</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Samples Tested</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Passed</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Failed</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Pass Rate</th>
-                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Evidence Req</th>
-                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Status</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase w-8">Code</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Assertion</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Attribute</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Workflow</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Samples Tested</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Passed</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Failed</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Pass Rate</th>
+                <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Evidence Req</th>
+                <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Status</th>
               </tr></thead>
               <tbody>
                 {attrLegend.map(l => {
@@ -2900,17 +2918,17 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                       <td className="px-2 py-1.5 font-bold text-primary">{l.code}</td>
                       <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5rem] font-bold">{l.attr.assertionName}</span></td>
                       <td className="px-2 py-1.5 text-text">{l.attr.name}</td>
-                      <td className="px-2 py-1.5 text-gray-500">{l.workflowName} {l.workflowVersion}</td>
+                      <td className="px-2 py-1.5 text-ink-500">{l.workflowName} {l.workflowVersion}</td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-text">{tested}/{totalSamples}</td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-emerald-600 font-medium">{passed}</td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-red-600 font-medium">{failed}</td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-text font-medium">{tested > 0 ? `${passRate}%` : '—'}</td>
-                      <td className="px-2 py-1.5 text-gray-500 text-[0.5625rem]">{evReq}</td>
+                      <td className="px-2 py-1.5 text-ink-500 text-[0.5625rem]">{evReq}</td>
                       <td className="px-2 py-1.5 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[0.4375rem] font-bold ${
                           status === 'Passed' ? 'bg-emerald-50 text-emerald-700' :
                           status === 'Exception Noted' ? 'bg-amber-50 text-amber-700' :
-                          'bg-gray-100 text-gray-500'
+                          'bg-canvas text-ink-500'
                         }`}>{status}</span>
                       </td>
                     </tr>
@@ -2924,38 +2942,38 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
         {/* 5. Sample Data Summary */}
         <Section num={5} title="Sample Data Summary">
           <div className="grid grid-cols-3 gap-3 text-[0.6875rem]">
-            <div><span className="text-gray-400 block text-[0.625rem]">Sample Count</span><span className="text-text font-medium tabular-nums">{items.length}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Source</span><span className="text-text font-medium">Uploaded sample data</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Attributes per Sample</span><span className="text-text font-medium tabular-nums">{ctrl.attributes.length}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Sample Count</span><span className="text-text font-medium tabular-nums">{items.length}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Source</span><span className="text-text font-medium">Uploaded sample data</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Attributes per Sample</span><span className="text-text font-medium tabular-nums">{ctrl.attributes.length}</span></div>
           </div>
         </Section>
 
         {/* 6. Evidence Coverage Matrix */}
         <Section num={6} title="Evidence Coverage Matrix">
-          <p className="text-[0.5625rem] text-gray-400 mb-2">Attribute columns (A/B/C) show user-uploaded files. System Evidence shows workflow-generated logs and reports.</p>
+          <p className="text-[0.5625rem] text-ink-400 mb-2">Attribute columns (A/B/C) show user-uploaded files. System Evidence shows workflow-generated logs and reports.</p>
           {items.some(ti => ti.evidence.length > 0) ? (
             <div className="rounded-lg border border-border-light overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-[0.625rem]">
                   <thead><tr className="border-b border-border-light bg-surface-2/30">
-                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase w-5"></th>
-                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Sample</th>
-                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Reference</th>
+                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase w-5"></th>
+                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Sample</th>
+                    <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Reference</th>
                     {attrLegend.map(l => (
-                      <th key={l.attr.id} className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase" title={l.attr.name}>
+                      <th key={l.attr.id} className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase" title={l.attr.name}>
                         <div className="flex flex-col items-center">
                           <span className="text-primary font-bold text-[0.5625rem]">{l.code}</span>
-                          <span className="text-[0.375rem] text-gray-400 font-normal">files</span>
+                          <span className="text-[0.375rem] text-ink-400 font-normal">files</span>
                         </div>
                       </th>
                     ))}
-                    <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">
+                    <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">
                       <div className="flex flex-col items-center">
                         <span>System</span>
-                        <span className="text-[0.375rem] text-gray-400 font-normal">logs</span>
+                        <span className="text-[0.375rem] text-ink-400 font-normal">logs</span>
                       </div>
                     </th>
-                    <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Status</th>
+                    <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Status</th>
                   </tr></thead>
                   <tbody>
                     {items.slice(0, 20).map(ti => {
@@ -2987,23 +3005,23 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                         <React.Fragment key={ti.id}>
                           <tr className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 transition-colors ${isEvExpanded ? 'bg-surface-2/20' : ''}`}
                             onClick={() => setExpandedEvidenceSampleId(isEvExpanded ? null : ti.id)}>
-                            <td className="px-2 py-1.5 text-gray-400">
+                            <td className="px-2 py-1.5 text-ink-400">
                               {isEvExpanded ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
                             </td>
-                            <td className="px-2 py-1.5 font-mono text-gray-500">{ti.referenceId}</td>
+                            <td className="px-2 py-1.5 font-mono text-ink-500">{ti.referenceId}</td>
                             <td className="px-2 py-1.5 text-text text-[0.5625rem] truncate max-w-[120px]" title={ti.description}>{ti.description || '—'}</td>
                             {attrLegend.map(l => {
                               const count = userEvByAttr.get(l.code) || 0;
                               return (
                                 <td key={l.attr.id} className="px-2 py-1.5 text-center">
-                                  <span className={`text-[0.5rem] font-medium ${count > 0 ? 'text-text' : 'text-gray-300'}`}>
+                                  <span className={`text-[0.5rem] font-medium ${count > 0 ? 'text-text' : 'text-ink-300'}`}>
                                     {count}
                                   </span>
                                 </td>
                               );
                             })}
                             <td className="px-2 py-1.5 text-center">
-                              <span className={`text-[0.5rem] font-medium ${systemEvCount > 0 ? 'text-blue-600' : 'text-gray-300'}`}>
+                              <span className={`text-[0.5rem] font-medium ${systemEvCount > 0 ? 'text-blue-600' : 'text-ink-300'}`}>
                                 {systemEvCount}
                               </span>
                             </td>
@@ -3017,7 +3035,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                                 {/* User-uploaded evidence */}
                                 {ti.evidence.filter(ev => ev.uploadedBy !== 'System').length > 0 && (
                                   <div>
-                                    <div className="text-[0.4375rem] font-semibold text-gray-400 uppercase mb-1">User Evidence</div>
+                                    <div className="text-[0.4375rem] font-semibold text-ink-400 uppercase mb-1">User Evidence</div>
                                     <table className="w-full text-[0.5625rem]">
                                       <tbody>
                                         {ti.evidence.filter(ev => ev.uploadedBy !== 'System').map(ev => {
@@ -3025,7 +3043,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                                           return (
                                             <tr key={ev.id} className="border-t border-border-light/20">
                                               <td className="py-1 pr-2 font-bold text-primary w-10">{mappedCodes}</td>
-                                              <td className="py-1 pr-2 text-gray-500 w-28">{ev.evidenceType}</td>
+                                              <td className="py-1 pr-2 text-ink-500 w-28">{ev.evidenceType}</td>
                                               <td className="py-1 text-text truncate max-w-[200px]" title={ev.fileName}>{ev.fileName}</td>
                                             </tr>
                                           );
@@ -3063,10 +3081,10 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                   </tbody>
                 </table>
               </div>
-              {items.length > 20 && <div className="px-2 py-1 text-[0.5625rem] text-gray-400 bg-surface-2/20">Showing 20 of {items.length} items</div>}
+              {items.length > 20 && <div className="px-2 py-1 text-[0.5625rem] text-ink-400 bg-surface-2/20">Showing 20 of {items.length} items</div>}
             </div>
           ) : (
-            <div className="text-[0.6875rem] text-gray-400 italic">No evidence uploaded.</div>
+            <div className="text-[0.6875rem] text-ink-400 italic">No evidence uploaded.</div>
           )}
         </Section>
 
@@ -3076,22 +3094,22 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
             <div className="overflow-x-auto">
               <table className="w-full text-[0.625rem]">
                 <thead><tr className="border-b border-border-light bg-surface-2/30">
-                  <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Sample</th>
-                  <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-gray-400 uppercase">Reference</th>
+                  <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Sample</th>
+                  <th className="px-2 py-1.5 text-left text-[0.5rem] font-semibold text-ink-400 uppercase">Reference</th>
                   {attrLegend.map(l => (
-                    <th key={l.attr.id} className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase" title={l.attr.name}>
+                    <th key={l.attr.id} className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase" title={l.attr.name}>
                       <div className="flex flex-col items-center">
                         <span className="text-primary font-bold text-[0.5625rem]">{l.code}</span>
-                        <span className="text-[0.4375rem] text-gray-400 leading-tight max-w-[60px] truncate">{l.attr.name}</span>
+                        <span className="text-[0.4375rem] text-ink-400 leading-tight max-w-[60px] truncate">{l.attr.name}</span>
                       </div>
                     </th>
                   ))}
-                  <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-gray-400 uppercase">Result</th>
+                  <th className="px-2 py-1.5 text-center text-[0.5rem] font-semibold text-ink-400 uppercase">Result</th>
                 </tr></thead>
                 <tbody>
                   {items.slice(0, 20).map(ti => (
                     <tr key={ti.id} className="border-b border-border-light/50">
-                      <td className="px-2 py-1 font-mono text-gray-500">{ti.referenceId}</td>
+                      <td className="px-2 py-1 font-mono text-ink-500">{ti.referenceId}</td>
                       <td className="px-2 py-1 text-text text-[0.5625rem] truncate max-w-[120px]" title={ti.description}>{ti.description || '—'}</td>
                       {attrLegend.map(l => {
                         const ar = ti.attributeResults.find(r => r.attributeId === l.attr.id);
@@ -3114,9 +3132,9 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                 </tbody>
               </table>
             </div>
-            {items.length > 20 && <div className="px-2 py-1 text-[0.5625rem] text-gray-400 bg-surface-2/20">Showing 20 of {items.length} items</div>}
+            {items.length > 20 && <div className="px-2 py-1 text-[0.5625rem] text-ink-400 bg-surface-2/20">Showing 20 of {items.length} items</div>}
           </div>
-          <div className="mt-1.5 text-[0.5625rem] text-gray-400">P = Attribute satisfied · F = Attribute not satisfied · — = Not tested · N/A = Not applicable</div>
+          <div className="mt-1.5 text-[0.5625rem] text-ink-400">P = Attribute satisfied · F = Attribute not satisfied · — = Not tested · N/A = Not applicable</div>
         </Section>
 
         {/* 8. Sample-Level Testing Details */}
@@ -3134,13 +3152,13 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                 return (ar?.evidenceIds?.length || 0) > 0;
               }).length;
               const evLabel = evCoveredCount === attrLegend.length ? 'Complete' : evCoveredCount > 0 ? 'Partial' : 'Missing';
-              const evLabelCls = evLabel === 'Complete' ? 'text-emerald-600' : evLabel === 'Partial' ? 'text-amber-600' : 'text-gray-400';
+              const evLabelCls = evLabel === 'Complete' ? 'text-emerald-600' : evLabel === 'Partial' ? 'text-amber-600' : 'text-ink-400';
               return (
                 <div key={ti.id} className="rounded-lg border border-border-light overflow-hidden">
                   <button onClick={() => setExpandedSampleId(isExpanded ? null : ti.id)}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-2/20 cursor-pointer transition-colors">
-                    {isExpanded ? <ChevronDown size={9} className="text-gray-400 shrink-0" /> : <ChevronRight size={9} className="text-gray-400 shrink-0" />}
-                    <span className="text-[0.625rem] font-mono text-gray-500 shrink-0 w-[70px]">{ti.referenceId}</span>
+                    {isExpanded ? <ChevronDown size={9} className="text-ink-400 shrink-0" /> : <ChevronRight size={9} className="text-ink-400 shrink-0" />}
+                    <span className="text-[0.625rem] font-mono text-ink-500 shrink-0 w-[70px]">{ti.referenceId}</span>
                     <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold shrink-0 ${sampleResultStyle(ti.sampleResult)}`}>
                       {sampleResultLabel(ti.sampleResult)}
                     </span>
@@ -3156,7 +3174,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                   {isExpanded && (
                     <div className="border-t border-border-light bg-surface-2/15 px-3 py-2">
                       <table className="w-full text-[0.625rem]">
-                        <thead><tr className="text-[0.5rem] font-semibold text-gray-400 uppercase">
+                        <thead><tr className="text-[0.5rem] font-semibold text-ink-400 uppercase">
                           <th className="text-left py-1 pr-2">Code</th>
                           <th className="text-left py-1 pr-2">Attribute</th>
                           <th className="text-left py-1 pr-2">Assertion</th>
@@ -3184,9 +3202,9 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                                 <td className="py-1 pr-2 text-text">{l.attr.name}</td>
                                 <td className="py-1 pr-2"><span className="px-1 py-0.5 rounded bg-primary/10 text-primary text-[0.4375rem] font-bold">{l.attr.assertionName}</span></td>
                                 <td className="py-1 pr-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attrResultStyle(r)}`}>{attrResultLabel(r)}</span></td>
-                                <td className="py-1 pr-2 text-center text-gray-500">{userEvCount > 0 ? `${userEvCount} file${userEvCount !== 1 ? 's' : ''}` : '—'}</td>
+                                <td className="py-1 pr-2 text-center text-ink-500">{userEvCount > 0 ? `${userEvCount} file${userEvCount !== 1 ? 's' : ''}` : '—'}</td>
                                 <td className="py-1 pr-2 text-center text-blue-500">{sysEvCount > 0 ? `${sysEvCount} log${sysEvCount !== 1 ? 's' : ''}` : '—'}</td>
-                                <td className="py-1 text-gray-500 truncate max-w-[150px]" title={ar?.notes || ''}>{ar?.notes || '—'}</td>
+                                <td className="py-1 text-ink-500 truncate max-w-[150px]" title={ar?.notes || ''}>{ar?.notes || '—'}</td>
                               </tr>
                             );
                           })}
@@ -3197,7 +3215,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                 </div>
               );
             })}
-            {items.length > 20 && <div className="text-[0.5625rem] text-gray-400">Showing 20 of {items.length} samples</div>}
+            {items.length > 20 && <div className="text-[0.5625rem] text-ink-400">Showing 20 of {items.length} samples</div>}
           </div>
         </Section>
 
@@ -3206,7 +3224,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
           <div className="flex items-center gap-4 mb-2 text-[0.6875rem]">
             <span className="text-emerald-600 font-semibold">{passedSamples} passed</span>
             <span className="text-red-600 font-semibold">{failedSamples} failed</span>
-            <span className="text-gray-500 font-semibold">{pendingSamples} pending</span>
+            <span className="text-ink-500 font-semibold">{pendingSamples} pending</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {items.map(ti => (
@@ -3226,9 +3244,9 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
         <Section num={10} title="Review & Approval">
           <div className="text-[0.6875rem] space-y-1">
             <div className="flex items-center gap-4">
-              <span><span className="text-gray-400">Status:</span> <span className={`font-semibold ${reviewStyle}`}>{reviewLabel}</span></span>
-              {exec.review.reviewer && <span><span className="text-gray-400">Reviewer:</span> <span className="text-text">{exec.review.reviewer}</span></span>}
-              {exec.review.reviewedAt && <span><span className="text-gray-400">Date:</span> <span className="text-text">{exec.review.reviewedAt}</span></span>}
+              <span><span className="text-ink-400">Status:</span> <span className={`font-semibold ${reviewStyle}`}>{reviewLabel}</span></span>
+              {exec.review.reviewer && <span><span className="text-ink-400">Reviewer:</span> <span className="text-text">{exec.review.reviewer}</span></span>}
+              {exec.review.reviewedAt && <span><span className="text-ink-400">Date:</span> <span className="text-text">{exec.review.reviewedAt}</span></span>}
             </div>
             {exec.review.comments && <p className="text-text italic">"{exec.review.comments}"</p>}
             {isRejected && (
@@ -3251,7 +3269,7 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
               {exec.conclusion.reason && <span className="font-normal text-[0.6875rem] ml-2">— {exec.conclusion.reason}</span>}
             </div>
           ) : (
-            <div className="px-3 py-2 rounded-lg bg-gray-50 text-[0.6875rem] text-gray-500 italic">
+            <div className="px-3 py-2 rounded-lg bg-canvas text-[0.6875rem] text-ink-500 italic">
               Conclusion unavailable — reviewer approval required before conclusion can be set.
             </div>
           )}
@@ -3283,6 +3301,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
   const progress = deriveTestingProgress(ctrl);
   const items = exec.testItems;
   const [comments, setComments] = useState(exec.review.comments);
+  const logEvent = useAuditLog();
 
   const isPending = exec.review.status === ReviewStatus.PENDING;
   const isApproved = exec.review.status === ReviewStatus.APPROVED;
@@ -3307,6 +3326,8 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         workingPaper: { ...prev.execution.workingPaper, status: WorkingPaperStatus.GENERATED },
       },
     }));
+    logEvent({ action: 'Update', description: `Submitted control "${ctrl.name}" for review`, module: 'Engagement Execution', entity: 'Control' });
+    logEvent({ action: 'Create', description: `Generated working paper for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Working Paper' });
   };
 
   // Approve
@@ -3338,6 +3359,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         },
       };
     });
+    logEvent({ action: 'Update', description: `Approved testing for control "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Control' });
   };
 
   // Send back
@@ -3352,6 +3374,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         review: { ...prev.execution.review, status: ReviewStatus.REJECTED, reviewedAt: now, reviewer: 'Audit Lead', comments },
       },
     }));
+    logEvent({ action: 'Update', description: `Sent control "${ctrl.name}" back for rework`, module: 'Engagement Execution', entity: 'Control' });
   };
 
   // ── Submit / Resubmit State ──
@@ -3375,12 +3398,12 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
 
         {/* Summary */}
         <div className="rounded-lg border border-border-light p-4 space-y-3">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Test Summary</h5>
+          <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Test Summary</h5>
           <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
-            <div><span className="text-gray-400 block text-[0.625rem]">Test Items</span><span className="text-text font-medium tabular-nums">{items.length}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Completion</span><span className="text-text font-medium tabular-nums">{progress.completionPercent}%</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Passed</span><span className="text-emerald-700 font-medium tabular-nums">{passedSamples}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Failed</span><span className={`font-medium tabular-nums ${failedSamples > 0 ? 'text-red-700' : 'text-gray-400'}`}>{failedSamples}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Test Items</span><span className="text-text font-medium tabular-nums">{items.length}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Completion</span><span className="text-text font-medium tabular-nums">{progress.completionPercent}%</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Passed</span><span className="text-emerald-700 font-medium tabular-nums">{passedSamples}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Failed</span><span className={`font-medium tabular-nums ${failedSamples > 0 ? 'text-red-700' : 'text-ink-400'}`}>{failedSamples}</span></div>
           </div>
         </div>
 
@@ -3427,7 +3450,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
           <h4 className="text-[0.875rem] font-bold text-text">Review Pending</h4>
-          <span className="text-[0.6875rem] text-gray-400">Submitted {exec.review.submittedAt}</span>
+          <span className="text-[0.6875rem] text-ink-400">Submitted {exec.review.submittedAt}</span>
         </div>
 
         {/* Embedded Working Paper for reviewer */}
@@ -3453,8 +3476,8 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
                       <X size={10} className="text-red-500 mt-0.5 shrink-0" />
                       <div>
                         <span className="text-text font-medium">{attr?.name || fa.attributeId}</span>
-                        {item && <span className="text-gray-400 ml-1">({item.referenceId})</span>}
-                        {fa.notes && <span className="text-gray-500 ml-1">— {fa.notes}</span>}
+                        {item && <span className="text-ink-400 ml-1">({item.referenceId})</span>}
+                        {fa.notes && <span className="text-ink-500 ml-1">— {fa.notes}</span>}
                       </div>
                     </div>
                   );
@@ -3465,7 +3488,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
 
           {/* Reviewer comments */}
           <div>
-            <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1.5">Reviewer Comments</label>
+            <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1.5">Reviewer Comments</label>
             <textarea value={comments} onChange={e => setComments(e.target.value)} rows={3}
               placeholder="Add review comments..."
               className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 resize-none" />
@@ -3486,7 +3509,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
             </button>
             </Gated>
             {!comments.trim() && (
-              <span className="text-[0.625rem] text-gray-400 italic">Comments required to send back</span>
+              <span className="text-[0.625rem] text-ink-400 italic">Comments required to send back</span>
             )}
           </div>
         </div>
@@ -3543,12 +3566,12 @@ function ConclusionStep({ ctrl, onNavigate }: {
     const reviewLabel = exec.review.status === 'PENDING' ? 'Pending' : exec.review.status === 'REJECTED' ? 'Rejected' : 'Not Submitted';
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Lock size={24} className="text-gray-300 mb-4" />
+        <Lock size={24} className="text-ink-300 mb-4" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Conclusion Not Available</h4>
         <p className="text-[0.75rem] text-text-muted max-w-sm mb-3">
           Conclusion will be generated after reviewer approval. The reviewer must approve the test results before a conclusion can be set.
         </p>
-        <div className="text-[0.6875rem] text-gray-500">
+        <div className="text-[0.6875rem] text-ink-500">
           Current review status: <span className="font-semibold">{reviewLabel}</span>
         </div>
         {exec.review.status !== 'APPROVED' && (
@@ -3595,23 +3618,23 @@ function ConclusionStep({ ctrl, onNavigate }: {
 
       {/* Test Results Summary */}
       <div className="rounded-lg border border-border-light p-4">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-3">Test Results Summary</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-3">Test Results Summary</h5>
         <div className="grid grid-cols-4 gap-4">
           <div>
             <span className="text-[1.25rem] font-bold text-text block tabular-nums">{items.length}</span>
-            <span className="text-[0.5625rem] text-gray-400">Total Samples</span>
+            <span className="text-[0.5625rem] text-ink-400">Total Samples</span>
           </div>
           <div>
             <span className="text-[1.25rem] font-bold text-emerald-700 block tabular-nums">{passedSamples}</span>
-            <span className="text-[0.5625rem] text-gray-400">Passed</span>
+            <span className="text-[0.5625rem] text-ink-400">Passed</span>
           </div>
           <div>
-            <span className={`text-[1.25rem] font-bold block tabular-nums ${failedSamples > 0 ? 'text-red-700' : 'text-gray-400'}`}>{failedSamples}</span>
-            <span className="text-[0.5625rem] text-gray-400">Failed</span>
+            <span className={`text-[1.25rem] font-bold block tabular-nums ${failedSamples > 0 ? 'text-red-700' : 'text-ink-400'}`}>{failedSamples}</span>
+            <span className="text-[0.5625rem] text-ink-400">Failed</span>
           </div>
           <div>
-            <span className={`text-[1.25rem] font-bold block tabular-nums ${pendingSamples > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{pendingSamples}</span>
-            <span className="text-[0.5625rem] text-gray-400">Pending</span>
+            <span className={`text-[1.25rem] font-bold block tabular-nums ${pendingSamples > 0 ? 'text-amber-600' : 'text-ink-400'}`}>{pendingSamples}</span>
+            <span className="text-[0.5625rem] text-ink-400">Pending</span>
           </div>
         </div>
       </div>
@@ -3629,8 +3652,8 @@ function ConclusionStep({ ctrl, onNavigate }: {
                   <X size={10} className="text-red-500 mt-0.5 shrink-0" />
                   <div>
                     <span className="text-text font-medium">{attr?.name || fa.attributeId}</span>
-                    {item && <span className="text-gray-400 ml-1">({item.referenceId})</span>}
-                    {fa.notes && <span className="text-gray-500 ml-1">— {fa.notes}</span>}
+                    {item && <span className="text-ink-400 ml-1">({item.referenceId})</span>}
+                    {fa.notes && <span className="text-ink-500 ml-1">— {fa.notes}</span>}
                   </div>
                 </div>
               );
@@ -3641,14 +3664,14 @@ function ConclusionStep({ ctrl, onNavigate }: {
 
       {/* Review Info */}
       <div className="rounded-lg border border-border-light p-4 text-[0.6875rem]">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Review</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Review</h5>
         <div className="grid grid-cols-3 gap-3">
-          <div><span className="text-gray-400 block text-[0.625rem]">Reviewer</span><span className="text-text font-medium">{exec.review.reviewer}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Approved On</span><span className="text-text font-medium">{exec.review.reviewedAt}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Working Paper</span><span className="text-text font-medium">{exec.workingPaper.status === 'FINAL' ? 'Final' : exec.workingPaper.status}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Reviewer</span><span className="text-text font-medium">{exec.review.reviewer}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Approved On</span><span className="text-text font-medium">{exec.review.reviewedAt}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Working Paper</span><span className="text-text font-medium">{exec.workingPaper.status === 'FINAL' ? 'Final' : exec.workingPaper.status}</span></div>
         </div>
         {exec.review.comments && (
-          <p className="text-gray-500 italic mt-2">"{exec.review.comments}"</p>
+          <p className="text-ink-500 italic mt-2">"{exec.review.comments}"</p>
         )}
       </div>
 
@@ -3782,23 +3805,23 @@ function CreateSamplesStep({ ctrl, onUpdateControl, onNavigate }: {
         <div className="rounded-lg border border-border-light overflow-hidden">
           <table className="w-full text-[0.6875rem]">
             <thead><tr className="border-b border-border-light bg-surface-2/30">
-              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Ref ID</th>
-              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Description</th>
-              <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Attributes</th>
-              <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Result</th>
+              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Ref ID</th>
+              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-ink-400 uppercase">Description</th>
+              <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Attributes</th>
+              <th className="px-3 py-2 text-center text-[0.5625rem] font-semibold text-ink-400 uppercase">Result</th>
               <th className="px-3 py-2 w-8"></th>
             </tr></thead>
             <tbody>
               {ctrl.execution.testItems.map(item => (
                 <tr key={item.id} className="border-b border-border-light/50">
-                  <td className="px-3 py-2 font-mono text-gray-500">{item.referenceId}</td>
+                  <td className="px-3 py-2 font-mono text-ink-500">{item.referenceId}</td>
                   <td className="px-3 py-2 text-text">{item.description}</td>
-                  <td className="px-3 py-2 text-center text-gray-500 tabular-nums">{item.attributeResults.length}</td>
+                  <td className="px-3 py-2 text-center text-ink-500 tabular-nums">{item.attributeResults.length}</td>
                   <td className="px-3 py-2 text-center">
-                    <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-500">Pending</span>
+                    <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-canvas text-ink-500">Pending</span>
                   </td>
                   <td className="px-3 py-2">
-                    <button onClick={() => removeSample(item.id)} className="text-gray-400 hover:text-red-500 cursor-pointer"><Trash2 size={11} /></button>
+                    <button onClick={() => removeSample(item.id)} className="text-ink-400 hover:text-red-500 cursor-pointer"><Trash2 size={11} /></button>
                   </td>
                 </tr>
               ))}
@@ -3816,25 +3839,25 @@ function CreateSamplesStep({ ctrl, onUpdateControl, onNavigate }: {
         <div className="rounded-lg border border-border-light p-4 space-y-3">
           <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Add Sample Manually</h5>
           <div>
-            <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Reference ID <span className="text-red-400">*</span></label>
+            <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Reference ID <span className="text-red-400">*</span></label>
             <input value={manualRef} onChange={e => setManualRef(e.target.value)} placeholder="e.g. S-005" className={fieldCls} />
           </div>
           <div>
-            <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Description</label>
+            <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Description</label>
             <input value={manualDesc} onChange={e => setManualDesc(e.target.value)} placeholder="e.g. Finance FY26 Procurement Budget" className={fieldCls} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Owner / Department</label>
+              <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Owner / Department</label>
               <input value={manualOwner} onChange={e => setManualOwner(e.target.value)} placeholder="e.g. Finance Dept" className={fieldCls} />
             </div>
             <div>
-              <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Period</label>
+              <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Period</label>
               <input value={manualPeriod} onChange={e => setManualPeriod(e.target.value)} placeholder="e.g. FY26" className={fieldCls} />
             </div>
           </div>
           <div>
-            <label className="text-[0.625rem] font-semibold text-gray-500 block mb-1">Notes</label>
+            <label className="text-[0.625rem] font-semibold text-ink-500 block mb-1">Notes</label>
             <input value={manualNotes} onChange={e => setManualNotes(e.target.value)} placeholder="Optional notes" className={fieldCls} />
           </div>
           <button onClick={addManualSample} disabled={!manualRef.trim()}
@@ -3852,9 +3875,9 @@ function CreateSamplesStep({ ctrl, onUpdateControl, onNavigate }: {
               const alreadyAdded = ctrl.execution.testItems.some(ti => ti.referenceId === d.refId);
               return (
                 <div key={d.refId} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${alreadyAdded ? 'border-emerald-200/50 bg-emerald-50/20' : 'border-border-light'}`}>
-                  {alreadyAdded ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <FlaskConical size={12} className="text-gray-400 shrink-0" />}
+                  {alreadyAdded ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <FlaskConical size={12} className="text-ink-400 shrink-0" />}
                   <div className="flex-1 min-w-0">
-                    <span className="text-[0.6875rem] font-mono text-gray-500">{d.refId}</span>
+                    <span className="text-[0.6875rem] font-mono text-ink-500">{d.refId}</span>
                     <span className="text-[0.6875rem] text-text ml-1.5">{d.description}</span>
                   </div>
                   {alreadyAdded && <span className="text-[0.5625rem] text-emerald-600 font-semibold">Added</span>}
@@ -3907,8 +3930,8 @@ function LockedStep({ step, reason, steps, availability, onNavigate }: {
 
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mb-4">
-        <Lock size={20} className="text-gray-400" />
+      <div className="w-12 h-12 rounded-xl bg-canvas flex items-center justify-center mb-4">
+        <Lock size={20} className="text-ink-400" />
       </div>
       <h4 className="text-[0.875rem] font-semibold text-text mb-1">{step.label} is locked</h4>
       <p className="text-[0.75rem] text-text-muted max-w-sm mb-5">{reason || 'Complete the required previous steps to unlock this step.'}</p>
@@ -3949,7 +3972,7 @@ function AuditTrailStep({ ctrl }: { ctrl: ExecutionControl }) {
   ];
 
   const ICON_MAP = { config: Settings, run: Play, finding: AlertTriangle, review: CheckCircle2 };
-  const BG_MAP = { config: 'bg-gray-200 text-gray-500', run: 'bg-purple-100 text-purple-600', finding: 'bg-amber-100 text-amber-600', review: 'bg-emerald-100 text-emerald-600' };
+  const BG_MAP = { config: 'bg-canvas-border text-ink-500', run: 'bg-purple-100 text-purple-600', finding: 'bg-amber-100 text-amber-600', review: 'bg-emerald-100 text-emerald-600' };
   const BORDER_MAP = { config: 'border-l-gray-300', run: 'border-l-purple-300', finding: 'border-l-amber-400', review: 'border-l-emerald-400' };
 
   return (
@@ -3966,11 +3989,11 @@ function AuditTrailStep({ ctrl }: { ctrl: ExecutionControl }) {
               <div className={`w-7 h-7 rounded-full ${bg} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
               <div className="flex-1 min-w-0">
                 <div className="text-[0.75rem] font-semibold text-text">{ev.title}</div>
-                <div className="text-[0.625rem] text-gray-400 mt-0.5">{ev.subtitle}</div>
+                <div className="text-[0.625rem] text-ink-400 mt-0.5">{ev.subtitle}</div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-[0.625rem] text-gray-300">{ev.time}</div>
-                <div className="text-[0.625rem] text-gray-400 mt-0.5">{ev.actor}</div>
+                <div className="text-[0.625rem] text-ink-300">{ev.time}</div>
+                <div className="text-[0.625rem] text-ink-400 mt-0.5">{ev.actor}</div>
               </div>
             </div>
           );
@@ -3999,16 +4022,19 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
   const [filterDesc, setFilterDesc] = useState('');
   const [samplesReady, setSamplesReady] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
+  const logEvent = useAuditLog();
 
   const sampleBasedCount = ctrl.attributes.length || 3;
 
   const handleUpload = () => {
     setProcessing(true);
-    setPopulationFile(`population_${ctrl.id.toLowerCase()}_FY26.xlsx`);
+    const fileName = `population_${ctrl.id.toLowerCase()}_FY26.xlsx`;
+    setPopulationFile(fileName);
     setTimeout(() => {
       setProcessing(false);
       setPopulationUploaded(true);
       setPopulationRows(487);
+      logEvent({ action: 'Upload', description: `Uploaded population file "${fileName}" (487 rows) for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     }, 5000);
   };
 
@@ -4046,6 +4072,7 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
           status: prev.execution.status === 'NOT_STARTED' ? 'TEST_ITEMS_READY' as any : prev.execution.status,
         },
       }));
+      logEvent({ action: 'Create', description: `Generated samples (${method}) — ${count} of ${populationRows} rows for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     }, 5000);
   };
 
@@ -4114,7 +4141,7 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
       </div>
 
       {/* Configure sampling */}
-      <div className="rounded-xl border border-border-light bg-white p-5 space-y-4">
+      <div className="rounded-lg border border-border-light bg-white p-5 space-y-4">
         <div>
           <h4 className="text-[0.8125rem] font-bold text-text mb-0.5">Configure sampling</h4>
           <p className="text-[0.6875rem] text-text-muted">One sample set shared across {sampleBasedCount} sample-based attributes.</p>
@@ -4128,7 +4155,7 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
                 method === m.id ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border-light hover:border-primary/30'
               }`}>
               <span className="text-[0.75rem] font-semibold text-text block">{m.label}</span>
-              <span className="text-[0.625rem] text-gray-400 mt-0.5 block">{m.sub}</span>
+              <span className="text-[0.625rem] text-ink-400 mt-0.5 block">{m.sub}</span>
             </button>
           ))}
         </div>
@@ -4152,14 +4179,14 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
           )}
 
           {method === 'Statistical' && (
-            <p className="text-[0.625rem] text-gray-400 italic">Statistical sampling configuration can be expanded later.</p>
+            <p className="text-[0.625rem] text-ink-400 italic">Statistical sampling configuration can be expanded later.</p>
           )}
 
           {method === 'Workflow' && (
             <div className="space-y-2">
               <label className="text-[0.6875rem] font-semibold text-text-muted block">Sample Size</label>
               <input type="number" value={sampleSize} disabled className={fieldCls + ' max-w-[200px] opacity-50 cursor-not-allowed'} />
-              <p className="text-[0.625rem] text-gray-400">Sample size is determined by the workflow.</p>
+              <p className="text-[0.625rem] text-ink-400">Sample size is determined by the workflow.</p>
               <button onClick={() => onLaunchWorkflowBuilder?.(`Build a sampling workflow for control ${ctrl.id} (${ctrl.name}). The workflow should select a deterministic sample list from the uploaded population (${populationRows} rows).`)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
                 <Workflow size={12} />Build sampling workflow

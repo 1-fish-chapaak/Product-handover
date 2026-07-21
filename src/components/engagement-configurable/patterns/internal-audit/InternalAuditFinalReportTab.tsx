@@ -15,6 +15,7 @@ import {
   type InternalAuditFinalReportState, type OverallRating,
 } from './internalAuditFinalReportData';
 import FloatingLines from '../../../shared/FloatingLines';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function InternalAuditFinalReportTab({ engagement, iaState, finalReport, onUpdateFinalReport, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const { ready, checks } = deriveFinalReportReadiness(iaState, engagement);
   const activeObs = iaState.observations.observations.filter(o => o.status !== 'DROPPED');
@@ -44,14 +46,17 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
   const handleGenerate = () => {
     const draft = generateReportDraft(engagement, iaState);
     onUpdateFinalReport({ ...finalReport, ...draft, status: 'DRAFT' });
+    logEvent({ action: 'Create', description: `Generated audit final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const handleMarkReady = () => {
     onUpdateFinalReport({ ...finalReport, status: 'READY_FOR_REVIEW', history: [...finalReport.history, { id: `rh-${Date.now()}`, action: 'MARKED_READY', actor: engagement.owner, timestamp: now(), comments: '' }] });
+    logEvent({ action: 'Update', description: `Marked final report ready for review — "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const handleIssue = () => {
     onUpdateFinalReport({ ...finalReport, status: 'ISSUED', issuedAt: now(), issuedBy: engagement.reviewer || engagement.owner, history: [...finalReport.history, { id: `rh-${Date.now()}`, action: 'ISSUED', actor: engagement.reviewer || engagement.owner, timestamp: now(), comments: 'Final report issued.' }] });
+    logEvent({ action: 'Update', description: `Issued final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   // ── Not Started ──
@@ -77,7 +82,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
           {checks.map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -113,9 +118,9 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
               <span className="text-white/70">{engagement.entityOrLocation || '—'}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`px-2.5 py-1 rounded-[10px] text-[0.6875rem] font-bold ${isIssued ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>{finalReport.status.replace(/_/g, ' ')}</span>
+              <span className={`px-2.5 py-1 rounded-lg text-[0.6875rem] font-bold ${isIssued ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>{finalReport.status.replace(/_/g, ' ')}</span>
               {!isIssued && (
-                <button onClick={handleGenerate} className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <button onClick={handleGenerate} className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-lg hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <RefreshCw size={12} />Regenerate
                 </button>
               )}
@@ -125,7 +130,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Report Metadata ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <div className="grid grid-cols-3 gap-x-8 gap-y-3 text-[0.75rem]">
           <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Assignment</span><span className="text-text font-semibold">{engagement.name}</span></div>
           <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Business Process</span><span className="text-text font-semibold">{bp?.name || engagement.businessProcess || '—'}</span></div>
@@ -137,16 +142,16 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Executive Summary ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
         <div className="grid grid-cols-4 gap-3 mb-4">
           {[
             { icon: BarChart3, label: 'Observations', value: activeObs.length, color: 'text-primary bg-primary/10' },
-            { icon: AlertTriangle, label: 'Critical / High', value: criticalCount + highCount, color: criticalCount + highCount > 0 ? 'text-red-700 bg-red-50' : 'text-gray-500 bg-gray-100' },
+            { icon: AlertTriangle, label: 'Critical / High', value: criticalCount + highCount, color: criticalCount + highCount > 0 ? 'text-red-700 bg-red-50' : 'text-ink-500 bg-canvas' },
             { icon: Shield, label: 'Agreed Actions', value: agreedActions.length, color: 'text-brand-700 bg-brand-50' },
             { icon: CheckCircle2, label: 'Rating', value: RATING_LABELS[finalReport.overallRating], color: finalReport.overallRating === 'SATISFACTORY' ? 'text-emerald-700 bg-emerald-50' : finalReport.overallRating === 'UNSATISFACTORY' ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50' },
           ].map(stat => (
-            <div key={stat.label} className="bg-white rounded-xl border border-border-light p-4 flex items-center gap-3">
+            <div key={stat.label} className="bg-white rounded-lg border border-border-light p-4 flex items-center gap-3">
               <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
               <div><div className="text-xl font-bold text-text">{stat.value}</div><div className="text-[0.625rem] text-text-muted">{stat.label}</div></div>
             </div>
@@ -156,7 +161,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Scope and Objective ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><Shield size={14} className="text-primary" /> Scope and Objective</h3>
         <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-3">{finalReport.scopeAndObjective}</p>
         {(iaState.scope.sopIds.length > 0 || iaState.scope.racmVersionIds.length > 0 || iaState.scope.checklistIds.length > 0) && (
@@ -169,14 +174,14 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Audit Approach ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Audit Approach</h3>
         <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-2">{finalReport.proceduresPerformed}</p>
-        {receivedFiles.length > 0 && <p className="text-[0.6875rem] text-gray-400">{finalReport.dataReviewed}</p>}
+        {receivedFiles.length > 0 && <p className="text-[0.6875rem] text-ink-400">{finalReport.dataReviewed}</p>}
       </div>
 
       {/* ══ Key Metrics ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Audit Snapshot</h3>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.75rem]">
           {[
@@ -200,12 +205,12 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Detailed Observations ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-500" /> Detailed Observations ({activeObs.length})</h3>
         {iaState.observations.noObservationsConfirmed ? (
           <div className="text-[0.75rem] text-emerald-600 flex items-center gap-2 py-3"><CheckCircle2 size={13} />No audit observations were noted during this assignment.</div>
         ) : activeObs.length === 0 ? (
-          <div className="text-[0.75rem] text-gray-400 italic py-3">Observations pending formalization.</div>
+          <div className="text-[0.75rem] text-ink-400 italic py-3">Observations pending formalization.</div>
         ) : (
           <div className="space-y-3">
             {activeObs.map((obs, idx) => {
@@ -216,29 +221,29 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
                   <div className="px-4 py-3 bg-surface-2/20 border-b border-border-light">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-[0.625rem] font-bold text-gray-400">#{idx + 1}</span>
+                        <span className="text-[0.625rem] font-bold text-ink-400">#{idx + 1}</span>
                         <span className="text-[0.8125rem] font-semibold text-text">{obs.title}</span>
                         <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${OBS_SEV_CLS[obs.severity]}`}>{obs.severity}</span>
                       </div>
-                      <span className="text-[0.625rem] text-gray-400">{CATEGORY_LABELS[obs.observationCategory]}</span>
+                      <span className="text-[0.625rem] text-ink-400">{CATEGORY_LABELS[obs.observationCategory]}</span>
                     </div>
                   </div>
                   <div className="px-4 py-3 space-y-2 text-[0.6875rem]">
                     <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                      <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Control / Check</span><span className="text-text">{obs.linkedControlName || obs.linkedScopeLabel || '—'}</span></div>
-                      <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Source</span><span className="text-text">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? `Analysis — ${wfRun?.workflowName || 'Workflow'}` : 'Manual'}</span></div>
-                      {obs.description && <div className="col-span-2"><span className="text-gray-400 block text-[0.5625rem] font-medium">Condition (What was found)</span><span className="text-text">{obs.description}</span></div>}
-                      {obs.rootCause && <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Root Cause</span><span className="text-text">{obs.rootCause}</span></div>}
-                      {obs.impact && <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Impact / Risk</span><span className="text-text">{obs.impact}</span></div>}
-                      {obs.recommendation && <div className="col-span-2"><span className="text-gray-400 block text-[0.5625rem] font-medium">Recommendation</span><span className="text-text">{obs.recommendation}</span></div>}
+                      <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Control / Check</span><span className="text-text">{obs.linkedControlName || obs.linkedScopeLabel || '—'}</span></div>
+                      <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Source</span><span className="text-text">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? `Analysis — ${wfRun?.workflowName || 'Workflow'}` : 'Manual'}</span></div>
+                      {obs.description && <div className="col-span-2"><span className="text-ink-400 block text-[0.5625rem] font-medium">Condition (What was found)</span><span className="text-text">{obs.description}</span></div>}
+                      {obs.rootCause && <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Root Cause</span><span className="text-text">{obs.rootCause}</span></div>}
+                      {obs.impact && <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Impact / Risk</span><span className="text-text">{obs.impact}</span></div>}
+                      {obs.recommendation && <div className="col-span-2"><span className="text-ink-400 block text-[0.5625rem] font-medium">Recommendation</span><span className="text-text">{obs.recommendation}</span></div>}
                     </div>
                     {disc && (
                       <div className="border-t border-border-light/50 pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-2">
-                        <div className="col-span-2"><span className="text-gray-400 block text-[0.5625rem] font-medium">Process Owner Response</span><span className="text-text">{disc.managementResponse || '—'}</span></div>
-                        {disc.agreedAction && <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Agreed Action</span><span className="text-text">{disc.agreedAction}</span></div>}
-                        <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Action Owner</span><span className="text-text">{disc.actionOwner || obs.processOwner || '—'}</span></div>
-                        <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Target Date</span><span className="text-text font-mono">{disc.targetDate || obs.targetRemediationDate || '—'}</span></div>
-                        <div><span className="text-gray-400 block text-[0.5625rem] font-medium">Discussion Status</span><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${disc.status === 'AGREED' || disc.status === 'READY_FOR_REPORT' ? 'bg-emerald-50 text-emerald-700' : disc.status === 'DISAGREED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{disc.status.replace(/_/g, ' ')}</span></div>
+                        <div className="col-span-2"><span className="text-ink-400 block text-[0.5625rem] font-medium">Process Owner Response</span><span className="text-text">{disc.managementResponse || '—'}</span></div>
+                        {disc.agreedAction && <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Agreed Action</span><span className="text-text">{disc.agreedAction}</span></div>}
+                        <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Action Owner</span><span className="text-text">{disc.actionOwner || obs.processOwner || '—'}</span></div>
+                        <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Target Date</span><span className="text-text font-mono">{disc.targetDate || obs.targetRemediationDate || '—'}</span></div>
+                        <div><span className="text-ink-400 block text-[0.5625rem] font-medium">Discussion Status</span><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${disc.status === 'AGREED' || disc.status === 'READY_FOR_REPORT' ? 'bg-emerald-50 text-emerald-700' : disc.status === 'DISAGREED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{disc.status.replace(/_/g, ' ')}</span></div>
                       </div>
                     )}
                   </div>
@@ -251,21 +256,21 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
 
       {/* ══ Process Owner Response Summary ══ */}
       {iaState.discussion.items.length > 0 && (
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-lg border border-border-light p-5">
           <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Users size={14} className="text-primary" /> Process Owner Response Summary</h3>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[0.6875rem]">
-              <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+              <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
                 <th className="px-3 py-1.5 text-left">Observation</th><th className="px-3 py-1.5 text-center">Response</th><th className="px-3 py-1.5 text-center">Status</th><th className="px-3 py-1.5 text-left">Owner</th><th className="px-3 py-1.5 text-center">Target</th><th className="px-3 py-1.5 text-center">Remediation</th>
               </tr></thead>
               <tbody>{iaState.discussion.items.map(d => (
                 <tr key={d.id} className="border-b border-border-light/50">
                   <td className="px-3 py-2 text-text font-medium">{d.observationTitle}</td>
-                  <td className="px-3 py-2 text-center">{d.managementResponse ? <CheckCircle2 size={12} className="text-emerald-500 mx-auto" /> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2 text-center">{d.managementResponse ? <CheckCircle2 size={12} className="text-emerald-500 mx-auto" /> : <span className="text-ink-300">—</span>}</td>
                   <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${d.status === 'AGREED' || d.status === 'READY_FOR_REPORT' ? 'bg-emerald-50 text-emerald-700' : d.status === 'DISAGREED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{d.status.replace(/_/g, ' ')}</span></td>
-                  <td className="px-3 py-2 text-gray-500">{d.actionOwner || '—'}</td>
-                  <td className="px-3 py-2 text-center font-mono text-gray-500">{d.targetDate || '—'}</td>
-                  <td className="px-3 py-2 text-center">{d.remediationRequired ? <span className="text-[0.5625rem] font-semibold text-amber-700">Yes</span> : <span className="text-[0.5625rem] text-gray-400">No</span>}</td>
+                  <td className="px-3 py-2 text-ink-500">{d.actionOwner || '—'}</td>
+                  <td className="px-3 py-2 text-center font-mono text-ink-500">{d.targetDate || '—'}</td>
+                  <td className="px-3 py-2 text-center">{d.remediationRequired ? <span className="text-[0.5625rem] font-semibold text-amber-700">Yes</span> : <span className="text-[0.5625rem] text-ink-400">No</span>}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -280,7 +285,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Sign-off / Distribution ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Users size={14} className="text-primary" /> Sign-off & Distribution</h3>
         <div className="grid grid-cols-3 gap-4 text-[0.75rem]">
           <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Prepared By</span><span className="text-text font-semibold">{finalReport.preparedBy || engagement.owner}</span></div>
@@ -298,7 +303,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
       </div>
 
       {/* ══ Appendix ══ */}
-      <div className="bg-white rounded-xl border border-border-light p-5">
+      <div className="bg-white rounded-lg border border-border-light p-5">
         <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Appendix</h3>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[0.6875rem]">
           <div className="flex justify-between border-b border-border-light/40 py-1"><span className="text-text-muted">Working Paper</span><span className="text-text font-medium">Available</span></div>
@@ -313,14 +318,14 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
         <div className="rounded-lg border border-border-light p-4">
           <h4 className="text-[0.6875rem] font-bold text-text mb-2">Report History</h4>
           <div className="space-y-1">{finalReport.history.map(h => (
-            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action.replace(/_/g, ' ')}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-ink-500"><span className="font-semibold text-text">{h.action.replace(/_/g, ' ')}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}
 
       {/* ══ Actions ══ */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => alert('Report download will be connected later.')}
+        <button onClick={() => { logEvent({ action: 'Export', description: `Downloaded draft final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); alert('Report download will be connected later.'); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">
           <Download size={12} />Download Draft
         </button>

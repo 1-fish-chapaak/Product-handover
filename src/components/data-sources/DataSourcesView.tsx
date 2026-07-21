@@ -8,6 +8,7 @@ import {
   LayoutGrid, Rows3, ChevronDown,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { Button } from '../shared/Button';
 import {
@@ -485,7 +486,7 @@ function SourceRow({
                 onToggleSelect(source.id, { shift: e.shiftKey });
               }
             }}
-            className={`absolute inset-0 m-auto w-4 h-4 rounded-[5px] border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+            className={`absolute inset-0 m-auto w-4 h-4 rounded-sm border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
               selected
                 ? 'bg-brand-600 border-brand-600 text-white opacity-100'
                 : isSelecting
@@ -818,6 +819,7 @@ interface DataSourcesViewProps {
 
 const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded', onDetailChange }, ref) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   const [tab, setTab] = useState<TabId>('all');
@@ -1020,8 +1022,17 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const clearAllFilters = () => { setSearch(''); setDateFilter(DEFAULT_DATE_FILTER); };
 
   const renameSource = (id: string, newName: string) => {
+    const oldName = sources.find(s => s.id === id)?.name;
     knowledge.rename(id, newName);
     setActiveSource(curr => curr && curr.id === id ? { ...curr, name: newName } : curr);
+    logEvent({
+      action: 'Update',
+      description: oldName && oldName !== newName
+        ? `Renamed data source "${oldName}" to "${newName}"`
+        : `Renamed data source to "${newName}"`,
+      module: 'Knowledge Hub',
+      entity: 'Data Source',
+    });
   };
 
   // ── Destructive-action confirmation ──────────────────────────────────────
@@ -1060,6 +1071,12 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
       type: 'info',
       message: `${verb} ${target}.`,
       action: { label: 'Undo', onClick: () => knowledge.addMany(snapshots) },
+    });
+    logEvent({
+      action: 'Delete',
+      description: `${verb} ${target} from Knowledge Hub`,
+      module: 'Knowledge Hub',
+      entity: 'Data Source',
     });
     setPendingRemove(null);
     clearSelection();
@@ -1320,11 +1337,23 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     // Toast wording reflects what actually happened.
     if (dbConnect.length > 0) {
       addToast({ type: 'success', message: `Connected to ${dbConnect[0].name}.` });
+      logEvent({
+        action: 'Create',
+        description: `Connected data source "${dbConnect[0].name}" (${dbConnect[0].dbType} · ${dbConnect[0].database})`,
+        module: 'Knowledge Hub',
+        entity: 'Data Source',
+      });
     } else if (uploads.length > 0) {
       const parts: string[] = [];
       if (folderCount > 0) parts.push(`${folderCount} ${folderCount === 1 ? 'folder' : 'folders'} (${totalFiles - looseCount} files)`);
       if (looseCount > 0)  parts.push(`${looseCount} ${looseCount === 1 ? 'file' : 'files'}`);
       addToast({ type: 'success', message: `Added ${parts.join(' · ')} to Knowledge Hub.` });
+      logEvent({
+        action: 'Upload',
+        description: `Uploaded ${parts.join(' · ')} to Knowledge Hub`,
+        module: 'Knowledge Hub',
+        entity: 'Data Source',
+      });
     }
 
     setPickerOpen(false);
@@ -1490,7 +1519,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         >
           <Plus size={14} />
           Add source
-          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white/20 text-white/95 font-mono text-[10px] leading-none">
+          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white/20 text-white/95 font-mono text-[0.625rem] leading-none">
             N
           </kbd>
         </button>

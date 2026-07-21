@@ -139,7 +139,7 @@ export default function ExceptionManagementModal({ onClose, onGenerateReport, on
               type="checkbox"
               checked={selected.size === exceptions.length}
               onChange={selectAll}
-              className="w-4 h-4 rounded border-gray-300 text-primary accent-primary"
+              className="w-4 h-4 rounded border-ink-300 text-primary accent-primary"
             />
             <span className="text-[0.75rem] font-medium text-text-secondary">Select All</span>
           </label>
@@ -216,7 +216,7 @@ export default function ExceptionManagementModal({ onClose, onGenerateReport, on
                       type="checkbox"
                       checked={selected.has(exc.id)}
                       onChange={() => toggleSelect(exc.id)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 accent-primary cursor-pointer"
+                      className="w-3.5 h-3.5 rounded border-ink-300 accent-primary cursor-pointer"
                     />
                   </td>
                   <td className="px-3 py-3 font-mono text-text-muted">{exc.id}</td>
