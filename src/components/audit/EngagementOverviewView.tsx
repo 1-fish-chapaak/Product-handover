@@ -552,7 +552,10 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                 onOpenWorkflow={onOpenWorkflow}
                 hideWorkflowConfig={eng.type === 'Automation'}
-                onSeeAllInsights={() => setActiveTab('insights')}
+                // If the AI Insights tab is hidden from Configuration, don't
+                // preview — fall back to the full stack inline so "See all"
+                // never routes to a tab that instantly bounces back.
+                onSeeAllInsights={tabPrefs.hidden.includes('insights') ? undefined : () => setActiveTab('insights')}
               />
             )}
             {/* ═══ AI INSIGHTS (all types) — the full insight stack ═══ */}
