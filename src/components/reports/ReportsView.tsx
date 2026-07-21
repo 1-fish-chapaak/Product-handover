@@ -12,6 +12,7 @@ import {
   WifiOff, FileCheck2, FolderArchive, CloudUpload, FileUp,
 } from 'lucide-react';
 import BringYourOwnTemplateTab from './byot/BringYourOwnTemplateTab';
+import TemplatePreview from './TemplatePreview';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
@@ -280,6 +281,9 @@ export default function ReportsView({
   // Drop any selection when the user leaves the current report list.
   useEffect(() => { setSelectedReportIds(new Set()); }, [reportType, activeTab, viewMode]);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // Clicking a template opens it as the page it produces — read the report
+  // first, generate from there.
+  const [previewTemplate, setPreviewTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
   // app, App.tsx owns the canonical list, so this branch stays empty to avoid
@@ -1000,6 +1004,25 @@ export default function ReportsView({
     );
   }
 
+  // Template preview — the template as the page it produces, read only. No
+  // generate action here: this page answers "what report is this?", nothing else.
+  if (previewTemplate) {
+    const isCustom = customTemplates.some(t => t.id === previewTemplate.id);
+    return (
+      <TemplatePreview
+        template={previewTemplate as EditableTemplate}
+        isCustom={isCustom}
+        onBack={() => setPreviewTemplate(null)}
+        onEdit={() => { setPreviewTemplate(null); setEditingTemplate(previewTemplate); }}
+        onDelete={() => {
+          // The confirm dialog lives on the list page, so return there first.
+          setPreviewTemplate(null);
+          setTemplateToDelete({ id: previewTemplate.id, name: previewTemplate.name });
+        }}
+      />
+    );
+  }
+
   // Ids the active view exposes for multi-select (mirrors each list's
   // ReportNameCell `selectable` rule). Drives the bulk bar's Select all toggle.
   const selectableVisibleIds =
@@ -1453,13 +1476,6 @@ export default function ReportsView({
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
             setEditingTemplate(rt);
           };
-          // SOX reports are produced from a SOX/ICFR engagement (control testing
-          // → working paper → report), never generated standalone from a
-          // template. Picking the SOX template routes the user to that area.
-          const openSoxFromEngagement = () => {
-            addToast({ type: 'info', message: 'Open a SOX / ICFR engagement to generate its report.' });
-            onOpenSox?.();
-          };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
@@ -1473,13 +1489,9 @@ export default function ReportsView({
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
                 className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
                 onClick={() => {
-                  // Whole card = the primary action. Each report type generates
-                  // its own way: ATR via upload/observations, SOX from a SOX/ICFR
-                  // engagement, IA/Bulk by assembling from existing report queries.
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
+                  // Whole card = open the template as the report it produces.
+                  // Generating happens from that page, once they can see it.
+                  setPreviewTemplate(rt);
                 }}
               >
                 <div className="flex items-start justify-between gap-3 mb-3.5">
@@ -1584,12 +1596,7 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
                 className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
-                onClick={() => {
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
-                }}
+                onClick={() => setPreviewTemplate(rt)}
               >
                 <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md ${tintBg}`}>
                   <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
