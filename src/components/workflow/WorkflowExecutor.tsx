@@ -1125,11 +1125,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   const [columnMapPending, setColumnMapPending] = useState(false);
   const [alignments, setAlignments] = useState<JourneyAlignments>(() => seedAlignments(workflow));
 
-  // Insufficient-data gate — a required input has too little data, so the whole
-  // flow (clarification → mapping) is held back until the user uploads a
-  // complete file. Seeded per run in startExecution.
-  const [insufficientData, setInsufficientData] = useState(false);
-
   // Which Required Files card has its "Expected columns" popover open (input id).
   const [columnsViewFor, setColumnsViewFor] = useState<string | null>(null);
 
@@ -1428,8 +1423,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setDataPickerOpen(false);
     if (selections.length === 0) return;
     // Compute the de-duped additions up front (NOT inside the setFiles updater),
-    // so the post-add effects — the toast and clearing the insufficient-data
-    // gate — fire reliably instead of racing React's async state updater.
+    // so the post-add toast fires reliably instead of racing React's async
+    // state updater.
     const seen = new Set(Object.values(files).flat().map((f) => f.name));
     const toAdd: UploadedFile[] = [];
     for (const sel of selections) {
@@ -1451,8 +1446,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       return next;
     });
     addToast({ type: 'success', message: `Added ${toAdd.length} ${toAdd.length === 1 ? 'item' : 'items'} to this workflow.` });
-    // A fresh upload resolves the insufficient-data gate, unblocking the flow.
-    setInsufficientData(false);
   }, [files, pickTargetInputId, addToast]);
 
   const advance = useCallback(() => {
@@ -1495,10 +1488,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setFileMappings([]);
     setUnstructuredMappings([]);
     setColumnMapPending(false);
-    // Structured executors demo the insufficient-data gate; PDF flows don't.
-    setInsufficientData(!isPdfExecutor);
     advance();
-  }, [hasRequired, advance, isPdfExecutor]);
+  }, [hasRequired, advance]);
 
   const stopExecution = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -1509,7 +1500,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setFileMapPending(false);
     setUnstructuredMappings([]);
     setColumnMapPending(false);
-    setInsufficientData(false);
   }, []);
 
   const resolveClarification = useCallback(() => {
@@ -2167,42 +2157,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     />
                   </div>
 
-                  {/* Insufficient-data gate — blocks the flow (clarification &
-                      mapping) until the user uploads a complete file for the
-                      affected required input. */}
-                  {insufficientData && (
-                    <div className="flex items-start gap-2.5 rounded-lg border border-mitigated-200 bg-mitigated-50 px-3 py-2.5 mb-4">
-                      <AlertCircle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[12px] font-semibold text-mitigated-700">
-                            Insufficient data detected
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold rounded-md bg-canvas-elevated border border-mitigated-200 text-mitigated-700 px-1.5 py-0.5">
-                            <FileIcon size={10} />
-                            GL Trial Balance
-                            <span className="text-[9.5px] font-bold uppercase tracking-wider text-risk">
-                              Required
-                            </span>
-                          </span>
-                        </div>
-                        <div className="text-[11.5px] text-ink-600 mt-1 leading-relaxed">
-                          The file mapped to this required input has only <span className="font-mono font-semibold">2,340</span> rows
-                          (expected ~<span className="font-mono font-semibold">5,000</span> for this period).
-                          Upload a complete file to continue — the run stays paused until the data is sufficient.
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setDataPickerOpen(true)}
-                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
-                        >
-                          <UploadCloud size={13} />
-                          Upload file
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="space-y-2">
                     {EXECUTION_STEPS.map((step, i) => {
                       const isDone = i < currentStep;
@@ -2247,10 +2201,9 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               )}
             </AnimatePresence>
 
-            {/* Clarification question (pauses execution) — held back until the
-                insufficient-data gate is cleared; data comes first. */}
+            {/* Clarification question (pauses execution) */}
             <AnimatePresence>
-              {phase === 'running' && clarificationPending && !insufficientData && (
+              {phase === 'running' && clarificationPending && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2363,7 +2316,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
             {/* Step 1: File mapping (pauses execution after clarification) —
                 also held back until the insufficient-data gate is cleared. */}
             <AnimatePresence>
-              {phase === 'running' && fileMapPending && !insufficientData && (
+              {phase === 'running' && fileMapPending && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2736,7 +2689,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                 held back while data is insufficient; the user must upload a
                 complete file (via the gate above) before mapping appears. */}
             <AnimatePresence>
-              {phase === 'running' && columnMapPending && !insufficientData && (
+              {phase === 'running' && columnMapPending && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
