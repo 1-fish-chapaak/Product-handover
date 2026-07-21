@@ -65,6 +65,10 @@ interface Props {
   signatories?: import('./reportShared').SignatorySlot[];
   signoffs?: Record<string, import('./reportShared').Signoff>;
   sections: DownloadPreviewSection[];
+  /** Sections still awaiting content (manual fill or a person's input) — named
+   *  here before download so nothing incomplete leaves quietly. Exporting
+   *  anyway stays allowed; the shape holds its place either way. */
+  incomplete?: string[];
   /** Optional spreadsheet export. When provided, an "Excel" tab is shown and the
    *  Download action delegates to this callback (the report owns the .xlsx
    *  composer — e.g. ATR / bulk-audit tabular exports). */
@@ -101,6 +105,7 @@ export default function ReportDownloadModal({
   signatories,
   signoffs,
   sections,
+  incomplete,
   onExcelExport,
   onClose,
 }: Props) {
@@ -234,6 +239,18 @@ export default function ReportDownloadModal({
             </div>
           </div>
 
+          {/* Export checklist — sections still awaiting content are named before
+              download. Export anyway stays allowed; nothing incomplete leaves
+              quietly. */}
+          {(incomplete?.length ?? 0) > 0 && (
+            <div className="shrink-0 px-7 py-2 border-b border-mitigated-200 bg-mitigated-50/60 flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-mitigated-600" />
+              <p className="text-[0.75rem] text-mitigated-800 leading-relaxed">
+                {incomplete!.length === 1 ? 'One section is' : `${incomplete!.length} sections are`} still awaiting content: {incomplete!.map(n => `“${n}”`).join(', ')}. {incomplete!.length === 1 ? 'It exports' : 'They export'} with the shape in place and an empty state.
+              </p>
+            </div>
+          )}
+
           {/* Preview Body — fixed-pixel-width PDF/PPT/DOCX page mockups need
               horizontal scroll + scale-down on narrow viewports so the preview
               doesn't clip past the modal edge. */}
@@ -350,7 +367,7 @@ function PdfPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages — one PdfPage per block */}
@@ -393,7 +410,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
   );
 }
 
-function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
+function PdfContents({ sections, showPageNo = true }: { sections: DownloadPreviewSection[]; showPageNo?: boolean }) {
   return (
     <div>
       <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
@@ -582,7 +599,7 @@ function PptPreview({
 
       {/* Contents slide */}
       <PptSlide slideNo={2} total={total} reportName={reportName} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PptSlide>
 
       {/* Content slides — one section per slide, widgets included.
@@ -750,7 +767,7 @@ function DocxPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages */}

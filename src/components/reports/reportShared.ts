@@ -327,8 +327,66 @@ export const DEFAULT_WATERMARK: WatermarkConfig = {
 
 /** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
  *  — they hold no numbers. Values come from trusted query data at generate time,
- *  never scraped from an uploaded report. */
-export type SectionKind = 'text' | 'kpi' | 'chart' | 'table';
+ *  never scraped from an uploaded report. `cards` is a repeating finding card
+ *  (one saved shape, stamped once per finding); `human` is a slot only a real
+ *  person may fill (sign-off, management response) — the AI never writes it.
+ *  Legacy single-kind sections only — new BYOT sections carry `blocks`. */
+export type SectionKind = 'text' | 'kpi' | 'chart' | 'table' | 'cards' | 'human';
+
+// ─── BYOT block model ────────────────────────────────────────────────────────
+// A section = heading + description + typed blocks. Extraction keeps the
+// skeleton, never the content: block shapes and labels survive, values don't.
+
+/** Where a block's content comes from at generation — the five cases, minus
+ *  'mixed' (a section-level answer). A section is never silently skipped:
+ *  query  → auto-filled from query data (fills by binding, prints their name)
+ *  manual → kept, rendered empty, "No data connected — fill in manually"
+ *  fixed  → prints word-for-word every time, never rewritten
+ *  human  → a prompted empty state only a real person may fill */
+export type BlockFill = 'query' | 'manual' | 'fixed' | 'human';
+/** Section-level fill. 'mixed' = fill types attach to its blocks individually
+ *  (a fixed objective + human scope list + data table under one heading). */
+export type SectionFill = BlockFill | 'mixed';
+
+/** Our side of a query-filled section's two identities: the DISPLAY NAME is
+ *  theirs (printed exactly); the BINDING is ours — which concept fills it.
+ *  Filling by binding works in any wording; matching heading text wouldn't. */
+export type DataBinding = 'findings' | 'summary' | 'metrics' | 'actions';
+
+/** The kinds of building block a client report uses. */
+export type TemplateBlockKind =
+  | 'narrative'   // prose under a (sub-)heading
+  | 'table'       // real table — column names kept, rows thrown away
+  | 'stat'        // a stat strip: big numbers with captions (labels kept)
+  | 'slot'        // fill-in-the-blank label + value pairs (labels kept)
+  | 'callout'     // text set apart as a note / key point
+  | 'chart'       // a figure placeholder
+  | 'cards'       // one repeating card shape, stamped once per finding
+  | 'signoff';    // signature slots (roles kept)
+
+/** One typed block inside a template section. */
+export type TemplateBlock = {
+  kind: TemplateBlockKind;
+  /** The label the block carried (sub-heading, caption, metric name). */
+  label?: string;
+  fill: BlockFill;
+  binding?: DataBinding;
+  /** Tables — column names from the header row (names only, rows discarded). */
+  columns?: string[];
+  /** Tables — set when rows reuse the finding IDs: auto-built from findings. */
+  linkedTo?: string;
+  /** Cards — field labels, human-only fields, ID shape, repeat count. */
+  cardFields?: string[];
+  humanFields?: string[];
+  idPattern?: string;
+  cardCount?: number;
+  /** Fixed text — the verbatim lines this block prints, word-for-word. */
+  fixedBody?: string[];
+  /** Stat strips / slots — the captions or labels kept (values discarded). */
+  slotLabels?: string[];
+  /** Sign-off — signatory roles found (Prepared by, Approved by…). */
+  signRoles?: string[];
+};
 
 /** One section in a template outline. */
 export type TemplateSection = {
@@ -345,6 +403,39 @@ export type TemplateSection = {
   metric?: string;
   /** For chart blocks — the chart style. */
   chartType?: 'bar' | 'line';
+  /** For table blocks — the column names read from the document's header row.
+   *  Only the names survive extraction; the rows are always thrown away. */
+  columns?: string[];
+  /** For a table that reuses the finding IDs — the name of the findings section
+   *  it's auto-built from, so the two sections can't disagree. */
+  linkedTo?: string;
+  /** For repeating cards — the field labels each card carries, in order. */
+  cardFields?: string[];
+  /** For repeating cards — the fields only a real person may fill (they render
+   *  as an empty "awaiting response" slot, never AI-written). */
+  humanFields?: string[];
+  /** For repeating cards — the document's finding-ID shape, digits generalised
+   *  ("IA-##-H##"). */
+  idPattern?: string;
+  /** For repeating cards — how many repeats the uploaded report carried. */
+  cardCount?: number;
+  /** Fixed text: this section prints word-for-word every time and is never
+   *  rewritten at generation (rating definitions, legal lines). */
+  fixed?: boolean;
+  /** The verbatim lines a fixed section prints. */
+  fixedBody?: string[];
+  /** Where this section's content comes from at generation (the five cases).
+   *  Guessed by extraction, confirmed by the user at review. Absent = query. */
+  fill?: SectionFill;
+  /** The data concept that fills this section (query-filled sections). */
+  binding?: DataBinding;
+  /** The section's typed blocks (BYOT). When present, generation renders these
+   *  in order; the legacy single-kind fields above are for older templates. */
+  blocks?: TemplateBlock[];
+  /** Door 2 of "no data connected": content typed once in a generated report
+   *  and remembered — pre-fills this section in every future report. Setup
+   *  that never changes (distribution list, intro paragraph), not audit data. */
+  savedContent?: string;
 };
 
 /** A report template plus the optional branding the Customize editor sets.
@@ -369,6 +460,11 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
    *  (Prepared by, Approved by…) each report gets a manual sign / sign-off for. */
   signoffEnabled?: boolean;
   signatories?: SignatorySlot[];
+  /** The document's own rating language, captured at import — the finding scale
+   *  (e.g. Critical / High / Medium / Low) and the overall-opinion scale (e.g.
+   *  Effective → Unsatisfactory). Generated reports speak these words. */
+  findingScale?: string[];
+  opinionScale?: string[];
   /** Free-form tags for findability once the library grows (§9). */
   tags?: string[];
 };
@@ -415,8 +511,9 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   reportPeriod?: string;
   /** The template's advertised sections, baked at generate time so the report
    *  delivers the structure the template card promises (rendered as editable
-   *  note blocks around the query body). */
-  templateSections?: { name: string; icon: string }[];
+   *  note blocks around the query body; typed blocks — tables, repeating cards,
+   *  fixed text, human slots — render as their block shape). */
+  templateSections?: TemplateSection[];
   description?: string;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
@@ -446,6 +543,9 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   /** Sign-off block config carried from the template. */
   signoffEnabled?: boolean;
   signatories?: SignatorySlot[];
+  /** Rating language carried from the template (captured at import). */
+  findingScale?: string[];
+  opinionScale?: string[];
   /** Runtime sign state, keyed by signatory-slot id — set when a report is
    *  manually signed, cleared on sign-off. */
   signoffs?: Record<string, Signoff>;

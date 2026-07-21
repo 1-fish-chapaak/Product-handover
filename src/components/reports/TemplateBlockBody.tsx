@@ -1,0 +1,420 @@
+// Typed template blocks inside a generated report — a BYOT section renders its
+// blocks in order, each by its own fill case:
+//   query  → filled from audit data (cards stamped, linked tables derived)
+//   manual → the shape kept, rendered empty, "No data connected" — never AI-invented
+//   fixed  → prints word-for-word, the AI is locked out of rewriting it
+//   human  → a prompted empty state only a real person may fill
+// Legacy single-kind sections (older saved templates) translate to one block.
+
+import { Lock } from 'lucide-react';
+import type { TemplateBlock, TemplateSection } from './reportShared';
+
+/** One finding from the report's evidence pool, stamped into a repeating card
+ *  or a linked action-plan row. */
+export type CardFinding = {
+  title: string;
+  severity: string;
+  recommendation?: string;
+  owner?: string;
+};
+
+// Which card field carries what — matched against the client's own labels.
+// Only the condition-like field carries the finding text; criteria/cause/effect
+// stay empty ("—") until real audit data fills them.
+const FIELD_TEXT_RE = /condition|observation|finding|description|issue/i;
+const FIELD_REC_RE = /recommendation|action|agreed/i;
+const FIELD_OWNER_RE = /owner|responsib/i;
+const FIELD_DATE_RE = /due|deadline|target date|timeline/i;
+const FIELD_RATING_RE = /rating|risk level|severity|priority/i;
+const FIELD_REF_RE = /^(ref|id|no\.?|#)/i;
+const FIELD_STATUS_RE = /status/i;
+
+/** Say a severity in the template's own rating words (captured at import). */
+function rateIn(scale: string[] | undefined, severity: string): string {
+  if (!scale || scale.length === 0) return severity;
+  const hit = scale.find(s => s.toLowerCase() === severity.toLowerCase());
+  if (hit) return hit;
+  const s = severity.toLowerCase();
+  if (s === 'high' || s === 'critical') return scale[0];
+  if (s === 'medium' || s === 'moderate') return scale[Math.floor((scale.length - 1) / 2)];
+  return scale[scale.length - 1];
+}
+
+function severityTint(severity: string): string {
+  const s = severity.toLowerCase();
+  if (s === 'medium' || s === 'moderate') return 'bg-mitigated-50 text-mitigated-700';
+  if (s === 'low' || s === 'minor') return 'bg-compliant-50 text-compliant-700';
+  return 'bg-risk-50 text-risk-700';
+}
+
+/** Generate a display ID from the captured shape: "IA-##-H##" → "IA-26-H01".
+ *  The last digit run counts the finding; earlier runs read as the year. */
+function idFromPattern(pattern: string | undefined, index: number): string {
+  if (!pattern) return `F-${String(index + 1).padStart(2, '0')}`;
+  const total = (pattern.match(/#+/g) ?? []).length;
+  const year = String(new Date().getFullYear());
+  let seen = 0;
+  return pattern.replace(/#+/g, run => {
+    seen++;
+    return seen === total ? String(index + 1).padStart(run.length, '0') : year.slice(-run.length);
+  });
+}
+
+/** The value a card field or table column shows for one finding. Human fields
+ *  return null — the caller renders the awaiting slot instead. */
+function fieldValue(label: string, f: CardFinding, id: string, ratedAs: string): string | null {
+  if (FIELD_REF_RE.test(label)) return id;
+  if (FIELD_RATING_RE.test(label)) return ratedAs;
+  if (FIELD_REC_RE.test(label)) return f.recommendation ?? '—';
+  if (FIELD_OWNER_RE.test(label)) return f.owner ?? '—';
+  if (FIELD_DATE_RE.test(label)) return '—';
+  if (FIELD_STATUS_RE.test(label)) return 'Open';
+  if (FIELD_TEXT_RE.test(label)) return f.title;
+  return null;
+}
+
+const AWAITING = (prompt?: string) => (
+  <div className="rounded-[8px] border border-dashed border-mitigated-300 bg-mitigated-50/40 px-3 py-2">
+    <p className="text-[0.8125rem] text-mitigated-700 font-medium">{prompt || 'Awaiting response'}</p>
+    <p className="text-[0.6875rem] text-mitigated-700/70 mt-0.5">Only a real person fills this in, never the AI.</p>
+  </div>
+);
+
+/** A human-input prompt in the block's own words — ghost text shaped to what
+ *  the block is, since these can never be guessed. */
+function humanPrompt(label?: string): string {
+  const l = (label ?? '').toLowerCase();
+  if (/scope/.test(l)) return 'List the areas covered in this audit';
+  if (/objective/.test(l)) return 'State what this audit set out to test';
+  if (/management|auditee/.test(l)) return 'Awaiting management’s response';
+  return 'Awaiting input';
+}
+
+/** Translate a legacy single-kind section into one typed block, so old saved
+ *  templates render through the same block path. */
+function legacyBlocks(tsec: TemplateSection): TemplateBlock[] {
+  if (tsec.blocks?.length) return tsec.blocks;
+  const kind = tsec.kind ?? 'text';
+  if (kind === 'cards') {
+    return [{ kind: 'cards', fill: 'query', binding: 'findings', cardFields: tsec.cardFields, humanFields: tsec.humanFields, idPattern: tsec.idPattern, cardCount: tsec.cardCount }];
+  }
+  if (kind === 'table') return [{ kind: 'table', fill: tsec.linkedTo ? 'query' : 'manual', binding: tsec.linkedTo ? 'actions' : undefined, label: tsec.metric, columns: tsec.columns, linkedTo: tsec.linkedTo, idPattern: tsec.idPattern }];
+  if (kind === 'kpi') return [{ kind: 'stat', fill: 'query', binding: 'metrics', label: tsec.metric, slotLabels: tsec.metric ? [tsec.metric] : undefined }];
+  if (kind === 'chart') return [{ kind: 'chart', fill: 'query', binding: 'metrics', label: tsec.metric }];
+  if (kind === 'human') return [{ kind: 'signoff', fill: 'human' }];
+  if (tsec.fixed) return [{ kind: 'narrative', fill: 'fixed', fixedBody: tsec.fixedBody }];
+  return [{ kind: 'narrative', fill: tsec.fill === 'mixed' ? 'query' : (tsec.fill ?? 'query') }];
+}
+
+function BlockBody({ block, cards, findingScale, composed, manual }: {
+  block: TemplateBlock;
+  cards: CardFinding[];
+  findingScale?: string[];
+  /** Composed prose for query-filled narrative blocks (the section's data-
+   *  driven content). Manual/fixed/human blocks never receive it. */
+  composed?: string;
+  /** Door 1 of "no data connected": the user types or pastes into the shape.
+   *  Present only on the section's primary manual narrative block. */
+  manual?: {
+    text: string;
+    onChange: (text: string) => void;
+    onCommit?: () => void;
+    /** Door 2 — save the typed content back to the template as a default. */
+    onRemember?: () => void;
+  };
+}) {
+  // ── Repeating finding cards — the saved shape, stamped once per finding ──
+  if (block.kind === 'cards') {
+    const isHuman = (label: string) => (block.humanFields ?? []).some(h => h.toLowerCase() === label.toLowerCase());
+    if (cards.length === 0) {
+      return (
+        <div className="rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-4">
+          <p className="text-[0.8125rem] text-ink-500">Finding cards render here, one card per finding, in this template's saved shape{block.idPattern ? ` (${block.idPattern})` : ''}.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        {cards.map((f, i) => {
+          const id = idFromPattern(block.idPattern, i);
+          const ratedAs = rateIn(findingScale, f.severity);
+          const fields = block.cardFields ?? [];
+          return (
+            <article key={id} className="rounded-[10px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04)] px-5 py-4" style={{ borderLeft: '3px solid var(--rep-accent, #550fa5)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-baseline gap-2.5 min-w-0">
+                  <span className="shrink-0 font-mono text-[0.8125rem] font-semibold" style={{ color: 'var(--rep-accent, #550fa5)' }}>{id}</span>
+                  <h4 className="min-w-0 truncate text-[0.9375rem] font-semibold text-ink-900">{f.title}</h4>
+                </div>
+                <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${severityTint(f.severity)}`}>{ratedAs}</span>
+              </div>
+              {fields.length > 0 && (
+                <dl className="mt-3 space-y-2.5">
+                  {fields.map(label => {
+                    if (FIELD_RATING_RE.test(label)) return null; // shown as the chip above
+                    return (
+                      <div key={label}>
+                        <dt className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-400">{label}</dt>
+                        <dd className="mt-1">
+                          {isHuman(label)
+                            ? AWAITING(humanPrompt(label))
+                            : <p className="text-[0.8125rem] text-ink-700 leading-relaxed">{fieldValue(label, f, idFromPattern(block.idPattern, i), ratedAs) ?? '—'}</p>}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Real table — the client's own column names; rows derive from findings
+  //    when linked; otherwise empty, never invented ──
+  if (block.kind === 'table') {
+    const cols = block.columns ?? [];
+    const linkedRows = block.linkedTo && cards.length > 0 ? cards : [];
+    return (
+      <div className="max-w-full">
+        <div className="rounded-[8px] overflow-hidden border border-canvas-border">
+          {cols.length > 0 ? (
+            <div className="flex bg-canvas">
+              {cols.slice(0, 6).map(c => (
+                <div key={c} className="flex-1 min-w-0 truncate border-r last:border-r-0 border-canvas-border px-2.5 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">{c}</div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 bg-canvas">
+              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-6 border-r last:border-r-0 border-canvas-border" />)}
+            </div>
+          )}
+          {linkedRows.length > 0
+            ? linkedRows.map((f, i) => {
+                const id = idFromPattern(block.idPattern, i);
+                const ratedAs = rateIn(findingScale, f.severity);
+                return (
+                  <div key={id} className="flex border-t border-canvas-border">
+                    {cols.slice(0, 6).map(c => (
+                      <div key={c} className="flex-1 min-w-0 border-r last:border-r-0 border-canvas-border px-2.5 py-2 text-[0.75rem] text-ink-700 truncate">
+                        {fieldValue(c, f, id, ratedAs) ?? '—'}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            : Array.from({ length: 3 }).map((_, r) => (
+                <div key={r} className="flex border-t border-canvas-border">
+                  {Array.from({ length: cols.length ? Math.min(cols.length, 6) : 4 }).map((_, c) => (
+                    <div key={c} className="flex-1 border-r last:border-r-0 border-canvas-border px-2.5 py-2 text-[0.75rem] text-ink-300">—</div>
+                  ))}
+                </div>
+              ))}
+        </div>
+        <p className="mt-2 text-[0.6875rem] text-ink-400">
+          {block.linkedTo
+            ? <>Built automatically from “{block.linkedTo}”, so the two sections can’t disagree.</>
+            : block.fill === 'manual'
+              ? 'No data connected — fill in manually. The shape holds its place either way.'
+              : 'Rows fill from your audit data at generation.'}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Stat strip — big numbers with captions; values come from data, or stay
+  //    honestly empty when none is connected ──
+  if (block.kind === 'stat') {
+    const labels = block.slotLabels?.length ? block.slotLabels : [block.label || 'Metric'];
+    return (
+      <div>
+        <div className="flex flex-wrap gap-6">
+          {labels.slice(0, 6).map(l => (
+            <div key={l} className="shrink-0">
+              <div className="text-[1.75rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
+              <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1.5">{l}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[0.6875rem] text-ink-400">
+          {block.fill === 'manual' ? 'No data connected — fill in manually.' : 'Filled from query data at generation.'}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Fill-in slots — label + value pairs; labels kept, values from report
+  //    details at generation ──
+  if (block.kind === 'slot') {
+    const labels = block.slotLabels ?? [];
+    return (
+      <div className="max-w-[80%]">
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-2.5">
+          {labels.slice(0, 8).map(l => (
+            <div key={l} className="flex items-baseline justify-between gap-3 border-b border-canvas-border pb-1.5">
+              <dt className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-400">{l}</dt>
+              <dd className="text-[0.8125rem] text-ink-300">—</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-2 text-[0.6875rem] text-ink-400">
+          {block.fill === 'human' ? 'Typed once, saved as template defaults.' : 'Filled from the report’s own details at generation.'}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Callout — text set apart; fixed callouts print verbatim ──
+  if (block.kind === 'callout') {
+    return (
+      <div className="max-w-[80ch] rounded-[8px] border border-mitigated-200 bg-mitigated-50/50 px-4 py-3">
+        {block.fill === 'fixed' && (block.fixedBody ?? []).length > 0 ? (
+          <>
+            {(block.fixedBody ?? []).map((line, i) => (
+              <p key={i} className="text-[0.875rem] text-ink-700 leading-relaxed">{line}</p>
+            ))}
+            <p className="mt-2 inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-400">
+              <Lock size={11} /> Fixed text. Prints exactly as written.
+            </p>
+          </>
+        ) : (
+          <p className="text-[0.875rem] text-ink-500 leading-relaxed">{block.label || 'Callout'} — {block.fill === 'human' ? humanPrompt(block.label) : 'filled at generation.'}</p>
+        )}
+      </div>
+    );
+  }
+
+  // ── Chart placeholder — values from trusted data, or honestly empty ──
+  if (block.kind === 'chart') {
+    return (
+      <div className="max-w-[75%]">
+        <div className="flex items-end gap-1.5 h-14">
+          {[40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-canvas-border" style={{ height: `${h}%` }} />)}
+        </div>
+        <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">
+          {block.label || 'Chart'} · {block.fill === 'manual' ? 'no data connected — add manually' : 'filled from query data'}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Sign-off — signature slots, real people only ──
+  if (block.kind === 'signoff') {
+    return (
+      <div className="max-w-[80%]">
+        {AWAITING('Signatures')}
+        {(block.signRoles ?? []).length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(block.signRoles ?? []).map(r => (
+              <span key={r} className="inline-flex items-center rounded-full bg-white border border-mitigated-200 px-2 py-0.5 text-[0.6875rem] font-semibold text-mitigated-700">{r}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Narrative — by fill case ──
+  if (block.fill === 'fixed') {
+    return (
+      <div className="max-w-[80ch]">
+        {(block.fixedBody ?? []).map((line, i) => (
+          <p key={i} className="text-[0.9375rem] text-ink-700 leading-[1.8]">{line}</p>
+        ))}
+        <p className="mt-2.5 inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-400">
+          <Lock size={11} /> Fixed text. Prints exactly as written, never rewritten at generation.
+        </p>
+      </div>
+    );
+  }
+  if (block.fill === 'human') {
+    return <div className="max-w-[80%]">{AWAITING(humanPrompt(block.label))}</div>;
+  }
+  if (block.fill === 'manual') {
+    // Not a dead end: the shape holds its place and the user types or pastes
+    // straight into it (door 1). Static only when no edit handler reached us.
+    if (!manual) {
+      return (
+        <div className="max-w-[80ch] rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-4 py-3.5">
+          <p className="text-[0.8125rem] font-medium text-ink-500">No data connected — fill in manually.</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-1">The heading and shape keep their place in the report. Type or paste the content here; the export checklist flags it until it's filled.</p>
+        </div>
+      );
+    }
+    const filled = manual.text.trim().length > 0;
+    return (
+      <div className="max-w-[80ch]">
+        <textarea
+          value={manual.text}
+          onChange={e => manual.onChange(e.target.value)}
+          onBlur={() => manual.onCommit?.()}
+          rows={filled ? Math.min(10, Math.max(3, manual.text.split('\n').length + 1)) : 3}
+          placeholder="No data connected — type or paste this section's content here."
+          aria-label="Section content"
+          className={`w-full resize-y rounded-[10px] px-4 py-3 text-[0.9375rem] text-ink-700 leading-[1.8] transition-colors focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-400 ${
+            filled ? 'border border-canvas-border bg-white' : 'border border-dashed border-canvas-border bg-canvas/40'
+          }`}
+        />
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="text-[0.6875rem] text-ink-400">
+            {filled ? 'Filled in manually — saved with this report.' : 'The heading and shape keep their place either way; the export checklist flags this until it’s filled.'}
+          </p>
+          {/* Door 2: setup that never changes gets typed once and remembered —
+              pre-filled in every future report from this template. */}
+          {filled && manual.onRemember && (
+            <button
+              onClick={manual.onRemember}
+              className="shrink-0 text-[0.6875rem] font-semibold text-brand-600 hover:text-brand-700 transition-colors cursor-pointer"
+            >
+              Remember for future reports
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // query-filled narrative: the composed, data-driven prose.
+  return <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{composed || '—'}</p>;
+}
+
+export default function TemplateBlockBody({ tsec, cards = [], findingScale, composed, manual }: {
+  tsec: TemplateSection;
+  /** The report's findings pool — stamped into repeating cards and linked tables. */
+  cards?: CardFinding[];
+  /** The template's own rating words (captured at import). */
+  findingScale?: string[];
+  /** Composed prose for query-filled narrative blocks. */
+  composed?: string;
+  /** Manual-fill editing (door 1) — attached to the section's first manual
+   *  prose block; the rest of the shape stays as placeholders. */
+  manual?: {
+    text: string;
+    onChange: (text: string) => void;
+    onCommit?: () => void;
+    onRemember?: () => void;
+  };
+}) {
+  const blocks = legacyBlocks(tsec);
+  // A section with a manual fill but no prose block still needs somewhere to
+  // type — append a narrative slot so the box exists (never a dead end).
+  const hasManualProse = blocks.some(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'manual');
+  const rendered: TemplateBlock[] = manual && !hasManualProse && blocks.every(b => b.fill !== 'query')
+    ? [...blocks, { kind: 'narrative', fill: 'manual' }]
+    : blocks;
+  const manualIdx = rendered.findIndex(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'manual');
+  return (
+    <div className="space-y-5">
+      {rendered.map((b, i) => (
+        <div key={i}>
+          {/* A block's own sub-heading — the client's furniture inside the section. */}
+          {b.label && b.kind !== 'chart' && b.kind !== 'stat' && b.kind !== 'callout' && (
+            <h4 className="mb-2 text-[0.8125rem] font-semibold text-ink-900">{b.label}</h4>
+          )}
+          <BlockBody block={b} cards={cards} findingScale={findingScale} composed={composed} manual={i === manualIdx ? manual : undefined} />
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -291,6 +291,25 @@ function AppInner() {
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
   const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
 
+  // "Remember for future reports" — a report reader saved a hand-typed section
+  // back onto its custom template as a default (setup that never changes:
+  // distribution lists, intro paragraphs). Future reports pre-fill it; the
+  // template's shape never moves, only the section's saved default.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ templateId?: string; sectionName?: string; content?: string }>).detail;
+      if (!detail?.templateId || !detail.sectionName) return;
+      setCustomTemplates(prev => prev.map(t => (t.id !== detail.templateId ? t : {
+        ...t,
+        sections: (t.sections ?? []).map(s =>
+          s.name === detail.sectionName ? { ...s, savedContent: detail.content || undefined } : s,
+        ) as typeof t.sections,
+      })));
+    };
+    window.addEventListener('irame:template-remember-content', handler);
+    return () => window.removeEventListener('irame:template-remember-content', handler);
+  }, []);
+
   useEffect(() => {
     if (mainScrollRef.current) {
       mainScrollRef.current.scrollTop = 0;

@@ -832,6 +832,8 @@ export default function ReportsView({
       pageNumbers: (rt as EditableTemplate).pageNumbers,
       signoffEnabled: (rt as EditableTemplate).signoffEnabled,
       signatories: (rt as EditableTemplate).signatories,
+      findingScale: (rt as EditableTemplate).findingScale,
+      opinionScale: (rt as EditableTemplate).opinionScale,
     };
     setGeneratedReports(prev => [newReport, ...prev]);
     setWizardTemplate(null);

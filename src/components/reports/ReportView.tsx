@@ -40,11 +40,14 @@ import {
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
+import TemplateBlockBody, { type CardFinding } from './TemplateBlockBody';
+import type { TemplateSection } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -1824,6 +1827,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 }) {
   const { addToast } = useToast();
   const { currentUser } = useCurrentUser();
+  const logEvent = useAuditLog();
   // Manual sign-on / sign-off on the report's approval slots. Signing records
   // the slot's assigned name (or the current user) + today's date; signing off
   // clears it. Persisted via onUpdateSignoffs (no-op if the report is read-only).
@@ -2151,6 +2155,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
     | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
     | { id: string; kind: 'note'; title: string; content: string }
+    | { id: string; kind: 'tblock'; title: string; tsec: TemplateSection; cards?: CardFinding[]; composed?: string }
     | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
 
   type ObservationItem = {
@@ -2218,21 +2223,61 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     // above the body, the rest below.
     const tmpl = (report.generatedQueries?.length || reportWorkflows.length) ? (report.templateSections ?? []) : [];
     if (tmpl.length > 0) {
-      const anchorIdx = tmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+      // The findings pool, flattened — stamped into repeating cards and linked
+      // action-plan tables in the template's own shape and rating words.
+      const cardFindings: CardFinding[] = evidence.flatMap(q =>
+        q.findings.map((f, fi) => ({
+          title: f,
+          severity: q.severity,
+          recommendation: q.observations[fi] ?? q.observations[0],
+        })),
+      );
+      const cardsBlockOf = (s: TemplateSection) => s.blocks?.find(b => b.kind === 'cards');
+      const cardsSec = tmpl.find(s => s.kind === 'cards' || cardsBlockOf(s));
+      const cardsIdPattern = cardsSec ? (cardsSec.kind === 'cards' ? cardsSec.idPattern : cardsBlockOf(cardsSec)?.idPattern) : undefined;
+      // A template with its own repeating finding cards carries the findings
+      // there — the generic per-query body would duplicate them.
+      const hasCards = !!cardsSec;
+      const anchorIdx = tmpl.findIndex(s => s === cardsSec || /quer(y|ies)|testing results|findings/i.test(s.name));
       const pre: SectionItem[] = [];
       const post: SectionItem[] = [];
       tmpl.forEach((s, i) => {
         if (/executive summary/i.test(s.name)) return; // covered by the summary block
-        const block: SectionItem = {
-          id: `sec-tmpl-${i}`,
-          kind: 'note',
-          title: s.name,
-          content: composeSectionContent(s.name, evidence),
-        };
+        // Route by what the section IS. Typed sections (BYOT blocks, legacy
+        // kinds, fixed text, or any non-query fill) render through the block
+        // renderer — manual stays honestly empty, human waits for a person,
+        // fixed prints verbatim. Only query-filled prose is ever composed;
+        // the AI never invents content for the other cases.
+        const hasBlocks = (s.blocks?.length ?? 0) > 0;
+        const typed = hasBlocks || (s.kind && s.kind !== 'text') || s.fixed || (s.fill && s.fill !== 'query');
+        const wantsComposed = hasBlocks
+          ? (s.blocks ?? []).some(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'query')
+          : !s.fill || s.fill === 'query';
+        const needsCards = s.kind === 'cards' || (s.kind === 'table' && !!s.linkedTo) ||
+          (s.blocks ?? []).some(b => b.kind === 'cards' || !!b.linkedTo);
+        // A linked table borrows the cards' ID shape so its refs match.
+        const patched: TemplateSection = hasBlocks
+          ? { ...s, blocks: s.blocks!.map(b => (b.linkedTo && !b.idPattern ? { ...b, idPattern: cardsIdPattern } : b)) }
+          : s.kind === 'table' && s.linkedTo && !s.idPattern ? { ...s, idPattern: cardsIdPattern } : s;
+        const block: SectionItem = typed
+          ? {
+              id: `sec-tmpl-${i}`,
+              kind: 'tblock',
+              title: s.name,
+              tsec: patched,
+              cards: needsCards ? cardFindings : undefined,
+              composed: wantsComposed ? composeSectionContent(s.name, evidence) : undefined,
+            }
+          : {
+              id: `sec-tmpl-${i}`,
+              kind: 'note',
+              title: s.name,
+              content: composeSectionContent(s.name, evidence),
+            };
         if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
         else post.push(block);
       });
-      return [...head, ...pre, ...bodyBlocks, ...post];
+      return hasCards ? [...head, ...pre, ...post] : [...head, ...pre, ...bodyBlocks, ...post];
     }
 
     return [...head, ...bodyBlocks];
@@ -2267,6 +2312,55 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // Initial-generation loading flag: the summary prose is gated behind it so
   // "Generate Summary" produces a visible empty → loading → content transition.
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // ── "No data connected" is not a dead end (door 1): the user types or
+  // pastes into the section's shape, and the text stays with this report.
+  // Persisted per report so a reopen keeps the filled sections filled.
+  const MANUAL_FILLS_KEY = 'irame.reports.manualFills.v1';
+  const [manualFills, setManualFills] = useState<Record<string, string>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  // Sections already logged as hand-filled — the door-1 usage signal is one
+  // entry per section, not one per keystroke. That log IS the ranked evidence
+  // for which data integration to build next.
+  const manualLoggedRef = useRef<Set<string>>(new Set());
+  const setManualFill = (sectionId: string, text: string) =>
+    setManualFills(prev => ({ ...prev, [sectionId]: text }));
+  const commitManualFill = (sectionId: string, title: string) => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [sectionId]: manualFills[sectionId] ?? '' };
+      localStorage.setItem(MANUAL_FILLS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if ((manualFills[sectionId] ?? '').trim() && !manualLoggedRef.current.has(sectionId)) {
+      manualLoggedRef.current.add(sectionId);
+      logEvent({
+        action: 'Update',
+        description: `Filled "${title}" manually in "${report.name}" — no connected data for this section yet`,
+        module: 'Reports',
+        entity: 'Manual section',
+      });
+    }
+  };
+  // Door 2: setup that never changes gets remembered on the template itself —
+  // every future report from this template pre-fills it. Only custom templates
+  // can learn (standard ones are shared and read-only).
+  const canRemember = customTemplates.some(t => t.id === report.templateId);
+  const rememberManualFill = (title: string, content: string) => {
+    window.dispatchEvent(new CustomEvent('irame:template-remember-content', {
+      detail: { templateId: report.templateId, sectionName: title, content },
+    }));
+    logEvent({
+      action: 'Update',
+      description: `Saved "${title}" as a template default from "${report.name}"`,
+      module: 'Reports',
+      entity: 'Report Template',
+    });
+    addToast({ type: 'success', message: `Remembered. Future reports pre-fill “${title}” with this.` });
+  };
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
   const generateSummary = () => {
     if (isGeneratingSummary || summaryGenerated) return;
@@ -2959,10 +3053,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     dragListener: false as const,
                   };
 
-                  if (section.kind === 'cover') {
+  if (section.kind === 'cover') {
+                    // A cards-driven (BYOT) report carries its findings inside the
+                    // repeating-card block, not query sections — count what the
+                    // reader actually shows, never "0 queries".
+                    const cardTotal = sections.reduce((n, s) => n + (s.kind === 'tblock' && (s.tsec.kind === 'cards' || s.tsec.blocks?.some(b => b.kind === 'cards')) ? (s.cards?.length ?? 0) : 0), 0);
                     const scopeLabel = isBulkAudit
                       ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
-                      : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
+                      : cardTotal > 0
+                        ? `${cardTotal} ${cardTotal === 1 ? 'finding' : 'findings'}`
+                        : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
@@ -3142,6 +3242,38 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     );
                   }
 
+                  // Typed template blocks (BYOT) — repeating finding cards, real
+                  // tables, KPI/chart placeholders, fixed text, human slots.
+                  if (section.kind === 'tblock') {
+                    const t = section.tsec;
+                    // Door 1: a "no data connected" section takes typed input in
+                    // place; door 2 pre-fills from the template's remembered
+                    // default. Never a dead end.
+                    const isManualSection = t.blocks?.length
+                      ? t.blocks.some(b => b.fill === 'manual')
+                      : t.fill === 'manual' || (t.kind === 'table' && !t.linkedTo);
+                    const manualText = manualFills[section.id] ?? t.savedContent ?? '';
+                    return (
+                      <Reorder.Item key={section.id} {...sectionProps}>
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
+                          <TemplateBlockBody
+                            tsec={t}
+                            cards={section.cards}
+                            findingScale={report.findingScale}
+                            composed={section.composed}
+                            manual={isManualSection ? {
+                              text: manualText,
+                              onChange: text => setManualFill(section.id, text),
+                              onCommit: () => commitManualFill(section.id, section.title),
+                              onRemember: canRemember ? () => rememberManualFill(section.title, manualText) : undefined,
+                            } : undefined}
+                          />
+                        </div>
+                      </Reorder.Item>
+                    );
+                  }
+
                   if (section.kind === 'observation') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
@@ -3210,6 +3342,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             brandColor={report.brandColor}
             signatories={report.signoffEnabled ? report.signatories : undefined}
             signoffs={report.signoffs}
+            // The export checklist — sections still awaiting content (manual
+            // fill or a person's input) are named before download, so nothing
+            // incomplete leaves quietly. Export anyway stays allowed. A section
+            // the user already typed into (or the template remembered) is no
+            // longer incomplete.
+            incomplete={sections
+              .filter(s => {
+                if (s.kind !== 'tblock') return false;
+                const filled = (manualFills[s.id] ?? s.tsec.savedContent ?? '').trim().length > 0;
+                const manualOpen = !filled && (
+                  (s.tsec.blocks ?? []).some(b => b.fill === 'manual')
+                  || (!s.tsec.blocks?.length && s.tsec.fill === 'manual'));
+                const humanOpen =
+                  (s.tsec.blocks ?? []).some(b => (b.fill === 'human' && b.kind !== 'signoff') || (b.humanFields?.length ?? 0) > 0)
+                  || (!s.tsec.blocks?.length && (s.tsec.kind === 'human' || s.tsec.fill === 'human' || (s.tsec.humanFields?.length ?? 0) > 0));
+                return manualOpen || humanOpen;
+              })
+              .map(s => s.title)}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
@@ -3260,6 +3410,39 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               }
               if (s.kind === 'note') {
                 return { id: s.id, kind: 'note', title: s.title, content: s.content };
+              }
+              // Typed template blocks export as plain-language notes: the block
+              // shape is a screen affordance; the export states what fills it —
+              // by each block's own fill case, never invented.
+              if (s.kind === 'tblock') {
+                const t = s.tsec;
+                // Hand-typed content (door 1) or the template's remembered
+                // default (door 2) IS this section's export content.
+                const typed = (manualFills[s.id] ?? t.savedContent ?? '').trim();
+                const describeBlock = (b: NonNullable<TemplateSection['blocks']>[number]): string => {
+                  if (b.kind === 'cards') return `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${b.idPattern ? ` (${b.idPattern})` : ''}${b.cardFields?.length ? ` with fields: ${b.cardFields.join(', ')}` : ''}.`;
+                  if (b.kind === 'table') return `${b.columns?.length ? `Table — columns: ${b.columns.join(', ')}` : 'Table'}${b.linkedTo ? `. Auto-built from ${b.linkedTo}` : b.fill === 'manual' ? '. No data connected — filled in manually' : ''}.`;
+                  if (b.kind === 'signoff') return 'Signature slots — signed by real people.';
+                  if (b.kind === 'stat') return `Stat strip${b.slotLabels?.length ? ` (${b.slotLabels.join(', ')})` : ''}${b.fill === 'manual' ? ' — no data connected' : ''}.`;
+                  if (b.kind === 'slot') return `Details${b.slotLabels?.length ? `: ${b.slotLabels.join(', ')}` : ''}.`;
+                  if (b.kind === 'chart') return `${b.label ?? 'Chart'}${b.fill === 'manual' ? ' — no data connected' : ' — filled from query data'}.`;
+                  if (b.fill === 'fixed') return (b.fixedBody ?? []).join(' ');
+                  if (b.fill === 'human') return 'Awaiting response. Filled in by a person before the report is issued.';
+                  if (b.fill === 'manual') return typed || 'No data connected — filled in manually.';
+                  return s.composed ?? 'Filled from query data at generation.';
+                };
+                const content = t.blocks?.length
+                  ? t.blocks.map(describeBlock).filter(Boolean).join(' ')
+                  : t.kind === 'cards'
+                    ? `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${t.idPattern ? ` (${t.idPattern})` : ''}${t.cardFields?.length ? ` with fields: ${t.cardFields.join(', ')}` : ''}.`
+                    : t.kind === 'table'
+                      ? `${t.columns?.length ? `Table — columns: ${t.columns.join(', ')}` : 'Table'}${t.linkedTo ? `. Auto-built from ${t.linkedTo}` : ''}.`
+                      : t.kind === 'human'
+                        ? 'Awaiting response. Filled in by a person before the report is issued.'
+                        : t.fixed
+                          ? (t.fixedBody ?? []).join(' ')
+                          : (t.metric ?? s.composed ?? 'Filled from query data at generation.');
+                return { id: s.id, kind: 'note', title: s.title, content };
               }
               // Exec summary + stats sections carry the KPI tiles so exports can
               // render the same ATR-style tile grid as the on-screen document.
