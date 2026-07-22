@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import Gated from '../shared/Gated';
 import DatePicker from '../shared/DatePicker';
 import {
-  X, FileText, Plus, Check, ChevronRight, ChevronDown, Search, Lock,
+  X, FileText, Plus, Check, ChevronRight, ChevronDown, Search,
 } from 'lucide-react';
 import type { AuditResultData, GranularSelection } from './AddToDashboardModal';
 import {
@@ -23,7 +23,6 @@ import {
 export interface ReportOption {
   id: string;
   name: string;
-  status: 'draft' | 'final';
   generatedBy?: string;
 }
 
@@ -254,8 +253,10 @@ export function AddToReportModal({
     onReturn: handleAdvance,
   });
 
+  // Reports have no draft/final lifecycle — any report can receive a result.
+  // The only thing that blocks a row is the result already being in it.
   const navigableIds = useMemo(
-    () => filtered.filter(r => r.status !== 'final' && !alreadyAddedIds.includes(r.id)).map(r => r.id),
+    () => filtered.filter(r => !alreadyAddedIds.includes(r.id)).map(r => r.id),
     [filtered, alreadyAddedIds],
   );
   const { highlight, setHighlight, onKeyDown: onSearchKey } = useListKeyboardNav(
@@ -284,7 +285,7 @@ export function AddToReportModal({
               {step === 'pick' ? 'Add to Report' : 'Choose What to Include'}
             </h2>
             <p id={descId} className="text-[0.6875rem] text-ink-500">
-              {step === 'pick' ? 'Choose a draft report or create a new one'
+              {step === 'pick' ? 'Choose a report or create a new one'
                 : 'Select individual KPIs, charts, and columns'}
             </p>
           </div>
@@ -376,8 +377,8 @@ export function AddToReportModal({
                     <ModalEmptyState
                       icon={<FileText size={20} />}
                       title="No reports yet"
-                      description="Start a draft report to capture findings, KPIs, and charts in one place."
-                      primaryAction={{ label: 'Start a draft', onClick: () => setMode('new') }}
+                      description="Create a report to capture findings, KPIs, and charts in one place."
+                      primaryAction={{ label: 'Create a report', onClick: () => setMode('new') }}
                       accent="brand"
                     />
                   ) : noSearchHits ? (
@@ -394,12 +395,10 @@ export function AddToReportModal({
                     />
                   ) : (
                     filtered.map(r => {
-                      const isFinal = r.status === 'final';
                       const alreadyAdded = alreadyAddedIds.includes(r.id);
-                      const disabled = isFinal || alreadyAdded;
+                      const disabled = alreadyAdded;
                       const tooltip = alreadyAdded
                         ? 'This result is already in this report.'
-                        : isFinal ? 'Final reports are locked. Duplicate to a new draft to keep editing.'
                         : undefined;
                       const isHighlighted = !disabled && navigableIds[highlight] === r.id;
                       return (
@@ -428,26 +427,19 @@ export function AddToReportModal({
                           }`}
                         >
                           <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
-                            {isFinal ? <Lock size={14} className="text-ink-400" /> : <FileText size={14} className="text-brand-700" />}
+                            <FileText size={14} className="text-brand-700" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[0.8125rem] font-medium text-ink-800 truncate">
                               <Highlighted text={r.name} query={searchTrim} />
                             </div>
-                            <div className="text-[0.6875rem] text-ink-500">
-                              {r.status === 'draft' ? 'Draft' : 'Final (locked)'}
-                              {r.generatedBy && ` by ${r.generatedBy}`}
-                            </div>
+                            {r.generatedBy && (
+                              <div className="text-[0.6875rem] text-ink-500">by {r.generatedBy}</div>
+                            )}
                           </div>
-                          {alreadyAdded ? (
+                          {alreadyAdded && (
                             <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 shrink-0">
                               Already added
-                            </span>
-                          ) : (
-                            <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                              isFinal ? 'bg-ink-100 text-ink-500' : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {isFinal ? 'Locked' : 'Draft'}
                             </span>
                           )}
                           {selectedId === r.id && !disabled && (
@@ -499,7 +491,7 @@ export function AddToReportModal({
                     <span id={nameError ? 'new-rpt-name-error' : 'new-rpt-name-hint'} className={`text-[0.6875rem] truncate ${
                       nameError ? 'text-risk-700' : nameNotice ? 'text-mitigated-700' : 'text-ink-400'
                     }`}>
-                      {nameError ?? nameNotice ?? 'Saved as a draft you can edit later.'}
+                      {nameError ?? nameNotice ?? 'You can edit this report later.'}
                     </span>
                     <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{newName.length}/{NAME_MAX}</span>
                   </div>

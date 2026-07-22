@@ -7,7 +7,7 @@
  * Run with the dev server already on port 5173:
  *   npx playwright test tests/verify-workflow-build.spec.ts --project=chromium --reporter=list
  */
-import { test, expect, type Page } from './_helpers';
+import { test, expect, answerClarification, type Page } from './_helpers';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -40,11 +40,11 @@ test('upload-first workflow build', async ({ page }) => {
   await page.waitForTimeout(300);
 
   // 2. Attach 2 required sources via All Data tab
-  await page.getByRole('button', { name: /SAP ERP: AP Module/i }).click();
+  await page.getByRole('button', { name: /SAP ERP.*AP Module/i }).first().click();
   await page.waitForTimeout(150);
-  await page.getByRole('button', { name: /Vendor Master Data/i }).click();
+  await page.getByRole('button', { name: /^Vendor Master Data/i }).first().click();
   await page.waitForTimeout(200);
-  await page.getByRole('button', { name: /^Attach$/ }).click();
+  await page.getByRole('button', { name: /^Add( \d+)?$/ }).click();
   await page.waitForTimeout(800);
   await snap(page, 'B-after-attach');
 
@@ -54,12 +54,9 @@ test('upload-first workflow build', async ({ page }) => {
   await snap(page, 'B2-file-processing');
 
   // 3b. Clarify cards should appear AFTER the processing wait (docked above composer)
-  await expect(page.getByRole('option', { name: /Last 30 days/i })).toBeVisible({ timeout: 6000 });
+  await expect(page.getByRole('radio', { name: /Last 30 days/i })).toBeVisible({ timeout: 6000 });
   await snap(page, 'C-clarify-after-upload');
-  for (let i = 1; i <= 4; i++) {
-    await page.keyboard.press('1');
-    await page.waitForTimeout(400);
-  }
+  await answerClarification(page);
 
   // 4. Map card after clarify
   await expect(page.getByText(/Clarifications locked in.*moving to data mapping/i)).toBeVisible({ timeout: 6000 });

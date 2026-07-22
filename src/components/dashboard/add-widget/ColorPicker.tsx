@@ -32,8 +32,8 @@ export function ColorPicker({ selectedColor, onColorChange, colors = DEFAULT_COL
       ))}
       
       {/* Color code display - inline with color circles */}
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#e5e7eb] rounded-[6px] w-fit">
-        <div className="size-[12px] rounded-[2px]" style={{ backgroundColor: selectedColor }} />
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#e5e7eb] rounded-sm w-fit">
+        <div className="size-[12px] rounded-xs" style={{ backgroundColor: selectedColor }} />
         <span className="text-[0.6875rem] font-medium text-[#26064a] uppercase">{selectedColor}</span>
       </div>
     </div>

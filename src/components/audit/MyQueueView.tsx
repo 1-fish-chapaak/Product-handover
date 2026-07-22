@@ -546,7 +546,7 @@ function DelegationCard({
   const [to, setTo] = useState(PEOPLE.find(p => p.name !== meName)?.name ?? PEOPLE[0].name);
 
   return (
-    <div className="w-[300px] shrink-0 rounded-xl border border-border-light bg-white p-4 relative">
+    <div className="w-[300px] shrink-0 rounded-lg border border-border-light bg-white p-4 relative">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5">
           <div className="w-7 h-7 rounded-md bg-evidence-50 text-evidence-700 flex items-center justify-center">

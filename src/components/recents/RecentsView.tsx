@@ -127,6 +127,7 @@ const STATUS_TONE: Record<WorkflowRunRow['status'], { label: string; cls: string
 function FavToggle({ on, onClick }: { on: boolean; onClick: (e: React.MouseEvent) => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={`p-1 rounded-md transition-colors cursor-pointer ${
         on ? 'text-mitigated-700' : 'text-ink-400 hover:text-ink-700 opacity-0 group-hover:opacity-100'
@@ -152,11 +153,22 @@ interface RowProps {
   onToggleFav: (e: React.MouseEvent) => void;
 }
 
+// The row carries its own actions (favourite star), so it can't be a <button> —
+// nesting a button inside a button is invalid HTML. It's a role="button" div
+// with the keyboard behaviour a native button would have given us.
 function RecentRow({ icon: Icon, title, meta, trailing, ts, onClick, fav, onToggleFav }: RowProps) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="group w-full flex items-center gap-3 px-4 h-12 text-left rounded-md hover:bg-brand-50/50 transition-colors cursor-pointer"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className="group w-full flex items-center gap-3 px-4 h-12 text-left rounded-md hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
     >
       <Icon size={15} className="text-ink-400 shrink-0" />
       <div className="flex-1 min-w-0 flex items-baseline gap-3">
@@ -166,7 +178,7 @@ function RecentRow({ icon: Icon, title, meta, trailing, ts, onClick, fav, onTogg
       {trailing}
       <FavToggle on={fav} onClick={onToggleFav} />
       <span className="text-[0.75rem] text-ink-500 tabular-nums w-20 text-right shrink-0">{formatRelative(ts.toISOString())}</span>
-    </button>
+    </div>
   );
 }
 
@@ -538,11 +550,26 @@ function BookmarkRow({
   const titleSnippet = bookmark.text.length > 90
     ? bookmark.text.slice(0, 87).trimEnd() + '…'
     : bookmark.text;
+  // role="button" div, not <button> — it holds the Remove action, and a button
+  // can't contain a button. A bookmark whose chat is gone isn't openable, so it
+  // drops out of the tab order and reports itself disabled.
+  const openable = Boolean(bookmark.chatId);
   return (
-    <button
-      onClick={onOpen}
-      disabled={!bookmark.chatId}
-      className="group w-full flex items-center gap-3 px-4 h-12 text-left rounded-md hover:bg-brand-50/50 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
+    <div
+      role="button"
+      tabIndex={openable ? 0 : -1}
+      aria-disabled={!openable}
+      onClick={openable ? onOpen : undefined}
+      onKeyDown={(e) => {
+        if (!openable) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`group w-full flex items-center gap-3 px-4 h-12 text-left rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+        openable ? 'hover:bg-brand-50/50 cursor-pointer' : 'cursor-default'
+      }`}
     >
       <Bookmark size={14} className="text-mitigated-700 fill-mitigated-700 shrink-0" />
       <div className="flex-1 min-w-0 flex items-baseline gap-3">
@@ -559,7 +586,7 @@ function BookmarkRow({
         <X size={13} />
       </button>
       <span className="text-[0.75rem] text-ink-500 tabular-nums w-20 text-right shrink-0">{formatRelative(ts.toISOString())}</span>
-    </button>
+    </div>
   );
 }
 

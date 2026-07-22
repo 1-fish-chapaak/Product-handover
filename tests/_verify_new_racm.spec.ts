@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterWorkspace } from './_helpers';
 
 // Driver (not a CI test): clicks through the new Process Hub "New RACM" two-card
 // flow in the running app and screenshots each step as verification evidence.
@@ -12,13 +13,17 @@ async function clearStorage(page: Page) {
 
 async function gotoP2PRacmTab(page: Page) {
   await page.goto('/');
+  await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
-  await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
-  await page.getByText('Procure to Pay').first().click();
-  // BP detail loaded — open the RACM section.
-  await expect(page.getByRole('button', { name: /Open RACMs/ }).first()).toBeVisible({ timeout: 8000 });
-  await page.getByRole('button', { name: /Open RACMs/ }).first().click();
-  await expect(page.getByRole('button', { name: 'Create new RACM' })).toBeVisible({ timeout: 8000 });
+  const card = page.getByText('Procure to Pay').first();
+  await card.waitFor({ state: 'visible' });
+  await page.waitForTimeout(700); // let the card entrance cascade settle before clicking
+  await card.click();
+  // BP detail loaded (lands on the first section) — open the RACM section via its tab-bar control.
+  const racmTab = page.getByRole('button', { name: 'Switch to RACMs' });
+  await expect(racmTab).toBeVisible({ timeout: 8000 });
+  await racmTab.click();
+  await expect(page.getByRole('button', { name: 'Create RACM' }).first()).toBeVisible({ timeout: 8000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -31,7 +36,7 @@ test('New RACM — full two-card flow, click by click', async ({ page }) => {
   await page.screenshot({ path: 'test-results/nr-01-racm-tab.png' });
 
   // ── Step 1: open the modal ──────────────────────────────────────────────
-  await page.getByRole('button', { name: 'Create new RACM' }).click();
+  await page.getByRole('button', { name: 'Create RACM' }).first().click();
   await expect(page.getByText('Start from an existing matrix, or extract one from an SOP.')).toBeVisible({ timeout: 4000 });
   await expect(page.getByText('Upload a RACM')).toBeVisible();
   await expect(page.getByText(/Upload an SOP/)).toBeVisible();
@@ -56,7 +61,7 @@ test('New RACM — full two-card flow, click by click', async ({ page }) => {
   await page.screenshot({ path: 'test-results/nr-04-racm-in-list.png' });
 
   // ── Step 3: "Upload an SOP → extract" → overlay → drafted RACM ───────────
-  await page.getByRole('button', { name: 'Create new RACM' }).click();
+  await page.getByRole('button', { name: 'Create RACM' }).first().click();
   await expect(page.getByText(/Upload an SOP/)).toBeVisible({ timeout: 4000 });
   const [sopChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
@@ -78,7 +83,7 @@ test('New RACM — full two-card flow, click by click', async ({ page }) => {
   await page.screenshot({ path: 'test-results/nr-06-sop-extracted-in-list.png' });
 
   // ── Probe 1: backdrop click closes the modal, creating nothing ───────────
-  await page.getByRole('button', { name: 'Create new RACM' }).click();
+  await page.getByRole('button', { name: 'Create RACM' }).first().click();
   await expect(page.getByText('Start from an existing matrix, or extract one from an SOP.')).toBeVisible({ timeout: 3000 });
   await page.mouse.click(20, 20); // outside the centered card → backdrop onClose
   await expect(page.getByText('Start from an existing matrix, or extract one from an SOP.')).toHaveCount(0, { timeout: 3000 });

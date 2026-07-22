@@ -18,15 +18,16 @@ import {
   runAutomatedChecks, deriveAiVerdict,
   type AttributeTestResult, type AttrTestResult, type AttributeTestingState,
 } from './complianceAttributeTestingData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const RESULT_CLS: Record<AttrTestResult, string> = {
-  NOT_TESTED: 'bg-gray-100 text-gray-500',
+  NOT_TESTED: 'bg-canvas text-ink-500',
   PASS: 'bg-emerald-50 text-emerald-700',
   FAIL: 'bg-red-50 text-red-700',
   NA: 'bg-blue-50 text-blue-600',
 };
 const RESULT_LABEL: Record<AttrTestResult, string> = { NOT_TESTED: '—', PASS: 'P', FAIL: 'F', NA: 'N/A' };
-const SAMPLE_CLS = { PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', PENDING: 'bg-gray-100 text-gray-500' };
+const SAMPLE_CLS = { PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', PENDING: 'bg-canvas text-ink-500' };
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -40,6 +41,7 @@ const nowStamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const pairKey = (tiId: string, attrId: string) => `${tiId}::${attrId}`;
 
 export default function ComplianceAttributeTestingTab({ samplesEvidence, attributeTesting, onUpdateAttributeTesting, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const auditorName = currentUser?.name || 'Auditor';
   const testItems = samplesEvidence.batches.flatMap(b => b.testItems);
@@ -83,7 +85,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
   if (testItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle size={24} className="text-gray-300 mb-3" />
+        <AlertCircle size={24} className="text-ink-300 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Attribute Testing</h4>
         <p className="text-[0.75rem] text-text-muted mb-4">Prepare samples/test items and evidence before attribute testing.</p>
         <button onClick={() => onNavigateTab?.('samples-evidence')}
@@ -169,6 +171,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
       .filter(r => r.result === 'NOT_TESTED' && filteredItems.some(ti => ti.id === r.testItemId))
       .map(r => ({ testItemId: r.testItemId, attributeId: r.attributeId }));
     runAiVerdicts(pairs);
+    logEvent({ action: 'Run', description: `Ran AI verdicts on ${pairs.length} mapped attribute${pairs.length === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const mappedUntested = results.filter(r =>
@@ -181,11 +184,13 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
   const handleRunAutomated = () => {
     const updated = runAutomatedChecks(testItems, attributeTesting.results);
     onUpdateAttributeTesting({ ...attributeTesting, results: updated, testingStarted: true });
+    logEvent({ action: 'Run', description: `Ran automated checks on ${testItems.length} test item${testItems.length === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const handleBulkPassPending = () => {
     const now = nowStamp();
     const filteredTiIds = new Set(filteredItems.map(ti => ti.id));
+    let passedCount = 0;
     onUpdateAttributeTesting({
       ...attributeTesting,
       results: attributeTesting.results.map(r => {
@@ -196,9 +201,11 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
         const attr = ctrl?.attributes.find(a => a.id === r.attributeId);
         const wf = attr?.workflowId ? ctrl?.workflows.find(w => w.id === attr.workflowId) : null;
         if (wf && wf.type !== 'Manual') return r;
+        passedCount++;
         return { ...r, result: 'PASS' as const, source: 'MANUAL' as const, testedBy: auditorName, testedAt: now, notes: 'Bulk marked as Pass' };
       }),
     });
+    logEvent({ action: 'Update', description: `Bulk-passed ${passedCount} pending attribute${passedCount === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   return (
@@ -245,12 +252,12 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
       {/* Control filter */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <button onClick={() => setControlFilter('all')}
-          className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${controlFilter === 'all' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${controlFilter === 'all' ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
           All Controls
         </button>
         {activeControls.map(c => (
           <button key={c.id} onClick={() => setControlFilter(c.id)}
-            className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${controlFilter === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${controlFilter === c.id ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
             {c.id} {c.name.length > 25 ? c.name.slice(0, 24) + '…' : c.name}
           </button>
         ))}
@@ -264,15 +271,15 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="text-[0.75rem] font-bold text-text">{control.id} — {control.name}</span>
               <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${control.nature === 'Preventive' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{control.nature}</span>
-              <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${control.automation === 'Automated' ? 'bg-purple-50 text-purple-700' : control.automation === 'Hybrid' ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>{control.automation}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${control.automation === 'Automated' ? 'bg-purple-50 text-purple-700' : control.automation === 'Hybrid' ? 'bg-indigo-50 text-indigo-700' : 'bg-canvas text-ink-600'}`}>{control.automation}</span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.6875rem]">
               {control.attributes.map(a => {
                 const wf = a.workflowId ? control.workflows.find(w => w.id === a.workflowId) : null;
                 return (
-                  <span key={a.id} className="text-gray-500">
+                  <span key={a.id} className="text-ink-500">
                     <span className="font-bold text-primary">{a.code}</span> {a.name}
-                    {wf && <span className="text-gray-400 ml-1">({wf.type})</span>}
+                    {wf && <span className="text-ink-400 ml-1">({wf.type})</span>}
                   </span>
                 );
               })}
@@ -300,7 +307,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
                     const sampleResult = deriveComplianceSampleResult(ti.id, results);
                     return (
                       <tr key={ti.id} className="border-b border-border-light/50">
-                        <td className="px-2 py-2 font-mono text-gray-500 text-[0.6875rem]">{ti.referenceId}</td>
+                        <td className="px-2 py-2 font-mono text-ink-500 text-[0.6875rem]">{ti.referenceId}</td>
                         <td className="px-2 py-2 text-text truncate max-w-[140px]" title={ti.description}>{ti.description}</td>
                         {control.attributes.map(a => {
                           const ar = results.find(r => r.testItemId === ti.id && r.attributeId === a.id);
@@ -361,7 +368,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
           <h4 className="text-[0.8125rem] font-bold text-text">Testing Status</h4>
           <span className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-bold ${
             summary.completionPercent === 100 ? 'bg-emerald-50 text-emerald-700' :
-            summary.completedChecks > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+            summary.completedChecks > 0 ? 'bg-amber-50 text-amber-700' : 'bg-canvas text-ink-500'
           }`}>
             {summary.completionPercent === 100 ? 'Testing Complete' : summary.completedChecks > 0 ? 'In Progress' : 'Not Started'}
           </span>
@@ -376,7 +383,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.75rem]">
               {c.ok ? <CheckCircle2 size={11} className="text-emerald-500" /> : <AlertCircle size={11} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -404,6 +411,7 @@ function AttributeDetailPanel({ target, results, evidence, testItems, aiRunning,
   onUpdate: (testItemId: string, attributeId: string, result: AttrTestResult, notes?: string) => void;
   onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const ar = results.find(r => r.testItemId === target.testItemId && r.attributeId === target.attributeId);
   const ti = testItems.find(t => t.id === target.testItemId);
   const ctrl = MOCK_COMPLIANCE_CONTROLS.find(c => c.id === ti?.linkedControlId);
@@ -421,22 +429,24 @@ function AttributeDetailPanel({ target, results, evidence, testItems, aiRunning,
 
   const handleMark = (result: AttrTestResult) => {
     onUpdate(target.testItemId, target.attributeId, result, notes);
+    logEvent({ action: 'Update', description: `Recorded ${result === 'NOT_TESTED' ? 'reset' : result} on attribute "${attr.name}" for ${ti.referenceId}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const handleOverride = () => {
     if (!notes.trim()) return;
     const flipped: AttrTestResult = ar.result === 'PASS' ? 'FAIL' : 'PASS';
     onUpdate(target.testItemId, target.attributeId, flipped, notes);
+    logEvent({ action: 'Update', description: `Overrode AI verdict to ${flipped} on attribute "${attr.name}" for ${ti.referenceId}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   return (
-    <div className="rounded-xl border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
+    <div className="rounded-lg border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
           <h5 className="text-[0.8125rem] font-bold text-text">{ti.referenceId} — Attribute {attr.code}</h5>
-          <p className="text-[0.75rem] text-gray-500">{attr.name} · {attr.assertion} · {ctrl.name}</p>
+          <p className="text-[0.75rem] text-ink-500">{attr.name} · {attr.assertion} · {ctrl.name}</p>
         </div>
-        <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
+        <button onClick={onClose} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-[0.75rem]">
@@ -457,8 +467,8 @@ function AttributeDetailPanel({ target, results, evidence, testItems, aiRunning,
           <div className="space-y-0.5">
             {mappedEvidence.map(e => (
               <div key={e.id} className="flex items-center gap-1.5 text-[0.6875rem] text-text">
-                <FileText size={10} className="text-gray-400 shrink-0" />{e.fileName}
-                <span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${e.source === 'USER_UPLOADED' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>
+                <FileText size={10} className="text-ink-400 shrink-0" />{e.fileName}
+                <span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${e.source === 'USER_UPLOADED' ? 'bg-canvas text-ink-600' : 'bg-blue-50 text-blue-600'}`}>
                   {e.source === 'USER_UPLOADED' ? 'User' : 'PBC'}
                 </span>
               </div>

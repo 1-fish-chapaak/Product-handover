@@ -25,18 +25,18 @@ export default function MethodSelectionCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       whileHover={disabled ? undefined : { y: -3 }}
-      className={`group text-left flex flex-col rounded-[12px] border bg-canvas-elevated p-5 min-h-[150px] transition-[border-color,box-shadow] ${
+      className={`group text-left flex flex-col rounded-lg border bg-canvas-elevated p-5 min-h-[150px] transition-[border-color,box-shadow] ${
         disabled
           ? 'border-canvas-border opacity-55 cursor-not-allowed'
           : 'border-canvas-border hover:border-brand-200 hover:shadow-[0_10px_28px_rgba(15,8,30,0.07)] cursor-pointer'
       }`}
     >
-      <span className="inline-flex items-center justify-center w-9 h-9 rounded-[9px] bg-brand-50 text-brand-600 mb-3">
+      <span className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-brand-50 text-brand-600 mb-3">
         <Icon size={18} aria-hidden="true" />
       </span>
-      <h3 className="text-[14px] font-semibold text-ink-900 mb-1">{title}</h3>
-      <p className="text-[12px] text-ink-500 leading-relaxed flex-1">{description}</p>
-      <span className={`mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold ${disabled ? 'text-ink-400' : 'text-brand-700'}`}>
+      <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1">{title}</h3>
+      <p className="text-[0.75rem] text-ink-500 leading-relaxed flex-1">{description}</p>
+      <span className={`mt-4 inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold ${disabled ? 'text-ink-400' : 'text-brand-700'}`}>
         {disabled ? (disabledHint ?? ctaLabel) : ctaLabel}
         {!disabled && <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
       </span>

@@ -54,3 +54,9 @@ rbac-share-review/
 /tests/__screenshots__/templates-nomatch.png
 /tests/__screenshots__/templates-search.png
 docs/prd-sox-icfr/dist/
+/tests/__screenshots__/live/
+/tests/__screenshots__/sweep/
+/tests/__screenshots__/sweep-deep/
+/tests/__screenshots__/sweep-drill/
+/tests/__screenshots__/usage/
+/tests/__screenshots__/dom-audit.json

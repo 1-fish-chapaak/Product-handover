@@ -229,17 +229,39 @@ export function arrangeForTemplate(templateId: string, defs: GeneratedQueryDef[]
  * Every string is editable placeholder content, composed from the attached
  * queries where the section maps to query data.
  */
+/** The rating a heading names, if it names one. "Detailed findings — medium"
+ *  is one section of a severity split, and it must speak only about its own
+ *  rating: a medium section reporting high-severity results is a lie the
+ *  reader can see. */
+const SECTION_SEVERITY = /\b(critical|high|medium|low)\b/i;
+
 export function composeSectionContent(sectionName: string, defs: GeneratedQueryDef[]): string {
-  const n = defs.length;
+  // Scope the numbers to the section's own rating before anything is counted,
+  // so no two sections of a split can end up with the same sentence.
+  const severity = sectionName.match(SECTION_SEVERITY)?.[1]?.toLowerCase();
+  const scoped = severity
+    ? defs.filter(d => (d.severity ?? '').toLowerCase() === severity)
+    : defs;
+  const n = scoped.length;
   const qWord = n === 1 ? 'query' : 'queries';
-  const high = defs.filter(d => d.severity === 'High').length;
+  const high = scoped.filter(d => d.severity === 'High').length;
+
+  if (severity) {
+    // A severity-split section states its own count, or says plainly that it
+    // has nothing this time. It never borrows the report's totals.
+    if (/quer(y|ies)|findings|observations|results|register/i.test(sectionName)) {
+      return n > 0
+        ? `${n} ${qWord} rated ${severity}. The detail follows.`
+        : `No ${severity}-rated findings in this report.`;
+    }
+  }
   // Data-anchored sections summarise the attached queries — richer, data-aware
   // prose, but ONLY when queries are actually attached. With no data (e.g. a
   // template applied before queries are added) these fall through to the section's
   // descriptive one-liner, so nothing ever reads "0 queries".
   if (n > 0) {
     if (/testing results|quer(y|ies)|findings|assessment|register/i.test(sectionName))
-      return `${n} ${qWord} executed${high > 0 ? ` — ${high} returned high-severity results` : ''}. Detailed results follow.`;
+      return `${n} ${qWord} executed${high > 0 ? `, ${high} of them returning high-severity results` : ''}. Detailed results follow.`;
     if (/deficienc|detailed description/i.test(sectionName))
       return high > 0
         ? `${high} of ${n} ${qWord} surfaced high-severity exceptions requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
@@ -249,7 +271,7 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
         ? `${high} of ${n} ${qWord} surfaced potential non-compliance requiring action. Each gap maps to its requirement and owner in the results above.`
         : 'No material gaps identified against the assessed requirements. Record any minor observations during review.';
     if (/recommendation|insight/i.test(sectionName)) {
-      const recs = defs.flatMap(d => d.observations).slice(0, 3);
+      const recs = scoped.flatMap(d => d.observations).slice(0, 3);
       if (recs.length > 0) return recs.join(' ');
     }
     if (/conclusion|opinion|assertion/i.test(sectionName))
@@ -257,7 +279,7 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
         ? `Based on the ${n} ${qWord} reviewed, control weaknesses were identified (${high} high-severity). A qualified conclusion is warranted pending remediation of the exceptions above.`
         : `Based on the ${n} ${qWord} reviewed, no significant exceptions were noted. Controls over the covered areas operated effectively for the period.`;
     if (/appendix/i.test(sectionName))
-      return `Source queries: ${defs.map(d => d.id).join(', ')}. Full query outputs, parameters, and evidence references are retained with this report.`;
+      return `Source queries: ${scoped.map(d => d.id).join(', ')}. Full query outputs, parameters, and evidence references are retained with this report.`;
   }
   // Everything else — and every section when no queries are attached — starts from
   // the section's one-line description, matching the template preview.

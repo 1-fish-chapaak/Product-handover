@@ -80,10 +80,10 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
   // ── Zero-observations empty state ──
   if (observations.length === 0) {
     return (
-      <div className="rounded-[12px] border border-dashed border-canvas-border p-12 text-center max-w-[640px] mx-auto">
+      <div className="rounded-lg border border-dashed border-canvas-border p-12 text-center max-w-[640px] mx-auto">
         <FileSearch size={26} className="text-ink-300 mx-auto mb-3" aria-hidden="true" />
-        <h3 className="text-[15px] font-semibold text-ink-800 mb-1">No observations found</h3>
-        <p className="text-[13px] text-ink-500 mb-5 max-w-[420px] mx-auto">We couldn't extract any observations from this report. Try the structured template approach, or upload a clearer report.</p>
+        <h3 className="text-[0.9375rem] font-semibold text-ink-800 mb-1">No observations found</h3>
+        <p className="text-[0.8125rem] text-ink-500 mb-5 max-w-[420px] mx-auto">We couldn't extract any observations from this report. Try the structured template approach, or upload a clearer report.</p>
         <Button variant="primary" leftIcon={<RotateCcw size={15} />} onClick={reset}>Start over</Button>
       </div>
     );
@@ -100,7 +100,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
           <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">
             {observations.length} observation{observations.length === 1 ? '' : 's'} found
           </h2>
-          <p className="mt-1 text-[11.5px] text-ink-400">Extracted at <span className="tabular-nums font-medium text-ink-500">{Math.round(session.confidence * 100)}%</span> confidence</p>
+          <p className="mt-1 text-[0.71875rem] text-ink-400">Extracted at <span className="tabular-nums font-medium text-ink-500">{Math.round(session.confidence * 100)}%</span> confidence</p>
         </div>
 
         {/* Filter as a vertical nav — only 3 states, reads cleaner stacked. */}
@@ -115,12 +115,12 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
                 key={o.key}
                 onClick={() => setFilterGuarded(o.key)}
                 aria-pressed={active}
-                className={`flex items-center justify-between h-8 px-2.5 rounded-[7px] text-[12.5px] cursor-pointer transition-colors ${
+                className={`flex items-center justify-between h-8 px-2.5 rounded-sm text-[0.78125rem] cursor-pointer transition-colors ${
                   active ? 'bg-brand-50 text-brand-800 font-semibold' : 'text-ink-600 font-medium hover:bg-canvas hover:text-ink-900'
                 }`}
               >
                 <span>{o.label}</span>
-                <span className={`tabular-nums text-[11.5px] ${active ? 'text-brand-600' : 'text-ink-400'}`}>{o.n}</span>
+                <span className={`tabular-nums text-[0.71875rem] ${active ? 'text-brand-600' : 'text-ink-400'}`}>{o.n}</span>
               </button>
             );
           })}
@@ -128,17 +128,17 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
 
         {/* Selection summary + a proper select/clear button (not a text link). */}
         <div className="mt-6 pt-5 border-t border-canvas-border">
-          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">Adding to this ATR</p>
+          <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">Adding to this ATR</p>
           <p className="mt-2 text-ink-600">
-            <span className="text-[15px] font-semibold tabular-nums text-ink-900">{selected.length}</span>
-            <span className="text-[12.5px] text-ink-400"> of {observations.length} observation{observations.length === 1 ? '' : 's'}</span>
+            <span className="text-[0.9375rem] font-semibold tabular-nums text-ink-900">{selected.length}</span>
+            <span className="text-[0.78125rem] text-ink-400"> of {observations.length} observation{observations.length === 1 ? '' : 's'}</span>
           </p>
           {selected.length === observations.length ? (
-            <button onClick={() => setAll(false)} className="mt-3 w-full inline-flex items-center justify-center h-8 rounded-[8px] border border-canvas-border text-[12px] font-semibold text-ink-600 hover:bg-canvas hover:text-ink-900 cursor-pointer transition-colors">
+            <button onClick={() => setAll(false)} className="mt-3 w-full inline-flex items-center justify-center h-8 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:bg-canvas hover:text-ink-900 cursor-pointer transition-colors">
               Clear selection
             </button>
           ) : (
-            <button onClick={() => setAll(true)} className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 rounded-[8px] border border-brand-200 bg-brand-50 text-[12px] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
+            <button onClick={() => setAll(true)} className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 rounded-md border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
               <CheckCheck size={13} aria-hidden="true" /> Select all {observations.length}
             </button>
           )}
@@ -146,12 +146,12 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
 
         {/* Issues nudge — pinned to the bottom of the rail, with a real CTA. */}
         {obsWithIssues.length > 0 && filter !== 'issues' && (
-          <div className="mt-auto rounded-[10px] border border-mitigated/25 bg-mitigated-50 p-3">
-            <div className="flex items-start gap-2 text-[11.5px] leading-snug text-mitigated-700">
+          <div className="mt-auto rounded-lg border border-mitigated/25 bg-mitigated-50 p-3">
+            <div className="flex items-start gap-2 text-[0.71875rem] leading-snug text-mitigated-700">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" aria-hidden="true" />
               <p><span className="font-semibold tabular-nums">{obsWithIssues.length}</span> {obsWithIssues.length === 1 ? 'observation needs' : 'observations need'} a few fields before {obsWithIssues.length === 1 ? "it's" : "they're"} ready.</p>
             </div>
-            <button onClick={() => setFilterGuarded('issues')} className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 h-7 rounded-[7px] bg-mitigated-600 text-white text-[11.5px] font-semibold hover:bg-mitigated-700 cursor-pointer transition-colors">
+            <button onClick={() => setFilterGuarded('issues')} className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 h-7 rounded-sm bg-mitigated-600 text-white text-[0.71875rem] font-semibold hover:bg-mitigated-700 cursor-pointer transition-colors">
               Review {obsWithIssues.length === 1 ? 'it' : 'them'} <ArrowRight size={11} aria-hidden="true" />
             </button>
           </div>
@@ -162,7 +162,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
       <div className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 pt-4 pb-4">
         {/* Select-all header — one checkbox to include/exclude every observation. */}
         <div className="flex items-center justify-between gap-3 mb-3 px-1">
-          <label className="inline-flex items-center gap-2.5 cursor-pointer text-[12.5px] font-semibold text-ink-800">
+          <label className="inline-flex items-center gap-2.5 cursor-pointer text-[0.78125rem] font-semibold text-ink-800">
             <Checkbox
               checked={selected.length === observations.length && observations.length > 0}
               onChange={() => setAll(selected.length !== observations.length)}
@@ -170,7 +170,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
             />
             Select all observations
           </label>
-          <span className="text-[11.5px] text-ink-400 tabular-nums">
+          <span className="text-[0.71875rem] text-ink-400 tabular-nums">
             <span className="font-semibold text-ink-700">{selected.length}</span> of {observations.length} selected · only selected proceed
           </span>
         </div>
@@ -190,7 +190,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
             ))}
           </div>
         ) : (
-          <div className="rounded-[12px] border border-dashed border-canvas-border p-8 text-center text-[13px] text-ink-500">
+          <div className="rounded-lg border border-dashed border-canvas-border p-8 text-center text-[0.8125rem] text-ink-500">
             No observations match this filter.
           </div>
         )}
@@ -199,7 +199,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
       {/* Footer — pinned below the scroll area */}
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
-          <p className="text-[12px] text-ink-500">
+          <p className="text-[0.75rem] text-ink-500">
             {blockReason ?? <span className="text-compliant-700 font-medium">{selected.length} selected — ready for annexures.</span>}
           </p>
           <Button variant="primary" size="md" rightIcon={<ArrowRight size={15} />} disabled={!canContinue} onClick={onContinue} title={blockReason ?? undefined}>

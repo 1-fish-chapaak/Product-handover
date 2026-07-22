@@ -28,17 +28,17 @@ export default function AssignmentsAdmin({ role, exceptions }: { role: Persona; 
 
   if (mine.length === 0) {
     return (
-      <div className="border border-dashed border-canvas-border rounded-[12px] p-10 text-center">
+      <div className="border border-dashed border-canvas-border rounded-lg p-10 text-center">
         <ClipboardList size={22} className="text-ink-300 mx-auto mb-2" />
-        <p className="text-[13px] font-semibold text-ink-700">No assignments yet</p>
-        <p className="text-[12px] text-ink-500 mt-1">Select exceptions in the Exceptions tab and click "Assign Approval Flow".</p>
+        <p className="text-[0.8125rem] font-semibold text-ink-700">No assignments yet</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1">Select exceptions in the Exceptions tab and click "Assign Approval Flow".</p>
       </div>
     );
   }
 
   return (
-    <div className="border border-canvas-border rounded-[12px] bg-canvas-elevated overflow-hidden">
-      <div className="grid grid-cols-[120px_1fr_160px_180px_auto] gap-3 px-4 py-2.5 bg-[#FAFAFB] border-b border-canvas-border text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
+    <div className="border border-canvas-border rounded-lg bg-canvas-elevated overflow-hidden">
+      <div className="grid grid-cols-[120px_1fr_160px_180px_auto] gap-3 px-4 py-2.5 bg-[#FAFAFB] border-b border-canvas-border text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">
         <span>Exception</span><span>Approval Route</span><span>Assignee</span><span>Status</span><span className="text-right">Actions</span>
       </div>
       <div className="divide-y divide-canvas-border">
@@ -49,11 +49,11 @@ export default function AssignmentsAdmin({ role, exceptions }: { role: Persona; 
           const active = a.status === 'drafting' || a.status === 'in-approval' || a.status === 'needs-reassignment';
           return (
             <div key={a.id} className="grid grid-cols-[120px_1fr_160px_180px_auto] gap-3 px-4 py-3 items-center">
-              <span className="font-mono text-[12.5px] font-semibold text-brand-700">{a.exceptionId}</span>
-              <span className="text-[12.5px] text-ink-700 truncate" title={ex?.title}>{a.workflowName} <span className="text-ink-400">v{a.workflowVersion}</span></span>
-              <span className="text-[12.5px] text-ink-800 truncate">{userName(a.assigneeId)}</span>
+              <span className="font-mono text-[0.78125rem] font-semibold text-brand-700">{a.exceptionId}</span>
+              <span className="text-[0.78125rem] text-ink-700 truncate" title={ex?.title}>{a.workflowName} <span className="text-ink-400">v{a.workflowVersion}</span></span>
+              <span className="text-[0.78125rem] text-ink-800 truncate">{userName(a.assigneeId)}</span>
               <span className="flex items-center gap-1.5 flex-wrap">
-                <span className={`inline-flex items-center gap-1 h-6 px-2.5 text-[11px] font-semibold rounded-full ${st.cls}`}>
+                <span className={`inline-flex items-center gap-1 h-6 px-2.5 text-[0.6875rem] font-semibold rounded-full ${st.cls}`}>
                   {a.status === 'needs-reassignment' && <AlertTriangle size={10} />}
                   {st.label(lvl?.name)}
                 </span>
@@ -69,8 +69,8 @@ export default function AssignmentsAdmin({ role, exceptions }: { role: Persona; 
               </span>
 
               {reassigning === a.id && (
-                <div className="col-span-5 mt-1 mb-1 flex items-center gap-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] p-2">
-                  <span className="text-[11.5px] font-semibold text-ink-600 px-1">Reassign to</span>
+                <div className="col-span-5 mt-1 mb-1 flex items-center gap-2 bg-[#FAFAFB] border border-canvas-border rounded-md p-2">
+                  <span className="text-[0.71875rem] font-semibold text-ink-600 px-1">Reassign to</span>
                   <div className="w-[260px]"><UserSelect users={usersForPersona(role)} value={null} onChange={(id) => { reassign(a.id, id); setReassigning(null); }} placeholder="Pick a user…" /></div>
                   <button onClick={() => setReassigning(null)} className="w-7 h-7 rounded flex items-center justify-center text-ink-400 hover:bg-[#F4F2F7] cursor-pointer"><X size={14} /></button>
                 </div>

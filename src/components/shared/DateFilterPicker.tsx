@@ -12,7 +12,7 @@ export type DateFilter =
   | { kind: 'preset'; id: 'all' | 'today' | '7d' | '30d' | '90d' }
   | { kind: 'custom'; from: string; to: string }; // ISO yyyy-mm-dd
 
-interface DatePreset {
+export interface DatePreset {
   id: 'all' | 'today' | '7d' | '30d' | '90d';
   label: string;
   days: number | null;
@@ -56,6 +56,41 @@ function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/* ── What a preset actually resolves to ──────────────────────────────────────
+   "Last 30 days" is a promise about the calendar, and every reader completes it
+   the same way: thirty days back from today. On a view whose `today` is a real
+   clock that reading is correct. On a view anchored to the newest record — the
+   whole of Platform Usage — it is wrong by however stale the data is, and the
+   label gives the reader nothing to catch it with: they pick "Last 30 days" in
+   July and silently get March 23 to April 21.
+
+   So when a caller opts in, every preset carries the dates it will actually
+   hand back, measured from that caller's own anchor. The window is inclusive of
+   both ends (N days back from the anchor INCLUDING the anchor day), which is
+   exactly what the consuming views slice. */
+
+/** The day `n` days before `d`, in UTC — the same clock every anchored view uses. */
+function shiftUtcDays(d: Date, n: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - n * DAY_MS);
+}
+
+const utcDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const utcDayYear = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+
+/**
+ * The real dates a preset covers, relative to `today` (the caller's anchor).
+ * `earliest` is only needed by "All time" — without it that preset has no
+ * knowable start, and says nothing rather than guessing.
+ */
+export function presetRangeLabel(preset: DatePreset, today: Date, earliest?: Date): string | null {
+  if (preset.days === null) {
+    return earliest ? `${utcDay(earliest)} – ${utcDayYear(today)}` : null;
+  }
+  if (preset.days <= 1) return utcDayYear(today);
+  const from = shiftUtcDays(today, preset.days - 1);
+  return `${utcDay(from)} – ${utcDayYear(today)}`;
+}
+
 export function dateFilterLabel(filter: DateFilter): string {
   if (filter.kind === 'preset') return DATE_PRESETS.find(p => p.id === filter.id)?.label ?? 'All time';
   return `${formatShortDate(filter.from)} – ${formatShortDate(filter.to)}`;
@@ -84,11 +119,28 @@ interface DateFilterPickerProps {
   /** Stack the custom From/To inputs vertically instead of 2-up — needed when
    *  the popover is narrow enough that two date fields won't fit side by side. */
   rangeStacked?: boolean;
+  /** Print the real dates each preset resolves to, under its label. Callers whose
+   *  `today` is not wall-clock today (Platform Usage anchors on the newest
+   *  record) must turn this on, or "Last 30 days" reads as a promise about a
+   *  window they will not get. */
+  showPresetDates?: boolean;
+  /** Oldest day in the caller's series. Only "All time" needs it. */
+  earliest?: Date;
 }
 
-export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9', panelWidth = 'w-[280px]', rangeStacked = false }: DateFilterPickerProps) {
+export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9', panelWidth = 'w-[280px]', rangeStacked = false, showPresetDates = false, earliest }: DateFilterPickerProps) {
   const active = isDateFilterActive(filter);
-  const label = dateFilterLabel(filter);
+  /* The trigger is the only part of this control most people ever read. Putting
+     the shorthand on it ("Last 30 days") and the truth inside the popover means
+     the truth is behind a click nobody has a reason to make: the shorthand looks
+     complete. So when the presets are anchored rather than wall-clock, the closed
+     trigger names the dates too, and the shorthand stays in the popover where the
+     choice is being made. A custom range already labels itself this way — this
+     just stops presets being the one filter that doesn't. */
+  const resolvedLabel = showPresetDates && filter.kind === 'preset'
+    ? presetRangeLabel(DATE_PRESETS.find(p => p.id === filter.id) ?? DATE_PRESETS[0], today, earliest)
+    : null;
+  const label = resolvedLabel ?? dateFilterLabel(filter);
   const todayIso = today.toISOString().slice(0, 10);
 
   const [from, setFrom] = useState<string>(filter.kind === 'custom' ? filter.from : '');
@@ -115,7 +167,13 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     <div className="relative">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-2 px-3 ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+        // Named distinctly from the presets inside the popover: both the trigger
+        // and the "Last 30 days" option would otherwise answer to the same
+        // accessible name, which is ambiguous to a screen reader and to a test.
+        aria-label={`Date range: ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`flex items-center gap-2 px-3 whitespace-nowrap ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
             : open
@@ -143,16 +201,29 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
             <div className="px-1.5 py-1">
               {DATE_PRESETS.map(p => {
                 const isCurrent = filter.kind === 'preset' && filter.id === p.id;
+                const dates = showPresetDates ? presetRangeLabel(p, today, earliest) : null;
                 return (
                   <button
                     key={p.id}
                     onClick={() => onApply({ kind: 'preset', id: p.id })}
-                    className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[0.75rem] cursor-pointer transition-colors ${
+                    className={`w-full flex items-center justify-between gap-3 text-left px-2.5 py-1.5 rounded-md text-[0.75rem] cursor-pointer transition-colors ${
                       isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas'
                     }`}
                   >
-                    <span>{p.label}</span>
-                    {isCurrent && <span className="text-[0.625rem] font-semibold uppercase tracking-wide">Active</span>}
+                    {/* The label is the shorthand; the dates are what you get. The
+                        dates sit under it rather than beside it so the column of
+                        labels still scans as a list of choices. */}
+                    <span className="min-w-0">
+                      <span className="block">{p.label}</span>
+                      {dates && (
+                        <span className={`block mt-0.5 text-[0.6875rem] font-normal tabular-nums truncate ${
+                          isCurrent ? 'text-brand-600' : 'text-ink-400'
+                        }`}>
+                          {dates}
+                        </span>
+                      )}
+                    </span>
+                    {isCurrent && <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide">Active</span>}
                   </button>
                 );
               })}

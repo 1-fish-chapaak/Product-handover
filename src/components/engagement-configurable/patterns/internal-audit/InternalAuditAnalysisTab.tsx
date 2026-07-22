@@ -15,12 +15,13 @@ import {
   type InternalAuditAnalysisState, type AnalysisRun, type AnalysisRunType,
 } from './internalAuditAnalysisData';
 import type { InternalAuditObservationsState, InternalAuditObservation } from './internalAuditObservationsData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
-const RUN_STATUS_CLS = { DRAFT: 'bg-gray-100 text-gray-600', READY: 'bg-blue-50 text-blue-700', RUNNING: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700', FAILED: 'bg-red-50 text-red-700' };
+const RUN_STATUS_CLS = { DRAFT: 'bg-canvas text-ink-600', READY: 'bg-blue-50 text-blue-700', RUNNING: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700', FAILED: 'bg-red-50 text-red-700' };
 const MODE_ICONS: Record<AnalysisRunType, React.ElementType> = { WORKFLOW: Workflow, QA_ANALYSIS: MessageSquare, DOCUMENT_REVIEW: Eye, DATA_REVIEW: Database };
 
 interface Props {
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function InternalAuditAnalysisTab({ engagement, scope, requestState, analysisState, onUpdateAnalysis, observationsState, onUpdateObservations, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const { requests, proceedWithoutIDR } = requestState;
   const receivedFiles = requests.filter(r => r.filesReceived.length > 0).flatMap(r => r.filesReceived.map(f => ({ file: f, requestId: r.id, requestTitle: r.title, requestType: r.requestType, scopeLabel: r.linkedScopeLabel })));
   const summary = deriveAnalysisSummary(analysisState);
@@ -47,7 +49,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
   if (!hasInputs) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle size={24} className="text-gray-300 mb-3" />
+        <AlertCircle size={24} className="text-ink-300 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Analysis</h4>
         <p className="text-[0.75rem] text-text-muted mb-4">No received IDR files available yet. Receive IDR files or proceed without IDR to start analysis.</p>
         <button onClick={() => onNavigateTab?.('requests-idr')}
@@ -92,6 +94,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
       observations: [...observationsState.observations, formalObs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Created potential observation "${ex.title}" from analysis finding`, module: 'Engagements', entity: 'Observation' });
   };
 
   // Batch promote — all open findings for a control → directly creates formal observations
@@ -119,18 +122,22 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
       observations: [...observationsState.observations, ...newObs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Created ${newObs.length} potential observation${newObs.length === 1 ? '' : 's'} from analysis findings`, module: 'Engagements', entity: 'Observation' });
   };
 
   const handleUpdateExStatus = (runId: string, exId: string, status: 'REVIEWED' | 'DISMISSED') => {
+    const ex = analysisState.runs.find(r => r.id === runId)?.exceptions.find(e => e.id === exId);
     onUpdateAnalysis({
       ...analysisState,
       runs: analysisState.runs.map(r => r.id === runId ? { ...r, exceptions: r.exceptions.map(e => e.id === exId ? { ...e, status } : e) } : r),
     });
+    logEvent({ action: 'Update', description: `${status === 'REVIEWED' ? 'Marked analysis finding reviewed' : 'Dismissed analysis finding'} — "${ex?.title || exId}"`, module: 'Engagements', entity: 'Run' });
   };
 
   const addRun = (run: AnalysisRun) => {
     onUpdateAnalysis({ ...analysisState, runs: [...analysisState.runs, run] });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created analysis run "${run.title}"`, module: 'Engagements', entity: 'Run' });
   };
 
   const hasCompletedRuns = analysisState.runs.some(r => r.status === 'COMPLETED');
@@ -162,19 +169,19 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
         return (
           <div className="space-y-3">
             {/* Executive summary */}
-            <div className="rounded-xl border border-border-light bg-white p-4">
+            <div className="rounded-lg border border-border-light bg-white p-4">
               <h4 className="text-[0.75rem] font-bold text-text mb-3 flex items-center gap-2"><Shield size={13} className="text-primary" />Control Execution Summary</h4>
               <div className="grid grid-cols-5 gap-2">
                 {[
                   { label: 'Controls Executed', value: controlGroups.size, color: 'text-primary' },
                   { label: 'Workflows Executed', value: controlRuns.length, color: 'text-text' },
                   { label: 'Findings Generated', value: totalFindings, color: totalFindings > 0 ? 'text-amber-600' : 'text-text' },
-                  { label: 'High / Critical', value: highCritical, color: highCritical > 0 ? 'text-red-600' : 'text-gray-400' },
+                  { label: 'High / Critical', value: highCritical, color: highCritical > 0 ? 'text-red-600' : 'text-ink-400' },
                   { label: 'Pending Review', value: openFindings, color: openFindings > 0 ? 'text-amber-600' : 'text-emerald-600' },
                 ].map(s => (
                   <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
                     <div className={`text-[1rem] font-bold tabular-nums ${s.color}`}>{s.value}</div>
-                    <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+                    <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -190,7 +197,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
                       <div className="flex items-center gap-2">
                         <Shield size={12} className="text-primary shrink-0" />
                         <span className="text-[0.75rem] font-semibold text-text">{controlName}</span>
-                        <span className="text-[0.625rem] text-gray-400">{runs.length} workflow{runs.length !== 1 ? 's' : ''} executed</span>
+                        <span className="text-[0.625rem] text-ink-400">{runs.length} workflow{runs.length !== 1 ? 's' : ''} executed</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {allEx.filter(e => e.status === 'OPEN').length > 0 && (
@@ -218,8 +225,8 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
                                 <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
                                 <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${EX_STATUS_CLS[ex.status]}`}>{ex.status === 'OPEN' ? 'Potential Finding' : ex.status === 'CONVERTED_TO_OBSERVATION' ? 'Promoted' : ex.status}</span>
                               </div>
-                              <p className="text-[0.625rem] text-gray-400 mt-0.5">{ex.description}</p>
-                              <span className="text-[0.5625rem] text-gray-400 mt-0.5 inline-block">Source: {parentRun.workflowName}</span>
+                              <p className="text-[0.625rem] text-ink-400 mt-0.5">{ex.description}</p>
+                              <span className="text-[0.5625rem] text-ink-400 mt-0.5 inline-block">Source: {parentRun.workflowName}</span>
                             </div>
                             <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                               {ex.status === 'OPEN' && (
@@ -227,7 +234,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
                                   <button onClick={() => setReviewModal({ runId: parentRun.id, exId: ex.id })}
                                     className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Review</button>
                                   <button onClick={() => handleUpdateExStatus(parentRun.id, ex.id, 'DISMISSED')}
-                                    className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
+                                    className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-ink-500 bg-canvas hover:bg-canvas-border cursor-pointer transition-colors">Dismiss</button>
                                   <button onClick={() => handleCreatePotentialObs(parentRun.id, ex.id)}
                                     className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Promote to Observation</button>
                                 </>
@@ -251,7 +258,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <h4 className="text-[0.6875rem] font-bold text-text">Next Step</h4>
         {!hasCompletedRuns && !hasPotentialObs ? (
-          <span className="text-[0.625rem] text-gray-500">Complete at least one analysis run before moving to observations.</span>
+          <span className="text-[0.625rem] text-ink-500">Complete at least one analysis run before moving to observations.</span>
         ) : (
           <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-200/50 text-[0.625rem] text-blue-600">
             <Info size={11} className="shrink-0 mt-0.5" />
@@ -314,7 +321,7 @@ function FindingDetailModal({ finding, workflowName, controlName, onClose, onMar
                   <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${EX_STATUS_CLS[finding.status]}`}>{finding.status === 'OPEN' ? 'Potential Finding' : finding.status}</span>
                 </div>
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+              <button onClick={onClose} className="p-1.5 rounded-lg text-ink-400 hover:text-text hover:bg-canvas cursor-pointer transition-colors">
                 <X size={16} />
               </button>
             </div>
@@ -325,33 +332,33 @@ function FindingDetailModal({ finding, workflowName, controlName, onClose, onMar
             {/* Finding details */}
             <div className="space-y-3">
               <div>
-                <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Description</span>
+                <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Description</span>
                 <p className="text-[0.75rem] text-text leading-relaxed">{finding.description}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Control</span>
+                  <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Control</span>
                   <span className="text-[0.75rem] text-text font-medium">{controlName}</span>
                 </div>
                 <div>
-                  <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Workflow Source</span>
+                  <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Workflow Source</span>
                   <div className="flex items-center gap-1.5">
                     <Workflow size={12} className="text-brand-600" />
                     <span className="text-[0.75rem] text-text font-medium">{workflowName}</span>
                   </div>
                 </div>
                 <div>
-                  <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Severity</span>
+                  <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Severity</span>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${SEVERITY_CLS[finding.severity]}`}>{finding.severity}</span>
                 </div>
                 <div>
-                  <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Category</span>
+                  <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Category</span>
                   <span className="text-[0.75rem] text-text">{finding.source || 'Workflow Analysis'}</span>
                 </div>
               </div>
               {finding.linkedFile && finding.linkedFile !== '—' && (
                 <div>
-                  <span className="text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Source File</span>
+                  <span className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider block mb-1">Source File</span>
                   <span className="text-[0.75rem] text-text">{finding.linkedFile}</span>
                 </div>
               )}
@@ -394,11 +401,11 @@ function FindingDetailModal({ finding, workflowName, controlName, onClose, onMar
           </div>
 
           {/* Footer Actions */}
-          <div className="px-6 py-3 border-t border-border-light bg-gray-50/50 flex items-center justify-end gap-2">
+          <div className="px-6 py-3 border-t border-border-light bg-canvas/50 flex items-center justify-end gap-2">
             {finding.status === 'OPEN' && (
               <>
                 <button onClick={onDismiss}
-                  className="px-3 py-2 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors">
+                  className="px-3 py-2 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-ink-500 hover:bg-canvas cursor-pointer transition-colors">
                   Dismiss
                 </button>
                 <button onClick={onMarkReviewed}
@@ -433,23 +440,23 @@ function RunDetail({ run, onCreateObs, onUpdateExStatus }: {
 }) {
   return (
     <div className="bg-surface-2/15 border-b border-border-light px-6 py-4 space-y-3">
-      <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Summary</h6><p className="text-[0.6875rem] text-text">{run.summary}</p></div>
+      <div><h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Summary</h6><p className="text-[0.6875rem] text-text">{run.summary}</p></div>
       <div className="grid grid-cols-3 gap-3 text-[0.625rem]">
-        <div><span className="text-gray-400 block text-[0.5625rem]">Input Files</span><span className="text-text">{run.inputFiles.join(', ') || '—'}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">{run.runType === 'WORKFLOW' ? 'Workflow' : 'Question'}</span><span className="text-text">{run.workflowName || run.question || '—'}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Completed</span><span className="text-text">{run.completedAt} by {run.runBy}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Input Files</span><span className="text-text">{run.inputFiles.join(', ') || '—'}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">{run.runType === 'WORKFLOW' ? 'Workflow' : 'Question'}</span><span className="text-text">{run.workflowName || run.question || '—'}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Completed</span><span className="text-text">{run.completedAt} by {run.runBy}</span></div>
       </div>
       {run.exceptions.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Exceptions ({run.exceptions.length})</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Exceptions ({run.exceptions.length})</h6>
           <div className="space-y-1.5">
             {run.exceptions.map(ex => (
               <div key={ex.id} className="rounded-lg border border-border-light p-3 flex items-start gap-3">
                 <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold shrink-0 mt-0.5 ${SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[0.6875rem] font-medium text-text mb-0.5">{ex.title}</div>
-                  <div className="text-[0.625rem] text-gray-500 mb-1">{ex.description}</div>
-                  <div className="flex items-center gap-2 text-[0.5625rem] text-gray-400">
+                  <div className="text-[0.625rem] text-ink-500 mb-1">{ex.description}</div>
+                  <div className="flex items-center gap-2 text-[0.5625rem] text-ink-400">
                     <span>Source: {ex.source}</span>
                     <span>· File: {ex.linkedFile}</span>
                     <span className={`px-1.5 py-0.5 rounded text-[0.4375rem] font-bold ${EX_STATUS_CLS[ex.status]}`}>{ex.status.replace(/_/g, ' ')}</span>
@@ -458,7 +465,7 @@ function RunDetail({ run, onCreateObs, onUpdateExStatus }: {
                 {ex.status === 'OPEN' && (
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => onUpdateExStatus(run.id, ex.id, 'REVIEWED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Review</button>
-                    <button onClick={() => onUpdateExStatus(run.id, ex.id, 'DISMISSED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
+                    <button onClick={() => onUpdateExStatus(run.id, ex.id, 'DISMISSED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-ink-500 bg-canvas hover:bg-canvas-border cursor-pointer transition-colors">Dismiss</button>
                     <button onClick={() => onCreateObs(run.id, ex.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">→ Observation</button>
                   </div>
                 )}
@@ -500,7 +507,7 @@ function CreateRunForm({ receivedFiles, workflows, onSave, onCancel }: {
 
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create Analysis Run</h4><button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
+      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create Analysis Run</h4><button onClick={onCancel} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
 
       {/* Mode selector */}
       <div>
@@ -510,7 +517,7 @@ function CreateRunForm({ receivedFiles, workflows, onSave, onCancel }: {
             const Icon = MODE_ICONS[t];
             return (
               <button key={t} onClick={() => setRunType(t)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer border-2 transition-all ${runType === t ? 'border-primary bg-primary/10 text-primary' : 'border-border-light text-gray-500 hover:border-gray-300'}`}>
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer border-2 transition-all ${runType === t ? 'border-primary bg-primary/10 text-primary' : 'border-border-light text-ink-500 hover:border-ink-300'}`}>
                 <Icon size={11} />{RUN_TYPE_LABELS[t]}
               </button>
             );
@@ -544,7 +551,7 @@ function CreateRunForm({ receivedFiles, workflows, onSave, onCancel }: {
           <div className="flex flex-wrap gap-1.5">
             {receivedFiles.map(f => (
               <button key={f} onClick={() => toggleFile(f)}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-medium cursor-pointer transition-colors ${selectedFiles.has(f) ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-gray-100 text-gray-500 border border-transparent hover:bg-gray-200'}`}>
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-medium cursor-pointer transition-colors ${selectedFiles.has(f) ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-canvas text-ink-500 border border-transparent hover:bg-canvas-border'}`}>
                 <FileText size={8} />{f}
               </button>
             ))}

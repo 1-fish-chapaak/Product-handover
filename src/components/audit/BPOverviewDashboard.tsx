@@ -84,7 +84,7 @@ function Card({ title, subtitle, icon: Icon, right, children, onClick }: {
   right?: React.ReactNode; children: React.ReactNode; onClick?: () => void;
 }) {
   return (
-    <section className="rounded-xl border border-canvas-border bg-white p-5 flex flex-col">
+    <section className="rounded-lg border border-canvas-border bg-white p-5 flex flex-col">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h3 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight flex items-center gap-2">

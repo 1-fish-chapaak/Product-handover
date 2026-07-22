@@ -22,7 +22,7 @@ test('attached source shows as a chip above the message, no [Attached:] text', a
   const name = (await firstRow.locator('.flex-1 .truncate').first().innerText()).trim();
   await firstRow.click();
 
-  const attach = page.getByRole('button', { name: /^Attach \d/ }); // footer "Attach 1", not the "+"
+  const attach = page.getByRole('button', { name: /^Add \d/ }); // footer "Add 1", not the "+"
   await expect(attach).toBeEnabled({ timeout: 4000 });
   await attach.click();
 

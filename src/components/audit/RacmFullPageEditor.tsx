@@ -17,6 +17,7 @@ import {
   AlertTriangle, Star, Trash2, Check,
 } from 'lucide-react';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
   groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
@@ -946,6 +947,7 @@ function RacmGridRow({
 
 // ─── Attribute Edit Modal ─────────────────────────────────────────────────
 function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave: (v: string) => void; onClose: () => void }) {
+  const logEvent = useAuditLog();
   const initial = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [attrs, setAttrs] = useState<string[]>(initial);
   const [input, setInput] = useState('');
@@ -969,7 +971,10 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
 
   const removeAttr = (idx: number) => setAttrs(p => p.filter((_, i) => i !== idx));
 
-  const handleSave = () => onSave(attrs.join(', '));
+  const handleSave = () => {
+    onSave(attrs.join(', '));
+    logEvent({ action: 'Update', description: 'Saved RACM attributes', module: 'Governance', entity: 'RACM' });
+  };
 
   return (
     <>

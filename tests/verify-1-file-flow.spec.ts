@@ -2,7 +2,7 @@
  * Verifies the workflow runs end-to-end with only 1 file attached
  * (not all required inputs filled).
  */
-import { test, expect, type Page } from './_helpers';
+import { test, expect, answerClarification, type Page } from './_helpers';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -30,16 +30,16 @@ test('workflow runs with only 1 file attached', async ({ page }) => {
   await expect(page.getByRole('button', { name: /All Data/ })).toBeVisible({ timeout: 8000 });
   await page.getByRole('button', { name: /All Data/ }).click();
   await page.waitForTimeout(300);
-  await page.getByRole('button', { name: /SAP ERP: AP Module/i }).click();
+  await page.getByRole('button', { name: /SAP ERP.*AP Module/i }).first().click();
   await page.waitForTimeout(200);
   await snap(page, 'A-1-source-selected');
-  await page.getByRole('button', { name: /^Attach$/ }).click();
+  await page.getByRole('button', { name: /^Add( \d+)?$/ }).click();
   await page.waitForTimeout(800);
   await snap(page, 'B-after-attach');
 
   // Clarify should appear after file processing wait
-  await expect(page.getByRole('option', { name: /Last 30 days/i })).toBeVisible({ timeout: 10000 });
-  for (let i = 0; i < 4; i++) { await page.keyboard.press('1'); await page.waitForTimeout(400); }
+  await expect(page.getByRole('radio', { name: /Last 30 days/i })).toBeVisible({ timeout: 10000 });
+  await answerClarification(page);
   await snap(page, 'C-clarify-done');
 
   // Map step → Approve & Run → runs the workflow directly

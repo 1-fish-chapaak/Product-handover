@@ -87,7 +87,7 @@ export default function EngagementCompareView({ onBack }: Props) {
 
         {/* Picker dropdown */}
         {pickerOpen && (
-          <div className="mb-4 glass-card rounded-xl p-3 max-w-md">
+          <div className="mb-4 glass-card p-3 max-w-md">
             <p className="text-[0.6875rem] text-text-muted uppercase tracking-wide font-semibold mb-2">Pick an engagement</p>
             <div className="space-y-1 max-h-[280px] overflow-y-auto">
               {ENGAGEMENTS.filter(e => !selectedIds.includes(e.id)).map(e => (
@@ -125,7 +125,7 @@ export default function EngagementCompareView({ onBack }: Props) {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className={`glass-card rounded-2xl p-5 border-2 ${TYPE_TINT[eng.type]} relative`}
+                  className={`glass-card p-5 border-2 ${TYPE_TINT[eng.type]} relative`}
                 >
                   <button
                     onClick={() => removeEngagement(eng.id)}
@@ -179,7 +179,7 @@ export default function EngagementCompareView({ onBack }: Props) {
 
         {/* Differences callout */}
         {selected.length >= 2 && (
-          <div className="mt-6 glass-card rounded-xl p-5">
+          <div className="mt-6 glass-card p-5">
             <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Differences worth a closer look</h3>
             <ul className="space-y-2 text-[0.75rem] text-text-secondary">
               {(() => {

@@ -429,12 +429,10 @@ export function CrossWorkflowCorrelationPanel({
       ? {
           label: `${displayName} is already on a standing watch${watchEntry ? ` — since ${watchEntry.approvedOn}` : ''}.`,
           detail: `${watch.watchNote ? `${watch.watchNote} ` : ''}The same ${entityType} failing ${checks} unrelated checks points at one upstream driver, not ${checks} coincidences.`,
-          confirmFirst: false,
         }
       : {
           label: 'One upstream driver, not check-specific noise.',
           detail: `The same ${entityType} failing ${checks} unrelated checks points at a shared upstream cause. Confirm against the ${entityType} master before concluding.`,
-          confirmFirst: true,
         },
     reasoning: `The ${checks} checks flag one ${entityType}, not ${checks} separate problems. This run's ${shortName} exceptions overlap the ${correlated.length} earlier run${correlated.length === 1 ? '' : 's'}, so memory counts the pattern once — it is not new noise.`,
     atStake: `${usd0(totalPaid)} flagged across sampled rows in ${checks} checks — sampled rows only, the full population is larger. This run: ${currentRunFlag}.`,

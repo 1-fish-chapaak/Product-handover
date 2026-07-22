@@ -45,15 +45,15 @@ export default function WorkflowPipelineBuilder({
   return (
     <div className="space-y-3">
       {levels.map((lvl, i) => (
-        <div key={lvl.id} className="border border-canvas-border rounded-[10px] p-3.5 bg-canvas-elevated">
+        <div key={lvl.id} className="border border-canvas-border rounded-lg p-3.5 bg-canvas-elevated">
           <div className="flex items-center gap-2 mb-3">
-            <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+            <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-[0.6875rem] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
             <GripVertical size={14} className="text-ink-300" />
             <input
               value={lvl.name}
               onChange={e => update(lvl.id, { name: e.target.value })}
               placeholder="Level name"
-              className="flex-1 h-9 px-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] font-semibold text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15"
+              className="flex-1 h-9 px-2.5 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] font-semibold text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15"
             />
             <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="w-7 h-7 rounded flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-[#F4F2F7] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"><ChevronUp size={14} /></button>
             <button type="button" onClick={() => move(i, 1)} disabled={i === levels.length - 1} className="w-7 h-7 rounded flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-[#F4F2F7] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"><ChevronDown size={14} /></button>
@@ -62,28 +62,28 @@ export default function WorkflowPipelineBuilder({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="text-[11px] font-semibold text-ink-600 mb-1 block">Approver(s)</label>
+              <label className="text-[0.6875rem] font-semibold text-ink-600 mb-1 block">Approver(s)</label>
               <UserMultiSelect users={users} selectedIds={lvl.assigneeIds} onChange={ids => update(lvl.id, { assigneeIds: ids })} />
             </div>
             <div className="col-span-2">
-              <label className="text-[11px] font-semibold text-ink-600 mb-1 block">Approval mode</label>
+              <label className="text-[0.6875rem] font-semibold text-ink-600 mb-1 block">Approval mode</label>
               <select
                 value={lvl.mode}
                 onChange={e => update(lvl.id, { mode: e.target.value as ApprovalMode })}
-                className="w-full h-9 px-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-600 cursor-pointer"
+                className="w-full h-9 px-2.5 bg-canvas-elevated border border-canvas-border rounded-md text-[0.78125rem] text-ink-800 focus:outline-none focus:border-brand-600 cursor-pointer"
               >
                 {MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
             <label className="col-span-2 flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={lvl.allowSendBack} onChange={e => update(lvl.id, { allowSendBack: e.target.checked })} className="w-4 h-4 accent-brand-600 cursor-pointer" />
-              <span className="text-[12.5px] text-ink-700">Allow this level to send the case back to the previous level</span>
+              <span className="text-[0.78125rem] text-ink-700">Allow this level to send the case back to the previous level</span>
             </label>
           </div>
         </div>
       ))}
 
-      <button type="button" onClick={add} className="w-full h-10 inline-flex items-center justify-center gap-1.5 text-[12.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-[8px] cursor-pointer transition-colors">
+      <button type="button" onClick={add} className="w-full h-10 inline-flex items-center justify-center gap-1.5 text-[0.78125rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md cursor-pointer transition-colors">
         <Plus size={14} /> Add approval level
       </button>
     </div>

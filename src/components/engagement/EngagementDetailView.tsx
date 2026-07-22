@@ -405,7 +405,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             { label: 'Reviewer', value: eng.reviewer, icon: Eye },
             { label: 'Activated', value: eng.activatedAt, icon: Zap },
           ].map(m => (
-            <div key={m.label} className="glass-card rounded-xl p-2.5">
+            <div key={m.label} className="glass-card p-2.5">
               <div className="flex items-center gap-1 mb-0.5"><m.icon size={10} className="text-text-muted" /><span className="text-[0.5625rem] font-semibold text-text-muted uppercase">{m.label}</span></div>
               <div className="text-[0.6875rem] font-medium text-text truncate" title={m.value}>{m.value}</div>
             </div>
@@ -432,7 +432,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                   { step: 2, icon: Database, label: 'Generate Samples', desc: 'Select sampling method and generate samples.', color: 'text-brand-700 bg-brand-50' },
                   { step: 3, icon: Target, label: 'Start Testing', desc: 'Evaluate samples against workflow attributes.', color: 'text-compliant-700 bg-compliant-50' },
                 ].map(s => (
-                  <div key={s.step} className="glass-card rounded-xl p-4">
+                  <div key={s.step} className="glass-card p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-6 h-6 rounded-full flex items-center justify-center text-[0.6875rem] font-bold text-white bg-gradient-to-br from-primary to-primary-medium">{s.step}</div>
                       <div className={`p-1 rounded-lg ${s.color}`}><s.icon size={12} /></div>
@@ -523,7 +523,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             </div>
 
             {/* Controls Execution Table */}
-            <div className="glass-card rounded-xl overflow-hidden">
+            <div className="glass-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-[0.75rem]">
                   <thead>
@@ -604,7 +604,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="glass-card rounded-xl p-4 mb-4">
+                <div className="glass-card p-4 mb-4">
                   <div className="flex items-center justify-between">
                     <div><span className="text-[0.6875rem] font-bold text-text-muted uppercase">Reviewer</span><p className="text-[0.8125rem] font-semibold text-text">{eng.reviewer}</p></div>
                     <div className="flex items-center gap-4">
@@ -617,7 +617,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                   const passed = ctrl.samples.filter(s => s.status === 'pass').length;
                   const failed = ctrl.samples.filter(s => s.status === 'fail' || s.status === 'exception').length;
                   return (
-                    <div key={ctrl.id} className={`glass-card rounded-xl p-5 ${ctrl.exceptions > 0 ? 'border-l-4 border-l-risk' : ''}`}>
+                    <div key={ctrl.id} className={`glass-card p-5 ${ctrl.exceptions > 0 ? 'border-l-4 border-l-risk' : ''}`}>
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
@@ -661,7 +661,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             ) : (
               <div className="space-y-3">
                 {FINDINGS.map(f => (
-                  <div key={f.id} className="glass-card rounded-xl p-5 border-l-4 border-risk hover:border-risk/80 transition-colors cursor-pointer"
+                  <div key={f.id} className="glass-card p-5 border-l-4 border-risk hover:border-risk/80 transition-colors cursor-pointer"
                     onClick={() => { const ctrl = sourceControls.find(c => c.controlId === f.controlId); if (ctrl) onOpenControl(ctrl.id, ctrl); }}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">

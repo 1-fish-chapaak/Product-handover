@@ -35,10 +35,10 @@ export const RATING_LABELS: Record<OverallRating, string> = {
 };
 export const RATING_CLS: Record<OverallRating, string> = {
   SATISFACTORY: 'bg-emerald-50 text-emerald-700 border-emerald-200', NEEDS_IMPROVEMENT: 'bg-amber-50 text-amber-700 border-amber-200',
-  UNSATISFACTORY: 'bg-red-50 text-red-700 border-red-200', NOT_APPLICABLE: 'bg-gray-50 text-gray-600 border-gray-200',
+  UNSATISFACTORY: 'bg-red-50 text-red-700 border-red-200', NOT_APPLICABLE: 'bg-canvas text-ink-600 border-canvas-border',
 };
 export const REPORT_STATUS_CLS: Record<ReportStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600', DRAFT: 'bg-blue-50 text-blue-700', READY_FOR_REVIEW: 'bg-purple-50 text-purple-700', ISSUED: 'bg-emerald-50 text-emerald-700',
+  NOT_STARTED: 'bg-canvas text-ink-600', DRAFT: 'bg-blue-50 text-blue-700', READY_FOR_REVIEW: 'bg-purple-50 text-purple-700', ISSUED: 'bg-emerald-50 text-emerald-700',
 };
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }

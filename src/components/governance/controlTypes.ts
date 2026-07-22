@@ -29,7 +29,7 @@ export const BP_COLORS: Record<string, string> = {
 
 export const AUTOMATION_STYLES: Record<string, { bg: string; text: string }> = {
   Automated:      { bg: 'bg-evidence-50', text: 'text-evidence-700' },
-  Manual:         { bg: 'bg-gray-100',    text: 'text-gray-700' },
+  Manual:         { bg: 'bg-canvas',    text: 'text-ink-700' },
   'IT-dependent': { bg: 'bg-purple-100',  text: 'text-purple-800' },
 };
 
@@ -40,9 +40,9 @@ export const NATURE_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 export const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  Draft:    { bg: 'bg-gray-100',      text: 'text-gray-600',      dot: 'bg-gray-400' },
+  Draft:    { bg: 'bg-canvas',      text: 'text-ink-600',      dot: 'bg-ink-400' },
   Active:   { bg: 'bg-emerald-50',    text: 'text-emerald-700',   dot: 'bg-emerald-500' },
-  Archived: { bg: 'bg-gray-50',       text: 'text-gray-400',      dot: 'bg-gray-300' },
+  Archived: { bg: 'bg-canvas',       text: 'text-ink-400',      dot: 'bg-ink-300' },
 };
 
 /** Derived design status — NOT stored, always computed */

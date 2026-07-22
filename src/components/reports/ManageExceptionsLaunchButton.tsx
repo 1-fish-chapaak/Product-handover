@@ -58,7 +58,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-2.5 rounded-[8px] text-[0.75rem] leading-4 font-semibold text-brand-700 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-2.5 rounded-md text-[0.75rem] leading-4 font-semibold text-brand-700 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
@@ -78,7 +78,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
       disabled={launching}
       title="Review & classify exceptions · opens in a new tab"
       aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-colors duration-200 bg-brand-600 hover:bg-brand-700 ${
+      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-md cursor-pointer transition-colors duration-200 bg-brand-600 hover:bg-brand-700 ${
         launching ? 'bg-brand-700' : ''
       }`}
     >

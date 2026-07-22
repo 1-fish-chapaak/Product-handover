@@ -96,7 +96,7 @@ function ResultBadge({ result }: { result: string }) {
     pass: { bg: 'bg-green-50', text: 'text-green-700', icon: <CheckCircle2 size={10} /> },
     fail: { bg: 'bg-red-50', text: 'text-red-700', icon: <AlertTriangle size={10} /> },
     pending: { bg: 'bg-amber-50', text: 'text-amber-700', icon: <Clock size={10} /> },
-    na: { bg: 'bg-gray-100', text: 'text-gray-500', icon: null },
+    na: { bg: 'bg-canvas', text: 'text-ink-500', icon: null },
   };
   const s = map[result] || map.pending;
   return (
@@ -108,7 +108,7 @@ function ResultBadge({ result }: { result: string }) {
 }
 
 function ReviewerBadge({ status }: { status: string }) {
-  if (!status) return <span className="text-gray-300 text-[0.6875rem]">-</span>;
+  if (!status) return <span className="text-ink-300 text-[0.6875rem]">-</span>;
   const map: Record<string, { bg: string; text: string }> = {
     approved: { bg: 'bg-green-50 border-green-200', text: 'text-green-700' },
     pending: { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700' },
@@ -172,7 +172,7 @@ export default function WorkingPaperPanel({ onClose, onViewWorkflow, onViewTrace
               Trace
             </button>
           )}
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-text-muted cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-canvas text-text-muted cursor-pointer">
             <X size={16} />
           </button>
         </div>
@@ -248,7 +248,7 @@ export default function WorkingPaperPanel({ onClose, onViewWorkflow, onViewTrace
                       {isExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                       <div className="flex items-center gap-2">
                         <span className="text-[0.8125rem] font-bold text-text">Round {round.round}</span>
-                        {isLocked && <Lock size={11} className="text-gray-400" />}
+                        {isLocked && <Lock size={11} className="text-ink-400" />}
                       </div>
                       <span className="text-[0.6875rem] text-text-muted">{round.date}</span>
                     </div>

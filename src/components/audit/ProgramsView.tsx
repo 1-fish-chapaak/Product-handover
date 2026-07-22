@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Building2, Search, Plus, X, Trash2, HelpCircle, ChevronRight,
 } from 'lucide-react';
-import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
+import { BUSINESS_PROCESSES } from '../../data/mockData';
+import { processCoverage, processRisks, processControls, racmsForProcess } from '../../data/processCoverage';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 import { Button } from '../shared/Button';
@@ -33,22 +35,25 @@ const inputCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.812
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
-function racmsForProcess(bpId: string) { return RACMS.filter(r => r.bpId === bpId).length; }
+// Coverage, risks, controls and the RACM count all live in the data layer, so
+// Platform Usage reports the same figures this screen shows. See
+// data/processCoverage.ts.
+//
+// These cards used to read the `risks`/`controls` fields carried on the process
+// record, which are stale: they claim P2P has 9 risks / 24 controls and R2R
+// 11 / 31, while the detail page one click away counts the actual records and
+// shows 6 / 6 and 2 / 1. The card and its own detail page disagreed.
+const coverageForProcess = (bp: { id: string }) => processCoverage(bp.id);
 
-/** Coverage = % of this process's risks that have at least one mapped control. */
-function coverageForProcess(bp: { id: string }) {
-  const rs = RISKS.filter(r => r.bpId === bp.id);
-  if (!rs.length) return 0;
-  const ids = new Set(rs.map(r => r.id));
-  const covered = new Set(CONTROLS.filter(c => ids.has(c.riskId)).map(c => c.riskId));
-  return Math.round((covered.size / rs.length) * 100);
-}
+/** The count is rendered separately (mono/tabular), so this is just the noun. */
+const noun = (n: number, word: string) => `${word}${n === 1 ? '' : 's'}`;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [search, setSearch] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
 
@@ -66,6 +71,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
     addUserProcess(newBP);
     setShowCreateDrawer(false);
     addToast({ message: `"${newBP.name}" (${newBP.abbr}) created as Draft`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created business process "${newBP.name}" (${newBP.abbr})`, module: 'Process Hub', entity: 'Business Process' });
     onSelectBP(newBP.id);
   };
 
@@ -144,10 +150,10 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     {/* Identity row — abbr stamp + process name, with a quiet open affordance. */}
                     <div className="flex items-start justify-between gap-3 mb-5">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[0.75rem] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[0.75rem] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[1rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">{bp.name}</span>
-                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] text-[0.5625rem] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
+                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-sm text-[0.5625rem] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
@@ -170,11 +176,11 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-400 pb-0.5">
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{bp.risks}</span> risks</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{processRisks(bp.id).length}</span> {noun(processRisks(bp.id).length, 'risk')}</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{bp.controls}</span> controls</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{processControls(bp.id).length}</span> {noun(processControls(bp.id).length, 'control')}</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.id)}</span> RACMs</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.abbr)}</span> {noun(racmsForProcess(bp.abbr), 'RACM')}</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-paper-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${coverage}%` }} /></div>

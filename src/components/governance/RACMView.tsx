@@ -19,6 +19,7 @@ import { Pill, type Tone } from '../shared/StatusBadge';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   /* no external props needed */
@@ -47,7 +48,7 @@ const MOCK_RACMS: RACMRow[] = [
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
   Active: { bg: 'bg-success-bg', text: 'text-compliant-700', dot: 'bg-success' },
   'In Mapping': { bg: 'bg-warning-bg', text: 'text-mitigated-700', dot: 'bg-warning' },
-  Draft: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+  Draft: { bg: 'bg-canvas', text: 'text-ink-600', dot: 'bg-ink-400' },
 };
 
 // Tone equivalents for the shared Pill primitive (DESIGN.md §7.10.4). STATUS_STYLES
@@ -117,6 +118,7 @@ const SEVERITY_STYLES: Record<string, { bg: string; text: string }> = {
 /* ─── 3-Level Risk Hierarchy Component ─── */
 function RiskHierarchy() {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [expandedRisks, setExpandedRisks] = useState<Set<string>>(new Set());
   const [expandedControls, setExpandedControls] = useState<Set<string>>(new Set());
 
@@ -185,6 +187,14 @@ function RiskHierarchy() {
                           onClick={(e) => {
                             e.stopPropagation();
                             addToast({ message: control.linked ? `Unlinked ${control.id}` : `Linked ${control.id}`, type: 'info' });
+                            logEvent({
+                              action: 'Update',
+                              description: control.linked
+                                ? `Unlinked control "${control.name}" (${control.id}) from risk "${risk.name}" in the RACM hierarchy`
+                                : `Linked control "${control.name}" (${control.id}) to risk "${risk.name}" in the RACM hierarchy`,
+                              module: 'Governance',
+                              entity: 'RACM',
+                            });
                           }}
                           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                             control.linked
@@ -209,7 +219,17 @@ function RiskHierarchy() {
                                 <div className="text-[0.75rem] text-text-muted">{wf.id}</div>
                               </div>
                               <button
-                                onClick={() => addToast({ message: wf.linked ? `Unlinked ${wf.id}` : `Linked ${wf.id}`, type: 'info' })}
+                                onClick={() => {
+                                  addToast({ message: wf.linked ? `Unlinked ${wf.id}` : `Linked ${wf.id}`, type: 'info' });
+                                  logEvent({
+                                    action: 'Update',
+                                    description: wf.linked
+                                      ? `Unlinked workflow "${wf.name}" (${wf.id}) from control "${control.name}" in the RACM hierarchy`
+                                      : `Linked workflow "${wf.name}" (${wf.id}) to control "${control.name}" in the RACM hierarchy`,
+                                    module: 'Governance',
+                                    entity: 'RACM',
+                                  });
+                                }}
                                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                                   wf.linked
                                     ? 'bg-risk-50 text-risk-700 hover:bg-risk-50'
@@ -237,6 +257,7 @@ function RiskHierarchy() {
 export default function RACMView({}: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filtered = MOCK_RACMS.filter(r => {
@@ -263,7 +284,10 @@ export default function RACMView({}: Props) {
           <div className="flex items-center gap-3">
             {can('racm_edit') && (
               <button
-                onClick={() => addToast({ message: 'New RACM template created', type: 'info' })}
+                onClick={() => {
+                  addToast({ message: 'New RACM template created', type: 'info' });
+                  logEvent({ action: 'Create', description: 'Created a new RACM template', module: 'Governance', entity: 'RACM' });
+                }}
                 className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
               >
                 <Plus size={14} />
@@ -272,7 +296,10 @@ export default function RACMView({}: Props) {
             )}
             {can('racm_generate') && (
               <button
-                onClick={() => addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' })}
+                onClick={() => {
+                  addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' });
+                  logEvent({ action: 'Create', description: 'Generated RACM from processes with AI', module: 'Governance', entity: 'RACM' });
+                }}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer"
               >
                 <Sparkles size={14} />
@@ -358,8 +385,12 @@ export default function RACMView({}: Props) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={(e) => { e.stopPropagation(); addToast({ message: `Exporting ${racm.name}...`, type: 'info' }); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-text-secondary text-[0.75rem] font-semibold rounded-lg cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToast({ message: `Exporting ${racm.name}...`, type: 'info' });
+                        logEvent({ action: 'Export', description: `Exported RACM "${racm.name}" (${racm.id})`, module: 'Governance', entity: 'RACM' });
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-canvas hover:bg-canvas text-text-secondary text-[0.75rem] font-semibold rounded-lg cursor-pointer"
                     >
                       <Download size={12} />
                       Export
@@ -445,7 +476,7 @@ export default function RACMView({}: Props) {
               render: (item) => {
                 const racm = item as unknown as RACMRow;
                 const pct = racm.completeness;
-                const barColor = pct >= 80 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-gray-300';
+                const barColor = pct >= 80 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-ink-300';
                 return (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-surface-3 rounded-full overflow-hidden">

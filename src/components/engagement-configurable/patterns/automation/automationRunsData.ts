@@ -28,10 +28,10 @@ export interface AutomationRun {
 export interface AutomationRunsState { runs: AutomationRun[] }
 
 export const RUN_STATUS_CLS: Record<AutoRunStatus, string> = {
-  READY: 'bg-blue-50 text-blue-700', RUNNING: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700', FAILED: 'bg-red-50 text-red-700', CANCELLED: 'bg-gray-100 text-gray-500',
+  READY: 'bg-blue-50 text-blue-700', RUNNING: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700', FAILED: 'bg-red-50 text-red-700', CANCELLED: 'bg-canvas text-ink-500',
 };
-export const EX_SEVERITY_CLS: Record<ExceptionSeverity, string> = { LOW: 'bg-gray-100 text-gray-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700' };
-export const EX_STATUS_CLS: Record<ExceptionStatus, string> = { OPEN: 'bg-amber-50 text-amber-700', REVIEWED: 'bg-blue-50 text-blue-700', DISMISSED: 'bg-gray-100 text-gray-500', CASE_CANDIDATE: 'bg-purple-50 text-purple-700' };
+export const EX_SEVERITY_CLS: Record<ExceptionSeverity, string> = { LOW: 'bg-canvas text-ink-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700' };
+export const EX_STATUS_CLS: Record<ExceptionStatus, string> = { OPEN: 'bg-amber-50 text-amber-700', REVIEWED: 'bg-blue-50 text-blue-700', DISMISSED: 'bg-canvas text-ink-500', CASE_CANDIDATE: 'bg-purple-50 text-purple-700' };
 export const EX_CAT_LABELS: Record<ExceptionCategory, string> = { RECONCILIATION_MISMATCH: 'Reconciliation Mismatch', DUPLICATE: 'Duplicate', MISSING_DOCUMENT: 'Missing Document', POLICY_VIOLATION: 'Policy Violation', DATA_QUALITY: 'Data Quality', OTHER: 'Other' };
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }

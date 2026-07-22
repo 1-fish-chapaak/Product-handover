@@ -55,7 +55,7 @@ export default function InternalAuditRacmTab({ engagement, scope, onNavigateTab 
       {/* SOP-only — show SOP context + embedded RACM workspace with default data */}
       {hasSopOnly && (
         <>
-          <div className="rounded-xl border border-border-light bg-white p-5 space-y-3">
+          <div className="rounded-lg border border-border-light bg-white p-5 space-y-3">
             <div className="flex items-start gap-3">
               <FileText size={18} className="text-primary shrink-0 mt-0.5" />
               <div>
@@ -70,8 +70,8 @@ export default function InternalAuditRacmTab({ engagement, scope, onNavigateTab 
                 <span key={s.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-2/30 border border-border-light/50 text-[0.6875rem]">
                   <FileText size={10} className="text-primary shrink-0" />
                   <span className="font-medium text-text">{s.name}</span>
-                  <span className="text-gray-400">{s.version}</span>
-                  <span className="text-gray-400">· {s.process}</span>
+                  <span className="text-ink-400">{s.version}</span>
+                  <span className="text-ink-400">· {s.process}</span>
                 </span>
               ))}
             </div>

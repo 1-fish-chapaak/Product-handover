@@ -53,7 +53,7 @@ export default function StepWritePrompt({
         transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
         className="mx-auto w-full max-w-[820px] px-6"
       >
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 shadow-[0_1px_0_rgba(106,18,205,0.04),0_24px_48px_-32px_rgba(106,18,205,0.18)]">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-5 shadow-[0_1px_0_rgba(106,18,205,0.04),0_24px_48px_-32px_rgba(106,18,205,0.18)]">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -120,7 +120,7 @@ export default function StepWritePrompt({
               <button
                 type="button"
                 onClick={() => onPickTemplate(w.id)}
-                className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors cursor-pointer"
+                className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-lg px-4 py-3 transition-colors cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                   <Workflow size={16} className="text-brand-600" />
@@ -165,7 +165,7 @@ export default function StepWritePrompt({
 
           {WORKFLOWS.map((w) => (
             <li key={w.id}>
-              <div className="group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors">
+              <div className="group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-lg px-4 py-3 transition-colors">
                 <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                   <FileText size={16} className="text-brand-600" />
                 </div>

@@ -9,8 +9,10 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, CloudUpload,
+  WifiOff, FileCheck2, FolderArchive, CloudUpload, FileUp,
 } from 'lucide-react';
+import BringYourOwnTemplateTab from './byot/BringYourOwnTemplateTab';
+import TemplatePreview from './TemplatePreview';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
@@ -34,17 +36,13 @@ import {
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
 import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type PickableQuery } from './templateQueryPool';
 import ReportView from './ReportView';
-// CUSTOM_TEMPLATES now lives in the shared keystone; re-exported so existing
-// importers (App.tsx) keep working.
-export { CUSTOM_TEMPLATES } from './reportShared';
-
-
 
 // Observation attachment type + helpers live in AddObservationModal.
 
@@ -103,18 +101,18 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
           <ArrowLeft size={14} /> Back to reports
         </button>
         <div className="flex items-center gap-2">
-          <div className="skeleton-cool h-9 w-9 rounded-[8px]" />
-          <div className="skeleton-cool h-9 w-24 rounded-[8px]" />
+          <div className="skeleton-cool h-9 w-9 rounded-md" />
+          <div className="skeleton-cool h-9 w-24 rounded-md" />
         </div>
       </div>
 
       <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
         {/* Outline rail */}
         <aside className="hidden xl:block w-[252px] shrink-0">
-          <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5 space-y-2">
+          <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-3.5 space-y-2">
             <div className="skeleton-cool h-3 w-24 rounded mb-3" />
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skeleton-cool h-7 rounded-[8px]" style={{ '--sk-delay': `${i * 90}ms` } as React.CSSProperties} />
+              <div key={i} className="skeleton-cool h-7 rounded-md" style={{ '--sk-delay': `${i * 90}ms` } as React.CSSProperties} />
             ))}
           </div>
         </aside>
@@ -123,7 +121,7 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
         <div className="min-w-0 flex-1">
           {/* Gradient banner — keeps the report's identity while it loads */}
           <div
-            className="relative overflow-hidden rounded-[12px] mb-5 px-9 pt-9 pb-8"
+            className="relative overflow-hidden rounded-lg mb-5 px-9 pt-9 pb-8"
             style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
           >
             <div className="skeleton-on-brand h-3 w-28 rounded mb-4" />
@@ -133,7 +131,7 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* KPI bar — matches the live unified divided stat-bar */}
-          <div className="overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated mb-5">
+          <div className="overflow-hidden rounded-lg border border-canvas-border bg-canvas-elevated mb-5">
             <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="border-l border-t border-canvas-border px-5 py-6">
@@ -150,7 +148,7 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
           {/* Section cards */}
           <div className="space-y-4">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="rounded-[12px] border border-canvas-border bg-white px-9 py-7">
+              <div key={i} className="rounded-lg border border-canvas-border bg-white px-9 py-7">
                 <div className="flex items-center gap-2.5 mb-6">
                   <div className="skeleton-cool h-4 w-10 rounded" />
                   <div className="skeleton-cool h-4 w-28 rounded" />
@@ -176,7 +174,7 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
 function SourceChip({ source }: { source: 'system' | 'custom' | string }) {
   const custom = source === 'custom';
   return (
-    <span className={`inline-flex items-center h-6 px-2.5 rounded-full border text-[11px] font-semibold whitespace-nowrap shrink-0 ${custom ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-draft-50 text-ink-600 border-canvas-border'}`}>
+    <span className={`inline-flex items-center h-6 px-2.5 rounded-full border text-[0.6875rem] font-semibold whitespace-nowrap shrink-0 ${custom ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-draft-50 text-ink-600 border-canvas-border'}`}>
       {custom ? 'Custom' : 'System'}
     </span>
   );
@@ -196,12 +194,13 @@ export default function ReportsView({
   onOpenSox,
 }: ReportsViewProps = {}) {
   const { addToast, updateToast } = useToast();
+  const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
-  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
+  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports' | 'byot'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
+    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports' || t === 'byot') return t;
     // Legacy deep-links to the old top-level ATR / Evidence tabs land in My Reports.
     if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
     return 'my-reports';
@@ -282,6 +281,9 @@ export default function ReportsView({
   // Drop any selection when the user leaves the current report list.
   useEffect(() => { setSelectedReportIds(new Set()); }, [reportType, activeTab, viewMode]);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // Clicking a template opens it as the page it produces — read the report
+  // first, generate from there.
+  const [previewTemplate, setPreviewTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
   // app, App.tsx owns the canonical list, so this branch stays empty to avoid
@@ -415,7 +417,7 @@ export default function ReportsView({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: r.status === 'final' ? 'final' : 'draft',
+        status: 'final',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -454,7 +456,6 @@ export default function ReportsView({
     source: 'system' | 'custom';
     description: string;
     pills: string[];
-    status: 'draft' | 'final';
     date: string;
     sortDate: number;
     open: () => void;
@@ -497,10 +498,12 @@ export default function ReportsView({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
         source: r.templateId && customTemplateIds.has(r.templateId) ? 'custom' : 'system',
         description: reportDesc(r), pills: reportPills(r),
-        status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => openReport(r),
-        download: () => startReportDownload(addToast, updateToast, r.name),
+        download: () => {
+          startReportDownload(addToast, updateToast, r.name);
+          logEvent({ action: 'Export', description: `Downloaded report "${r.name}"`, module: 'Reports', entity: 'Report' });
+        },
         shareId: r.id,
         del: () => setReportToDelete({ id: r.id, name: r.name }),
       });
@@ -510,10 +513,9 @@ export default function ReportsView({
       rows.push({
         id: a.id, kind: 'atr', name: a.name, bulk: false, source: 'system',
         description: atrDesc(a), pills: atrPills(a),
-        status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
-        download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
+        download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); logEvent({ action: 'Export', description: `Downloaded ATR "${a.name}" as Word`, module: 'Reports', entity: 'Report' }); },
         shareId: a.id,
       });
     });
@@ -527,10 +529,9 @@ export default function ReportsView({
         id: ev.id, kind: 'evidence', name: ev.name, bulk: false, source: 'system',
         description: `${ev.area} · linked to ${ev.atrName}`,
         pills: [ev.type, ev.size],
-        status: 'final',
         date: ev.uploadedAt, sortDate: ts(ev.uploadedAt),
         open: openFile,
-        download: () => addToast({ type: 'success', message: `Downloading “${ev.name}”.` }),
+        download: () => { addToast({ type: 'success', message: `Downloading “${ev.name}”.` }); logEvent({ action: 'Export', description: `Downloaded evidence file "${ev.name}" (${ev.type}, ${ev.size})`, module: 'Reports', entity: 'Evidence' }); },
         shareId: ev.id,
       });
     });
@@ -676,7 +677,7 @@ export default function ReportsView({
       tag: 'Internal Audit' as const,
       generatedBy: 'You',
       generatedAt: stamp,
-      status: 'draft' as const,
+      status: 'final' as const,
       pages: Math.max(1, data.observations.length * 2),
       queries: data.observations.length,
       atrData: data,
@@ -838,7 +839,6 @@ export default function ReportsView({
       tag: 'Internal Audit',
       generatedBy: 'You',
       generatedAt: today,
-      status: 'draft',
       pages: blockCount + 2,
       queries: payload.queries.length,
       generatedQueries: payload.queries,
@@ -855,6 +855,8 @@ export default function ReportsView({
       pageNumbers: (rt as EditableTemplate).pageNumbers,
       signoffEnabled: (rt as EditableTemplate).signoffEnabled,
       signatories: (rt as EditableTemplate).signatories,
+      findingScale: (rt as EditableTemplate).findingScale,
+      opinionScale: (rt as EditableTemplate).opinionScale,
     };
     setGeneratedReports(prev => [newReport, ...prev]);
     setWizardTemplate(null);
@@ -885,7 +887,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-[8px] whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -907,7 +909,7 @@ export default function ReportsView({
           {/* Type tile — a soft tone-tinted square so each row carries the same
               type anchor the grid card uses (list↔grid parity). Fades out on
               hover/select so the checkbox sits cleanly on the row bg. */}
-          <span aria-hidden="true" className={`absolute inset-0 flex items-center justify-center rounded-[9px] transition-opacity duration-150 ${iconClass ?? 'text-ink-400'} ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
+          <span aria-hidden="true" className={`absolute inset-0 flex items-center justify-center rounded-md transition-opacity duration-150 ${iconClass ?? 'text-ink-400'} ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
             <Icon size={16} strokeWidth={1.75} />
           </span>
           {selectable && (
@@ -918,7 +920,7 @@ export default function ReportsView({
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onToggleSelect?.(); } }}
-              className={`relative w-4 h-4 rounded-[5px] border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+              className={`relative w-4 h-4 rounded-sm border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
                 selected
                   ? 'bg-brand-600 border-brand-600 text-white opacity-100'
                   : isSelecting
@@ -950,7 +952,7 @@ export default function ReportsView({
   // so columns line up tab to tab. The Report (name) column has no fixed width,
   // so under SmartTable `fixedLayout` it absorbs the slack — the detail columns
   // and actions stay packed together on the right with no empty gap.
-  const COL_W = { type: '180px', status: '128px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
+  const COL_W = { type: '180px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -965,7 +967,7 @@ export default function ReportsView({
     if (viewingReport.atrData) {
       return (
         <AtrReportView
-          report={{ ...viewingReport, atrData: viewingReport.atrData, status: viewingReport.status === 'final' ? 'final' : 'draft' }}
+          report={{ ...viewingReport, atrData: viewingReport.atrData, status: 'final' }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
           onSave={data => saveAtrEdits(viewingReport.id, data)}
@@ -998,6 +1000,25 @@ export default function ReportsView({
         onUpdateSignoffs={updateReportSignoffs}
         onSaveAsTemplate={addCustomTemplateUnique}
         onSaveAtrVersion={saveAtrVersion}
+      />
+    );
+  }
+
+  // Template preview — the template as the page it produces, read only. No
+  // generate action here: this page answers "what report is this?", nothing else.
+  if (previewTemplate) {
+    const isCustom = customTemplates.some(t => t.id === previewTemplate.id);
+    return (
+      <TemplatePreview
+        template={previewTemplate as EditableTemplate}
+        isCustom={isCustom}
+        onBack={() => setPreviewTemplate(null)}
+        onEdit={() => { setPreviewTemplate(null); setEditingTemplate(previewTemplate); }}
+        onDelete={() => {
+          // The confirm dialog lives on the list page, so return there first.
+          setPreviewTemplate(null);
+          setTemplateToDelete({ id: previewTemplate.id, name: previewTemplate.name });
+        }}
       />
     );
   }
@@ -1061,6 +1082,8 @@ export default function ReportsView({
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
+                : activeTab === 'byot'
+                ? <>Upload one old report as a PDF. We copy how it looks, not what it says, and every report we make for you after that looks the same way.</>
                 : activeTab === 'templates'
                 ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
                 : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, grouped by type across ATR, SOX, IA, and evidence.</>}
@@ -1079,6 +1102,7 @@ export default function ReportsView({
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
             { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
+            { id: 'byot', label: 'Bring Your Own Template', icon: FileUp, count: 0 },
           ] as const).map(tab => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1125,7 +1149,7 @@ export default function ReportsView({
               action={
                 <button
                   onClick={() => setMissingFocusReport(false)}
-                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <ArrowLeft size={14} /> Back to reports
                 </button>
@@ -1157,7 +1181,7 @@ export default function ReportsView({
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
                 <button
                   onClick={() => setAtrUploadOpen(true)}
-                  className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
+                  className="inline-flex items-center gap-2 h-10 px-4 text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
                 >
                   <CloudUpload size={15} /> Generate ATR by Upload
                 </button>
@@ -1189,9 +1213,7 @@ export default function ReportsView({
                       eyebrow={row.bulk ? 'Bulk Audit' : m.label}
                       title={reportDisplayName(row.name)}
                       description={row.description}
-                      // Drop the Draft/Final status chip from the card — it's
-                      // carried by the list view's status column, not the cards.
-                      pills={row.pills.filter(p => p !== 'Draft' && p !== 'Final')}
+                      pills={row.pills}
                       badge={<SourceChip source={row.source} />}
                       footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{row.date}</span>}
                       onClick={() => row.open()}
@@ -1210,7 +1232,7 @@ export default function ReportsView({
               />
             )
           ) : (
-          <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-clip">
+          <div className="flex-1 rounded-lg border border-canvas-border bg-canvas-elevated overflow-clip">
           <SmartTable
             className=""
             variant="modern"
@@ -1307,7 +1329,7 @@ export default function ReportsView({
           />
         )}
         {activeTab === 'shared-reports' && viewMode === 'list' && (
-          <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-clip">
+          <div className="flex-1 rounded-lg border border-canvas-border bg-canvas-elevated overflow-clip">
           <SmartTable
             className=""
             variant="modern"
@@ -1328,7 +1350,7 @@ export default function ReportsView({
               />
             ) : (
               <div className="flex flex-col items-center gap-2 py-2 text-center">
-                <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                <div className="w-10 h-10 rounded-md bg-paper-50 flex items-center justify-center mb-1">
                   <Search size={20} className="text-ink-400" />
                 </div>
                 <div className="text-[0.8125rem] font-medium text-ink-700">No shared reports match your filters.</div>
@@ -1366,7 +1388,7 @@ export default function ReportsView({
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.sharedAt)}</span>
               )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); logEvent({ action: 'Export', description: `Downloaded report "${String(item.name)}"`, module: 'Reports', entity: 'Report' }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                 </div>
               )},
@@ -1390,7 +1412,7 @@ export default function ReportsView({
                 </div>
               ) : (
                 <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
-                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                  <div className="w-10 h-10 rounded-md bg-paper-50 flex items-center justify-center mb-1">
                     <Search size={20} className="text-ink-400" />
                   </div>
                   <div className="text-[0.8125rem] font-medium text-ink-700 max-w-[320px]">
@@ -1427,7 +1449,7 @@ export default function ReportsView({
                   footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.sharedAt}</span>}
                   onClick={() => openSharedReport(r as unknown as typeof SHARED_REPORTS[number])}
                   actions={<>
-                    <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                    <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); logEvent({ action: 'Export', description: `Downloaded report "${r.name}"`, module: 'Reports', entity: 'Report' }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                     {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                   </>}
                 />
@@ -1439,17 +1461,20 @@ export default function ReportsView({
           );
         })()}
 
+        {/* Bring Your Own Template — upload one past report, read its shape,
+            review what we found, save it as a template. The Templates tab and
+            its editor are untouched; this is the import journey on its own. */}
+        {activeTab === 'byot' && (
+          <BringYourOwnTemplateTab
+            onSaveTemplate={addCustomTemplateUnique}
+            onDone={() => setActiveTab('templates')}
+          />
+        )}
+
         {activeTab === 'templates' && (() => {
           // Custom templates open straight into the editor (edit in place).
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
             setEditingTemplate(rt);
-          };
-          // SOX reports are produced from a SOX/ICFR engagement (control testing
-          // → working paper → report), never generated standalone from a
-          // template. Picking the SOX template routes the user to that area.
-          const openSoxFromEngagement = () => {
-            addToast({ type: 'info', message: 'Open a SOX / ICFR engagement to generate its report.' });
-            onOpenSox?.();
           };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
@@ -1462,19 +1487,15 @@ export default function ReportsView({
                 key={rt.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-                className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
+                className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
                 onClick={() => {
-                  // Whole card = the primary action. Each report type generates
-                  // its own way: ATR via upload/observations, SOX from a SOX/ICFR
-                  // engagement, IA/Bulk by assembling from existing report queries.
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
+                  // Whole card = open the template as the report it produces.
+                  // Generating happens from that page, once they can see it.
+                  setPreviewTemplate(rt);
                 }}
               >
                 <div className="flex items-start justify-between gap-3 mb-3.5">
-                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[10px] ${tintBg}`}>
+                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-lg ${tintBg}`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
                   <div className="relative flex items-center h-7">
@@ -1502,7 +1523,7 @@ export default function ReportsView({
                       else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
                     }}
                     aria-label="Template name"
-                    className="w-full mb-1.5 px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                    className="w-full mb-1.5 px-1.5 py-0.5 -ml-1.5 rounded-sm bg-white border border-brand-400 text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
                   />
                 ) : (
                   <h3 onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
@@ -1575,14 +1596,9 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
                 className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
-                onClick={() => {
-                  const kind = templateKind(rt);
-                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { openSoxFromEngagement(); return; }
-                  setWizardTemplate(rt);
-                }}
+                onClick={() => setPreviewTemplate(rt)}
               >
-                <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-[8px] ${tintBg}`}>
+                <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md ${tintBg}`}>
                   <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -1600,7 +1616,7 @@ export default function ReportsView({
                           else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
                         }}
                         aria-label="Template name"
-                        className="w-full max-w-xs px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.8125rem] font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                        className="w-full max-w-xs px-1.5 py-0.5 -ml-1.5 rounded-sm bg-white border border-brand-400 text-[0.8125rem] font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
                       />
                     ) : (
                       <span onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
@@ -1622,7 +1638,7 @@ export default function ReportsView({
                         <button
                           onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
                           aria-label={`Edit template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
                         >
                           <Edit3 size={14} />
                         </button>
@@ -1633,7 +1649,7 @@ export default function ReportsView({
                         <button
                           onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
                           aria-label={`Delete template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -1652,7 +1668,7 @@ export default function ReportsView({
                 {rows.map((rt, i) => renderCard(rt, i, isCustom))}
               </div>
             ) : (
-              <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border [&>*:first-child]:rounded-t-[10px] [&>*:last-child]:rounded-b-[10px]">
+              <div className="rounded-lg border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border [&>*:first-child]:rounded-t-lg [&>*:last-child]:rounded-b-lg">
                 {rows.map((rt, i) => renderRow(rt, i, isCustom))}
               </div>
             );
@@ -1676,7 +1692,7 @@ export default function ReportsView({
 
           const noSearchMatch = (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
-              <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+              <div className="w-10 h-10 rounded-md bg-paper-50 flex items-center justify-center mb-1">
                 <Search size={20} className="text-ink-400" />
               </div>
               <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
@@ -1761,8 +1777,8 @@ export default function ReportsView({
               initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
               className={atrMinimized
-                ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-[14px] shadow-xl border border-canvas-border z-[60] overflow-hidden'
-                : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
+                ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-lg shadow-xl border border-canvas-border z-[60] overflow-hidden'
+                : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
               role="dialog" aria-modal={!atrMinimized} aria-label="Generate ATR by Upload"
             >
               <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); setAtrMinimized(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} onMinimizedChange={setAtrMinimized} />
@@ -1827,7 +1843,6 @@ export default function ReportsView({
               tag: 'Internal Audit',
               generatedBy: 'You',
               generatedAt: today,
-              status: 'draft',
               pages: Math.max(1, observations.length),
               queries: observations.length,
               atrData: { meta, observations, insights },
@@ -1853,6 +1868,7 @@ export default function ReportsView({
           if (!templateToDelete) return;
           removeCustomTemplate(templateToDelete.id);
           addToast({ type: 'success', message: `Template "${templateToDelete.name}" deleted.` });
+          logEvent({ action: 'Delete', description: `Deleted custom template "${templateToDelete.name}"`, module: 'Reports', entity: 'Template' });
           setTemplateToDelete(null);
         }}
       />
@@ -1874,6 +1890,7 @@ export default function ReportsView({
           const snapshotIndex = generatedReports.findIndex(r => r.id === id);
           setGeneratedReports(prev => prev.filter(r => r.id !== id));
           setReportToDelete(null);
+          logEvent({ action: 'Delete', description: `Deleted report "${name}"`, module: 'Reports', entity: 'Report' });
           addToast({
             type: 'success',
             message: `${name} deleted.`,

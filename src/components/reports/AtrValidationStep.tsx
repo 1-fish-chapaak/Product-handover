@@ -9,7 +9,7 @@ import {
 } from './atrBuilder';
 
 const INPUT =
-  'w-full px-2.5 py-1.5 rounded-[7px] border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15';
+  'w-full px-2.5 py-1.5 rounded-sm border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15';
 
 const BADGE: Record<Completeness, string> = {
   Complete: 'bg-compliant-50 text-compliant-700 border-compliant/30',
@@ -103,7 +103,7 @@ export default function AtrValidationStep({ observations, onChange }: {
     <div className="p-6">
       {/* Found banner */}
       <div className="flex items-center gap-2.5 mb-3">
-        <span className="w-8 h-8 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center"><CheckCircle2 size={16} /></span>
+        <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center"><CheckCircle2 size={16} /></span>
         <div>
           <div className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">We found {observations.length} observation{observations.length === 1 ? '' : 's'} in your report</div>
           <div className="text-[0.75rem] text-ink-500">Select what to include, and resolve any missing fields before continuing.</div>
@@ -112,7 +112,7 @@ export default function AtrValidationStep({ observations, onChange }: {
 
       {/* Global missing-fields banner */}
       {unresolved.length > 0 && (
-        <div role="alert" className="flex items-start gap-2 border border-risk/30 bg-risk-50 rounded-[8px] px-3 py-2 mb-3 text-[0.75rem] text-risk-700">
+        <div role="alert" className="flex items-start gap-2 border border-risk/30 bg-risk-50 rounded-md px-3 py-2 mb-3 text-[0.75rem] text-risk-700">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
           <span><span className="font-semibold">{unresolved.length} observation{unresolved.length === 1 ? '' : 's'} have missing fields.</span> Review or skip them before continuing.</span>
         </div>
@@ -120,7 +120,7 @@ export default function AtrValidationStep({ observations, onChange }: {
 
       {/* Duplicate detection banner */}
       {dupes.size > 0 && (
-        <div className="flex items-start gap-2 border border-mitigated/30 bg-mitigated-50 rounded-[8px] px-3 py-2 mb-3 text-[0.75rem] text-mitigated-700">
+        <div className="flex items-start gap-2 border border-mitigated/30 bg-mitigated-50 rounded-md px-3 py-2 mb-3 text-[0.75rem] text-mitigated-700">
           <Info size={14} className="mt-0.5 shrink-0" />
           <span><span className="font-semibold">{dupes.size} observation{dupes.size === 1 ? '' : 's'} look like duplicates</span> (matching titles). Deselect the extras to avoid repeating them in the ATR.</span>
         </div>
@@ -139,12 +139,12 @@ export default function AtrValidationStep({ observations, onChange }: {
           </div>
 
           {selected === 0 && (
-            <div role="alert" className="flex items-center gap-2 border border-risk/30 bg-risk-50 rounded-[8px] px-3 py-2 mb-2 text-[0.75rem] text-risk-700">
+            <div role="alert" className="flex items-center gap-2 border border-risk/30 bg-risk-50 rounded-md px-3 py-2 mb-2 text-[0.75rem] text-risk-700">
               <AlertTriangle size={13} className="shrink-0" /> <span className="font-semibold">Select at least 1 observation to continue.</span>
             </div>
           )}
 
-          <div className="rounded-[12px] border border-canvas-border divide-y divide-canvas-border overflow-hidden">
+          <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border overflow-hidden">
             {observations.map(o => {
               const miss = missingFields(o);
               const comp = completeness(o);
@@ -161,7 +161,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                         value={o.title}
                         onChange={e => patch(o._id, x => ({ ...x, title: e.target.value }))}
                         placeholder="Untitled Observation"
-                        className="w-full bg-transparent text-[0.8125rem] font-semibold text-ink-900 placeholder:text-ink-400 focus:outline-none focus:bg-canvas focus:rounded-[6px] focus:px-1.5 focus:-mx-1.5 focus:ring-2 focus:ring-brand-600/15"
+                        className="w-full bg-transparent text-[0.8125rem] font-semibold text-ink-900 placeholder:text-ink-400 focus:outline-none focus:bg-canvas focus:rounded-sm focus:px-1.5 focus:-mx-1.5 focus:ring-2 focus:ring-brand-600/15"
                       />
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         <span className={`inline-flex items-center h-5 px-2 rounded-full border text-[0.625rem] font-semibold ${BADGE[comp]}`}>{comp}</span>
@@ -190,7 +190,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                   {/* Full-details viewer (read-only) */}
                   {view.has(o._id) && (
                     <div className="px-3 pb-3 pt-1 bg-canvas space-y-2.5">
-                      <div className="rounded-[8px] border border-canvas-border bg-canvas-elevated p-3 space-y-2.5">
+                      <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-3 space-y-2.5">
                         {(o.process || o.status) && (
                           <div className="flex items-center gap-2 flex-wrap text-[0.6875rem]">
                             {o.process && <span className="text-ink-600"><span className="text-ink-400">Process / Area:</span> {o.process}</span>}
@@ -205,7 +205,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                             <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Management action plans</div>
                             <div className="space-y-2">
                               {o.actionPlans.map((p, pi) => (
-                                <div key={pi} className="rounded-[7px] border border-canvas-border bg-canvas p-2.5 space-y-1.5">
+                                <div key={pi} className="rounded-sm border border-canvas-border bg-canvas p-2.5 space-y-1.5">
                                   {p.text && <div className="text-[0.71875rem] text-ink-800 leading-snug">{p.text}</div>}
                                   <div className="flex items-center gap-3 flex-wrap text-[0.625rem] text-ink-500">
                                     {p.dueDate && <span>Due {p.dueDate}</span>}
@@ -229,13 +229,13 @@ export default function AtrValidationStep({ observations, onChange }: {
                       {miss.map(f => {
                         const isEditing = editing[o._id] === f;
                         return (
-                          <div key={f} className="rounded-[8px] border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+                          <div key={f} className="rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-[0.71875rem] font-semibold text-ink-700">{FIELD_LABEL[f]}</span>
                               {!isEditing && (
                                 <div className="flex items-center gap-1.5">
-                                  <button onClick={() => setEditing(s => ({ ...s, [o._id]: f }))} className="inline-flex items-center gap-1 h-6 px-2 rounded-[6px] bg-brand-50 text-brand-700 text-[0.625rem] font-semibold hover:bg-brand-100 cursor-pointer"><Pencil size={10} /> Fill manually</button>
-                                  <button onClick={() => patch(o._id, x => ({ ...x, skipped: [...x.skipped, f] }))} className="inline-flex items-center gap-1 h-6 px-2 rounded-[6px] border border-canvas-border text-ink-500 text-[0.625rem] font-semibold hover:text-ink-800 cursor-pointer"><Ban size={10} /> Skip from ATR</button>
+                                  <button onClick={() => setEditing(s => ({ ...s, [o._id]: f }))} className="inline-flex items-center gap-1 h-6 px-2 rounded-sm bg-brand-50 text-brand-700 text-[0.625rem] font-semibold hover:bg-brand-100 cursor-pointer"><Pencil size={10} /> Fill manually</button>
+                                  <button onClick={() => patch(o._id, x => ({ ...x, skipped: [...x.skipped, f] }))} className="inline-flex items-center gap-1 h-6 px-2 rounded-sm border border-canvas-border text-ink-500 text-[0.625rem] font-semibold hover:text-ink-800 cursor-pointer"><Ban size={10} /> Skip from ATR</button>
                                 </div>
                               )}
                             </div>
@@ -280,7 +280,7 @@ export default function AtrValidationStep({ observations, onChange }: {
         </div>
 
         {/* Right rail */}
-        <aside className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-fit lg:sticky lg:top-0">
+        <aside className="rounded-lg border border-canvas-border bg-canvas p-4 h-fit lg:sticky lg:top-0">
           <div className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-2.5">Running summary</div>
           <div className="space-y-1.5 mb-3">
             <Row label="Selected" value={`${selected} / ${observations.length}`} strong />

@@ -159,7 +159,7 @@ export function CustomDatePicker({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(p => !p)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border-light bg-white text-[13px] text-text hover:border-primary/30 focus:border-primary/40 focus:ring-2 focus:ring-primary/10 outline-none transition-all cursor-pointer"
+        className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border-light bg-white text-[0.8125rem] text-text hover:border-primary/30 focus:border-primary/40 focus:ring-2 focus:ring-primary/10 outline-none transition-all cursor-pointer"
       >
         <span className={parsed ? 'text-text' : 'text-text-muted/70'}>
           {parsed ? formatDisplay(parsed) : placeholder}
@@ -181,7 +181,7 @@ export function CustomDatePicker({
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
-            <div className="text-[13px] font-semibold text-text">{monthName}</div>
+            <div className="text-[0.8125rem] font-semibold text-text">{monthName}</div>
             <div className="flex items-center gap-0.5">
               <button
                 type="button"
@@ -207,7 +207,7 @@ export function CustomDatePicker({
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
               <div
                 key={i}
-                className="h-7 flex items-center justify-center text-[11px] font-semibold text-text-muted"
+                className="h-7 flex items-center justify-center text-[0.6875rem] font-semibold text-text-muted"
               >
                 {d}
               </div>
@@ -228,7 +228,7 @@ export function CustomDatePicker({
                   onClick={disabled ? undefined : () => selectDate(d)}
                   disabled={disabled}
                   aria-disabled={disabled || undefined}
-                  className={`h-8 rounded-md text-[12px] font-medium transition-colors ${
+                  className={`h-8 rounded-md text-[0.75rem] font-medium transition-colors ${
                     disabled
                       ? 'text-ink-300 cursor-not-allowed bg-transparent'
                       : isSelected
@@ -251,7 +251,7 @@ export function CustomDatePicker({
             <button
               type="button"
               onClick={clearDate}
-              className="text-[12px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
+              className="text-[0.75rem] font-semibold text-primary hover:text-primary-hover cursor-pointer"
             >
               Clear
             </button>
@@ -259,7 +259,7 @@ export function CustomDatePicker({
               type="button"
               onClick={goToday}
               disabled={isBeforeMin(today)}
-              className={`text-[12px] font-semibold ${
+              className={`text-[0.75rem] font-semibold ${
                 isBeforeMin(today)
                   ? 'text-ink-300 cursor-not-allowed'
                   : 'text-primary hover:text-primary-hover cursor-pointer'

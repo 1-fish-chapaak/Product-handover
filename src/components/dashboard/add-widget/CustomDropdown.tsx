@@ -98,7 +98,7 @@ export function CustomDropdown({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-[6px] text-left ${
+        className={`w-full ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-sm text-left ${
           hasValue ? "text-[#26064a]" : "text-[#cbd5e1]"
         } focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm flex items-center justify-between`}
       >
@@ -112,13 +112,13 @@ export function CustomDropdown({
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute left-0 right-0 mt-1.5 z-50">
-          <div className="bg-gradient-to-br from-[#3d3d46]/95 via-[#4a4a55]/95 to-[#353540]/95 backdrop-blur-xl rounded-[12px] shadow-2xl border border-white/10 overflow-hidden max-h-[280px] overflow-y-auto custom-scrollbar">
+          <div className="bg-canvas-elevated rounded-lg shadow-lg border border-canvas-border overflow-hidden max-h-[280px] overflow-y-auto custom-scrollbar">
             {/* Render grouped options */}
             {groups.length > 0 ? (
               groups.map((group, groupIndex) => (
                 <div key={groupIndex}>
                   {group.label && (
-                    <div className="px-3 py-2 text-[0.625rem] font-semibold text-white/50 uppercase tracking-wider border-b border-white/5">
+                    <div className="px-3 py-2 text-[0.625rem] font-semibold text-ink-500 uppercase tracking-wider border-b border-canvas-border">
                       {group.label}
                     </div>
                   )}
@@ -129,13 +129,13 @@ export function CustomDropdown({
                         key={option.value}
                         type="button"
                         onClick={() => handleSelect(option.value)}
-                        className={`w-full px-4 py-3 ${sizeClass.dropdown} text-left flex items-center justify-between gap-3 hover:bg-white/10 transition-colors ${
-                          isSelected ? "bg-white/5" : ""
+                        className={`w-full px-4 py-3 ${sizeClass.dropdown} text-left flex items-center justify-between gap-3 hover:bg-brand-50 transition-colors ${
+                          isSelected ? "bg-brand-50" : ""
                         }`}
                       >
-                        <span className="text-white font-medium">{option.label}</span>
+                        <span className={`font-medium ${isSelected ? "text-brand-700" : "text-ink-800"}`}>{option.label}</span>
                         {isSelected && (
-                          <Check className={`${sizeClass.checkIcon} text-white shrink-0`} strokeWidth={2.5} />
+                          <Check className={`${sizeClass.checkIcon} text-brand-600 shrink-0`} strokeWidth={2.5} />
                         )}
                       </button>
                     );
@@ -151,13 +151,13 @@ export function CustomDropdown({
                     key={option.value}
                     type="button"
                     onClick={() => handleSelect(option.value)}
-                    className={`w-full px-4 py-3 ${sizeClass.dropdown} text-left flex items-center justify-between gap-3 hover:bg-white/10 transition-colors ${
-                      isSelected ? "bg-white/5" : ""
+                    className={`w-full px-4 py-3 ${sizeClass.dropdown} text-left flex items-center justify-between gap-3 hover:bg-brand-50 transition-colors ${
+                      isSelected ? "bg-brand-50" : ""
                     }`}
                   >
-                    <span className="text-white font-medium">{option.label}</span>
+                    <span className={`font-medium ${isSelected ? "text-brand-700" : "text-ink-800"}`}>{option.label}</span>
                     {isSelected && (
-                      <Check className={`${sizeClass.checkIcon} text-white shrink-0`} strokeWidth={2.5} />
+                      <Check className={`${sizeClass.checkIcon} text-brand-600 shrink-0`} strokeWidth={2.5} />
                     )}
                   </button>
                 );
@@ -172,15 +172,15 @@ export function CustomDropdown({
           width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.05);
+          background: transparent;
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.2);
+          background: var(--color-canvas-border);
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.3);
+          background: var(--color-ink-300);
         }
       `}</style>
     </div>
