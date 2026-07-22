@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles, FlaskConical,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -12,6 +12,7 @@ import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
 import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
+import SoxTestingTab from './sox-testing/SoxTestingTab';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
@@ -19,7 +20,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
-type EngViewMode = 'overview' | 'list' | 'approval-flow';
+type EngViewMode = 'overview' | 'list' | 'approval-flow' | 'sox-testing';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -245,7 +246,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
                 : mode === 'approval-flow'
                   ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
-                  : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
+                  : mode === 'sox-testing'
+                    ? 'The scoping-first SOX flow — materiality and trial balances decide what\'s in scope, and every in-scope process becomes a RACM.'
+                    : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -509,6 +512,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
         </>)}
 
+        {mode === 'sox-testing' && <SoxTestingTab onOpenEngagement={onOpenEngagement} />}
+
         {mode === 'approval-flow' && (
           <div>
             <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
@@ -561,6 +566,7 @@ function ViewToggle({
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
+    { id: 'sox-testing', label: 'SOX Testing', Icon: FlaskConical },
   ];
   return (
     <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">
