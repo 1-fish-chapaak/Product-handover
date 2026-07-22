@@ -21,8 +21,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
-  Info, Crosshair, Split, GitCompareArrows, MessageCircleQuestion,
-  ScrollText, X, MessageSquare, ArrowUpRight,
+  Info, Crosshair, X, MessageSquare, ArrowUpRight,
 } from 'lucide-react';
 import {
   displayConfidencePct, CONFIDENCE_FACTOR_META, MEMORY_CANDIDATE_THRESHOLD,
@@ -34,9 +33,9 @@ import {
 } from '../../data/layeredInsights';
 import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
+import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
-const REC_CAP = 6;
 
 // ─── Tone → Editorial-GRC palette ─────────────────────────────────────────
 
@@ -64,10 +63,6 @@ function FreshnessTag({ insight }: { insight: LayeredInsight }) {
     </span>
   );
 }
-
-const CHECK_ICON: Record<CheckMoreOption['kind'], typeof Crosshair> = {
-  compare: GitCompareArrows, split: Split, trace: Crosshair, ask: MessageCircleQuestion,
-};
 
 function confDot(pct: number): string {
   if (pct >= 70) return 'rgb(21 128 61)';       // compliant
@@ -146,25 +141,6 @@ const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
   engagement: 'Evidence · risks and controls',
 };
 
-// ─── Recommended-action tile (grid cell) ───────────────────────────────────
-// Pared to the essential: the imperative, and nothing else. Priority survives
-// only in the sort order, so five real recommendations read as a clean
-// two-column list. The whole tile opens the step in Ask IRA — where the full
-// rationale and methodology live.
-
-function RecTile({ r, onOpen }: { r: NonNullable<LayeredInsight['recommendations']>[number]; onOpen: () => void }) {
-  return (
-    <button
-      type="button" onClick={onOpen}
-      title="Open this recommendation in Ask IRA (new tab)"
-      className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
-    >
-      <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">{r.title}</span>
-      <MessageSquare size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-300 group-hover:text-brand-600 transition-colors" />
-    </button>
-  );
-}
-
 // A plain-string "what to do next" step. Same compaction as RecTile: clamped to
 // two lines, expandable inline for the full paragraph, chat button to act.
 function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
@@ -220,9 +196,6 @@ export default function LayeredInsightCard({
   onRec?: (title: string) => void;
 }) {
   const meta = LAYER_META[insight.layer];
-  // Evidence starts collapsed on every card — the rows are one click away and
-  // the observation bullets already carry the sample refs.
-  const [showEvidence, setShowEvidence] = useState(false);
   const vTone = TONE[insight.verdict.tone];
   const sevTone = TONE[SEV_TONE[insight.severity]];
   // Typed recommendations, most-urgent first.
@@ -395,101 +368,22 @@ export default function LayeredInsightCard({
                 </div>
               </div>
 
-              {/* Toolbar — evidence toggle (collapsed by default) + check-more
-                  chips on one line, so neither claims a row of its own. */}
-              {(insight.evidence.length > 0 || insight.checkMore.length > 0) && (
-                <div className="mt-3">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                    {insight.evidence.length > 0 && (
-                      <button
-                        type="button" onClick={() => setShowEvidence(v => !v)} aria-expanded={showEvidence}
-                        className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-                      >
-                        <motion.span animate={{ rotate: showEvidence ? 0 : -90 }} transition={{ type: 'spring', stiffness: 360, damping: 26 }} className="inline-flex">
-                          <ChevronDown size={14} aria-hidden="true" />
-                        </motion.span>
-                        <ScrollText size={12} aria-hidden="true" /> {evidenceLabel ?? EVIDENCE_LABEL[insight.layer]} · {insight.evidence.length}
-                      </button>
-                    )}
-                    {insight.evidence.length > 0 && insight.checkMore.length > 0 && (
-                      <span className="h-3.5 w-px bg-canvas-border mx-1 hidden sm:block" aria-hidden="true" />
-                    )}
-                    {insight.checkMore.map((opt, i) => {
-                      const Icon = CHECK_ICON[opt.kind];
-                      return (
-                        <button
-                          key={i} type="button"
-                          onClick={() => (onCheckMore ? onCheckMore(opt) : openInChat(opt.detail ? `${opt.label} — ${opt.detail}` : opt.label))}
-                          title="Ask this in Ask IRA (new tab)"
-                          className="group inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors"
-                        >
-                          <Icon size={12} className="text-ink-400 group-hover:text-brand-600" aria-hidden="true" />
-                          {opt.label}
-                          {opt.detail && <span className="text-ink-400">· {opt.detail}</span>}
-                          <ArrowUpRight size={11} className="text-ink-300 group-hover:text-brand-600" aria-hidden="true" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <AnimatePresence initial={false}>
-                    {insight.evidence.length > 0 && showEvidence && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden"
-                      >
-                        {/* A calm data table — headers, plain ink, no severity paint;
-                            the tone story is already told above the fold. */}
-                        <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden bg-canvas-elevated">
-                          <table className="w-full text-[11.5px]">
-                            <thead>
-                              <tr className="bg-canvas border-b border-canvas-border text-left">
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500 hidden sm:table-cell w-[172px]">Source</th>
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Item</th>
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Detail</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-canvas-border">
-                              {insight.evidence.map((e, i) => (
-                                <tr key={i}>
-                                  <td className="px-3 py-2 font-mono text-[10.5px] text-ink-500 truncate hidden sm:table-cell">{e.ref}</td>
-                                  <td className="px-3 py-2 font-medium text-ink-800">{e.label}</td>
-                                  <td className="px-3 py-2 text-ink-700 tabular-nums">{e.detail}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {evidenceExtra}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
+              {/* Evidence disclosure — collapsed-by-default toggle + check-more
+                  chips + calm Source/Item/Detail table (shared surface). */}
+              <EvidenceDisclosure
+                evidence={insight.evidence}
+                label={evidenceLabel ?? EVIDENCE_LABEL[insight.layer]}
+                checkMore={insight.checkMore}
+                onCheckMore={onCheckMore}
+                evidenceExtra={evidenceExtra}
+                subjectLabel={insight.subjectLabel}
+              />
 
-              {/* Recommended actions — the fix, foregrounded. Tiles two-per-row so a
-                  4–5 item set reads in a couple of rows, not a tall wall. Each tile
-                  opens in Ask IRA (new tab) with the step pre-filled. */}
+              {/* Recommended actions — the fix, foregrounded (shared surface).
+                  Falls back to the plain "what to do next" list when the subject
+                  has no typed recommendations. */}
               {recs.length > 0 ? (
-                <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
-                    <Sparkles size={12} className="text-brand-600" aria-hidden="true" />
-                    Recommended actions
-                    <span className="text-ink-400">· {recs.length}</span>
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-brand-100/70 px-2 py-0.5 text-[9px] font-semibold text-brand-700 normal-case tracking-normal">
-                      <MessageSquare size={10} aria-hidden="true" /> Open one to work it in chat
-                    </span>
-                  </div>
-                  <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
-                    {recs.slice(0, REC_CAP).map((r) => (
-                      <li key={r.id} className="min-w-0">
-                        <RecTile r={r} onOpen={() => openRec(r.title)} />
-                      </li>
-                    ))}
-                  </ul>
-                  {recs.length > REC_CAP && (
-                    <p className="text-[10px] text-ink-400 mt-2 px-0.5">+{recs.length - REC_CAP} more — ask IRA to walk the full set.</p>
-                  )}
-                </div>
+                <RecommendedActions recs={recs} onOpen={openRec} />
               ) : (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">

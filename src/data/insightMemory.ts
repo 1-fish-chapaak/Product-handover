@@ -402,6 +402,27 @@ export const ENTITY_MEMORY: Record<string, EntityMemory> = {
 // Diff of THIS run vs the previous run of the same workflow: what's new, what
 // resolved, and how the headline KPIs moved.
 
+/** One point in a workflow's run history — the raw KPI values as of that run.
+ *  The compare card reads these numbers directly (never re-parses formatted
+ *  strings), so a single-run delta and an N-run trend derive from one source. */
+export interface RunSnapshot {
+  id: string;
+  /** Full run label, e.g. "Jun 2026". */
+  label: string;
+  /** Short axis label, e.g. "Jun". */
+  month: string;
+  /** Human date, e.g. "02 Jun 2026". */
+  date: string;
+  /** True for the run being viewed (always the last element of `history`). */
+  current?: boolean;
+  kpis: {
+    exceptions: number;
+    rowsProcessed: number;
+    /** $ under-recovered, sampled. */
+    underRecovered: number;
+  };
+}
+
 export interface OutputCompare {
   previousRunLabel: string;
   previousRunDate: string;
@@ -420,6 +441,14 @@ export interface OutputCompare {
         (e.g. "1", "341", "₹2.5L"). Rendered as the coloured delta chip. */
     delta: string;
   }[];
+  /** Ordered run history (oldest→newest, INCLUDING the current run as the last
+   *  element). The follow-up compare card lets the user pick which prior runs to
+   *  compare against and trends the KPIs across the selection. Optional so other
+   *  consumers of RUN_OUTPUT_COMPARE (e.g. WorkflowMemoryPanel) are unaffected. */
+  history?: RunSnapshot[];
+  /** # still-open items that have persisted across 3+ runs — the "chronic" count
+   *  surfaced only in multi-run (trend) mode. */
+  chronicOpen?: number;
 }
 
 export const RUN_OUTPUT_COMPARE: OutputCompare = {
@@ -437,6 +466,19 @@ export const RUN_OUTPUT_COMPARE: OutputCompare = {
     { label: 'Exceptions', current: '90', previous: '76', direction: 'up', sentiment: 'bad', delta: '14' },
     { label: 'Rows processed', current: '12,480', previous: '11,900', direction: 'up', sentiment: 'neutral', delta: '580' },
     { label: '$ under-recovered (sampled)', current: '$60.28', previous: '$41.10', direction: 'up', sentiment: 'bad', delta: '$19.18' },
+  ],
+  chronicOpen: 12,
+  // Six months of the same workflow, oldest→newest. Jul is the current run; the
+  // Jun snapshot matches previousRun*/kpiDeltas above so the single-run compare
+  // is identical whichever way it's derived. Exceptions climb every run — the
+  // trend the multi-run view is built to expose.
+  history: [
+    { id: 'r-feb', label: 'Feb 2026', month: 'Feb', date: '04 Feb 2026', kpis: { exceptions: 58, rowsProcessed: 11_020, underRecovered: 24.60 } },
+    { id: 'r-mar', label: 'Mar 2026', month: 'Mar', date: '03 Mar 2026', kpis: { exceptions: 61, rowsProcessed: 11_200, underRecovered: 28.40 } },
+    { id: 'r-apr', label: 'Apr 2026', month: 'Apr', date: '01 Apr 2026', kpis: { exceptions: 68, rowsProcessed: 11_480, underRecovered: 33.10 } },
+    { id: 'r-may', label: 'May 2026', month: 'May', date: '05 May 2026', kpis: { exceptions: 71, rowsProcessed: 11_720, underRecovered: 39.05 } },
+    { id: 'r-jun', label: 'Jun 2026', month: 'Jun', date: '02 Jun 2026', kpis: { exceptions: 76, rowsProcessed: 11_900, underRecovered: 41.10 } },
+    { id: 'r-jul', label: 'Jul 2026', month: 'Jul', date: '07 Jul 2026', current: true, kpis: { exceptions: 90, rowsProcessed: 12_480, underRecovered: 60.28 } },
   ],
 };
 

@@ -20,51 +20,56 @@
 // numbers always tie back to the run. Every recommendation / "what to do next"
 // can seed the follow-up composer via `onAction`, threading insights into chat.
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   GitCompareArrows, TrendingUp, TrendingDown, Minus,
-  Plus, Check, Sparkles, ArrowRight, Brain, Layers,
+  Plus, Check, Sparkles, Brain, Layers,
   ChevronDown, ScrollText,
 } from 'lucide-react';
 import {
   RUN_OUTPUT_COMPARE, STAGE3_CURRENT, ENTITY_MEMORY, ENTERPRISE_CONTEXT,
   PROCESS_INSIGHTS, correlatedRecords,
-  type OutputCompare, type Stage3Record, type Stage3EvidenceRow,
+  type OutputCompare, type RunSnapshot, type Stage3Record, type Stage3EvidenceRow,
 } from '../../data/insightMemory';
-import type { LayeredInsight, VerdictTone } from '../../data/layeredInsights';
+import type { LayeredInsight, VerdictTone, CheckMoreOption } from '../../data/layeredInsights';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
+import {
+  RecommendedActions, EvidenceDisclosure,
+  type RecItem, type EvidenceRow,
+} from '../shared/InsightActions';
 
 // ─── shared helpers ───────────────────────────────────────────────────────
 
-const parseNum = (s: string): number => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const usd0 = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const usd2 = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int0 = (n: number) => Math.round(n).toLocaleString('en-US');
 
-// A KPI is "lower is better" unless it's a pure volume metric (rows processed),
-// which is neither good nor bad on its own.
-function kpiPolarity(label: string): 'lowerBetter' | 'neutral' {
-  return /rows?\s*processed|records?/i.test(label) ? 'neutral' : 'lowerBetter';
+// The KPIs the compare card trends across — one source of truth, so the
+// sparklines, delta chips, headline copy and verdict all read the same raw
+// numbers off the run history. A KPI is "lower is better" unless it's a pure
+// volume metric (rows processed), which is neither good nor bad on its own.
+type KpiKey = keyof RunSnapshot['kpis'];
+const KPI_DEFS: { key: KpiKey; label: string; headline?: boolean; fmt: (n: number) => string }[] = [
+  { key: 'exceptions', label: 'Exceptions', headline: true, fmt: int0 },
+  { key: 'rowsProcessed', label: 'Rows processed', fmt: int0 },
+  { key: 'underRecovered', label: '$ under-recovered (sampled)', fmt: usd2 },
+];
+
+// Tone of a single KPI move — exceptions / dollars are lower-is-better, rows
+// processed is a neutral volume metric.
+function kpiTone(key: KpiKey, dir: 'up' | 'down' | 'flat'): 'bad' | 'good' | 'neutral' {
+  if (key === 'rowsProcessed' || dir === 'flat') return 'neutral';
+  return dir === 'up' ? 'bad' : 'good';
 }
+const TONE_TEXT = { bad: 'text-risk-400', good: 'text-compliant-500', neutral: 'text-brand-400' } as const;
+const CHIP_CLS = { bad: 'text-risk bg-risk-50', good: 'text-compliant-700 bg-compliant-50', neutral: 'text-ink-500 bg-canvas' } as const;
+const BAR_CLS = { bad: 'bg-risk-400', good: 'bg-compliant-500', neutral: 'bg-brand-300' } as const;
 
-// One recommended "what to do next" line — a full-width, single-tap action that
-// seeds the follow-up composer. Reads as the natural next move off the card.
-function NextAction({ label, onClick }: { label: string; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group mt-3 flex w-full items-center gap-2.5 rounded-xl border border-brand-200/70 bg-brand-50/40 px-3.5 py-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 cursor-pointer"
-    >
-      <span className="size-6 shrink-0 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
-        <ArrowRight size={13} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-700">What to do next</span>
-        <span className="block text-[12.5px] font-semibold text-ink-800 leading-snug">{label}</span>
-      </span>
-      <ArrowRight size={14} className="shrink-0 text-brand-400 transition-transform group-hover:translate-x-0.5" />
-    </button>
-  );
+function moveOf(key: KpiKey, cur: number, prev: number) {
+  const pct = prev ? Math.round(((cur - prev) / prev) * 100) : 0;
+  const dir = cur > prev ? 'up' : cur < prev ? 'down' : 'flat';
+  return { pct, dir, tone: kpiTone(key, dir as 'up' | 'down' | 'flat') };
 }
 
 // ─── 1. Compare with previous output ──────────────────────────────────────
@@ -77,40 +82,198 @@ const VERDICT = {
 
 type Verdict = keyof typeof VERDICT;
 
-// One KPI as a stat tile — current value is the hero, a colored delta chip
-// carries the % move, and a delta-magnitude bar (scaled to the biggest mover
-// across all KPIs, `maxAbsPct`) makes the three tiles genuinely comparable:
-// the largest change reads longest, not every bar pinned at 100%.
-function KpiTile({ kpi, maxAbsPct }: { kpi: OutputCompare['kpiDeltas'][number]; maxAbsPct: number }) {
-  const prev = parseNum(kpi.previous);
-  const cur = parseNum(kpi.current);
-  const pct = prev ? Math.round(((cur - prev) / prev) * 100) : 0;
+// Inline sparkline — a run series as a normalized polyline + soft area fill with
+// the latest point dotted. No axes; the tile's hero value + series row carry the
+// numbers. Stroke stays crisp when the SVG stretches to fill the tile.
+function Sparkline({ values, tone }: { values: number[]; tone: 'bad' | 'good' | 'neutral' }) {
+  const w = 140, h = 34, pad = 3;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max - min || 1;
+  const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+  const pts = values.map((val, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (val - min) / span) * (h - pad * 2);
+    return [x, y] as const;
+  });
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lx, ly] = pts[pts.length - 1];
+  const area = `${line} L${lx.toFixed(1)},${h} L${pts[0][0].toFixed(1)},${h} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" className={TONE_TEXT[tone]} aria-hidden>
+      <path d={area} fill="currentColor" opacity={0.1} />
+      <path d={line} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={lx} cy={ly} r={2.6} fill="currentColor" />
+    </svg>
+  );
+}
 
-  const polarity = kpiPolarity(kpi.label);
-  const isBad = polarity === 'lowerBetter' && kpi.direction === 'up';
-  const isGood = polarity === 'lowerBetter' && kpi.direction === 'down';
-  const chipCls = isBad ? 'text-risk bg-risk-50' : isGood ? 'text-compliant-700 bg-compliant-50' : 'text-ink-500 bg-canvas';
-  const barCls = isBad ? 'bg-risk-400' : isGood ? 'bg-compliant-500' : 'bg-brand-300';
-  const Arrow = kpi.direction === 'up' ? TrendingUp : kpi.direction === 'down' ? TrendingDown : Minus;
+// Delta tile (single comparison run) — current value hero, a coloured % chip,
+// "from X", and a magnitude bar scaled to the biggest mover across the three
+// KPIs (`maxAbsPct`) so the largest change reads longest, not pinned at 100%.
+function KpiDeltaTile({ def, prev, cur, maxAbsPct }: {
+  def: typeof KPI_DEFS[number]; prev: number; cur: number; maxAbsPct: number;
+}) {
+  const { pct, dir, tone } = moveOf(def.key, cur, prev);
+  const Arrow = dir === 'up' ? TrendingUp : dir === 'down' ? TrendingDown : Minus;
   const barW = maxAbsPct ? Math.max(6, (Math.abs(pct) / maxAbsPct) * 100) : 0;
-
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-canvas-border bg-canvas-elevated p-3">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-400 leading-tight">{kpi.label}</span>
-        {kpi.direction !== 'flat' && (
-          <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] font-bold shrink-0 ${chipCls}`}>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-400 leading-tight">{def.label}</span>
+        {dir !== 'flat' && (
+          <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] font-bold shrink-0 ${CHIP_CLS[tone]}`}>
             <Arrow size={10} />{pct > 0 ? '+' : ''}{pct}%
           </span>
         )}
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{kpi.current}</span>
-      </div>
-      <div className="text-[11px] font-mono text-ink-400">from {kpi.previous}</div>
+      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{def.fmt(cur)}</span>
+      <div className="text-[11px] font-mono text-ink-400">from {def.fmt(prev)}</div>
       <div className="mt-0.5 h-1.5 rounded-full bg-canvas overflow-hidden" title={`${Math.abs(pct)}% change`}>
-        <div className={`h-full rounded-full ${barCls}`} style={{ width: `${barW}%` }} />
+        <div className={`h-full rounded-full ${BAR_CLS[tone]}`} style={{ width: `${barW}%` }} />
       </div>
+    </div>
+  );
+}
+
+// Trend tile (2+ comparison runs) — same hero value + last-move chip, but the
+// magnitude bar becomes a sparkline over the whole selected window, with the
+// run-by-run series underneath and the latest point emphasized. The headline
+// KPI (exceptions) gets a subtle accent so the eye lands there first.
+function KpiTrendTile({ def, series, headline }: {
+  def: typeof KPI_DEFS[number]; series: number[]; headline?: boolean;
+}) {
+  const cur = series[series.length - 1];
+  const prev = series[series.length - 2] ?? cur;
+  const { pct, dir, tone } = moveOf(def.key, cur, prev);
+  const Arrow = dir === 'up' ? TrendingUp : dir === 'down' ? TrendingDown : Minus;
+  return (
+    <div className={`flex h-full flex-col gap-2 rounded-xl border p-3 snap-start ${headline ? 'border-brand-200 bg-brand-50/25' : 'border-canvas-border bg-canvas-elevated'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-400 leading-tight">{def.label}</span>
+        {dir !== 'flat' && (
+          <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] font-bold shrink-0 ${CHIP_CLS[tone]}`}>
+            <Arrow size={10} />{pct > 0 ? '+' : ''}{pct}%
+          </span>
+        )}
+      </div>
+      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{def.fmt(cur)}</span>
+      <Sparkline values={series} tone={tone} />
+      <div className="text-[10.5px] font-mono leading-tight text-ink-400">
+        {series.map((val, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-ink-300"> · </span>}
+            <span className={i === series.length - 1 ? `font-bold ${TONE_TEXT[tone]}` : ''}>{def.fmt(val)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Run-window selector — the descriptor label itself is the dropdown trigger, so
+// the header text always names the current selection. Free multi-select of prior
+// runs (with Last-run / Last-3 / All shortcuts); the current run is the fixed
+// anchor and can't be unpicked, and at least one prior must stay selected.
+function RunSelector({ priors, current, selectedIds, descriptor, onToggle, onQuick }: {
+  priors: RunSnapshot[]; current?: RunSnapshot; selectedIds: Set<string>;
+  descriptor: string;
+  onToggle: (id: string) => void;
+  onQuick: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const recent = [...priors].reverse(); // most-recent first in the list
+  const lastId = priors[priors.length - 1]?.id;
+  const quicks = [
+    { label: 'Last run', ids: lastId ? [lastId] : [] },
+    { label: 'Last 3', ids: priors.slice(-2).map(r => r.id) }, // 2 priors + current = 3 runs
+    { label: 'All', ids: priors.map(r => r.id) },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="group inline-flex items-center gap-1.5 -ml-1 rounded-lg px-1.5 py-1 hover:bg-canvas transition-colors cursor-pointer"
+      >
+        <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
+          <GitCompareArrows size={13} />
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">{descriptor}</span>
+        <ChevronDown size={13} className={`text-brand-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute left-0 top-[calc(100%+6px)] z-30 w-64 rounded-xl border border-canvas-border bg-canvas-elevated p-2 shadow-lg shadow-ink-900/5"
+          >
+            <div className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">Compare against</div>
+            <div className="flex flex-wrap gap-1 px-1 pb-2">
+              {quicks.map(q => {
+                const active = q.ids.length === selectedIds.size && q.ids.every(id => selectedIds.has(id));
+                return (
+                  <button key={q.label} type="button" onClick={() => onQuick(q.ids)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${active ? 'bg-brand-600 text-white' : 'bg-canvas text-ink-600 hover:bg-brand-50 hover:text-brand-700'}`}>
+                    {q.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="max-h-56 overflow-y-auto">
+              {recent.map(r => {
+                const checked = selectedIds.has(r.id);
+                const lockLast = checked && selectedIds.size === 1; // keep ≥1 prior
+                return (
+                  <button key={r.id} type="button"
+                    onClick={() => { if (!lockLast) onToggle(r.id); }}
+                    disabled={lockLast}
+                    title={lockLast ? 'Keep at least one run to compare against' : undefined}
+                    className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${lockLast ? 'cursor-default' : 'cursor-pointer hover:bg-canvas'}`}>
+                    <span className={`size-4 shrink-0 rounded-[5px] border flex items-center justify-center ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-canvas'}`}>
+                      {checked && <Check size={11} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[12px] font-semibold text-ink-800">{r.label}</span>
+                      <span className="block text-[10.5px] text-ink-400">{r.date}</span>
+                    </span>
+                    <span className="shrink-0 text-[11px] font-mono text-ink-500 tabular-nums" title="exceptions">{r.kpis.exceptions}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {current && (
+              <div className="mt-1 flex items-center gap-2.5 border-t border-canvas-border px-2 pt-2">
+                <span className="size-4 shrink-0 rounded-[5px] border border-brand-200 bg-brand-50 flex items-center justify-center text-brand-500">
+                  <Check size={11} />
+                </span>
+                <span className="min-w-0 flex-1 text-[11.5px] text-ink-500">
+                  <span className="font-semibold text-ink-700">{current.label}</span> · this run
+                </span>
+                <span className="shrink-0 text-[11px] font-mono text-ink-500 tabular-nums">{current.kpis.exceptions}</span>
+              </div>
+            )}
+            <p className="px-2 pt-2 text-[10.5px] text-ink-400">
+              {selectedIds.size + 1} runs in view · {selectedIds.size >= 2 ? 'trend' : 'delta'}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -154,26 +317,131 @@ export function OutputComparePanel({
     ?? (STAGE3_CURRENT.insight.evidence[0]?.['Vendor Name']?.split(' ')[0]) // "MCKESSON"
     ?? 'this run';
 
-  // Verdict: weigh how the "lower is better" KPIs moved.
-  const badMoves = compare.kpiDeltas.filter(k => kpiPolarity(k.label) === 'lowerBetter' && k.direction === 'up').length;
-  const goodMoves = compare.kpiDeltas.filter(k => kpiPolarity(k.label) === 'lowerBetter' && k.direction === 'down').length;
-  const verdict: Verdict = badMoves > goodMoves ? 'worse' : goodMoves > badMoves ? 'better' : 'same';
-  const v = VERDICT[verdict];
+  const history = compare.history ?? [];
+  const priors = history.filter(r => !r.current);
+  const current = history.find(r => r.current) ?? history[history.length - 1];
+  const mostRecentPriorId = priors[priors.length - 1]?.id;
 
-  // Headline % from the exceptions KPI (the metric the verdict hangs on).
-  const excKpi = compare.kpiDeltas.find(k => /exception|error|flag/i.test(k.label)) ?? compare.kpiDeltas[0];
-  const excPct = excKpi ? Math.round(((parseNum(excKpi.current) - parseNum(excKpi.previous)) / (parseNum(excKpi.previous) || 1)) * 100) : 0;
-  const dirWord = excPct > 0 ? 'up' : excPct < 0 ? 'down' : 'flat';
+  // Default to the single most-recent prior — i.e. today's "compared to last
+  // run" behaviour. Picking 2+ priors flips the card into trend mode.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(mostRecentPriorId ? [mostRecentPriorId] : []),
+  );
+
+  const toggle = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    if (next.size === 0 && mostRecentPriorId) next.add(mostRecentPriorId);
+    return next;
+  });
+  const quick = (ids: string[]) => setSelectedIds(new Set(ids.length ? ids : (mostRecentPriorId ? [mostRecentPriorId] : [])));
+
+  // Selected priors in chronological order + the current run = the series every
+  // derivation reads (sparklines, headline copy, verdict, streak).
+  const selectedPriors = priors.filter(p => selectedIds.has(p.id));
+  const runs: RunSnapshot[] = current ? [...selectedPriors, current] : selectedPriors;
+  const trend = selectedPriors.length >= 2;
+  const seriesOf = (key: KpiKey) => runs.map(r => r.kpis[key]);
+
+  const workflowName = compare.previousRunLabel.split('—')[0].trim();
+  const year = current?.date.match(/\d{4}/)?.[0] ?? '';
+
+  // Descriptor — reflects the selection AND doubles as the dropdown trigger.
+  const contiguousLastN = selectedPriors.length > 0 &&
+    selectedPriors.every((p, i) => p.id === priors[priors.length - selectedPriors.length + i]?.id);
+  const descriptor = !trend
+    ? (selectedPriors[0]?.id === mostRecentPriorId ? 'Compared to last run' : `Compared to ${selectedPriors[0]?.month ?? 'a run'}`)
+    : contiguousLastN ? `Across last ${runs.length} runs` : `Comparing ${runs.length} runs`;
+
+  // Exceptions is the metric the verdict + headline hang on.
+  const exc = seriesOf('exceptions');
+  const excCur = exc[exc.length - 1] ?? 0;
+  const excPrev = exc[exc.length - 2] ?? excCur;
+  const excBase = exc[0] ?? excCur;
+  const lastPct = excPrev ? Math.round(((excCur - excPrev) / excPrev) * 100) : 0;
+  const windowPct = excBase ? Math.round(((excCur - excBase) / excBase) * 100) : 0;
+  const dirWord = lastPct > 0 ? 'up' : lastPct < 0 ? 'down' : 'flat';
+
+  // Consecutive runs the exceptions count rose / fell, latest-run backward.
+  const streakLen = (cmp: (a: number, b: number) => boolean) => {
+    let n = 0;
+    for (let i = exc.length - 1; i > 0; i--) { if (cmp(exc[i], exc[i - 1])) n++; else break; }
+    return n;
+  };
+  const risingRuns = streakLen((a, b) => a > b);
+  const fallingRuns = streakLen((a, b) => a < b);
+
+  // Verdict — weigh how the "lower is better" KPIs made their latest move.
+  const moves = KPI_DEFS.filter(d => d.key !== 'rowsProcessed').map(d => {
+    const s = seriesOf(d.key); return moveOf(d.key, s[s.length - 1], s[s.length - 2] ?? s[s.length - 1]).tone;
+  });
+  const verdict: Verdict = moves.filter(m => m === 'bad').length > moves.filter(m => m === 'good').length
+    ? 'worse'
+    : moves.filter(m => m === 'good').length > moves.filter(m => m === 'bad').length ? 'better' : 'same';
+  const v = VERDICT[verdict];
+  const streak =
+    trend && verdict === 'worse' && risingRuns >= 2 ? ` · ${risingRuns} runs rising`
+    : trend && verdict === 'better' && fallingRuns >= 2 ? ` · ${fallingRuns} runs falling`
+    : '';
 
   const newCount = compare.newFindings.length;
-  const takeaway =
-    newCount > 0
-      ? `A new ${entity} cluster appeared, and exceptions are ${dirWord} ${Math.abs(excPct)}% since your last run.`
-      : `No new clusters this run — exceptions are ${dirWord} ${Math.abs(excPct)}% since your last run.`;
+  const takeaway = !trend
+    ? (newCount > 0
+        ? `A new ${entity} cluster appeared, and exceptions are ${dirWord} ${Math.abs(lastPct)}% since your last run.`
+        : `No new clusters this run — exceptions are ${dirWord} ${Math.abs(lastPct)}% since your last run.`)
+    : (risingRuns >= 2
+        ? `Exceptions have climbed ${risingRuns} runs straight — ${int0(excCur)} now, up ${Math.abs(lastPct)}% on last run and ${Math.abs(windowPct)}% across the window.`
+        : `Exceptions are ${dirWord} ${Math.abs(lastPct)}% on last run and ${windowPct >= 0 ? 'up' : 'down'} ${Math.abs(windowPct)}% across ${runs.length} runs.`);
 
-  const nextAction = newCount > 0
-    ? `Triage the ${newCount} new finding${newCount === 1 ? '' : 's'} first — ${compare.newFindings[0].detail.split('—')[0].trim()}`
-    : 'Confirm the carried-over items are still expected';
+  const showChronic = trend && runs.length >= 3 && (compare.chronicOpen ?? 0) > 0;
+
+  // Recommended actions — derived from what actually moved this run, urgent
+  // first, and rendered through the shared RecommendedActions surface so they
+  // read identically to the other AI-insight cards.
+  const resolvedCount = compare.resolvedFindings.length;
+  const recs: RecItem[] = [
+    ...(newCount > 0 ? [{
+      id: 'cmp-new',
+      title: `Triage the ${newCount === 1 ? 'new' : `${newCount} new`} ${entity} finding${newCount === 1 ? '' : 's'} before settlement — ${compare.newFindings[0].ref} ${compare.newFindings[0].detail.split('—')[0].trim()}.`,
+    }] : []),
+    ...(trend && risingRuns >= 2 ? [{
+      id: 'cmp-rise',
+      title: `Investigate the ${risingRuns}-run rise in exceptions — ${int0(excBase)} → ${int0(excCur)} across ${runs[0]?.month}–${current?.month}.`,
+    }] : []),
+    ...(showChronic ? [{
+      id: 'cmp-chronic',
+      title: `Clear the ${compare.chronicOpen} chronic items open across 3+ runs — they aren't resolving on their own.`,
+    }] : []),
+    ...(resolvedCount > 0 ? [{
+      id: 'cmp-fixed',
+      title: `Confirm the ${resolvedCount} fixed item${resolvedCount === 1 ? '' : 's'} stay closed on the next run.`,
+    }] : []),
+    ...(!showChronic ? [{
+      id: 'cmp-open',
+      title: `Spot-check the ${compare.carriedOver} still-open items carried over from before.`,
+    }] : []),
+  ];
+
+  // Evidence — the runs in view (newest first), the raw material behind the
+  // comparison, in the shared Source/Item/Detail table (collapsed by default).
+  const evidence: EvidenceRow[] = [...runs].reverse().map(r => ({
+    ref: r.date,
+    label: `${r.label}${r.current ? ' · this run' : ''} — ${int0(r.kpis.exceptions)} exceptions`,
+    detail: `${usd2(r.kpis.underRecovered)} under-recovered`,
+  }));
+
+  const checkMore: CheckMoreOption[] = trend
+    ? [
+        { kind: 'compare', label: 'Compare run-over-run' },
+        { kind: 'ask', label: risingRuns >= 2 ? 'Ask why exceptions keep rising' : 'Ask what changed across these runs' },
+      ]
+    : [
+        { kind: 'compare', label: 'Compare line by line vs last run' },
+        { kind: 'ask', label: 'Ask what drove the change' },
+      ];
+  const onCheckMore = onAction
+    ? (opt: CheckMoreOption) => onAction(opt.detail ? `${opt.label} — ${opt.detail}` : opt.label)
+    : undefined;
 
   return (
     <motion.section
@@ -183,56 +451,88 @@ export function OutputComparePanel({
       className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden"
     >
       <div className="p-4">
-        {/* Header — label + verdict */}
+        {/* Header — run selector (doubles as the descriptor) + AI chip + verdict */}
         <div className="flex items-center gap-2">
-          <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
-            <GitCompareArrows size={13} />
-          </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Compared to last run</span>
+          {history.length > 0 ? (
+            <RunSelector priors={priors} current={current} selectedIds={selectedIds}
+              descriptor={descriptor} onToggle={toggle} onQuick={quick} />
+          ) : (
+            <>
+              <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
+                <GitCompareArrows size={13} />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Compared to last run</span>
+            </>
+          )}
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-bold border border-brand-100">
             <Sparkles size={10} /> AI Insight
           </span>
           <span className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${v.cls}`}>
-            <v.Icon size={11} /> {v.label}
+            <v.Icon size={11} /> {v.label}{streak}
           </span>
         </div>
 
         {/* Takeaway */}
         <h4 className="text-[15px] font-bold text-ink-900 leading-snug mt-2.5">{takeaway}</h4>
         <p className="text-[11.5px] text-ink-400 mt-1">
-          vs <span className="font-medium text-ink-600">{compare.previousRunLabel}</span> · {compare.previousRunDate}
+          {!trend
+            ? <>vs <span className="font-medium text-ink-600">{selectedPriors[0]?.label ?? compare.previousRunLabel}</span> · {selectedPriors[0]?.date ?? compare.previousRunDate}</>
+            : <>trend of <span className="font-medium text-ink-600">{workflowName}</span> · {runs[0]?.month}–{current?.month} {year}</>}
         </p>
 
-        {/* How the KPIs moved — stat tiles with a shared-axis delta bar */}
+        {/* How the KPIs moved / are trending — morphs between delta tiles and
+            a scroll-snap row of sparkline tiles (3-up when the column is wide,
+            scrolls when the workspace panel narrows it / on mobile). */}
         <div className="mt-3 rounded-xl border border-canvas-border bg-canvas/40 p-3">
           <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">How the KPIs moved</span>
-            <span className="text-[10px] text-ink-300">bar = size of change</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">{trend ? 'How the KPIs are trending' : 'How the KPIs moved'}</span>
+            <span className="text-[10px] text-ink-300">{trend ? `line = last ${runs.length} runs` : 'bar = size of change'}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {(() => {
-              const maxAbsPct = Math.max(
-                1,
-                ...compare.kpiDeltas.map((k) => {
-                  const p = parseNum(k.previous);
-                  const c = parseNum(k.current);
-                  return p ? Math.abs(Math.round(((c - p) / p) * 100)) : 0;
-                }),
-              );
-              return compare.kpiDeltas.map((k) => <KpiTile key={k.label} kpi={k} maxAbsPct={maxAbsPct} />);
-            })()}
-          </div>
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={trend ? 'trend' : 'delta'}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              {trend ? (
+                <div className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory pb-1 -mb-1 [scrollbar-width:thin]">
+                  {KPI_DEFS.map(def => (
+                    <div key={def.key} className="min-w-[168px] flex-1">
+                      <KpiTrendTile def={def} series={seriesOf(def.key)} headline={def.headline} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {(() => {
+                    const prevRun = selectedPriors[0] ?? current;
+                    const maxAbsPct = Math.max(1, ...KPI_DEFS.map(def => {
+                      const p = prevRun?.kpis[def.key] ?? 0, c = current?.kpis[def.key] ?? 0;
+                      return p ? Math.abs(Math.round(((c - p) / p) * 100)) : 0;
+                    }));
+                    return KPI_DEFS.map(def => (
+                      <KpiDeltaTile key={def.key} def={def} prev={prevRun?.kpis[def.key] ?? 0} cur={current?.kpis[def.key] ?? 0} maxAbsPct={maxAbsPct} />
+                    ));
+                  })()}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* What's new / fixed / still open */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
           <DiffColumn Icon={Plus} label="New" count={newCount} tone="new">
             {newCount > 0 ? (
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {compare.newFindings.map((f) => (
                   <li key={f.ref} className="text-[11.5px] text-ink-700 leading-snug">
                     <span className="font-mono text-[10px] text-mitigated-700">{f.ref}</span>
                     <span className="block text-ink-600">{f.detail}</span>
+                    {trend && (
+                      <span className="mt-1 inline-flex items-center rounded bg-mitigated-100 text-mitigated-700 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide">1st run seen</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -254,12 +554,32 @@ export function OutputComparePanel({
 
           <DiffColumn Icon={Layers} label="Still open" count={compare.carriedOver} tone="open">
             <p className="text-[11.5px] text-ink-500 leading-snug">
-              known item{compare.carriedOver === 1 ? '' : 's'} carried over from before, still unresolved.
+              {trend
+                ? 'carried over from before, still unresolved.'
+                : <>known item{compare.carriedOver === 1 ? '' : 's'} carried over from before, still unresolved.</>}
             </p>
+            {showChronic && (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded bg-risk-50 text-risk px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide">
+                {compare.chronicOpen} chronic · 3+ runs
+              </span>
+            )}
           </DiffColumn>
         </div>
 
-        <NextAction label={nextAction} onClick={onAction ? () => onAction(nextAction) : undefined} />
+        {/* Evidence (collapsed by default) then the recommended actions —
+            the same two shared surfaces the other AI-insight cards use. */}
+        <EvidenceDisclosure
+          className="mt-3"
+          evidence={evidence}
+          label="Evidence · runs in view"
+          checkMore={checkMore}
+          onCheckMore={onCheckMore}
+        />
+        <RecommendedActions
+          className="mt-2.5"
+          recs={recs}
+          onOpen={(title) => onAction?.(title)}
+        />
       </div>
     </motion.section>
   );
