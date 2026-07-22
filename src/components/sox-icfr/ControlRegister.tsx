@@ -10,6 +10,7 @@ import {
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
+import CreateEngagementDrawer from './CreateEngagementDrawer';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -85,8 +86,9 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, openControl, setView, rollForward, requestDesignDocs } = useIcfr();
+  const { eng, role, openControl, rollForward, requestDesignDocs } = useIcfr();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
+  const [creating, setCreating] = useState(false);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -146,7 +148,7 @@ export default function ControlRegister() {
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
             <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
           </button>
-          {role === 'auditor' && <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New</button>}
+          {role === 'auditor' && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New</button>}
         </div>
       </div>
 
@@ -291,6 +293,9 @@ export default function ControlRegister() {
 
       {/* bulk test — compile files → attach unique datasets → execute */}
       {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
+
+      {/* new engagement — side drawer, ends in go-live with locked materiality */}
+      {creating && <CreateEngagementDrawer onClose={() => setCreating(false)} />}
     </div>
   );
 }

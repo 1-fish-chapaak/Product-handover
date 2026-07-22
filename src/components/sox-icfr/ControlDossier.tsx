@@ -10,7 +10,7 @@ import {
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
+  controlConclusion, courtFor, designCompleteness, discussionsFor, operatingProgress, trackResult,
   pointResult, stepResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
@@ -22,7 +22,7 @@ import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, EvidenceMode, OperatingStep,
+  Control, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -87,7 +87,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
   const [emails, setEmails] = useState<string[]>(['controls.owner@airindiaexpress.in']);
   const [draft, setDraft] = useState('');
   const addEmail = () => { const e = draft.trim().replace(/,$/, ''); if (e && !emails.includes(e)) setEmails([...emails, e]); setDraft(''); };
-  const toggle = (id: string) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) => setSel(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const canSend = sel.size > 0 && emails.length > 0;
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
@@ -137,7 +137,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
 }
 
 // ── conclude footer — always visible, prominent ───────────────────────────────────
-function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean }) {
+function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disableEffective, disableEffectiveNote }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean; disableEffective?: boolean; disableEffectiveNote?: string }) {
   const { me, concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -157,8 +157,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
   return (
     <div className="mt-4 pt-4 border-t border-canvas-border">
       <div className="flex items-center gap-2.5 flex-wrap">
-        <button disabled={disabled} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer"><CheckCircle2 size={15} /> Conclude effective</button>
+        <button disabled={disabled || disableEffective} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
         <button disabled={disabled} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
+        {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {suggestion !== 'Not tested' && <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></span>}
       </div>
       {pending && <RationaleForm title={`Overriding the evidence — record why you concluded ${pending}`} onCancel={() => setPending(null)} buttons={[{ label: `Save rationale`, onClick: note => { override(control.id, { result: pending === 'Effective' ? 'Effective' : 'Ineffective', by: me, at: 'just now', rationale: note }); setPending(null); } }]} />}
@@ -412,15 +413,29 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 }
 
 // ── design section (TOD) ──────────────────────────────────────────────────────────
+// Realistic evidence file name for a design element — what the "upload" attaches.
+const EVIDENCE_EXT: Partial<Record<DesignDocKind, string>> = { 'Precision & thresholds': 'xlsx', 'Segregation of duties': 'xlsx' };
+function evidenceFileName(kind: DesignDocKind, wpRef: string): string {
+  return `${kind.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
+}
+
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { setDocStatus, addDesignDoc, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
+  const { addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
   const logEvent = useAuditLog();
-  const d = control.design; const prog = designProgress(control);
+  const d = control.design;
   const [modal, setModal] = useState(false);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
   const [validatingAll, setValidatingAll] = useState(false);
+  const [attaching, setAttaching] = useState<string | null>(null);
   const runValidateAll = () => { setValidatingAll(true); logEvent({ action: 'Run', description: `Validated all design considerations for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
+  const attach = (docId: string, kind: DesignDocKind) => {
+    setAttaching(docId);
+    logEvent({ action: 'Upload', description: `Attached design evidence (${kind}) to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+    window.setTimeout(() => { attachDesignEvidence(control.id, docId, evidenceFileName(kind, control.wpRef)); setAttaching(null); }, 900);
+  };
+  const completeness = designCompleteness(control);
+  const complete = completeness.total > 0 && completeness.pct === 100;
   const missing = d.documents.filter(x => x.status !== 'Received');
   const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
     : missing.length > 0 || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
@@ -430,42 +445,75 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   return (
     <div className="p-5">
       {empty ? (
-        <EmptyState icon={<FileText size={18} />} title="Test of design isn’t set up yet" hint="Add the design documents you need (process narrative, flowchart, walkthrough) and the design considerations to assess. You can request the documents from the control owner by email.">
+        <EmptyState icon={<FileText size={18} />} title="Test of design isn’t set up yet" hint="Add the design elements to evidence (process narrative, flowchart, walkthrough, precision & thresholds) and the design checks to assess. You can request the documents from the control owner by email.">
           {canEdit && <>
-            <Dropdown trigger={<><Plus size={13} /> Add document</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design document to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>
+            <Dropdown trigger={<><Plus size={13} /> Add element</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>
             <button onClick={() => setModal(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 cursor-pointer"><Mail size={13} /> Request data</button>
           </>}
         </EmptyState>
       ) : (
         <>
-          {/* documents */}
+          {/* completeness — the gate on the design conclusion */}
+          <div className={cn('rounded-xl border p-3.5 mb-4 flex items-center gap-4', complete ? 'border-compliant-200 bg-compliant-50/30' : 'border-canvas-border bg-paper-50/40')}>
+            <div className="relative w-12 h-12 shrink-0" role="img" aria-label={`Design completeness ${completeness.pct}%`}>
+              <svg viewBox="0 0 44 44" className="w-12 h-12 -rotate-90">
+                <circle cx="22" cy="22" r="18" fill="none" stroke="var(--color-paper-200)" strokeWidth="5" />
+                <circle cx="22" cy="22" r="18" fill="none" stroke={complete ? 'var(--color-compliant-500)' : 'var(--color-brand-500)'} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(completeness.pct / 100) * 113} 113`} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums text-ink-800">{completeness.pct}%</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-bold text-ink-900">Design completeness — {completeness.done} of {completeness.total} required elements evidenced</div>
+              <p className="text-[11.5px] text-ink-500 mt-0.5">Every required element needs evidence attached before the design can be concluded effective. Optional elements strengthen the file but don’t gate.</p>
+            </div>
+            {complete && <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-compliant-700 shrink-0"><CheckCircle2 size={14} /> Complete</span>}
+          </div>
+
+          {/* design elements — each one evidenced by attached files */}
           <div className="flex items-center justify-between mb-2.5">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Required design documents</h4>
+            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Design elements &amp; evidence</h4>
             <div className="flex items-center gap-2">
-              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{prog.docsReceived}/{prog.docsTotal} received</span>
               {canEdit && <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button>}
-              {canEdit && <Dropdown trigger={<><Plus size={12} /> Add</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design document to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>}
+              {canEdit && <Dropdown trigger={<><Plus size={12} /> Add element</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>}
             </div>
           </div>
-          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No documents yet — add one or request data.</p> : (
+          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No elements yet — add one or request data.</p> : (
             <div className="mb-5 space-y-1.5">
-              {d.documents.map(doc => (
-                <div key={doc.id} className="doc-row">
-                  <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />
-                  <div className="min-w-0 flex-1"><div className="text-[0.75rem] font-semibold text-ink-800 truncate">{doc.kind}</div><div className="text-[0.6875rem] text-ink-400 truncate">{doc.name}{doc.uploadedBy ? ` · ${doc.uploadedBy}, ${doc.at}` : ''}</div></div>
-                  <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status}</Pill>
-                  {canEdit && <div className="flex items-center gap-1">
-                    {doc.status !== 'Received' && <button onClick={() => { setDocStatus(control.id, doc.id, 'Received'); logEvent({ action: 'Upload', description: `Attached design document for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}
-                    <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design document from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
-                  </div>}
-                </div>
-              ))}
+              {d.documents.map(doc => {
+                const files = doc.files ?? (doc.status === 'Received' ? [{ id: doc.id + '-f', name: doc.name, kind: 'PDF' as const, uploadedBy: doc.uploadedBy ?? 'Risk Owner', uploadedAt: doc.at ?? '' }] : []);
+                const busy = attaching === doc.id;
+                return (
+                  <div key={doc.id} className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200')}>
+                    {busy ? <Loader2 size={15} className="animate-spin text-brand-600 shrink-0" /> : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[0.75rem] font-semibold text-ink-800">{doc.kind}</span>
+                        <span className={cn('text-[0.5625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
+                      </div>
+                      {files.length > 0 ? (
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          {files.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-600 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] max-w-[240px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.name}</span></span>)}
+                          <span className="text-[0.65625rem] text-ink-400">{doc.uploadedBy ? `· ${doc.uploadedBy}, ${doc.at}` : ''}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{busy ? 'Uploading evidence…' : doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
+                      )}
+                    </div>
+                    <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.status}</Pill>
+                    {canEdit && <div className="flex items-center gap-1">
+                      {doc.status !== 'Received' && <button disabled={busy} onClick={() => attach(doc.id, doc.kind)} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
+                      {doc.status === 'Received' && <button disabled={busy} onClick={() => attach(doc.id, doc.kind)} title="Attach another file" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
+                      <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+                    </div>}
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* considerations */}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design considerations <span className="font-normal text-ink-400">· each validated by a workflow</span></h4>
+            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· AI-validated against the evidence</span></h4>
             <div className="flex items-center gap-2">
               {canEdit && d.points.length > 0 && <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button>}
               {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
@@ -481,8 +529,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
             <div className="space-y-2 mb-2">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
           )}
 
-          {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} document{missing.length > 1 ? 's' : ''} outstanding — design can’t be concluded effective without them (override to proceed).</div>}
-          <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit} />
+          {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence or request it from the control owner.</div>}
+          <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit}
+            disableEffective={!complete}
+            disableEffectiveNote={complete ? undefined : `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`} />
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>

@@ -7,8 +7,12 @@ import type {
 
 // ── builders ─────────────────────────────────────────────────────────────────────
 let _d = 0;
+// Flowchart & Policy/SOP strengthen the file but don't gate the design conclusion.
+const OPTIONAL_KINDS: DesignDoc['kind'][] = ['Flowchart', 'Policy / SOP'];
 const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: string): DesignDoc =>
-  ({ id: `dd${++_d}`, kind, name, status, uploadedBy: status === 'Received' ? (by ?? 'Risk Owner') : undefined, at: status === 'Received' ? '12 Apr' : undefined });
+  ({ id: `dd${++_d}`, kind, name, status, required: !OPTIONAL_KINDS.includes(kind),
+     files: status === 'Received' ? [{ id: `ddf${_d}`, name, kind: name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: by ?? 'Risk Owner', uploadedAt: '12 Apr' }] : undefined,
+     uploadedBy: status === 'Received' ? (by ?? 'Risk Owner') : undefined, at: status === 'Received' ? '12 Apr' : undefined });
 
 let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
@@ -416,6 +420,21 @@ const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Airline P2P & O2C', entity: 'Airline Group Ltd', framework: 'COSO 2013 / SOX 404',
   periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
   materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
+  live: true, wentLiveAt: '01 Apr 2025',
+  entityDetected: { name: 'Airline Group Ltd', companyCode: 'AG01', source: 'GL upload · Mar 2025' },
+  materialityBasis: {
+    benchmark: 'assets',
+    amounts: { assets: 1_000_000_000, revenue: 820_000_000, pbt: 74_000_000, cash: 58_000_000, equity: 402_000_000 },
+    pct: 0.5, pmPct: 75, ctPct: 5,
+    source: 'GL Mar 2025 (AG01) · P&L annualized ×12, balance sheet as at 31 Mar 2025',
+    allocation: [
+      { group: 'Revenue', balance: 412_000_000, sharePct: 55, allocated: 0 },
+      { group: 'Accounts Payable', balance: 184_000_000, sharePct: 25, allocated: 0 },
+      { group: 'Inventory', balance: 96_000_000, sharePct: 13, allocated: 0 },
+      { group: 'Cash & bank', balance: 58_000_000, sharePct: 7, allocated: 0 },
+    ],
+    lockedAt: '01 Apr 2025 · at go-live',
+  },
   rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
   accounts: ACCOUNTS,
   controls: [...DETAILED, ...generate()],

@@ -105,6 +105,27 @@ export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
   return { columns: ['Document', 'Vendor', 'Approval', 'Amount', 'Result'], rows };
 }
 
+/** TOD completeness — the share of REQUIRED design elements that carry evidence.
+ *  Concluding design effective is gated on this reaching 100%. */
+export function designCompleteness(c: Control): { done: number; total: number; pct: number } {
+  const req = c.design.documents.filter(d => d.required !== false);
+  const done = req.filter(d => d.status === 'Received').length;
+  return { done, total: req.length, pct: req.length ? Math.round((done / req.length) * 100) : 0 };
+}
+
+// ─── Materiality worksheet math ──────────────────────────────────────────────────
+import type { BenchmarkKey, MaterialityBasis } from './types';
+export const BENCHMARK_META: Record<BenchmarkKey, { label: string; range: [number, number]; note: string }> = {
+  assets: { label: 'Total assets', range: [0.5, 2], note: 'Asset-intensive entities (fleet, infrastructure)' },
+  revenue: { label: 'Revenue', range: [0.5, 1], note: 'Stable top-line, thin or volatile margins' },
+  pbt: { label: 'Profit before tax', range: [5, 10], note: 'Profit-oriented listed entities' },
+  cash: { label: 'Cash & equivalents', range: [1, 3], note: 'Liquidity-driven / custodial operations' },
+  equity: { label: 'Net assets / equity', range: [1, 2], note: 'Holding and investment entities' },
+};
+export function overallMateriality(b: MaterialityBasis): number { return Math.round(b.amounts[b.benchmark] * b.pct / 100); }
+export function performanceMaterialityOf(b: MaterialityBasis): number { return Math.round(overallMateriality(b) * b.pmPct / 100); }
+export function clearlyTrivialOf(b: MaterialityBasis): number { return Math.round(overallMateriality(b) * b.ctPct / 100); }
+
 export function designProgress(c: Control) {
   const docs = c.design.documents;
   return {

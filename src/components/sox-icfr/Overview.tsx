@@ -155,7 +155,7 @@ export default function Overview() {
               </div>
             ))}
           </div>
-          <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
+          <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Configuration <ArrowRight size={13} /></button>
         </div>
       </div>
 

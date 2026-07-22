@@ -17,7 +17,7 @@ import { ROLE_LABEL } from './types';
 // The four primary tabs — mirrors how other engagements are laid out.
 export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls';
 // 'overview' | 'racm' | 'risks' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
-type View = 'overview' | 'racm' | 'racm-editor' | 'risks' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
+type View = 'overview' | 'racm' | 'racm-editor' | 'risks' | 'register' | 'dossier' | 'deficiencies' | 'scope';
 export interface RacmEditorMeta { name: string; process?: string }
 
 const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register' };
@@ -43,6 +43,7 @@ interface IcfrCtx {
   overrideDesign: (controlId: string, override: Override | null) => void;
   // design CRUD + validation
   addDesignDoc: (controlId: string, kind: DesignDocKind) => void;
+  attachDesignEvidence: (controlId: string, docId: string, fileName: string) => void;
   removeDesignDoc: (controlId: string, docId: string) => void;
   addDesignPoint: (controlId: string, text: string) => void;
   removeDesignPoint: (controlId: string, pointId: string) => void;
@@ -174,8 +175,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchControl, pushExec]);
 
   const addDesignDoc = useCallback<IcfrCtx['addDesignDoc']>((controlId, kind) => {
-    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: [...c.design.documents, { id: uid('dd'), kind, name: `${kind} — to provide`, status: 'Missing' } as DesignDoc] } }));
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: [...c.design.documents, { id: uid('dd'), kind, name: `${kind} — to provide`, status: 'Missing', required: true } as DesignDoc] } }));
   }, [patchControl]);
+
+  // Attach an evidence file to a design element — the element becomes Evidenced,
+  // which is what the TOD completeness gate counts.
+  const attachDesignEvidence = useCallback<IcfrCtx['attachDesignEvidence']>((controlId, docId, fileName) => {
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId
+      ? { ...d, status: 'Received' as DocStatus, name: fileName, uploadedBy: me, at: 'just now', files: [...(d.files ?? []), { id: uid('f'), name: fileName, kind: fileName.toLowerCase().endsWith('.xlsx') ? 'XLSX' : fileName.toLowerCase().endsWith('.csv') ? 'CSV' : 'PDF', uploadedBy: me, uploadedAt: 'just now' } as EvidenceFile] }
+      : d) } }));
+    pushExec(prev => { const d = prev.controls.find(c => c.id === controlId)?.design.documents.find(dd => dd.id === docId); return d ? { controlId, track: 'design', kind: 'receive-doc', verb: 'attached evidence', target: d.kind } : null; });
+  }, [patchControl, me, pushExec]);
   const removeDesignDoc = useCallback<IcfrCtx['removeDesignDoc']>((controlId, docId) => {
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.filter(d => d.id !== docId) } }));
   }, [patchControl]);
@@ -430,11 +440,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const updateDeficiency = useCallback<IcfrCtx['updateDeficiency']>((id, patch) => {
     setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
   }, []);
+  // Materiality is immutable once the engagement went live — thresholds set at
+  // go-live are the contract every exception is sized against.
   const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
-    setEng(prev => ({ ...prev, rules: { ...prev.rules, ...patch } }));
+    setEng(prev => {
+      const p = { ...patch };
+      if (prev.materialityBasis?.lockedAt) delete p.clearlyTrivial;
+      return { ...prev, rules: { ...prev.rules, ...p } };
+    });
   }, []);
   const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
-    setEng(prev => ({ ...prev, ...patch }));
+    setEng(prev => (prev.materialityBasis?.lockedAt ? prev : { ...prev, ...patch }));
   }, []);
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
     setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
@@ -470,7 +486,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     eng, role, tab, view, selectedControlId, racmEditor, me,
     setRole: changeRole, setTab, setView, openRacmEditor, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
@@ -478,7 +494,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
     togglePeriod, rollForward, createEngagement,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

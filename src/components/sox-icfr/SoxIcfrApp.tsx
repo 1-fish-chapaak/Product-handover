@@ -13,7 +13,6 @@ import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
 import { DeficienciesView, ScopeView } from './extraViews';
-import SetupWizard from './SetupWizard';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 
 const SOX_TABS: TabDef[] = [
@@ -66,7 +65,6 @@ function Inner({ onBack }: { onBack?: () => void }) {
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
-    : view === 'setup' ? <SetupWizard />
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? <Racm />
     : tab === 'risks' ? <RiskLibrary />

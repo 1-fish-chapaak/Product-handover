@@ -44,13 +44,19 @@ export interface EvidenceFile {
 
 // ─── Design track (TOD) ─────────────────────────────────────────────────────────
 
-export type DesignDocKind = 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP';
+export type DesignDocKind =
+  | 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP'
+  | 'Precision & thresholds' | 'Segregation of duties';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+/** One design element — a completeness requirement evidenced by attached files. */
 export interface DesignDoc {
   id: string;
   kind: DesignDocKind;
   name: string;
   status: DocStatus;
+  /** Required elements gate the design conclusion; optional ones don't. Default true. */
+  required?: boolean;
+  files?: EvidenceFile[];
   uploadedBy?: string;
   at?: string;
 }
@@ -249,6 +255,27 @@ export const MW_INDICATOR_CATALOGUE = [
   'Ineffective control environment / oversight',
   'Ineffective period-end financial reporting process',
 ] as const;
+// ─── Materiality basis — the benchmark worksheet behind the number ───────────────
+// Set in the engagement drawer, locked at go-live: the benchmark, its annualized
+// amount (from the uploaded one-month GL), the chosen %, and how performance
+// materiality allocates across the significant account groups.
+export interface BenchmarkAmounts { assets: number; revenue: number; pbt: number; cash: number; equity: number; }
+export type BenchmarkKey = keyof BenchmarkAmounts;
+export interface MaterialityAllocation { group: string; balance: number; sharePct: number; allocated: number; }
+export interface MaterialityBasis {
+  benchmark: BenchmarkKey;
+  amounts: BenchmarkAmounts;     // annualized (P&L ×12) / point-in-time (balance sheet)
+  pct: number;                   // chosen % of the benchmark
+  pmPct: number;                 // performance materiality as % of overall (50–75)
+  ctPct: number;                 // clearly-trivial as % of overall (usually 5)
+  source: string;                // e.g. 'GL Apr 2026 (AG01) · P&L annualized ×12'
+  allocation: MaterialityAllocation[];
+  lockedAt?: string;             // set at go-live — materiality can't change after
+}
+
+/** What the tool detected from the uploaded RACM / GL when the engagement was created. */
+export interface EntityDetection { name: string; companyCode: string; source: string; }
+
 export interface MaterialityRules {
   clearlyTrivial: number;        // de-minimis threshold (₹) — below this, an exception is clearly trivial
   sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
@@ -280,6 +307,10 @@ export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
+  live?: boolean;
+  wentLiveAt?: string;
+  entityDetected?: EntityDetection;
+  materialityBasis?: MaterialityBasis;
   rules: MaterialityRules;
   accounts: SignificantAccount[];
   controls: Control[];
@@ -289,4 +320,4 @@ export interface IcfrEngagement {
   executions: ExecutionEvent[];
 }
 
-export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];
+export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];

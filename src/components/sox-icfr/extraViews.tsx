@@ -1,7 +1,8 @@
-import { ArrowLeft, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
+import { ArrowLeft, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, XCircle, Sliders, GitMerge, Route, Building2, Lock, Paperclip, Sparkles } from 'lucide-react';
 import { useIcfr } from './store';
 import { computeSeverity, formatINR, severityOf, isClearlyTrivial } from './helpers';
 import { SeverityPill } from './parts';
+import MaterialityWorksheet from './MaterialityWorksheet';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -14,10 +15,11 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   return <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cn('toggle', on && 'on')} />;
 }
 
-// ─── Materiality & scope — the ground rules ──────────────────────────────────────
+// ─── Configuration — entity, materiality (locked at go-live) & the ground rules ──
 export function ScopeView() {
-  const { eng, back, updateRules, updateMateriality } = useIcfr();
+  const { eng, back, updateRules, updateMateriality, racmDocs } = useIcfr();
   const M = eng.materiality; const r = eng.rules;
+  const locked = !!eng.materialityBasis?.lockedAt;
   const pm = eng.performanceMateriality;
   const ctt = r.clearlyTrivial;
   const sd = M * r.sdBandPct / 100;
@@ -35,18 +37,47 @@ export function ScopeView() {
     <div className="space-y-5">
       <button onClick={back} className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Back</button>
       <div>
-        <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Materiality &amp; scope</h1>
-        <p className="text-[0.8125rem] text-ink-500 mt-0.5">The ground rules that drive how every exception is evaluated, sized, and routed. Set them once — they apply across all controls.</p>
+        <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Configuration</h1>
+        <p className="text-[0.8125rem] text-ink-500 mt-0.5">Entity, materiality and the ground rules that drive how every exception is evaluated, sized, and routed. Materiality locks at go-live.</p>
       </div>
 
-      {/* materiality */}
+      {/* entity & source */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Target size={15} className="text-brand-600" /> Materiality</h2>
-        <div className="grid grid-cols-3 gap-4">
-          <Money label="Overall materiality" value={M} onChange={v => updateMateriality({ materiality: v })} hint="The financial-statement materiality benchmark." />
-          <Money label="Performance materiality" value={pm} onChange={v => updateMateriality({ performanceMateriality: v })} hint={`${pmPct}% of overall — the testing threshold.`} />
-          <Money label="Clearly-trivial threshold" value={ctt} onChange={v => updateRules({ clearlyTrivial: v })} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
+        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Building2 size={15} className="text-brand-600" /> Entity</h2>
+        <div className="flex items-start gap-3.5">
+          <span className="w-10 h-10 rounded-xl bg-brand-600 text-white inline-flex items-center justify-center shrink-0"><Building2 size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.875rem] font-semibold text-ink-900">{eng.entity}</div>
+            <div className="text-[0.75rem] text-ink-500 mt-0.5">
+              {eng.entityDetected
+                ? <><Sparkles size={11} className="inline -mt-0.5 text-brand-600" /> Detected from {eng.entityDetected.source} · company code <b className="font-mono">{eng.entityDetected.companyCode}</b></>
+                : `${eng.framework} · ${eng.periodStart} – ${eng.periodEnd}`}
+              {eng.live && <> · <span className="font-semibold text-compliant-700">Live{eng.wentLiveAt ? ` since ${eng.wentLiveAt}` : ''}</span></>}
+            </div>
+            {racmDocs.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                {racmDocs.map(d => <span key={d.id} className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-canvas-border bg-paper-50/50 text-[0.6875rem] font-medium text-ink-600"><Paperclip size={10} /> {d.name}</span>)}
+              </div>
+            )}
+          </div>
         </div>
+      </section>
+
+      {/* materiality — the worksheet, locked once the engagement went live */}
+      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Materiality</h2>
+          {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2 h-5"><Lock size={10} /> Locked at go-live</span>}
+        </div>
+        {eng.materialityBasis ? (
+          <MaterialityWorksheet basis={eng.materialityBasis} locked={locked} />
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            <Money label="Overall materiality" value={M} onChange={v => updateMateriality({ materiality: v })} hint="The financial-statement materiality benchmark." />
+            <Money label="Performance materiality" value={pm} onChange={v => updateMateriality({ performanceMateriality: v })} hint={`${pmPct}% of overall — the testing threshold.`} />
+            <Money label="Clearly-trivial threshold" value={ctt} onChange={v => updateRules({ clearlyTrivial: v })} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
+          </div>
+        )}
       </section>
 
       {/* severity ladder */}
