@@ -22,9 +22,11 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('tab', { name: 'SOX Testing' }).click();
   await page.waitForTimeout(600);
 
-  // Landing: programme list only — the pipeline explainer is parked
+  // Landing: programme list only — the pipeline explainer is parked, and the
+  // scoping-window note lives inside the modal, not upfront
   await expect(page.getByText('SOX programmes — scoping first')).toBeVisible();
   await expect(page.getByText('How a programme gets its scope')).toHaveCount(0);
+  await expect(page.getByText(/Scoping window open since/)).toHaveCount(0);
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/01-landing.png`, fullPage: true });
 
@@ -34,12 +36,15 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   const modal = page.getByRole('dialog');
   await expect(modal).toBeVisible();
   const box = await modal.boundingBox();
-  expect(Math.round(box!.width)).toBe(800);
+  expect(Math.round(box!.width)).toBe(1000);
   expect(Math.round(box!.height)).toBe(800);
+  // No breadcrumb in the summary — a plain modal header, then the engagement
+  await expect(modal.getByText('Scoping summary', { exact: true })).toBeVisible();
+  await expect(modal.locator('nav[aria-label="Breadcrumb"]')).toHaveCount(0);
   await expect(page.getByText('Opinion as of 31 Mar 2026')).toBeVisible();
   await expect(page.getByText('In-scope processes — one RACM each')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/02-fy26-programme.png`, fullPage: true });
-  await page.locator('nav[aria-label="Breadcrumb"] button', { hasText: 'SOX Testing' }).click();
+  await modal.getByRole('button', { name: 'Close' }).click();
   await page.waitForTimeout(400);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
@@ -48,7 +53,13 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.waitForTimeout(1000);
   await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
-  await expect(page.getByText('RACM', { exact: true }).first()).toBeVisible();
+  // The RACM tab mirrors the scoping summary: the same 7 derived processes,
+  // including the ones the classic catalogue doesn't have
+  await page.getByText('RACM', { exact: true }).first().click();
+  await page.waitForTimeout(800);
+  await expect(page.getByText('Fixed Assets').first()).toBeVisible();
+  await expect(page.getByText('Payroll (Hire to Retire)').first()).toBeVisible();
+  await expect(page.getByText('Procure to Pay').first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/02b-fy26-workspace.png`, fullPage: true });
   await page.getByRole('button', { name: 'Back to Engagements' }).click();
   await page.waitForTimeout(800);
@@ -71,6 +82,7 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   // No start/end dates — the cycle is FY + "as of" year-end (defaults FY 2026-27, 31 Mar 2027)
   await expect(page.getByRole('button', { name: '31 Mar 2027' })).toBeVisible();
   await expect(page.getByText(/testing runs through FY 2026-27/)).toBeVisible();
+  await expect(page.getByText(/Scoping window open since Apr 2026/)).toBeVisible();
   await expect(page.getByText('Select date')).toHaveCount(0);
   await page.screenshot({ path: `${SHOT_DIR}/03a-wizard-basics.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -123,12 +135,11 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('button', { name: 'Create FY27 programme' }).click();
   await page.waitForTimeout(700);
 
-  // Created programme: scoping-summary modal with as-of anchor + RACM shells
-  await expect(page.getByText('Opinion as of 31 Mar 2027')).toBeVisible();
-  await expect(page.getByText('RACM shell — ready to build').first()).toBeVisible();
+  // Creation closes the modal — the new programme lands on the listing
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText(/FY27 programme created — 7 RACMs derived/)).toBeVisible();
+  await expect(page.getByText('as of 31 Mar 2027')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/09-fy27-created.png`, fullPage: true });
-  await page.locator('nav[aria-label="Breadcrumb"] button', { hasText: 'SOX Testing' }).click();
-  await page.waitForTimeout(400);
 
   // Landing lists both; the new card opens its own classic SOX workspace
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
@@ -136,6 +147,8 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.waitForTimeout(1000);
   await expect(page.getByRole('heading', { name: 'FY27 ICFR — Airline Group' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
+  // Fresh workspace seeds one RACM per scoping-derived process too
+  await expect(page.getByText('Fixed Assets').first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/10-fy27-workspace.png`, fullPage: true });
   await page.getByRole('button', { name: 'Back to Engagements' }).click();
   await page.waitForTimeout(800);
@@ -180,12 +193,11 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('button', { name: 'Create FY28 programme' }).click();
   await page.waitForTimeout(700);
 
-  // Rolled programme summary: provenance chip + as-of 2028
-  await expect(page.getByText('Rolled forward from FY27').first()).toBeVisible();
-  await expect(page.getByText('Opinion as of 31 Mar 2028')).toBeVisible();
+  // Creation closes the modal — the rolled cycle lands on the listing with provenance
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText(/programme rolled forward from FY27/)).toBeVisible();
+  await expect(page.getByText('as of 31 Mar 2028')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/14-fy28-rolled.png`, fullPage: true });
-  await page.locator('nav[aria-label="Breadcrumb"] button', { hasText: 'SOX Testing' }).click();
-  await page.waitForTimeout(400);
 
   // Landing: FY28 card exists and now owns the Roll forward action
   await expect(page.getByText('FY28 ICFR — Airline Group')).toBeVisible();

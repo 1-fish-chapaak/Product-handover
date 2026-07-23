@@ -42,10 +42,12 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   const [view, setView] = useState<TabView>('home');
   const [programmes, setProgrammes] = useState<SoxProgramme[]>(() => [...PROGRAMMES]);
 
+  // Creation lands the user on the list — the modal closes and the new
+  // programme card is right there (its Scoping summary is one click away).
   const handleCreated = (p: SoxProgramme) => {
     registerProgramme(p);
     setProgrammes([...PROGRAMMES]);
-    setView({ programmeId: p.id });
+    setView('home');
     addToast({
       message: p.rolledFromFy
         ? `${p.fy} programme rolled forward from ${p.rolledFromFy} — ${p.racms.length} RACMs carried`
@@ -78,15 +80,12 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
               engagement flow; nothing there changes.
             </p>
           </div>
-          <div className="shrink-0 text-right">
-            <button
-              onClick={() => setView('wizard')}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
-            >
-              <Plus size={14} /> New Engagement
-            </button>
-            <div className="text-[10.5px] text-text-muted mt-1.5">Scoping window open since Apr 2026</div>
-          </div>
+          <button
+            onClick={() => setView('wizard')}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+          >
+            <Plus size={14} /> New Engagement
+          </button>
         </div>
 
         {/*
@@ -114,6 +113,21 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
 
         {/* Programme cards — the tab's landing is the list itself */}
         <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Programmes</div>
+        {programmes.length === 0 && (
+          <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
+            <FileSearch size={22} className="mx-auto text-text-muted mb-2.5" />
+            <div className="text-[13.5px] font-semibold text-text">No SOX programmes yet</div>
+            <p className="text-[12px] text-text-secondary mt-1 mb-4 max-w-sm mx-auto leading-relaxed">
+              Start with scoping — materiality, trial balances and the qualitative overlay decide what lands in scope.
+            </p>
+            <button
+              onClick={() => setView('wizard')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+            >
+              <Plus size={14} /> New Engagement
+            </button>
+          </div>
+        )}
         <div className="space-y-2.5">
           {programmes.map((p, i) => {
             const totalControls = p.racms.reduce((s, r) => s + (r.controls ?? 0), 0);
@@ -170,7 +184,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                   <span className="text-border">·</span>
                   <span className="tabular-nums">{p.racms.length} processes → {p.racms.length} RACMs</span>
                   <span className="text-border">·</span>
-                  <span className="tabular-nums">materiality {fmtCr(p.materiality.overall)}</span>
+                  <span className="tabular-nums">materiality {fmtCr(p.materiality.overall)} · performance {fmtCr(p.materiality.overall * p.materiality.pmPct / 100)} · trivial {fmtCr(p.materiality.overall * p.materiality.cttPct / 100)}</span>
                   {totalControls > 0 && totalEffective > 0 && (<>
                     <span className="text-border">·</span>
                     <span className="tabular-nums"><span className="font-semibold text-text">{totalEffective}</span>/{totalControls} controls effective</span>
@@ -200,7 +214,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
           <FlowModal
             key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
             label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls={view === 'wizard' || rollFrom ? 'w-[1000px]' : 'w-[800px]'}
+            widthCls="w-[1000px]"
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
@@ -208,7 +222,10 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
             ) : rollFrom ? (
               <RollForwardWizard prior={rollFrom} onCancel={() => setView('home')} onCreated={handleCreated} />
             ) : openProgramme ? (
-              <ProgrammeView programme={openProgramme} onBack={() => setView('home')} />
+              <ProgrammeView
+                programme={openProgramme}
+                onOpenWorkspace={openProgramme.engagementId ? () => { setView('home'); onOpenEngagement(openProgramme.engagementId!); } : undefined}
+              />
             ) : null}
           </FlowModal>
         )}
@@ -245,7 +262,7 @@ function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
           exit={{ opacity: 0, y: 10, scale: 0.98 }}
           transition={{ duration: 0.18 }}
           role="dialog" aria-modal="true" aria-label={label}
-          className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden flex flex-col`}
+          className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
         >
           <button
             onClick={onClose}

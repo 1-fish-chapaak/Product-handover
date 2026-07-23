@@ -4,7 +4,6 @@ import {
   ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Building2, Check, FileSpreadsheet,
   Flag, Loader2, RefreshCw, Upload, Eye,
 } from 'lucide-react';
-import { SoxBreadcrumb } from '../../sox-icfr/parts';
 import { StepRail } from './ScopingWizard';
 import { SourceChips } from './ProgrammeView';
 import { OWNER_NAMES } from '../../../data/grc-domain';
@@ -51,9 +50,11 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
   const [owner, setOwner] = useState(prior.owner ?? OWNER_NAMES[0]);
 
   // Step 2 — materiality re-set on the new year's benchmark; basis, PM% and
-  // CTT% carry forward from last year.
+  // CTT% carry forward from last year as editable defaults.
   const [benchmark, setBenchmark] = useState(() => Math.round(prior.materiality.benchmark * 1.107));
-  const { basis, benchmarkLabel, pct, pmPct, cttPct } = prior.materiality;
+  const { basis, benchmarkLabel, pct } = prior.materiality;
+  const [pmPct, setPmPct] = useState(prior.materiality.pmPct);
+  const [cttPct, setCttPct] = useState(prior.materiality.cttPct);
   const overallCr = basis === 'custom' ? benchmark : Math.round(benchmark * pct * 100) / 10000;
   const [uploads, setUploads] = useState<Record<string, 'parsing' | { file: string; lines: number }>>({});
   const allUploaded = prior.entities.every(e => typeof uploads[e.id] === 'object');
@@ -133,6 +134,10 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
         aggregate: true,
         keyOnly: true,
       },
+      soxProcesses: derived.map(r => r.process),
+      // Design conclusions travel with the roll-forward only when the prior
+      // cycle actually tested something; a rolled shell starts fresh.
+      soxSeedMode: prior.racms.some(r => r.controls != null) ? 'carried' : 'fresh',
       process: ({ 'Procure to Pay': 'P2P', 'Order to Cash': 'O2C' } as Partial<Record<ProcessName, ProcessCode>>)[derived[0]?.process] ?? 'P2P',
       framework: 'COSO 2013 / SOX 404',
       owner,
@@ -181,8 +186,11 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
   const delta = (c: RolledCaption) => Math.round(((c.balance - c.prior) / c.prior) * 100);
 
   return (
-    <div>
-      <SoxBreadcrumb items={[{ label: 'SOX Testing', onClick: onCancel }, { label: `Roll forward to ${fy}` }]} />
+    // min-h-full + flex column: the footer pins to the modal's bottom edge on
+    // short steps instead of floating right under the content.
+    <div className="flex flex-col min-h-full">
+      {/* Modal header — same eyebrow pattern as the scoping summary */}
+      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">Roll forward</div>
       <StepRail steps={STEPS} step={step} onStepClick={setStep} />
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
@@ -211,7 +219,7 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 max-w-3xl">
+            <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className={labelCls}>Engagement name</label>
                 <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
@@ -239,17 +247,51 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
             </p>
 
             <div className="grid grid-cols-2 gap-4 items-start mb-5">
-              <div className="border border-border-light rounded-xl bg-white p-4">
-                <label className={labelCls}>{benchmarkLabel} (₹ Cr) — {fy}</label>
-                <input
-                  type="number" min={0}
-                  value={benchmark}
-                  onChange={e => setBenchmark(Number(e.target.value))}
-                  className="w-40 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-                />
-                <p className="text-[11px] text-text-muted mt-2">
-                  {prior.fy}: {fmtCr(prior.materiality.benchmark)} · basis {basis === 'custom' ? 'custom' : `${pct}%`} carried
-                </p>
+              <div className="border border-border-light rounded-xl bg-white p-4 space-y-4">
+                <div>
+                  <label className={labelCls}>{benchmarkLabel} (₹ Cr) — {fy}</label>
+                  <input
+                    type="number" min={0}
+                    value={benchmark}
+                    onChange={e => setBenchmark(Number(e.target.value))}
+                    className="w-40 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  />
+                  <p className="text-[11px] text-text-muted mt-2">
+                    {prior.fy}: {fmtCr(prior.materiality.benchmark)} · basis {basis === 'custom' ? 'custom' : `${pct}%`} carried
+                  </p>
+                </div>
+                {basis !== 'custom' && (
+                  <div>
+                    <label className={labelCls}>Overall materiality (₹ Cr)</label>
+                    <div className="flex items-center gap-2">
+                      <div className="w-40 px-3 py-2 text-[13px] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
+                        {fmtCr(overallCr)}
+                      </div>
+                      <span className="text-[12px] text-text-muted">= {pct}% × {fmtCr(benchmark)}</span>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className={labelCls}>Performance materiality (% of overall)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min={50} max={75} step={5}
+                      value={pmPct}
+                      onChange={e => setPmPct(Number(e.target.value))}
+                      className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    />
+                    <span className="text-[12px] text-text-muted">carried from {prior.fy} — edit if reliance changed</span>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Clearly-trivial threshold (% of overall)</label>
+                  <input
+                    type="number" min={1} max={10}
+                    value={cttPct}
+                    onChange={e => setCttPct(Number(e.target.value))}
+                    className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  />
+                </div>
               </div>
               <div className="border border-border-light rounded-xl bg-white p-4">
                 <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Materiality — {fy} vs {prior.fy}</div>
@@ -257,9 +299,13 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
                   <span className="text-[12px] font-semibold text-text">Overall</span>
                   <span className="font-mono tabular-nums text-[13px] text-text">{fmtCr(priorThreshold)} → <span className="font-bold">{fmtCr(overallCr)}</span></span>
                 </div>
-                <div className="flex items-baseline justify-between py-1">
+                <div className="flex items-baseline justify-between py-1 border-b border-border-light">
                   <span className="text-[12px] text-text-secondary">Performance · {pmPct}%</span>
-                  <span className="font-mono tabular-nums text-[12px] text-text">{fmtCr(overallCr * pmPct / 100)}</span>
+                  <span className="font-mono tabular-nums text-[12px] text-text">{fmtCr(priorThreshold * prior.materiality.pmPct / 100)} → <span className="font-semibold">{fmtCr(overallCr * pmPct / 100)}</span></span>
+                </div>
+                <div className="flex items-baseline justify-between py-1">
+                  <span className="text-[12px] text-text-secondary">Clearly trivial · {cttPct}%</span>
+                  <span className="font-mono tabular-nums text-[12px] text-text">{fmtCr(priorThreshold * prior.materiality.cttPct / 100)} → <span className="font-semibold">{fmtCr(overallCr * cttPct / 100)}</span></span>
                 </div>
               </div>
             </div>
@@ -423,7 +469,7 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
                 </p>
                 <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
                   {derived.map(r => (
-                    <div key={r.process} className="border border-border-light rounded-lg p-3">
+                    <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
                         {r.carried && (
@@ -446,7 +492,8 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
       </motion.div>
 
       {/* Footer — sticky inside the modal scroll */}
-      <div className="flex items-center justify-between mt-6 py-4 border-t border-border-light sticky bottom-0 bg-white -mx-6 px-6">
+      <div className="mt-auto pt-6" />
+      <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
           onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"

@@ -6,6 +6,7 @@ import {
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { requiredDatasetsFor, type RequiredDataset } from './mockData';
+import { isControlLocked } from './helpers';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -49,7 +50,11 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   const { addToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // Concluded controls are frozen — the store's bulk run skips them, so the
+  // scope starts with them out and keeps the shown count honest.
+  const [excluded, setExcluded] = useState<Set<string>>(() => new Set(
+    controlIds.filter(id => { const c = eng.controls.find(x => x.id === id); return c && isControlLocked(c); }),
+  ));
   const [compiling, setCompiling] = useState(false);
   const [provided, setProvided] = useState<Set<string>>(new Set());
   const [attaching, setAttaching] = useState<Set<string>>(new Set());
@@ -96,12 +101,18 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
   }, [selected]);
 
-  const toggleControl = (id: string) => setExcluded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  // Group toggle — all in → drop the whole group; otherwise bring the whole group in.
+  const toggleControl = (id: string) => {
+    const c = eng.controls.find(x => x.id === id);
+    if (c && isControlLocked(c)) return;
+    setExcluded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  // Group toggle — all in → drop the whole group; otherwise bring the whole
+  // group in. Locked rows never move.
   const toggleGroup = (rows: Control[]) => setExcluded(prev => {
     const n = new Set(prev);
-    const allIn = rows.every(c => !n.has(c.id));
-    rows.forEach(c => { if (allIn) n.add(c.id); else n.delete(c.id); });
+    const open = rows.filter(c => !isControlLocked(c));
+    const allIn = open.every(c => !n.has(c.id));
+    open.forEach(c => { if (allIn) n.add(c.id); else n.delete(c.id); });
     return n;
   });
 
@@ -204,30 +215,42 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
           ) : (
             <div>
               <p className="text-[12px] text-ink-500 mb-3">Each control's design considerations and operating attributes will be tested against its evidence. Untick anything you want to leave out of this run.</p>
-              {groups.map(g => (
+              {active.length === 0 && (
+                <div className="mb-3 rounded-xl border border-dashed border-canvas-border p-3.5 text-[12px] text-ink-500">
+                  Every control in this selection is already concluded — its paper is frozen, so there is nothing left to test. Reopen a conclusion from the control's page to retest it.
+                </div>
+              )}
+              {groups.map(g => {
+                const open = g.rows.filter(c => !isControlLocked(c));
+                return (
                 <div key={g.key} className="mb-4">
-                  <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-400 mb-1.5 cursor-pointer w-fit">
-                    <input type="checkbox" checked={g.rows.every(c => !excluded.has(c.id))} onChange={() => toggleGroup(g.rows)}
-                      className="cursor-pointer accent-brand-600" aria-label={`Select all in ${g.key}`} />
+                  <label className={cn('flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-400 mb-1.5 w-fit', open.length > 0 && 'cursor-pointer')}>
+                    <input type="checkbox" checked={open.length > 0 && open.every(c => !excluded.has(c.id))} disabled={open.length === 0} onChange={() => toggleGroup(g.rows)}
+                      className="cursor-pointer accent-brand-600 disabled:cursor-not-allowed" aria-label={`Select all in ${g.key}`} />
                     {g.key} · {g.rows.filter(c => !excluded.has(c.id)).length}/{g.rows.length}
                   </label>
                   <div className="space-y-1.5">
-                    {g.rows.map(c => (
-                      <label key={c.id} className={cn('flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors', excluded.has(c.id) ? 'border-canvas-border opacity-50' : 'border-canvas-border hover:border-brand-200 bg-canvas-elevated')}>
-                        <input type="checkbox" checked={!excluded.has(c.id)} onChange={() => toggleControl(c.id)} className="mt-0.5 cursor-pointer accent-brand-600" />
+                    {g.rows.map(c => {
+                      const locked = isControlLocked(c);
+                      return (
+                      <label key={c.id} className={cn('flex items-start gap-3 rounded-xl border border-canvas-border p-3 transition-colors', locked ? 'opacity-50 cursor-not-allowed' : excluded.has(c.id) ? 'opacity-50 cursor-pointer' : 'hover:border-brand-200 bg-canvas-elevated cursor-pointer')}>
+                        <input type="checkbox" checked={!excluded.has(c.id)} disabled={locked} onChange={() => toggleControl(c.id)} className="mt-0.5 cursor-pointer accent-brand-600 disabled:cursor-not-allowed" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
                             <span className="wp-ref">{c.wpRef}</span>
                             {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100 shrink-0" />}
                             <span className="text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
+                            {locked && <span className="px-1.5 h-[17px] inline-flex items-center rounded border border-canvas-border bg-paper-50 text-[9.5px] font-bold uppercase tracking-wide text-ink-500 shrink-0">Concluded — locked</span>}
                           </span>
                           <span className="block text-[11px] text-ink-400 mt-0.5">{checksOf(c)} checks · {evidenceSummary(c)} · {c.owner}</span>
                         </span>
                       </label>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ))}
 

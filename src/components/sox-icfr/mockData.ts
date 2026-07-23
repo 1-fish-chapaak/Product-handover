@@ -125,7 +125,13 @@ export const PROCESS_DATASETS: Record<string, RequiredDataset[]> = {
     { name: 'Change tickets export', format: 'CSV', description: 'Transports with test evidence and approver per change.' },
     { name: 'Batch job run log', format: 'CSV', description: 'Scheduled job outcomes with failure resolution notes.' },
   ],
+  'Fixed Assets': [
+    { name: 'Fixed asset register (AS03)', format: 'XLSX', description: 'Asset master with cost, useful life and accumulated depreciation.' },
+    { name: 'Depreciation run log (AFAB)', format: 'CSV', description: 'Monthly depreciation postings with run status and exceptions.' },
+  ],
 };
+// The scoping flow names the process in full — reuse the Payroll dataset list.
+PROCESS_DATASETS['Payroll (Hire to Retire)'] = PROCESS_DATASETS['Payroll']!;
 
 /** Which datasets a control needs for bulk testing — deterministic, deduped across
  *  a selection by dataset name. Attestation-only manual controls need no files. */
@@ -533,7 +539,7 @@ const ENGAGEMENT: IcfrEngagement = {
 };
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
-export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
@@ -552,8 +558,27 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     }
     return base;
   }
-  // Any other engagement → a fresh engagement scoped to the picked process, ready to configure.
+  // Any other engagement → a fresh engagement scoped to the picked process —
+  // or, when a scoping-derived process list is supplied, one RACM per process.
   const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
+  const controls = meta.processes?.length ? racmTemplateForProcesses(meta.processes, meta.seedMode) : racmTemplate(proc);
+  // A 'live' cycle claims tested controls — back that claim with the bulk run
+  // that produced them, so the Test runs registry isn't empty on arrival.
+  const runs: RunRecord[] = [];
+  if (meta.seedMode === 'live') {
+    const tested = controls.filter(c => c.design.conclusion === 'Effective' && c.operating.conclusion === 'Effective');
+    if (tested.length) {
+      const datasets = Array.from(new Set(tested.flatMap(c => requiredDatasetsFor(c).map(d => d.name))));
+      const checks = tested.reduce((n, c) => n + c.design.points.length + c.operating.steps.length, 0);
+      runs.push({
+        id: 'run-seed-live', kind: 'bulk-test',
+        label: `Bulk test — ${tested.length} control${tested.length === 1 ? '' : 's'}`,
+        detail: `${checks} checks · ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
+        controls: tested.map(c => ({ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: 'Effective' as const, checks: c.design.points.length + c.operating.steps.length })),
+        datasets, by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+      });
+    }
+  }
   return {
     ...base,
     id: meta.id,
@@ -562,16 +587,94 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     periodStart: meta.periodStart ?? base.periodStart,
     periodEnd: meta.periodEnd ?? base.periodEnd,
     preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
-    controls: racmTemplate(proc),
+    controls,
     deficiencies: [],
     tasks: [],
     discussions: [],
     reviewNotes: [],
     executions: [],
-    runs: [],
+    runs,
     signoff: {},
     rulesLog: [],
   };
+}
+
+/**
+ * One template RACM per scoping-derived process. Catalogue processes reuse
+ * their spread (relabelled to the caller's name, e.g. "Payroll (Hire to
+ * Retire)"); processes outside the catalogue (e.g. Fixed Assets) get a
+ * five-control generic shell so the RACM tab always mirrors the scoping.
+ *
+ * Every control seeds real design considerations and operating attributes so
+ * a bulk test has checks to run. `mode` sets how far testing has progressed:
+ * 'fresh' — nothing tested; 'live' — all but the last control per RACM
+ * concluded effective (the scoping summary's n−1 story); 'carried' — design
+ * conclusions carried from the prior cycle, operating retest pending.
+ */
+export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live' | 'carried' = 'fresh'): Control[] {
+  const GENERIC_TITLES: Record<string, string[]> = {
+    'Fixed Assets': [
+      'Capex additions are approved per the delegation of authority',
+      'Assets are capitalised with correct useful lives and start dates',
+      'Depreciation run is reviewed against the asset register monthly',
+      'Disposals are approved and derecognised in the period of sale',
+      'Physical verification results are reconciled to the fixed asset register',
+    ],
+  };
+  return names.flatMap(name => {
+    const norm = name.startsWith('Payroll') ? 'Payroll' : name;
+    const sp = SPREADS.find(s => s.process === norm);
+    const prefix = name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'GEN';
+    const shells: Control[] = sp
+      ? racmTemplate(sp.process).map(c => ({ ...c, process: name }))
+      : (GENERIC_TITLES[name] ?? [
+          `${name} transactions are approved before processing`,
+          `${name} balances are reconciled to the ledger monthly`,
+          `${name} master data changes are independently reviewed`,
+          `${name} period-end cut-off is reviewed`,
+          `${name} exceptions are escalated and resolved per policy`,
+        ]).map((title, i) => ({
+          id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
+          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
+          isKey: true, precision: `${title}.`, owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
+          riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
+          assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
+          design: designTrack('Not tested', [], []),
+          operating: manualTrack('Not tested', [], undefined, 0),
+        }));
+    return shells.map((c, i) => {
+      const last = i === shells.length - 1;
+      const designDone = mode === 'carried' || (mode === 'live' && !last);
+      const opDone = mode === 'live' && !last;
+      const nature: Nature = i % 3 === 1 ? 'Automated' : 'Manual';
+      const title = c.description.replace(/\.$/, '');
+      const docs: DesignDoc[] = [
+        doc('Process narrative', `${name} narrative.pdf`, 'Received'),
+        doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
+        doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
+      ];
+      const points: DesignPoint[] = [
+        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
+        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
+      ];
+      const stepExtra = (k: number): Partial<OperatingStep> => nature === 'Automated'
+        ? wf(`wf-${c.id.toLowerCase()}-${k}`, `${title} — check ${k}`, opDone ? `run #${6000 + i * 3 + k}` : undefined)
+        : {};
+      const opSteps: OperatingStep[] = [
+        step(`${i + 1}.1`, `${title} — primary attribute tested.`, 'Accuracy', 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], opDone ? 'Pass' : 'Not tested', stepExtra(1)),
+        step(`${i + 1}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], opDone ? 'Pass' : 'Not tested', stepExtra(2)),
+      ];
+      return {
+        ...c,
+        nature,
+        frequency: nature === 'Automated' ? 'Recurring' as const : c.frequency,
+        design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
+        operating: nature === 'Automated'
+          ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
+          : manualTrack(opDone ? 'Effective' : 'Not tested', opSteps, opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, opDone ? 2000 + i * 7 : 0),
+      };
+    });
+  });
 }
 
 // ── RACM template for the setup wizard ──────────────────────────────────────────

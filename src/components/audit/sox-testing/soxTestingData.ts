@@ -1,3 +1,5 @@
+import { registerEngagement } from '../../../data/engagements';
+
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
  *
@@ -359,30 +361,62 @@ function buildSeedProgramme(): SoxProgramme {
   const qualIds = new Set(SEED_QUAL_PICKS.map(q => q.captionId));
   const inScope = SEED_CAPTIONS.filter(c => c.balance >= overall || qualIds.has(c.id));
   const racms = deriveRacms(inScope, qualIds, SEED_ENTITIES);
-  // Live testing numbers for the completed example — totals match the classic
-  // eng-1 workspace this programme opens into (100 controls, 75% effective).
+  // Live testing numbers for the completed example — counts match exactly what
+  // the workspace's RACM tab seeds per process (Payroll and Tax templates
+  // carry fewer controls than the rest).
   const CONTROLS: Record<string, [number, number]> = {
-    'Order to Cash': [20, 16],
-    'Procure to Pay': [26, 20],
-    Treasury: [16, 13],
-    'Payroll (Hire to Retire)': [10, 8],
-    Inventory: [12, 8],
-    'Fixed Assets': [9, 6],
-    Tax: [7, 4],
+    'Order to Cash': [5, 4],
+    'Procure to Pay': [5, 4],
+    Treasury: [5, 4],
+    'Payroll (Hire to Retire)': [4, 3],
+    Inventory: [5, 4],
+    'Fixed Assets': [5, 4],
+    Tax: [3, 2],
   };
   for (const r of racms) {
     const [c, e] = CONTROLS[r.process] ?? [6, 5];
     r.controls = c;
     r.effective = e;
   }
+  // The seed programme opens its OWN workspace (not eng-1) so the RACM tab
+  // seeds exactly the scoping-derived processes — summary and workspace agree.
+  registerEngagement({
+    id: 'sox-prog-fy26',
+    code: 'ENG-001',
+    name: 'FY26 ICFR — Airline P2P & O2C',
+    description: 'SOX 404 / ICFR programme — FY26 cycle scoped from 3 trial balances; 7 in-scope processes, one RACM each.',
+    type: 'SOX / ICFR',
+    soxConfig: {
+      overallMateriality: 210_000_000,
+      performanceMateriality: 157_500_000,
+      clearlyTrivial: 10_500_000,
+      sdBandPct: 20,
+      aggregate: true,
+      keyOnly: true,
+    },
+    soxProcesses: racms.map(r => r.process),
+    soxSeedMode: 'live',
+    process: 'P2P',
+    framework: 'COSO 2013 / SOX 404',
+    owner: 'A. Mehta',
+    status: 'Active',
+    periodStart: 'Apr 2025',
+    periodEnd: 'Mar 2026',
+    startDate: '2025-04-01',
+    endDate: '2026-03-31',
+    entity: SEED_GROUP_NAME,
+    controls: 32,
+    health: 78,
+    openIssues: 0,
+    lastActivity: '2d ago',
+    nextScheduled: 'Year-end testing — as of 31 Mar 2026',
+  });
   return {
     id: 'sox-prog-fy26',
-    // Identity mirrors the classic eng-1 engagement — clicking this card opens
-    // that workspace, so the two must read as one thing.
     name: 'FY26 ICFR — Airline P2P & O2C',
     code: 'ENG-001',
     owner: 'A. Mehta',
-    engagementId: 'eng-1',
+    engagementId: 'sox-prog-fy26',
     fy: 'FY26',
     asOf: '31 Mar 2026',
     phase: 'Year-end testing',

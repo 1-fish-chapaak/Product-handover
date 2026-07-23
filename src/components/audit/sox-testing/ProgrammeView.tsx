@@ -1,8 +1,8 @@
+import { Fragment } from 'react';
 import { motion } from 'motion/react';
 import {
-  Building2, Landmark, Flag, FileSpreadsheet, Layers, CheckCircle2, RefreshCw,
+  Building2, Landmark, Flag, FileSpreadsheet, Layers, CheckCircle2, RefreshCw, ArrowUpRight,
 } from 'lucide-react';
-import { SoxBreadcrumb } from '../../sox-icfr/parts';
 import {
   BEYOND_TB, CYCLE_PHASES, fmtCr, type CyclePhase, type SoxProgramme,
 } from './soxTestingData';
@@ -18,19 +18,21 @@ const PHASE_CLS: Record<CyclePhase, string> = {
 
 interface Props {
   programme: SoxProgramme;
-  onBack: () => void;
+  /** Opens the classic SOX workspace (tabs + control testing) on this programme's engagement. */
+  onOpenWorkspace?: () => void;
 }
 
-export default function ProgrammeView({ programme: p, onBack }: Props) {
+export default function ProgrammeView({ programme: p, onOpenWorkspace }: Props) {
   const currentIdx = CYCLE_PHASES.findIndex(c => c.phase === p.phase);
   const totalControls = p.racms.reduce((s, r) => s + (r.controls ?? 0), 0);
   const totalEffective = p.racms.reduce((s, r) => s + (r.effective ?? 0), 0);
 
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-      <SoxBreadcrumb items={[{ label: 'SOX Testing', onClick: onBack }, { label: `${p.fy} programme` }]} />
+      {/* Modal header — what this surface is, then which engagement it's about */}
+      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Scoping summary</div>
 
-      {/* Header — anchored to "as of", not a start/end range */}
+      {/* Engagement name + details — anchored to "as of", not a start/end range */}
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap pr-8">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -63,45 +65,58 @@ export default function ProgrammeView({ programme: p, onBack }: Props) {
             </>)}
           </div>
         </div>
+        {onOpenWorkspace && (
+          <button
+            onClick={onOpenWorkspace}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:text-primary text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+          >
+            Open workspace <ArrowUpRight size={13} />
+          </button>
+        )}
       </div>
 
-      {/* Cycle timeline — period-based, one anchor date */}
-      <div className="border border-border-light rounded-xl bg-white p-4 mb-5">
-        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Audit cycle</div>
-        <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
+      {/* Cycle timeline — an open stepper on the canvas (no box-in-box), the
+          same visual language as the wizard's StepRail. */}
+      <div className="mb-6">
+        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">Audit cycle</div>
+        <div className="flex items-start w-full px-2">
           {CYCLE_PHASES.map((c, i) => {
             const done = i < currentIdx;
             const active = i === currentIdx;
             const anchor = c.phase === 'Year-end testing';
             return (
-              <div key={c.phase} className="flex items-center gap-1.5 shrink-0">
-                {i > 0 && <div className={`w-4 h-px ${done || active ? 'bg-brand-300' : 'bg-border-light'}`} />}
-                <div className={`px-3 py-2 rounded-lg border min-w-[118px] ${
-                  active ? 'border-primary/50 bg-primary/5'
-                  : done ? 'border-border-light bg-surface-2/60'
-                  : 'border-border-light bg-white'
-                }`}>
-                  <div className="flex items-center gap-1.5">
-                    {done && <CheckCircle2 size={11} className="text-compliant-700 shrink-0" />}
-                    {anchor && !done && <Flag size={11} className={active ? 'text-primary' : 'text-text-muted'} />}
-                    <span className={`text-[11.5px] font-semibold ${active ? 'text-primary' : done ? 'text-text-secondary' : 'text-text-muted'}`}>
-                      {c.phase}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-text-muted mt-0.5 tabular-nums">{c.window}</div>
+              <Fragment key={c.phase}>
+                {i > 0 && <div className={`flex-1 h-px mt-3 mx-2 min-w-3 ${i <= currentIdx ? 'bg-brand-300' : 'bg-border-light'}`} />}
+                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                  <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center transition-colors ${
+                    active ? 'bg-primary text-white shadow-sm shadow-brand-900/10'
+                    : done ? 'bg-brand-100 text-brand-700'
+                    : 'border border-border bg-white text-text-muted'
+                  }`}>
+                    {done ? <CheckCircle2 size={12} /> : anchor ? <Flag size={11} /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                  </span>
+                  <span className={`text-[11px] font-semibold whitespace-nowrap ${
+                    active ? 'text-primary' : done ? 'text-brand-700' : 'text-text-muted'
+                  }`}>
+                    {c.phase}
+                  </span>
+                  <span className={`text-[10px] tabular-nums whitespace-nowrap -mt-1 ${active ? 'text-text-secondary font-semibold' : 'text-text-muted'}`}>
+                    {anchor ? `as of ${p.asOf.replace(/ \d{4}$/, '')}` : c.window}
+                  </span>
                 </div>
-              </div>
+              </Fragment>
             );
           })}
         </div>
-        <p className="text-[11px] text-text-muted mt-2.5 leading-relaxed">
+        <p className="text-[11px] text-text-muted mt-3 leading-relaxed">
           There is no start and end date — the external auditor opines on control effectiveness <span className="font-semibold text-text-secondary">as of {p.asOf}</span>. Testing runs through the year; scoping opened the cycle in April.
         </p>
       </div>
 
-      {/* Scope summary */}
-      <div className="grid grid-cols-1 gap-3 mb-5">
-        <div className="border border-border-light rounded-xl bg-white p-4">
+      {/* Scope summary — one surface, three columns. Column dividers instead
+          of three separate cards keep the box count down. */}
+      <div className="border border-border-light rounded-xl bg-white grid grid-cols-3 divide-x divide-border-light mb-5 items-stretch">
+        <div className="p-4">
           <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Materiality</div>
           <SummaryRow label="Overall" value={fmtCr(p.materiality.overall)} strong
             note={p.materiality.basis === 'custom' ? 'Set directly' : `${p.materiality.pct}% of ${p.materiality.benchmarkLabel.toLowerCase()}`} />
@@ -109,7 +124,7 @@ export default function ProgrammeView({ programme: p, onBack }: Props) {
           <SummaryRow label="Clearly trivial" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
         </div>
 
-        <div className="border border-border-light rounded-xl bg-white p-4">
+        <div className="p-4">
           <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Entities & trial balances</div>
           <div className="space-y-2">
             {p.entities.map(e => (
@@ -134,7 +149,7 @@ export default function ProgrammeView({ programme: p, onBack }: Props) {
           </p>
         </div>
 
-        <div className="border border-border-light rounded-xl bg-white p-4">
+        <div className="p-4">
           <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Scope funnel</div>
           <SummaryRow label="TB captions parsed" value={String(p.totalCaptions)} />
           <SummaryRow label="Above materiality" value={String(p.quantCount)} />
@@ -150,9 +165,18 @@ export default function ProgrammeView({ programme: p, onBack }: Props) {
         <h3 className="text-[14px] font-bold text-text">In-scope processes — one RACM each</h3>
         <span className="text-[11.5px] text-text-muted">derived from scoping, not picked by hand</span>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="grid grid-cols-3 gap-3 mb-5">
         {p.racms.map(r => (
-          <div key={r.process} className="border border-border-light rounded-xl bg-white p-4 hover:border-primary/40 transition-colors">
+          <div
+            key={r.process}
+            {...(onOpenWorkspace ? {
+              role: 'button' as const, tabIndex: 0,
+              onClick: onOpenWorkspace,
+              onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') onOpenWorkspace(); },
+              title: `Open the ${r.process} RACM in the workspace`,
+            } : {})}
+            className={`border border-border-light rounded-xl bg-white p-4 hover:border-primary/40 transition-colors ${onOpenWorkspace ? 'cursor-pointer' : ''}`}
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="text-[13.5px] font-semibold text-text">{r.process}</div>
               {r.controls != null && r.effective != null ? (
@@ -182,9 +206,9 @@ export default function ProgrammeView({ programme: p, onBack }: Props) {
 
       {/* Beyond-TB workstreams */}
       <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Group-level workstreams — beyond the trial balance</div>
-      <div className="grid grid-cols-2 gap-2.5 mb-6">
+      <div className="grid grid-cols-4 gap-2.5 mb-6">
         {BEYOND_TB.filter(b => p.beyondTb.includes(b.id)).map(b => (
-          <div key={b.id} className="border border-dashed border-border rounded-xl bg-surface-2/40 p-3.5">
+          <div key={b.id} className="rounded-xl bg-surface-2/70 p-3.5">
             <div className="text-[12.5px] font-semibold text-text-secondary">{b.name}</div>
             <div className="text-[10.5px] text-text-muted mt-1 leading-relaxed">{b.why}</div>
           </div>

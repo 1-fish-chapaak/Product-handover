@@ -5,7 +5,6 @@ import {
   ArrowRight, ArrowLeft, Loader2, Sparkles, Info,
   ShieldCheck, ClipboardList, Zap, AlertCircle,
 } from 'lucide-react';
-import { SoxBreadcrumb } from '../../sox-icfr/parts';
 import { SourceChips } from './ProgrammeView';
 import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, type EngType, type ProcessCode } from '../../../data/engagements';
@@ -124,7 +123,8 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     benchmark > 0 && (basis === 'custom' || pct > 0),
     allUploaded,
     true,
-    true,
+    // An empty scope derives zero RACMs — there is no programme to create.
+    inScope.length > 0,
     true,
   ][step];
 
@@ -164,8 +164,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
         aggregate: true,
         keyOnly: true,
       },
-      // No process was asked for — the workspace anchors on the biggest
-      // scoping-derived process (falls back to P2P for the template seed).
+      // The workspace seeds one RACM per scoping-derived process, so the RACM
+      // tab mirrors the scoping summary exactly.
+      soxProcesses: derived.map(r => r.process),
+      soxSeedMode: 'fresh',
+      // No process was asked for — the anchor is the biggest scoping-derived
+      // process (falls back to P2P).
       process: ({ 'Procure to Pay': 'P2P', 'Order to Cash': 'O2C' } as Partial<Record<ProcessName, ProcessCode>>)[derived[0]?.process] ?? 'P2P',
       framework: 'COSO 2013 / SOX 404',
       owner,
@@ -220,8 +224,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
   };
 
   return (
-    <div>
-      <SoxBreadcrumb items={[{ label: 'SOX Testing', onClick: onCancel }, { label: 'New engagement' }]} />
+    // min-h-full + flex column: on short steps the footer still sits pinned to
+    // the modal's bottom edge instead of floating mid-air after the content.
+    <div className="flex flex-col min-h-full">
+      {/* Modal header — same eyebrow pattern as the scoping summary; no
+          breadcrumb or back affordance, close is X / Escape / Cancel. */}
+      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
 
       <StepRail steps={STEPS} step={step} onStepClick={setStep} />
 
@@ -315,7 +323,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 </div>
               </div>
               <p className="text-[0.75rem] text-ink-500 -mt-1">
-                An annual cycle, not a dated project — testing runs through {fyLabel}; the auditor opines on control effectiveness as of {asOf}.
+                An annual cycle, not a dated project — testing runs through {fyLabel}; the auditor opines on control effectiveness as of {asOf}. Scoping window open since {yearEndConv === 'mar' ? `Apr ${fyEnd - 1}` : `Jan ${fyEnd}`}.
               </p>
               <div>
                 <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
@@ -339,12 +347,25 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               />
             </div>
             <FieldLabel>Entities in scope of the group audit</FieldLabel>
+            {/* Ownership % column — parked for now (grid was
+                [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
+                per-row input; the data still seeds and shows downstream):
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" min={1} max={100}
+                    value={ent.ownership}
+                    onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
+                    className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
+                  />
+                  <span className="text-[11px] text-text-muted">%</span>
+                </div>
+            */}
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[2.4fr_1fr_0.8fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                <div>Entity</div><div>Type</div><div>Ownership</div><div />
+              <div className="grid grid-cols-[2.4fr_1fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                <div>Entity</div><div>Type</div><div />
               </div>
               {entities.map((ent, i) => (
-                <div key={ent.id} className="grid grid-cols-[2.4fr_1fr_0.8fr_44px] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
+                <div key={ent.id} className="grid grid-cols-[2.4fr_1fr_44px] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
                   <div className="flex items-center gap-2 min-w-0">
                     {ent.type === 'Holding'
                       ? <Landmark size={14} className="text-brand-700 shrink-0" />
@@ -363,15 +384,6 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     <option>Holding</option>
                     <option>Subsidiary</option>
                   </select>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number" min={1} max={100}
-                      value={ent.ownership}
-                      onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
-                      className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
-                    />
-                    <span className="text-[11px] text-text-muted">%</span>
-                  </div>
                   <button
                     onClick={() => setEntities(prev => prev.filter((_, j) => j !== i))}
                     disabled={entities.length === 1}
@@ -442,15 +454,28 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     </div>
                   )}
                 </div>
+                {basis !== 'custom' && (
+                  <div>
+                    <FieldLabel>Overall materiality (₹ Cr)</FieldLabel>
+                    <div className="flex items-center gap-2">
+                      <div className="w-40 px-3 py-2 text-[13px] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
+                        {fmtCr(overallCr)}
+                      </div>
+                      <span className="text-[12px] text-text-muted">= {pct}% × {fmtCr(benchmark)} — switch to Custom amount to set it directly</span>
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <FieldLabel>Performance materiality — {pmPct}% of overall</FieldLabel>
-                  <input
-                    type="range" min={50} max={75} step={5}
-                    value={pmPct}
-                    onChange={e => setPmPct(Number(e.target.value))}
-                    className="w-full accent-[var(--color-primary,#6A12CD)] cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10.5px] text-text-muted mt-0.5"><span>50%</span><span>75%</span></div>
+                  <FieldLabel>Performance materiality (% of overall)</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min={50} max={75} step={5}
+                      value={pmPct}
+                      onChange={e => setPmPct(Number(e.target.value))}
+                      className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    />
+                    <span className="text-[12px] text-text-muted">% of overall — auditors typically set 50–75%</span>
+                  </div>
                 </div>
                 <div>
                   <FieldLabel>Clearly-trivial threshold (% of overall)</FieldLabel>
@@ -570,6 +595,16 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
             title="Qualitative overlay"
             sub="Some captions sit below materiality but still belong in scope — small balances with huge flows, or complex accounting. Scope them in with a reason."
           >
+            {belowThreshold.length === 0 && (
+              <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
+                <Info size={18} className="mx-auto text-text-muted mb-2" />
+                <div className="text-[13px] font-semibold text-text">Nothing sits below {fmtCr(overallCr)}</div>
+                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                  Every caption is already flagged quantitatively at this materiality, so there is nothing left to scope in by judgement. Continue to the mapping step.
+                </p>
+              </div>
+            )}
+            {belowThreshold.length > 0 && (
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
               <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Caption (below {fmtCr(overallCr)})</div><div>Entity</div><div className="text-right">Balance</div><div>Scope in</div>
@@ -618,6 +653,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 );
               })}
             </div>
+            )}
             <p className="text-[11.5px] text-text-muted mt-3">
               {qualScope.length} caption{qualScope.length === 1 ? '' : 's'} scoped in qualitatively — they join the {quantScope.length} quantitative flags.
             </p>
@@ -629,6 +665,16 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
             title="Map accounts to processes"
             sub="Every in-scope caption maps to the business process that produces it — and each in-scope process becomes one RACM. Adjust any suggestion that's off."
           >
+            {inScope.length === 0 && (
+              <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center mb-4">
+                <AlertCircle size={18} className="mx-auto text-risk-700 mb-2" />
+                <div className="text-[13px] font-semibold text-text">Nothing is in scope at {fmtCr(overallCr)}</div>
+                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                  No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no programme to create. Lower the threshold on the materiality step, or scope captions in on the qualitative step.
+                </p>
+              </div>
+            )}
+            {inScope.length > 0 && (
             <div className="grid grid-cols-1 gap-4">
               <div className="border border-border-light rounded-xl bg-white overflow-hidden self-start">
                 <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
@@ -690,7 +736,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                           key={b.id}
                           onClick={() => setBeyond(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
                           className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
-                            on ? 'border-primary/30 bg-primary/5' : 'border-border-light bg-white hover:border-primary/20'
+                            on ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
                           }`}
                         >
                           <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
@@ -709,6 +755,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 </div>
               </div>
             </div>
+            )}
           </StepShell>
         )}
 
@@ -747,7 +794,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {derived.map(r => (
-                  <div key={r.process} className="border border-border-light rounded-lg p-3">
+                  <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
                     <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
                     <div className="text-[10.5px] text-text-muted mt-0.5 mb-2 tabular-nums">
                       {r.sources.length} source caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
@@ -756,7 +803,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                   </div>
                 ))}
                 {BEYOND_TB.filter(b => beyond[b.id]).map(b => (
-                  <div key={b.id} className="border border-dashed border-border rounded-lg p-3 bg-surface-2/40">
+                  <div key={b.id} className="rounded-lg p-3 bg-surface-2/60">
                     <div className="text-[12.5px] font-semibold text-text-secondary">{b.name}</div>
                     <div className="text-[10.5px] text-text-muted mt-0.5">Group-level workstream — scoped without a TB caption</div>
                   </div>
@@ -767,8 +814,10 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
         )}
       </motion.div>
 
-      {/* Footer — sticky inside the modal scroll so the nav is always in reach */}
-      <div className="flex items-center justify-between mt-6 py-4 border-t border-border-light sticky bottom-0 bg-white -mx-6 px-6">
+      {/* Footer — pinned to the modal's bottom edge (mt-auto on short steps,
+          sticky over the scroll on tall ones) so Back/Continue never float */}
+      <div className="mt-auto pt-6" />
+      <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
           onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
@@ -786,7 +835,8 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
         ) : (
           <button
             onClick={create}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+            disabled={derived.length === 0}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={13} /> Create {fy} programme
           </button>

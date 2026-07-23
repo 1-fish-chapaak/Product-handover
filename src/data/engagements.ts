@@ -73,6 +73,14 @@ export interface Engagement {
   subtype?: AutomationSubtype;
   /** Present only for SOX / ICFR engagements. */
   soxConfig?: SoxConfig;
+  /** Scoping-derived process list (SOX Testing flow) — the ICFR workspace
+   *  seeds one RACM per entry instead of the single-process template. */
+  soxProcesses?: string[];
+  /** How the scoping-derived workspace seeds its testing state (SOX Testing
+   *  flow only). 'live' = testing in flight (all but one control per RACM
+   *  concluded), 'carried' = design carried from the prior cycle with the
+   *  operating retest pending, 'fresh' (default) = nothing tested yet. */
+  soxSeedMode?: 'fresh' | 'live' | 'carried';
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */
