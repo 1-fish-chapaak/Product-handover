@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ChevronRight, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, ChevronRight, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
 import { SeverityPill } from './parts';
 import { FormSelect } from '../shared/FilterSelect';
+import MaterialityWorksheet from './MaterialityWorksheet';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import { MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity, type SignificantAccount, type TaskType } from './types';
@@ -68,205 +69,139 @@ function scopeAdvice(eng: IcfrEngagement): ScopeAdvice {
 
 // ─── Materiality & scope — the ground rules ──────────────────────────────────────
 export function ScopeView() {
-  const { eng } = useIcfr();
-  const r = eng.rules;
-  // The ground rules are planning-time decisions: fixed before testing starts and
-  // read-only for the rest of the engagement. Re-cutting materiality after seeing
-  // results would re-grade findings already reached — so this screen only reads,
-  // and any indicated change is carried into next period's planning instead.
-  const M = eng.materiality;
+  const { eng, back, updateRules, updateMateriality, racmDocs } = useIcfr();
+  const M = eng.materiality; const r = eng.rules;
+  const locked = !!eng.materialityBasis?.lockedAt;
   const pm = eng.performanceMateriality;
   const ctt = r.clearlyTrivial;
-  const band = r.sdBandPct;
-  const sd = M * band / 100;
+  const sd = M * r.sdBandPct / 100;
   const pmPct = M ? Math.round((pm / M) * 100) : 0;
   const cttPct = M ? Math.round((ctt / M) * 100) : 0;
 
   const LADDER: { label: string; band: string; tone: string }[] = [
     { label: 'Clearly trivial', band: `≤ ${fmtFull(ctt)}`, tone: 'text-ink-500 bg-paper-50 border-canvas-border' },
     { label: 'Deficiency', band: `> ${fmtFull(ctt)} and < ${fmtFull(sd)}`, tone: 'text-mitigated-700 bg-mitigated-50/50 border-mitigated-200' },
-    { label: 'Significant deficiency', band: `≥ ${fmtFull(sd)}  ·  ${band}% of materiality`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
+    { label: 'Significant deficiency', band: `≥ ${fmtFull(sd)}  ·  ${r.sdBandPct}% of materiality`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
     { label: 'Material weakness', band: `≥ ${fmtFull(M)}  or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
   ];
 
-  // What this period's exceptions say about the thresholds. Advisory only: it
-  // feeds NEXT period's planning, never a mid-flight re-grade of these findings.
-  const advice = useMemo(() => scopeAdvice(eng), [eng]);
-
   return (
     <div className="space-y-5">
-      {/* getting back up is the breadcrumb's job (rendered by the shell):
-          Engagements / engagement / Materiality & scope */}
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Back</button>
       <div>
-        <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Materiality &amp; scope</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">The ground rules that drive how every exception is evaluated, sized, and routed. Fixed at planning — they apply across all controls for the whole period.</p>
+        <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Materiality &amp; scoping</h1>
+        <p className="text-[0.8125rem] text-ink-500 mt-0.5">Entity, materiality and the ground rules that drive how every exception is evaluated, sized, and routed. Materiality locks at go-live.</p>
       </div>
 
-      {/* materiality — read-only: these are planning-time decisions */}
-      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Materiality</h2>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2.5 h-[22px]"
-            title="Materiality is set before testing begins. Changing it mid-period would re-grade exceptions already concluded.">
-            <Lock size={11} className="text-ink-400" /> Set at planning · read-only
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <Money label="Overall materiality" value={M} hint="The financial-statement materiality benchmark." />
-          <Money label="Performance materiality" value={pm} hint={`${pmPct}% of overall — the testing threshold.`} />
-          <Money label="Clearly-trivial threshold" value={ctt} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
-        </div>
-      </section>
-
-      {/* what the period's exceptions say about the thresholds — advisory, next-period */}
-      <section className={cn('rounded-2xl border p-5', advice.tone === 'note' ? 'border-mitigated-200 bg-mitigated-50/40' : 'border-canvas-border bg-canvas-elevated')}>
-        <div className="flex items-start gap-3">
-          <span className={cn('shrink-0 mt-0.5', advice.tone === 'note' ? 'text-mitigated-700' : 'text-compliant-700')}>
-            {advice.tone === 'note' ? <Lightbulb size={16} /> : <CheckCircle2 size={16} />}
-          </span>
+      {/* entity & source */}
+      <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
+        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Building2 size={15} className="text-brand-600" /> Entity</h2>
+        <div className="flex items-start gap-3.5">
+          <span className="w-10 h-10 rounded-xl bg-brand-600 text-white inline-flex items-center justify-center shrink-0"><Building2 size={18} /></span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[13px] font-bold text-ink-800">{advice.headline}</h2>
-            <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">{advice.detail}</p>
-            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-              <span className="text-[11px] tabular-nums text-ink-500 bg-canvas-elevated border border-canvas-border rounded-lg px-2 py-1">{advice.evidence}</span>
-              <span className="text-[11px] text-ink-400">Carried into next period's planning — this period's grades stand.</span>
+            <div className="text-[0.875rem] font-semibold text-ink-900">{eng.entity}</div>
+            <div className="text-[0.75rem] text-ink-500 mt-0.5">
+              {eng.entityDetected
+                ? <><Sparkles size={11} className="inline -mt-0.5 text-brand-600" /> Detected from {eng.entityDetected.source} · company code <b className="font-mono">{eng.entityDetected.companyCode}</b></>
+                : `${eng.framework} · ${eng.periodStart} – ${eng.periodEnd}`}
+              {eng.live && <> · <span className="font-semibold text-compliant-700">Live{eng.wentLiveAt ? ` since ${eng.wentLiveAt}` : ''}</span></>}
             </div>
+            {racmDocs.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                {racmDocs.map(d => <span key={d.id} className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-canvas-border bg-paper-50/50 text-[0.6875rem] font-medium text-ink-600"><Paperclip size={10} /> {d.name}</span>)}
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      {/* severity ladder */}
+      {/* materiality — the worksheet, locked once the engagement went live */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Materiality</h2>
+          {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2 h-5"><Lock size={10} /> Locked at go-live</span>}
+        </div>
+        {eng.materialityBasis ? (
+          <MaterialityWorksheet basis={eng.materialityBasis} locked={locked} />
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            <Money label="Overall materiality" value={M} onChange={v => updateMateriality({ materiality: v })} hint="The financial-statement materiality benchmark." />
+            <Money label="Performance materiality" value={pm} onChange={v => updateMateriality({ performanceMateriality: v })} hint={`${pmPct}% of overall — the testing threshold.`} />
+            <Money label="Clearly-trivial threshold" value={ctt} onChange={v => updateRules({ clearlyTrivial: v })} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
+          </div>
+        )}
+      </section>
+
+      {/* severity ladder */}
+      <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
-          <label className="inline-flex items-center gap-2 text-[12px] text-ink-600"><Sliders size={13} /> Significant-deficiency band
-            <b className="font-semibold tabular-nums text-ink-800">{band}</b>
+          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
+          <label className="inline-flex items-center gap-2 text-[0.75rem] text-ink-600"><Sliders size={13} /> Significant-deficiency band
+            <input type="number" min={1} max={100} value={r.sdBandPct} onChange={e => updateRules({ sdBandPct: Math.max(1, Math.min(100, +e.target.value || 0)) })} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
             <span className="text-ink-400">% of materiality</span>
           </label>
         </div>
         <div className="space-y-2">
           {LADDER.map((row, i) => (
             <div key={row.label} className={cn('flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5', row.tone)}>
-              <span className="inline-flex items-center gap-2.5"><span className="font-mono text-[11px] font-bold opacity-60">{i + 1}</span><span className="text-[13px] font-bold">{row.label}</span></span>
-              <span className="text-[12px] tabular-nums font-medium">{row.band}</span>
+              <span className="inline-flex items-center gap-2.5"><span className="font-mono text-[0.6875rem] font-bold opacity-60">{i + 1}</span><span className="text-[0.8125rem] font-bold">{row.label}</span></span>
+              <span className="text-[0.75rem] tabular-nums font-medium">{row.band}</span>
             </div>
           ))}
         </div>
-        <p className="text-[11.5px] text-ink-400 mt-2.5">Severity = likelihood (more than remote) × magnitude vs materiality. A compensating control can cap — never clear — a deficiency.</p>
+        <p className="text-[0.71875rem] text-ink-400 mt-2.5">Severity = likelihood (more than remote) × magnitude vs materiality. A compensating control can cap — never clear — a deficiency.</p>
       </section>
 
       {/* policies */}
       <section className="grid grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
-          <div><div className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><GitMerge size={14} className="text-brand-600" /> Aggregation</div><p className="text-[12px] text-ink-500 mt-1">Combine individually-minor deficiencies by commonality and evaluate them together.</p></div>
-          <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
+          <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><GitMerge size={14} className="text-brand-600" /> Aggregation</div><p className="text-[0.75rem] text-ink-500 mt-1">Combine individually-minor deficiencies by commonality and evaluate them together.</p></div>
+          <Toggle on={r.aggregate} onChange={v => updateRules({ aggregate: v })} label="Aggregation" />
         </div>
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
-          <div><div className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[12px] text-ink-500 mt-1">Route an exception to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
-          <Pill tone={r.autoRoute ? 'compliant' : 'draft'}>{r.autoRoute ? 'On' : 'Off'}</Pill>
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
+          <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[0.75rem] text-ink-500 mt-1">Route an exception to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
+          <Toggle on={r.autoRoute} onChange={v => updateRules({ autoRoute: v })} label="Auto-routing" />
         </div>
       </section>
 
       {/* MW indicators */}
-      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Material-weakness indicators</h2>
-        <p className="text-[12px] text-ink-500 mb-3">If any in-force indicator is present on an exception, it is a material weakness regardless of magnitude.</p>
+      <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
+        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Material-weakness indicators</h2>
+        <p className="text-[0.75rem] text-ink-500 mb-3">If any in-force indicator is present on an exception, it is a material weakness regardless of magnitude.</p>
         <div className="space-y-1.5">
-          {/* the in-force set reads as plain rows — never a live switch */}
           {MW_INDICATOR_CATALOGUE.map(ind => {
             const on = r.mwIndicators.includes(ind);
             return (
-              <div key={ind} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border')}>
-                <span className={cn('w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={12} />}</span>
-                <span className="text-[12.5px] text-ink-800">{ind}</span>
-              </div>
+              <button key={ind} onClick={() => updateRules({ mwIndicators: on ? r.mwIndicators.filter(x => x !== ind) : [...r.mwIndicators, ind] })} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border hover:border-ink-300')}>
+                <span className={cn('w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={12} />}</span>
+                <span className="text-[0.78125rem] text-ink-800">{ind}</span>
+              </button>
             );
           })}
         </div>
       </section>
 
-      {/* ground-rules change history — the audit trail for mid-engagement edits */}
-      {eng.rulesLog.length > 0 && (
-        <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><History size={15} className="text-brand-600" /> Ground-rules change history</h2>
-          <div className="space-y-2.5">
-            {eng.rulesLog.map(entry => (
-              <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/40 px-4 py-3">
-                <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                  {entry.changes.map(c => (
-                    <span key={c.field} className="inline-flex items-center gap-1.5 text-ink-700"><b className="font-semibold">{c.field}</b> {c.from} <ArrowRight size={11} className="text-ink-400" /> <b className="font-semibold">{c.to}</b></span>
-                  ))}
-                  <span className="ml-auto text-[11.5px] text-ink-400">{entry.by} · {entry.at}</span>
-                </div>
-                <div className="text-[12px] text-ink-500 mt-1 italic">“{entry.reason}”</div>
-                <div className="text-[11.5px] mt-1.5">
-                  {entry.regraded.length === 0 ? <span className="text-ink-400">No exception changed grade.</span> : (
-                    <span className="inline-flex items-center gap-2 flex-wrap">
-                      {entry.regraded.map(rg => (
-                        <span key={rg.defId} className="inline-flex items-center gap-1 text-ink-600"><span className="font-mono font-semibold">{rg.defId}</span> {rg.from} <ArrowRight size={10} className="text-ink-400" /> <b className="font-semibold">{rg.to}</b></span>
-                      ))}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* significant accounts — the scoping front door: editable, with WCGWs */}
+      {/* significant accounts */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2>
-          <span className="text-[11.5px] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope · scoping unit = account × assertion</span>
-        </header>
-        <table className="w-full text-[12.5px]">
-          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'Process', 'In scope', 'Relevant assertions', 'What could go wrong'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[10px] px-4 py-2">{h}</th>)}</tr></thead>
+        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[0.71875rem] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
+        <table className="w-full text-[0.78125rem]">
+          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'In scope', 'Assertions'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[0.625rem] px-4 py-2">{h}</th>)}</tr></thead>
           <tbody>
-            {eng.accounts.map(a => <AccountRow key={a.id} a={a} canEdit={false} onPatch={() => {}} />)}
+            {eng.accounts.map(a => (
+              <tr key={a.id} className="border-b border-canvas-border/60 last:border-0">
+                <td className="px-4 py-2.5 font-medium text-ink-800">{a.name}</td>
+                <td className="px-4 py-2.5 tabular-nums text-ink-600">{fmt(a.balance)}</td>
+                <td className="px-4 py-2.5">{a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}</td>
+                <td className="px-4 py-2.5 text-ink-500">{a.assertions.join(' · ')}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </section>
-
-      {/* coverage — where a relevant assertion has no key control, that's a gap */}
-      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <header className="px-4 py-3 border-b border-canvas-border">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Coverage — account × assertion</h2>
-          <p className="text-[11.5px] text-ink-400 mt-0.5">Key controls in each account's process, per relevant assertion. A relevant assertion with no key control is a design gap — a WCGW with nothing mapped to it.</p>
-        </header>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-ink-500 border-b border-canvas-border">
-                <th className="text-left font-semibold uppercase tracking-wide text-[10px] px-4 py-2">Account</th>
-                {ALL_ASSERTIONS.map(as_ => <th key={as_} className="text-center font-semibold uppercase tracking-wide text-[9.5px] px-2 py-2 whitespace-nowrap">{as_.replace(' / Occurrence', '/Occ.')}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {eng.accounts.filter(a => a.inScope).map(a => (
-                <tr key={a.id} className="border-b border-canvas-border/60 last:border-0">
-                  <td className="px-4 py-2.5 font-medium text-ink-800 whitespace-nowrap">{a.name}<span className="text-ink-400 font-normal"> · {a.process ?? '—'}</span></td>
-                  {ALL_ASSERTIONS.map(as_ => {
-                    const relevant = a.assertions.includes(as_);
-                    if (!relevant) return <td key={as_} className="text-center text-ink-300 px-2 py-2.5">—</td>;
-                    const n = eng.controls.filter(c => c.isKey && c.process === a.process && c.assertions.includes(as_)).length;
-                    return (
-                      <td key={as_} className="text-center px-2 py-2.5">
-                        {n > 0
-                          ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-compliant-700 bg-compliant-50 border border-compliant-200 rounded-md px-1.5 h-5 tabular-nums" title={`${n} key control${n === 1 ? '' : 's'} in ${a.process}`}>{n}</span>
-                          : <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-risk-700 bg-risk-50 border border-risk-200 rounded-md px-1.5 h-5" title="Relevant assertion with no key control — design gap by absence">gap</span>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
     </div>
   );
 }
+
 
 const ALL_ASSERTIONS: Assertion[] = ['Existence / Occurrence', 'Completeness', 'Accuracy', 'Valuation', 'Cut-off', 'Rights & Obligations', 'Presentation'];
 
@@ -340,14 +275,14 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
 }
 
 // Editors get the input; readers get plain text — a threshold is never a
-// disabled form control for someone who can't set it.
-/** A threshold as stated at planning — read-only; these are never edited in-period. */
-function Money({ label, value, hint }: { label: string; value: number; hint: string }) {
+function Money({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint: string }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold text-ink-500 mb-1.5">{label}</div>
-      <div className="h-10 flex items-center text-[14px] font-semibold tabular-nums text-ink-800">{fmtFull(value)}</div>
-      <div className="text-[11px] text-ink-400 mt-1">{hint}</div>
+      <div className="text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{label}</div>
+      <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-400 pointer-events-none">₹</span>
+        <input type="number" min={0} value={value} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[0.8125rem] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      </div>
+      <div className="text-[0.6875rem] text-ink-400 mt-1">{hint}</div>
     </div>
   );
 }

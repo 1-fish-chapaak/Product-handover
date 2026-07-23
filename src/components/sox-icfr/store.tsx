@@ -84,6 +84,7 @@ interface IcfrCtx {
   overrideDesign: (controlId: string, override: Override | null) => void;
   // design CRUD + validation
   addDesignDoc: (controlId: string, kind: DesignDocKind) => void;
+  attachDesignEvidence: (controlId: string, docId: string, fileName: string) => void;
   removeDesignDoc: (controlId: string, docId: string) => void;
   addDesignPoint: (controlId: string, text: string) => void;
   removeDesignPoint: (controlId: string, pointId: string) => void;
@@ -340,6 +341,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: [...c.design.documents, { id: uid('dd'), kind, name: `${kind} — to provide`, status: 'Missing' } as DesignDoc] } }));
   }, [patchControl, role]);
+  // Attach an evidence file to a design element — the element becomes Evidenced,
+  // which is what the evidence-first TOD completeness gate counts. (Hand-merged
+  // from main's go-live commit for the evidence-first dossier.)
+  const attachDesignEvidence = useCallback<IcfrCtx['attachDesignEvidence']>((controlId, docId, fileName) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId
+      ? { ...d, status: 'Received' as DocStatus, name: fileName, uploadedBy: me, at: 'just now', files: [...(d.files ?? []), { id: uid('f'), name: fileName, kind: fileName.toLowerCase().endsWith('.xlsx') ? 'XLSX' : fileName.toLowerCase().endsWith('.csv') ? 'CSV' : 'PDF', uploadedBy: me, uploadedAt: 'just now' } as EvidenceFile] }
+      : d) } }));
+    pushExec(prev => { const d = prev.controls.find(c => c.id === controlId)?.design.documents.find(dd => dd.id === docId); return d ? { controlId, track: 'design', kind: 'receive-doc', verb: 'attached evidence', target: d.kind } : null; });
+  }, [patchControl, me, role, pushExec]);
   const removeDesignDoc = useCallback<IcfrCtx['removeDesignDoc']>((controlId, docId) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.filter(d => d.id !== docId) } }));
@@ -1111,7 +1122,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
@@ -1121,7 +1132,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
