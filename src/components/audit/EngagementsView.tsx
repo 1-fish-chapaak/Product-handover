@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles, FlaskConical,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -12,7 +12,6 @@ import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
 import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
-import SoxTestingTab from './sox-testing/SoxTestingTab';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
@@ -20,7 +19,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
-type EngViewMode = 'overview' | 'list' | 'approval-flow' | 'sox-testing';
+type EngViewMode = 'overview' | 'list' | 'approval-flow';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -246,9 +245,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
                 : mode === 'approval-flow'
                   ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
-                  : mode === 'sox-testing'
-                    ? 'The scoping-first SOX flow — materiality and trial balances decide what\'s in scope, and every in-scope process becomes a RACM.'
-                    : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
+                  : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -512,7 +509,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
         </>)}
 
-        {mode === 'sox-testing' && <SoxTestingTab onOpenEngagement={onOpenEngagement} />}
 
         {mode === 'approval-flow' && (
           <div>
@@ -566,7 +562,6 @@ function ViewToggle({
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
-    { id: 'sox-testing', label: 'SOX Testing', Icon: FlaskConical },
   ];
   return (
     <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">

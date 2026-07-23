@@ -70,16 +70,8 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   return (
     <>
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-        {/* Intro + CTA */}
-        <div className="flex items-end justify-between gap-4 mb-4 flex-wrap">
-          <div className="max-w-2xl">
-            <h2 className="text-[18px] font-bold text-text">SOX programmes — scoping first</h2>
-            <p className="text-[12.5px] text-text-secondary mt-1 leading-relaxed">
-              In this flow you don't pick entities, processes, or dates by hand. The scoping exercise decides
-              what's in scope — and every in-scope process becomes a RACM. Runs alongside the existing
-              engagement flow; nothing there changes.
-            </p>
-          </div>
+        {/* CTA — the intro copy lives in the page header (SoxTestingView) now */}
+        <div className="flex items-center justify-end mb-4">
           <button
             onClick={() => setView('wizard')}
             className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"

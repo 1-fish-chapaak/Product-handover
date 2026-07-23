@@ -15,10 +15,9 @@ const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Iram
 async function gotoSoxTesting(page: import('@playwright/test').Page) {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
-  await page.locator('[title="Engagements"]').first().click();
+  // SOX Testing is its own sidebar section now, right below Engagements
+  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
   await page.waitForTimeout(800);
-  await page.getByRole('tab', { name: 'SOX Testing' }).click();
-  await page.waitForTimeout(600);
 }
 
 test('A — FY26: summary → workspace → seeded run → honest bulk test', async ({ page }) => {

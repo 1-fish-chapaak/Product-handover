@@ -324,6 +324,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'audit-planning': 'plan_view',
   // Engagements
   'engagements': 'eng_view',
+  'sox-testing': 'eng_view',
   'engagement-overview': 'eng_view',
   'engagement-case-management': 'eng_view',
   'my-queue': 'eng_view',

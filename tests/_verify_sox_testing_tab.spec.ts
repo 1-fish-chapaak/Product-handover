@@ -13,18 +13,19 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   test.setTimeout(150_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
-  await page.locator('[title="Engagements"]').first().click();
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
   await page.waitForTimeout(800);
 
-  // Existing tabs untouched, new tab present
+  // Engagement Library keeps its classic tabs — SOX Testing moved to the sidebar
   await expect(page.getByRole('tab', { name: /All Engagements/ })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Approval Flow' })).toBeVisible();
-  await page.getByRole('tab', { name: 'SOX Testing' }).click();
-  await page.waitForTimeout(600);
+  await expect(page.getByRole('tab', { name: 'SOX Testing' })).toHaveCount(0);
+  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
+  await page.waitForTimeout(800);
 
-  // Landing: programme list only — the pipeline explainer is parked, and the
-  // scoping-window note lives inside the modal, not upfront
-  await expect(page.getByText('SOX programmes — scoping first')).toBeVisible();
+  // Landing: its own page — header chrome + programme list only; the pipeline
+  // explainer is parked, and the scoping-window note lives inside the modal
+  await expect(page.getByRole('heading', { name: 'SOX Testing' })).toBeVisible();
   await expect(page.getByText('How a programme gets its scope')).toHaveCount(0);
   await expect(page.getByText(/Scoping window open since/)).toHaveCount(0);
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
@@ -48,10 +49,11 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.waitForTimeout(400);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  // Card click opens the classic SOX workspace — tabs, control testing, the lot
+  // Card click opens the classic SOX workspace — tabs, control testing, the lot.
+  // Opened from the SOX Testing section, the back line points back to it.
   await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
-  await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to SOX Testing' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
   // The RACM tab mirrors the scoping summary: the same 7 derived processes,
   // including the ones the classic catalogue doesn't have
@@ -61,10 +63,9 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await expect(page.getByText('Payroll (Hire to Retire)').first()).toBeVisible();
   await expect(page.getByText('Procure to Pay').first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/02b-fy26-workspace.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Back to Engagements' }).click();
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
   await page.waitForTimeout(800);
-  await page.getByRole('tab', { name: 'SOX Testing' }).click();
-  await page.waitForTimeout(500);
+  await expect(page.getByRole('heading', { name: 'SOX Testing' })).toBeVisible();
 
   // "+ New Engagement" (tab CTA — the later of the two same-named buttons)
   await page.getByRole('button', { name: 'New Engagement' }).last().click();
@@ -146,19 +147,22 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByText('FY27 ICFR — Airline Group').first().click();
   await page.waitForTimeout(1000);
   await expect(page.getByRole('heading', { name: 'FY27 ICFR — Airline Group' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to SOX Testing' })).toBeVisible();
   // Fresh workspace seeds one RACM per scoping-derived process too
   await expect(page.getByText('Fixed Assets').first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/10-fy27-workspace.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Back to Engagements' }).click();
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
   await page.waitForTimeout(800);
 
-  // The classic list is untouched — the seed engagement is still there
+  // The classic Engagement Library is untouched — its list still has the seed
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('tab', { name: /All Engagements/ })).toBeVisible();
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C').first()).toBeVisible();
 
   // ── Roll forward: the annual action lives on the LATEST cycle only ──
-  await page.getByRole('tab', { name: 'SOX Testing' }).click();
-  await page.waitForTimeout(500);
+  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
+  await page.waitForTimeout(800);
   const rollBtns = page.getByRole('button', { name: 'Roll forward', exact: true });
   await expect(rollBtns).toHaveCount(1);
   await rollBtns.click();

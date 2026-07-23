@@ -25,7 +25,9 @@ const SOX_TABS: TabDef[] = [
   { id: 'runs', label: 'Test runs' },
 ];
 
-function Inner({ onBack }: { onBack?: () => void }) {
+function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
+  // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
+  const backCrumb = backLabel.replace(/^Back to /, '');
   const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
@@ -43,10 +45,10 @@ function Inner({ onBack }: { onBack?: () => void }) {
         {onBack && (
           <button
             onClick={onBack}
-            aria-label="Back to Engagements"
+            aria-label={backLabel}
             className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"
           >
-            <ArrowLeft size={15} /> Back to Engagements
+            <ArrowLeft size={15} /> {backLabel}
           </button>
         )}
         <div className="mt-3 flex items-start gap-3.5">
@@ -132,7 +134,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
         )}
         {isRacmMatrix && (
           <SoxBreadcrumb onBack={() => setView('racm')} items={[
-            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
             { label: eng.name, onClick: () => setTab('overview') },
             { label: 'RACM', onClick: () => setView('racm') },
             { label: racmProcess ?? eng.controls[0]?.process ?? 'Matrix' },
@@ -142,7 +144,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
           /* one level up from the ground rules is the engagement itself — always
              its Overview, not whichever tab happened to be open when it was opened */
           <SoxBreadcrumb onBack={() => setTab('overview')} items={[
-            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
             { label: eng.name, onClick: () => setTab('overview') },
             { label: 'Materiality & scope' },
           ]} />
@@ -158,7 +160,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';
           return (
             <SoxBreadcrumb onBack={back} items={[
-              ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+              ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
               { label: eng.name, onClick: () => setTab('overview') },
               { label: from, onClick: back },
               { label: wpRef },
@@ -167,7 +169,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
         })()}
         {isHandoffs && (
           <SoxBreadcrumb onBack={back} items={[
-            ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+            ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
             { label: eng.name, onClick: () => setTab('overview') },
             { label: 'Handoffs' },
           ]} />
@@ -180,7 +182,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
              hats — owner remediates, auditor retests, reviewer closes. */
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <SoxBreadcrumb onBack={back} items={[
-              ...(onBack ? [{ label: 'Engagements', onClick: onBack }] : []),
+              ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
               { label: eng.name, onClick: () => setTab('overview') },
               { label: role === 'risk-owner' ? 'My exceptions' : 'Exceptions' },
             ]} />
@@ -201,7 +203,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
   );
 }
 
-export default function SoxIcfrApp({ engagementId, onBack }: { engagementId?: string; onBack?: () => void }) {
+export default function SoxIcfrApp({ engagementId, onBack, backLabel }: { engagementId?: string; onBack?: () => void; backLabel?: string }) {
   // The SOX persona follows the platform login: risk owners land in the
   // Risk Owner view, reviewers in the Reviewer view; everyone else — including
   // signed-out — defaults to Auditor. The keyed provider re-seeds on login change.
@@ -211,7 +213,7 @@ export default function SoxIcfrApp({ engagementId, onBack }: { engagementId?: st
   const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, process: eng.process, processes: eng.soxProcesses, seedMode: eng.soxSeedMode, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
   return (
     <IcfrProvider key={currentUser?.id ?? 'signed-out'} initialRole={initialRole} seedMeta={seedMeta}>
-      <Inner onBack={onBack} />
+      <Inner onBack={onBack} backLabel={backLabel} />
     </IcfrProvider>
   );
 }
