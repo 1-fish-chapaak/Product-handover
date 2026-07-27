@@ -4,6 +4,11 @@ import { Plus, Flag, Building2, X, FileSearch, RefreshCw } from 'lucide-react';
 import { useToast } from '../../shared/Toast';
 import ScopingWizard from './ScopingWizard';
 import RollForwardWizard from './RollForwardWizard';
+
+/** Card actions parked (user ask) — Roll forward moved to the workspace
+ *  Configuration tab; the scoping-summary modal has no entry point while
+ *  this is off. Flip to bring the card buttons back. */
+const CARD_ACTIONS = false;
 import ProgrammeView from './ProgrammeView';
 import {
   PROGRAMMES, registerProgramme, fmtCr,
@@ -141,6 +146,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PHASE_CLS[p.phase]}`}>
                     {p.phase}
                   </span>
+                  {CARD_ACTIONS && (
                   <span className="ml-auto flex items-center gap-1 shrink-0">
                     {p.id === latestId && (
                       <button
@@ -158,6 +164,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                       <FileSearch size={12} /> Scoping summary
                     </button>
                   </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-2 text-[11.5px] text-text-secondary flex-wrap">
                   {p.code && (<>
@@ -229,7 +236,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
 /** Fixed-size modal shell for the SOX flow — 1000px wide for the wizard,
  *  800px for the scoping summary, both 800px tall. Closes on X or Escape
  *  only — an overlay click mid-wizard would silently discard scoping work. */
-function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
+export function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
   label: string;
   widthCls?: string;
   onClose: () => void;

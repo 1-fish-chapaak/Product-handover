@@ -24,18 +24,11 @@ test('A — FY26: summary → workspace → seeded run → honest bulk test', as
   test.setTimeout(180_000);
   await gotoSoxTesting(page);
 
-  // Scoping summary — de-boxed: open stepper cycle + one merged summary surface
-  await page.getByRole('button', { name: 'Scoping summary', exact: true }).click();
-  await page.waitForTimeout(500);
-  const modal = page.getByRole('dialog');
-  await expect(modal.getByText('Audit cycle')).toBeVisible();
-  await expect(modal.getByRole('button', { name: /Open workspace/ })).toBeVisible();
-  await page.screenshot({ path: `${SHOT_DIR}/a01-summary-deboxed.png`, fullPage: true });
-
-  // A RACM card is clickable — straight into the workspace
-  await modal.getByText('Treasury', { exact: true }).click();
+  // Card actions are parked (Roll forward lives on the workspace Configuration
+  // tab) — the card itself opens the workspace
+  await expect(page.getByRole('button', { name: 'Scoping summary', exact: true })).toHaveCount(0);
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
 
   // Test runs — the live cycle arrives with the bulk run that tested its 25 controls
@@ -196,8 +189,12 @@ test('C — rolled cycle: design carried, operating retest pending, no runs yet'
   test.setTimeout(180_000);
   await gotoSoxTesting(page);
 
-  // Roll the live FY26 into FY27 — scoping and design conclusions travel
-  await page.getByRole('button', { name: 'Roll forward', exact: true }).click();
+  // Roll the live FY26 into FY27 — from the workspace Configuration tab now
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
+  await page.waitForTimeout(1000);
+  await page.getByText('Configuration', { exact: true }).first().click();
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Roll forward' }).click();
   await page.waitForTimeout(500);
   await expect(page.getByText('Roll forward from FY26')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -209,8 +206,10 @@ test('C — rolled cycle: design carried, operating retest pending, no runs yet'
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Create FY27 programme' }).click();
   await page.waitForTimeout(700);
-  // Creation closes the modal — the card is on the listing
+  // Creation closes the modal — back on Configuration; the card is on the listing
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
+  await page.waitForTimeout(800);
 
   // The card says what carried; the workspace agrees
   await expect(page.getByText(/controls carried · TOE retest/)).toBeVisible();

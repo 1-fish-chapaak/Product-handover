@@ -33,23 +33,10 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/01-landing.png`, fullPage: true });
 
-  // "Scoping summary" opens the derivation story in the 800×800 modal
-  await page.getByRole('button', { name: 'Scoping summary', exact: true }).click();
-  await page.waitForTimeout(600);
-  const modal = page.getByRole('dialog');
-  await expect(modal).toBeVisible();
-  const box = await modal.boundingBox();
-  expect(Math.round(box!.width)).toBe(1000);
-  expect(Math.round(box!.height)).toBe(800);
-  // No breadcrumb in the summary — a plain modal header, then the engagement
-  await expect(modal.getByText('Scoping summary', { exact: true })).toBeVisible();
-  await expect(modal.locator('nav[aria-label="Breadcrumb"]')).toHaveCount(0);
-  await expect(page.getByText('Opinion as of 31 Mar 2026')).toBeVisible();
-  await expect(page.getByText('In-scope processes — one RACM each')).toBeVisible();
-  await page.screenshot({ path: `${SHOT_DIR}/02-fy26-programme.png`, fullPage: true });
-  await modal.getByRole('button', { name: 'Close' }).click();
-  await page.waitForTimeout(400);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // Card actions are parked — no Roll forward / Scoping summary buttons on
+  // cards; rolling forward lives on the workspace Configuration tab
+  await expect(page.getByRole('button', { name: 'Scoping summary', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(0);
 
   // Card click opens the classic SOX workspace — tabs, control testing, the lot.
   // Opened from the SOX Testing section, the back line points back to it.
@@ -104,15 +91,18 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await expect(page.getByRole('button', { name: 'Remove SkyCargo Logistics Pvt Ltd' })).toBeVisible();
   // Each mapped entity row carries its extracted processes
   await expect(page.getByTitle(/Order to Cash/).first()).toBeVisible();
-  // The absorbed mapping surfaces: caption→process table + beyond-TB toggles
+  // The absorbed mapping surfaces: caption→process table (the beyond-TB
+  // workstream card is parked behind BEYOND_TB_CARD — its ids still store)
   await expect(page.getByText('Map accounts to processes')).toBeVisible();
-  await expect(page.getByText('Beyond the trial balance')).toBeVisible();
-  await expect(page.getByText('Entity-level controls (ELC)')).toBeVisible();
-  // Trial balances still gate the step — scoping runs on their numbers
+  await expect(page.getByText('Beyond the trial balance')).toHaveCount(0);
+  // Trial balances still gate the step — their own button stays until they're
+  // in; only when BOTH docs are uploaded do the buttons become "Upload more"
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expect(page.getByText(/Upload the trial balances to continue/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upload more' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload trial balances' }).click();
   await page.waitForTimeout(1100);
+  await expect(page.getByRole('button', { name: 'Upload more' })).toBeVisible();
   await expect(page.getByText('airline-group-tb-fy27.xlsx')).toBeVisible();
   await expect(page.getByText(/mapped from the uploads/)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/03-wizard-entities.png`, fullPage: true });
@@ -166,12 +156,15 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await expect(page.getByRole('tab', { name: /All Engagements/ })).toBeVisible();
   await expect(page.getByText('FY26 ICFR — Airline P2P & O2C').first()).toBeVisible();
 
-  // ── Roll forward: the annual action lives on the LATEST cycle only ──
+  // ── Roll forward: parked on cards — lives on the workspace Configuration tab ──
   await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
   await page.waitForTimeout(800);
-  const rollBtns = page.getByRole('button', { name: 'Roll forward', exact: true });
-  await expect(rollBtns).toHaveCount(1);
-  await rollBtns.click();
+  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(0);
+  await page.getByText('FY27 ICFR — Airline Group').first().click();
+  await page.waitForTimeout(1000);
+  await page.getByText('Configuration', { exact: true }).first().click();
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Roll forward' }).click();
   await page.waitForTimeout(500);
 
   // Step 1 — cycle is pure recurrence: FY28, as-of auto, everything prefilled
@@ -203,13 +196,15 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('button', { name: 'Create FY28 programme' }).click();
   await page.waitForTimeout(700);
 
-  // Creation closes the modal — the rolled cycle lands on the listing with provenance
+  // Creation closes the modal — back on Configuration with the toast
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText(/programme rolled forward from FY27/)).toBeVisible();
-  await expect(page.getByText('as of 31 Mar 2028')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/14-fy28-rolled.png`, fullPage: true });
 
-  // Landing: FY28 card exists and now owns the Roll forward action
+  // Landing: the FY28 card exists; cards still carry no actions
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
+  await page.waitForTimeout(800);
   await expect(page.getByText('FY28 ICFR — Airline Group')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(1);
+  await expect(page.getByText('as of 31 Mar 2028')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(0);
 });
