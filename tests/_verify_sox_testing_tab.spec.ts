@@ -80,7 +80,7 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 2 — Scoping: uploads → entities (with extracted processes) →
-  // caption→process mapping → beyond-TB workstreams, all on one step
+  // caption→process mapping, all on one step
   await expect(page.getByText(/Upload the RACM and trial balances/)).toBeVisible();
   await expect(page.getByText(/No entities yet/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
@@ -108,24 +108,15 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.screenshot({ path: `${SHOT_DIR}/03-wizard-entities.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // Step 3 — materiality (basis → computed ladder)
+  // Step 3 — materiality (basis → computed ladder); qualitative stays parked
   await expect(page.getByText(/thresholds cascade from it/)).toBeVisible();
   await expect(page.getByText('Computed thresholds')).toBeVisible();
   await expect(page.getByText('₹ 21 Cr').first()).toBeVisible();
+  await expect(page.getByText('Qualitative')).toHaveCount(0);
   await page.screenshot({ path: `${SHOT_DIR}/04-wizard-materiality.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // Step 4 — qualitative overlay, straight after materiality (the per-entity
-  // TB step is gone — the bulk upload happened on the group step); the quant
-  // flags surface as a one-line summary here
-  await expect(page.getByText(/below materiality but still belong in scope/)).toBeVisible();
-  await expect(page.getByText(/of 34 captions cleared materiality automatically/)).toBeVisible();
-  await expect(page.getByText(/daily fare collections/)).toBeVisible();
-  await expect(page.getByText(/fuel-hedge accounting complexity/i)).toBeVisible();
-  await page.screenshot({ path: `${SHOT_DIR}/06-wizard-qualitative.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Step 5 — review & create (mapping was absorbed into Scoping)
+  // Step 4 — review & create
   await expect(page.getByText(/Confirm the derivation/)).toBeVisible();
   await expect(page.getByText('RACMs to be generated — one per in-scope process')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/08-wizard-review.png`, fullPage: true });

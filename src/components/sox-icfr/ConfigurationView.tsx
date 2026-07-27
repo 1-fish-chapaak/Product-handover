@@ -18,6 +18,10 @@ import RollForwardWizard from '../audit/sox-testing/RollForwardWizard';
 /** The programme's group-default rule always sits first and can't be deleted. */
 const GROUP_RULE_ID = 'rule-group';
 
+/** Per-entity "Upload TB" button — was briefly parked, then the user
+ *  reverted. Set false to park it again (rows without a TB show a dash). */
+const TB_UPLOAD_BTN = true;
+
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 const selectCls = 'text-[12px] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer';
 const uploadBtnCls = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[11px] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer';
@@ -297,10 +301,12 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                       <X size={11} />
                     </button>
                   </span>
-                ) : (
+                ) : TB_UPLOAD_BTN ? (
                   <button onClick={() => uploadTb(ent)} className={uploadBtnCls}>
                     <Upload size={11} /> Upload TB
                   </button>
+                ) : (
+                  <span className="text-[11px] text-ink-400">—</span>
                 )}
               </div>
               <select

@@ -17,7 +17,7 @@ import {
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
 
-const STEPS = ['Type & basics', 'Scoping', 'Materiality', 'Qualitative', 'Review'] as const;
+const STEPS = ['Type & basics', 'Scoping', 'Materiality', 'Review'] as const;
 
 /* ── Step 1 = the classic wizard's "Type & basics" screen, as-is ─────────── */
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -36,6 +36,18 @@ const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: str
  *  their seeded defaults (all on), so the summary's workstreams strip keeps
  *  working. */
 const BEYOND_TB_CARD = false;
+
+/** The Qualitative overlay step is parked (user ask). To restore: flip this,
+ *  add 'Qualitative' back after 'Materiality' in STEPS, give the step its
+ *  canContinue entry back (inScope.length > 0) and re-key the step checks
+ *  (qual block → step === 3, review → step === 4). The seeded qualitative
+ *  picks still scope in silently, so the derivation numbers stay unchanged. */
+const QUAL_STEP = false;
+
+/** Trial-balance upload on the Scoping step — was briefly parked, then the
+ *  user reverted. Set false to park it again (button, chips, gate and hint
+ *  all follow this flag). */
+const TB_UPLOAD = true;
 
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
@@ -136,10 +148,11 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     type === 'SOX / ICFR' && name.trim().length > 0 && code.trim().length > 0,
     // Scoping runs on the trial-balance numbers, so the bulk TB upload gates
     // this step — the RACM upload and manual rows are optional on top.
-    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && tbUpload === 'done',
-    benchmark > 0 && (basis === 'custom' || pct > 0),
-    // An empty scope derives zero RACMs — there is no programme to create.
-    inScope.length > 0,
+    // The TB gate only applies while the TB upload isn't parked.
+    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && (!TB_UPLOAD || tbUpload === 'done'),
+    // Qualitative is parked (QUAL_STEP) — the empty-scope gate rides on
+    // Materiality; an empty scope derives zero RACMs.
+    benchmark > 0 && (basis === 'custom' || pct > 0) && inScope.length > 0,
     true,
   ][step];
 
@@ -177,19 +190,22 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     window.setTimeout(() => {
       setUploadingMore(false);
       if (racmUpload !== 'done') setRacmUpload('done');
-      if (tbUpload !== 'done') setTbUpload('done');
       mergeExtractedEntities();
-      setUploads(prev => {
-        const next = { ...prev };
-        const known = [...entities, ...SEED_ENTITIES.filter(s => !entities.some(e => e.name.trim().toLowerCase() === s.name.toLowerCase()))];
-        for (const e of known) {
-          if (typeof next[e.id] !== 'object') {
-            const slug = e.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') || 'entity';
-            next[e.id] = SEED_TB_FILES[e.id] ?? { file: `${slug}-tb-fy27.xlsx`, lines: 96 };
+      // TB files only ride along while the TB upload isn't parked.
+      if (TB_UPLOAD) {
+        if (tbUpload !== 'done') setTbUpload('done');
+        setUploads(prev => {
+          const next = { ...prev };
+          const known = [...entities, ...SEED_ENTITIES.filter(s => !entities.some(e => e.name.trim().toLowerCase() === s.name.toLowerCase()))];
+          for (const e of known) {
+            if (typeof next[e.id] !== 'object') {
+              const slug = e.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') || 'entity';
+              next[e.id] = SEED_TB_FILES[e.id] ?? { file: `${slug}-tb-fy27.xlsx`, lines: 96 };
+            }
           }
-        }
-        return next;
-      });
+          return next;
+        });
+      }
     }, 800);
   };
 
@@ -414,7 +430,9 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
         {step === 1 && (
           <StepShell
             title="Scoping"
-            sub="Upload the RACM and trial balances — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted before materiality decides what's in scope."
+            sub={TB_UPLOAD
+              ? "Upload the RACM and trial balances — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted."
+              : "Upload the RACM — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted."}
           >
             {/* Uploads live with the group (user ask): the docs render as ONE
                 line of chips under the name, and after the first upload the two
@@ -475,12 +493,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     <Upload size={12} /> Upload RACM
                   </button>
                 )}
-                {tbUpload === 'idle' && (
+                {TB_UPLOAD && tbUpload === 'idle' && (
                   <button onClick={simulateTbUpload} title="Bulk upload — one file per entity or one workbook; entities extract from it" className={uploadBtnCls}>
                     <Upload size={12} /> Upload trial balances
                   </button>
                 )}
-                {racmUpload === 'done' && tbUpload === 'done' && !uploadingMore && (
+                {racmUpload === 'done' && (!TB_UPLOAD || tbUpload === 'done') && !uploadingMore && (
                   <button
                     onClick={simulateUploadMore}
                     title="Upload anything left out — extra or replacement files"
@@ -514,7 +532,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               </div>
               {entities.length === 0 && (
                 <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
-                  No entities yet — upload the RACM or trial balances above and they're mapped from the data, or add one by hand.
+                  No entities yet — upload the {TB_UPLOAD ? 'RACM or trial balances' : 'RACM'} above and they're mapped from the data, or add one by hand.
                 </div>
               )}
               {entities.map((ent, i) => (
@@ -574,7 +592,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 <Plus size={13} /> Add entity
               </button>
             </div>
-            {entities.length > 0 && tbUpload !== 'done' && (
+            {TB_UPLOAD && entities.length > 0 && tbUpload !== 'done' && (
               <Hint text="Upload the trial balances to continue — scoping runs on their numbers." />
             )}
 
@@ -746,7 +764,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           </StepShell>
         )}
 
-        {step === 3 && (
+        {QUAL_STEP && (
           <StepShell
             title="Qualitative overlay"
             sub="Some captions sit below materiality but still belong in scope — small balances with huge flows, or complex accounting. Scope them in with a reason."
@@ -835,7 +853,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           </StepShell>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <StepShell
             title="Review — scoping decides the programme"
             sub="Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances."
