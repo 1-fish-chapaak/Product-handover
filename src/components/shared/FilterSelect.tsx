@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Check, ChevronDown, ListFilter } from 'lucide-react';
 import { cn } from '../../lib/cn';
@@ -84,6 +85,63 @@ export function FilterSelect({ value, options, allLabel, onChange, ariaLabel, pr
       <OptionsPopover open={open} onClose={() => setOpen(false)} options={opts} value={value}
         onSelect={v => { onChange(v); setOpen(false); }} align={align} ariaLabel={ariaLabel} />
     </div>
+  );
+}
+
+/** Column-header filter — the column label itself is the trigger (funnel tints
+ *  brand while engaged). The menu portals to <body>: table wrappers clip
+ *  overflow, so an in-place popover would be cut off. */
+export function HeaderFilter({ label, value, options, allLabel, onChange, ariaLabel, engaged }: {
+  label: string; value: string; options: readonly (string | SelectOption)[]; allLabel?: string;
+  onChange: (v: string) => void; ariaLabel: string; engaged?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const reduce = useReducedMotion();
+  const opts = options.map(norm).map(o => (o.value === 'All' && allLabel ? { ...o, label: allLabel } : o));
+  const isEngaged = engaged ?? value !== 'All';
+  const toggleOpen = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left });
+    }
+    setOpen(o => !o);
+  };
+  return (
+    <>
+      <button ref={btnRef} onClick={toggleOpen} aria-label={ariaLabel} aria-expanded={open}
+        className={cn('inline-flex items-center gap-1 cursor-pointer transition-colors', isEngaged ? 'text-brand-700' : 'hover:text-ink-700')}>
+        {label}
+        <ListFilter size={11} className={cn('shrink-0', isEngaged ? 'text-brand-600' : 'text-ink-400')} />
+      </button>
+      {createPortal(
+        <AnimatePresence>
+          {open && pos && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+              <motion.div {...(reduce ? {} : POP_ANIM)} transition={{ duration: reduce ? 0 : 0.14, ease: [0.2, 0, 0, 1] }}
+                style={{ top: pos.top, left: pos.left }}
+                className="fixed z-50 bg-canvas-elevated border border-canvas-border rounded-lg p-1.5 shadow-lg max-h-72 overflow-y-auto min-w-[200px] origin-top-left"
+                role="listbox" aria-label={ariaLabel}>
+                {opts.map(opt => {
+                  const current = opt.value === value;
+                  return (
+                    <button key={opt.value} role="option" aria-selected={current}
+                      onClick={() => { onChange(opt.value); setOpen(false); }}
+                      className={cn('w-full flex items-center justify-between gap-3 text-left px-2.5 py-1.5 rounded-md text-[12px] normal-case tracking-normal cursor-pointer transition-colors',
+                        current ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas')}>
+                      <span className="truncate">{opt.label}</span>
+                      {current && <Check size={13} className="shrink-0" />}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body)}
+    </>
   );
 }
 

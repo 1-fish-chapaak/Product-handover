@@ -21,9 +21,13 @@ export interface GroupEntity {
   /** Simulated trial-balance upload — set once the file is "parsed". */
   tbFile?: string;
   tbLines?: number;
+  /** Materiality rule assigned on the Configuration tab — undefined = group default. */
+  ruleId?: string;
 }
 
-export type MaterialityBasis = 'pbt' | 'revenue' | 'expenses' | 'custom';
+/** 'netAssets' is produced only by the V2 wizard (call decision #3) — the
+ *  classic wizard's option list is unchanged. */
+export type MaterialityBasis = 'pbt' | 'revenue' | 'netAssets' | 'expenses' | 'custom';
 
 export interface BasisOption {
   id: MaterialityBasis;
@@ -242,6 +246,12 @@ export interface DerivedRacm {
   effective?: number;
   /** Rolled forward from the prior cycle — design carried, operating retest. */
   carried?: boolean;
+  /** Set only by the V2 wizard (call decisions #7/#8) — classic never reads
+   *  these. Group-level workstream RACM (FSCP / Consolidation / ELC / ITGC
+   *  per system) and the people evidence chasing runs on. */
+  workstream?: boolean;
+  processOwner?: string;
+  controlOwner?: string;
 }
 
 export interface MaterialitySet {
@@ -255,6 +265,23 @@ export interface MaterialitySet {
   pmPct: number;
   cttPct: number;
 }
+
+/** A named materiality rule — the group default plus any added on the
+ *  Configuration tab. An entity assigned a rule is flagged against ITS
+ *  computed overall (component materiality); unassigned entities use the
+ *  group default. */
+export interface MaterialityRule {
+  id: string;
+  name: string;
+  basis: MaterialityBasis;
+  /** ₹ Cr */
+  benchmark: number;
+  pct: number;
+}
+
+/** ₹ Cr threshold a rule computes. */
+export const ruleOverall = (r: MaterialityRule): number =>
+  r.basis === 'custom' ? r.benchmark : Math.round(r.benchmark * r.pct * 100) / 10000;
 
 export interface SoxProgramme {
   id: string;
@@ -272,6 +299,9 @@ export interface SoxProgramme {
   groupName: string;
   entities: GroupEntity[];
   materiality: MaterialitySet;
+  /** Extra named materiality rules (Configuration tab) — the group default
+   *  lives in `materiality`. */
+  matRules?: MaterialityRule[];
   totalCaptions: number;
   quantCount: number;
   qualCount: number;

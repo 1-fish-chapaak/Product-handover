@@ -16,6 +16,8 @@ import ControlDossier from './ControlDossier';
 import RunsView from './RunsView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
+import ConfigurationView from './ConfigurationView';
+import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
@@ -23,6 +25,7 @@ const SOX_TABS: TabDef[] = [
   { id: 'risks', label: 'Risk Library' },
   { id: 'controls', label: 'Control Library' },
   { id: 'runs', label: 'Test runs' },
+  { id: 'config', label: 'Configuration' },
 ];
 
 function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
@@ -32,7 +35,11 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
-  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
+  // Configuration only exists for scoping-backed engagements — it edits the
+  // programme record the SOX Testing wizard created.
+  const hasProgramme = PROGRAMMES.some(p => p.engagementId === eng.id);
+  const tabs = (role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS)
+    .filter(t => t.id !== 'config' || hasProgramme);
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
@@ -111,7 +118,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header
   const isDrillIn = isRacmMatrix || isScope || isDeficiencies || isHandoffs;
-  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs';
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs' || view === 'config';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'handoffs' ? <HandoffsView />
@@ -120,6 +127,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <RunsView />
+    : tab === 'config' ? <ConfigurationView />
     : <ControlRegister />;
 
   return (

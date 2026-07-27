@@ -3,7 +3,7 @@ import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
   Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
 } from 'lucide-react';
-import { FilterSelect } from '../shared/FilterSelect';
+import { HeaderFilter } from '../shared/FilterSelect';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
@@ -194,11 +194,16 @@ export default function ControlRegister() {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
+        {/* Toolbar filter dropdowns — COMMENTED OUT by user instruction
+            (Jul 24): filtering moved into the table's column headers
+            (HeaderFilter on Control / Nature / Conclusion). Resurrect by
+            restoring the FilterSelect import alongside HeaderFilter.
         <FilterSelect prefix="Status" engaged={savedView !== 'all'} value={savedView}
           options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
           onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
         <FilterSelect value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
         <FilterSelect value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" />
+        */}
         <div className="flex-1" />
         <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
         {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
@@ -276,11 +281,16 @@ export default function ControlRegister() {
             <tr>
               <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all" /></th>
               <th style={{ width: 64 }}>W/P</th>
-              <th>Control</th>
-              <th style={{ width: 96 }}>Nature</th>
+              {/* column filters — the toolbar dropdowns moved up here */}
+              <th><HeaderFilter label="Control" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></th>
+              <th style={{ width: 96 }}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></th>
               <th style={{ width: 150 }}>① Design</th>
               <th style={{ width: 168 }}>② Operating</th>
-              <th style={{ width: 116 }}>Conclusion</th>
+              <th style={{ width: 116 }}>
+                <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
+                  options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+                  onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
+              </th>
               <th style={{ width: 116 }} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</th>
             </tr>
           </thead>

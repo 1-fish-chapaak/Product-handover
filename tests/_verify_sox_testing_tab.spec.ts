@@ -6,8 +6,10 @@ const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Iram
  * SOX Testing tab — the scoping-first flow prototype on the Engagement Library.
  * Landing = programme list. Card click opens the classic SOX workspace (tabs +
  * control testing); "Scoping summary" opens the 800×800 modal; "+ New
- * Engagement" runs the 7-step wizard (classic Type & basics first) in the same
- * modal and registers a real runtime engagement. Existing flows untouched.
+ * Engagement" runs the 5-step wizard (classic Type & basics first; the Scoping
+ * step holds the bulk RACM / trial-balance uploads, the mapped entities with
+ * their extracted processes, the caption→process table and the beyond-TB
+ * workstreams) in the same modal and registers a real runtime engagement.
  */
 test('SOX Testing tab walks the scoping-first journey end to end', async ({ page }) => {
   test.setTimeout(150_000);
@@ -80,57 +82,61 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await expect(page.getByRole('dialog').getByText('SOX / ICFR', { exact: true })).toBeVisible();
   await expect(page.getByText('Process audit aligned to RACM + SOPs')).toBeVisible();
   await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill('FY27 ICFR — Airline Group');
-  // No start/end dates — the cycle is FY + "as of" year-end (defaults FY 2026-27, 31 Mar 2027)
-  await expect(page.getByRole('button', { name: '31 Mar 2027' })).toBeVisible();
-  await expect(page.getByText(/testing runs through FY 2026-27/)).toBeVisible();
-  await expect(page.getByText(/Scoping window open since Apr 2026/)).toBeVisible();
+  // No start/end dates and no "as of" field — the cycle is a year type
+  // (financial / calendar) + audit period (defaults financial, FY 2026-27)
+  await expect(page.getByRole('button', { name: /Financial year/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Calendar year/ })).toBeVisible();
+  await expect(page.getByText(/testing runs Apr 2026 – Mar 2027/)).toBeVisible();
+  await expect(page.getByText(/Opinion/)).toHaveCount(0);
   await expect(page.getByText('Select date')).toHaveCount(0);
   await page.screenshot({ path: `${SHOT_DIR}/03a-wizard-basics.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // Step 2 — group & entities
-  await expect(page.getByText('Group structure')).toBeVisible();
-  await expect(page.getByText('Entities in scope of the group audit')).toBeVisible();
+  // Step 2 — Scoping: uploads → entities (with extracted processes) →
+  // caption→process mapping → beyond-TB workstreams, all on one step
+  await expect(page.getByText(/Upload the RACM and trial balances/)).toBeVisible();
+  await expect(page.getByText(/No entities yet/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  // RACM upload extracts entities + processes
+  await page.getByRole('button', { name: 'Upload RACM' }).click();
+  await page.waitForTimeout(1100);
+  await expect(page.getByText(/\d+ processes extracted/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove SkyCargo Logistics Pvt Ltd' })).toBeVisible();
+  // Each mapped entity row carries its extracted processes
+  await expect(page.getByTitle(/Order to Cash/).first()).toBeVisible();
+  // The absorbed mapping surfaces: caption→process table + beyond-TB toggles
+  await expect(page.getByText('Map accounts to processes')).toBeVisible();
+  await expect(page.getByText('Beyond the trial balance')).toBeVisible();
+  await expect(page.getByText('Entity-level controls (ELC)')).toBeVisible();
+  // Trial balances still gate the step — scoping runs on their numbers
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByText(/Upload the trial balances to continue/)).toBeVisible();
+  await page.getByRole('button', { name: 'Upload trial balances' }).click();
+  await page.waitForTimeout(1100);
+  await expect(page.getByText('airline-group-tb-fy27.xlsx')).toBeVisible();
+  await expect(page.getByText(/mapped from the uploads/)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/03-wizard-entities.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 3 — materiality (basis → computed ladder)
-  await expect(page.getByText('Materiality — set before any testing')).toBeVisible();
+  await expect(page.getByText(/thresholds cascade from it/)).toBeVisible();
   await expect(page.getByText('Computed thresholds')).toBeVisible();
   await expect(page.getByText('₹ 21 Cr').first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/04-wizard-materiality.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // Step 4 — trial balance upload per entity, captions auto-flagged
-  await expect(page.getByText('Trial balance — quantitative scoping')).toBeVisible();
-  const uploads = page.getByRole('button', { name: 'Upload trial balance' });
-  while (await uploads.count() > 0) {
-    await uploads.first().click();
-    await page.waitForTimeout(950);
-  }
-  await expect(page.getByText(/of 34 captions flagged/)).toBeVisible();
-  await expect(page.getByText('airline-group-tb-fy27.xlsx')).toBeVisible();
-  await page.screenshot({ path: `${SHOT_DIR}/05-wizard-tb.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Step 5 — qualitative overlay (partner's two examples pre-scoped)
-  await expect(page.getByText('Qualitative overlay')).toBeVisible();
+  // Step 4 — qualitative overlay, straight after materiality (the per-entity
+  // TB step is gone — the bulk upload happened on the group step); the quant
+  // flags surface as a one-line summary here
+  await expect(page.getByText(/below materiality but still belong in scope/)).toBeVisible();
+  await expect(page.getByText(/of 34 captions cleared materiality automatically/)).toBeVisible();
   await expect(page.getByText(/daily fare collections/)).toBeVisible();
   await expect(page.getByText(/fuel-hedge accounting complexity/i)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/06-wizard-qualitative.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // Step 6 — process mapping + beyond-TB scope
-  await expect(page.getByText('Map accounts to processes')).toBeVisible();
-  await expect(page.getByText('Derived in-scope processes')).toBeVisible();
-  await expect(page.getByText('Beyond the trial balance')).toBeVisible();
-  await expect(page.getByText('Entity-level controls (ELC)')).toBeVisible();
-  await page.screenshot({ path: `${SHOT_DIR}/07-wizard-mapping.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Step 7 — review & create
-  await expect(page.getByText('Review — scoping decides the programme')).toBeVisible();
+  // Step 5 — review & create (mapping was absorbed into Scoping)
+  await expect(page.getByText(/Confirm the derivation/)).toBeVisible();
   await expect(page.getByText('RACMs to be generated — one per in-scope process')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/08-wizard-review.png`, fullPage: true });
   await page.getByRole('button', { name: 'Create FY27 programme' }).click();

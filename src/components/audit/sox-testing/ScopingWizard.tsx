@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
-  Building2, Landmark, Upload, FileSpreadsheet, Check, Plus, Trash2,
-  ArrowRight, ArrowLeft, Loader2, Sparkles, Info,
+  Building2, Landmark, Upload, FileSpreadsheet, Check, Plus, Trash2, X,
+  ArrowRight, ArrowLeft, Loader2, Info,
   ShieldCheck, ClipboardList, Zap, AlertCircle,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
@@ -17,7 +17,7 @@ import {
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
 
-const STEPS = ['Type & basics', 'Entities', 'Materiality', 'Trial balance', 'Qualitative', 'Mapping', 'Review'] as const;
+const STEPS = ['Type & basics', 'Scoping', 'Materiality', 'Qualitative', 'Review'] as const;
 
 /* ── Step 1 = the classic wizard's "Type & basics" screen, as-is ─────────── */
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -33,6 +33,7 @@ const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: str
 
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
+const uploadBtnCls = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer';
 
 const PROCESS_NAMES: ProcessName[] = [
   'Order to Cash', 'Procure to Pay', 'Inventory', 'Fixed Assets',
@@ -55,24 +56,26 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
   const [code, setCode] = useState(genCode());
   const [description, setDescription] = useState('');
   // SOX is an annual recurring cycle, not a dated project — so no start/end
-  // dates. The cycle is named by its fiscal year and anchored on the year-end
-  // date the auditor opines "as of" (31 Mar for Apr–Mar reporters, 31 Dec for
-  // calendar-year reporters).
-  const [yearEndConv, setYearEndConv] = useState<'mar' | 'dec'>('mar');
-  /** End-year of the audit period — 2027 ⇒ FY 2026-27 (Mar) / FY 2027 (Dec). */
+  // dates. The cycle is named by the year the group reports on: a financial
+  // year (Apr–Mar) or a calendar year (Jan–Dec).
+  const [yearBasis, setYearBasis] = useState<'fy' | 'cy'>('fy');
+  /** End-year of the audit period — 2027 ⇒ FY 2026-27 (financial) / CY 2027 (calendar). */
   const [fyEnd, setFyEnd] = useState(2027);
   const [owner, setOwner] = useState(OWNER_NAMES[0]);
 
-  const FY_OPTIONS = yearEndConv === 'mar'
+  const YEAR_OPTIONS = yearBasis === 'fy'
     ? [2026, 2027, 2028].map(y => ({ value: y, label: `FY ${y - 1}-${String(y).slice(-2)}` }))
-    : [2025, 2026, 2027].map(y => ({ value: y, label: `FY ${y}` }));
-  const fyLabel = FY_OPTIONS.find(o => o.value === fyEnd)?.label ?? `FY ${fyEnd}`;
+    : [2025, 2026, 2027].map(y => ({ value: y, label: `CY ${y}` }));
+  const fyLabel = YEAR_OPTIONS.find(o => o.value === fyEnd)?.label ?? `FY ${fyEnd}`;
   const fy = `FY${String(fyEnd).slice(-2)}`;
-  const asOf = yearEndConv === 'mar' ? `31 Mar ${fyEnd}` : `31 Dec ${fyEnd}`;
+  const asOf = yearBasis === 'fy' ? `31 Mar ${fyEnd}` : `31 Dec ${fyEnd}`;
 
-  // Step 2 — group & entities
+  // Step 2 — group & entities. The table starts empty: entities are mapped
+  // from the uploaded RACM / trial balances, with manual add as the fallback.
   const [groupName, setGroupName] = useState(SEED_GROUP_NAME);
-  const [entities, setEntities] = useState<GroupEntity[]>(() => SEED_ENTITIES.map(e => ({ ...e })));
+  const [entities, setEntities] = useState<GroupEntity[]>([]);
+  const [racmUpload, setRacmUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
+  const [tbUpload, setTbUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
 
   // Step 2 — materiality
   const [basis, setBasis] = useState<MaterialityBasis>('pbt');
@@ -83,7 +86,8 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
   const [cttPct, setCttPct] = useState(5);
   const overallCr = basis === 'custom' ? benchmark : Math.round(benchmark * pct * 100) / 10000;
 
-  // Step 3 — trial balance uploads (simulated parse)
+  // Per-entity TB parse results — filled wholesale when the bulk trial-balance
+  // upload lands on the group step (simulated parse).
   const [uploads, setUploads] = useState<Record<string, 'parsing' | { file: string; lines: number }>>({});
 
   // Step 4 — qualitative overlay
@@ -102,6 +106,9 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
   const captions = useMemo<TbCaption[]>(() => captionsForEntities(entities), [entities]);
 
   const captionProcess = (c: TbCaption): ProcessName => mapping[c.id] ?? c.process;
+  /** Distinct processes extracted for one entity — shown on its Scoping row. */
+  const entityProcesses = (entId: string): ProcessName[] =>
+    [...new Set(captions.filter(c => c.entityId === entId).map(c => captionProcess(c)))];
   const quantScope = captions.filter(c => c.balance >= overallCr);
   const belowThreshold = captions.filter(c => c.balance < overallCr);
   const qualScope = belowThreshold.filter(c => qual[c.id]?.on);
@@ -115,14 +122,16 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inScope]);
 
-  const allUploaded = entities.every(e => typeof uploads[e.id] === 'object');
+  /** Distinct processes the seeded RACM "extracts" — shown after its parse. */
+  const racmProcesses = useMemo(
+    () => [...new Set(captionsForEntities(SEED_ENTITIES).map(c => c.process))], []);
 
   const canContinue = [
     type === 'SOX / ICFR' && name.trim().length > 0 && code.trim().length > 0,
-    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()),
+    // Scoping runs on the trial-balance numbers, so the bulk TB upload gates
+    // this step — the RACM upload and manual rows are optional on top.
+    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && tbUpload === 'done',
     benchmark > 0 && (basis === 'custom' || pct > 0),
-    allUploaded,
-    true,
     // An empty scope derives zero RACMs — there is no programme to create.
     inScope.length > 0,
     true,
@@ -133,15 +142,37 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     setStep(s => s + 1);
   };
 
-  const simulateUpload = (entityId: string) => {
-    setUploads(prev => ({ ...prev, [entityId]: 'parsing' }));
-    const seeded = SEED_TB_FILES[entityId];
-    const ent = entities.find(e => e.id === entityId);
-    const slug = (ent?.name ?? 'entity').toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
-    const result = seeded ?? { file: `${slug}-tb-fy27.xlsx`, lines: 96 };
+  /** Entities read off an uploaded file — merged by name so a row the user
+   *  already typed never duplicates. */
+  const mergeExtractedEntities = () => {
+    setEntities(prev => {
+      const have = new Set(prev.map(e => e.name.trim().toLowerCase()));
+      return [...prev, ...SEED_ENTITIES.filter(e => !have.has(e.name.toLowerCase())).map(e => ({ ...e }))];
+    });
+  };
+
+  const simulateRacmUpload = () => {
+    setRacmUpload('parsing');
+    window.setTimeout(() => { setRacmUpload('done'); mergeExtractedEntities(); }, 800);
+  };
+
+  /** Removing the last TB file re-arms the upload button (and the step gate). */
+  const removeTbFile = (entityId: string) => {
+    const next = { ...uploads };
+    delete next[entityId];
+    setUploads(next);
+    if (Object.keys(next).length === 0) setTbUpload('idle');
+  };
+
+  const extractedReady = racmUpload === 'done' || tbUpload === 'done';
+
+  const simulateTbUpload = () => {
+    setTbUpload('parsing');
     window.setTimeout(() => {
-      setUploads(prev => ({ ...prev, [entityId]: result }));
-    }, 700);
+      setTbUpload('done');
+      mergeExtractedEntities();
+      setUploads(Object.fromEntries(Object.entries(SEED_TB_FILES).map(([id, f]) => [id, { ...f }])));
+    }, 800);
   };
 
   const create = () => {
@@ -174,10 +205,10 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
       framework: 'COSO 2013 / SOX 404',
       owner,
       status: 'Active',
-      periodStart: yearEndConv === 'mar' ? `Apr ${fyEnd - 1}` : `Jan ${fyEnd}`,
-      periodEnd: yearEndConv === 'mar' ? `Mar ${fyEnd}` : `Dec ${fyEnd}`,
-      startDate: yearEndConv === 'mar' ? `${fyEnd - 1}-04-01` : `${fyEnd}-01-01`,
-      endDate: yearEndConv === 'mar' ? `${fyEnd}-03-31` : `${fyEnd}-12-31`,
+      periodStart: yearBasis === 'fy' ? `Apr ${fyEnd - 1}` : `Jan ${fyEnd}`,
+      periodEnd: yearBasis === 'fy' ? `Mar ${fyEnd}` : `Dec ${fyEnd}`,
+      startDate: yearBasis === 'fy' ? `${fyEnd - 1}-04-01` : `${fyEnd}-01-01`,
+      endDate: yearBasis === 'fy' ? `${fyEnd}-03-31` : `${fyEnd}-12-31`,
       entity: groupName.trim(),
       controls: 0,
       health: 0,
@@ -299,31 +330,33 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={basicsLabelCls}>Fiscal year / audit period <span className="text-risk-700">*</span></label>
-                  <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
-                    {FY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={basicsLabelCls}>Opinion “as of” — year-end <span className="text-risk-700">*</span></label>
+                  <label className={basicsLabelCls}>Year type <span className="text-risk-700">*</span></label>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
-                      onClick={() => { if (yearEndConv !== 'mar') { setYearEndConv('mar'); setFyEnd(y => y + 1); } }}
-                      className={`px-2 py-2.5 rounded-lg border text-[0.75rem] font-bold tabular-nums transition-all cursor-pointer ${yearEndConv === 'mar' ? yeSegActive : yeSegIdle}`}
+                      onClick={() => { if (yearBasis !== 'fy') { setYearBasis('fy'); setFyEnd(y => y + 1); } }}
+                      className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? yeSegActive : yeSegIdle}`}
                     >
-                      31 Mar {yearEndConv === 'mar' ? fyEnd : fyEnd + 1}
+                      Financial year
+                      <span className="block text-[0.625rem] font-semibold opacity-70">Apr – Mar</span>
                     </button>
                     <button
-                      onClick={() => { if (yearEndConv !== 'dec') { setYearEndConv('dec'); setFyEnd(y => y - 1); } }}
-                      className={`px-2 py-2.5 rounded-lg border text-[0.75rem] font-bold tabular-nums transition-all cursor-pointer ${yearEndConv === 'dec' ? yeSegActive : yeSegIdle}`}
+                      onClick={() => { if (yearBasis !== 'cy') { setYearBasis('cy'); setFyEnd(y => y - 1); } }}
+                      className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? yeSegActive : yeSegIdle}`}
                     >
-                      31 Dec {yearEndConv === 'dec' ? fyEnd : fyEnd - 1}
+                      Calendar year
+                      <span className="block text-[0.625rem] font-semibold opacity-70">Jan – Dec</span>
                     </button>
                   </div>
                 </div>
+                <div>
+                  <label className={basicsLabelCls}>Audit period <span className="text-risk-700">*</span></label>
+                  <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
+                    {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
               </div>
               <p className="text-[0.75rem] text-ink-500 -mt-1">
-                An annual cycle, not a dated project — testing runs through {fyLabel}; the auditor opines on control effectiveness as of {asOf}. Scoping window open since {yearEndConv === 'mar' ? `Apr ${fyEnd - 1}` : `Jan ${fyEnd}`}.
+                An annual cycle, not a dated project — testing runs {yearBasis === 'fy' ? `Apr ${fyEnd - 1} – Mar ${fyEnd}` : `Jan – Dec ${fyEnd}`} and the programme carries the {fyLabel} name through testing and roll-forward.
               </p>
               <div>
                 <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
@@ -335,18 +368,85 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
 
         {step === 1 && (
           <StepShell
-            title="Group structure"
-            sub="The audit opinion is on the consolidated financials — but scoping runs on each entity's own trial balance. List the group and every entity in it."
+            title="Scoping"
+            sub="Upload the RACM and trial balances — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted before materiality decides what's in scope."
           >
-            <div className="max-w-xl mb-5">
-              <FieldLabel>Group (listed / holding)</FieldLabel>
-              <input
-                value={groupName}
-                onChange={e => setGroupName(e.target.value)}
-                className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-              />
+            {/* Both uploads live at group level (user ask), with the uploaded
+                docs managed as ONE list — each file removable, buttons return
+                for whatever isn't uploaded. */}
+            <div className="mb-5 flex items-start gap-4 flex-wrap">
+              <div className="flex-1 max-w-xl min-w-[260px]">
+                <FieldLabel>Group (listed / holding)</FieldLabel>
+                <input
+                  value={groupName}
+                  onChange={e => setGroupName(e.target.value)}
+                  className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                />
+              </div>
+              <div className="min-w-[320px] max-w-md flex-1">
+                <FieldLabel>Uploaded documents</FieldLabel>
+                {(racmUpload !== 'done' || tbUpload !== 'done') && (
+                  <div className="flex items-center gap-2 flex-wrap mb-2 min-h-[30px]">
+                    {racmUpload === 'idle' && (
+                      <button onClick={simulateRacmUpload} title="Risk & control matrix — entity and process information extracts from it" className={uploadBtnCls}>
+                        <Upload size={12} /> Upload RACM
+                      </button>
+                    )}
+                    {racmUpload === 'parsing' && (
+                      <span className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                        <Loader2 size={12} className="animate-spin" /> Extracting entities & processes…
+                      </span>
+                    )}
+                    {tbUpload === 'idle' && (
+                      <button onClick={simulateTbUpload} title="Bulk upload — one file per entity or one workbook; entities extract from it" className={uploadBtnCls}>
+                        <Upload size={12} /> Upload trial balances
+                      </button>
+                    )}
+                    {tbUpload === 'parsing' && (
+                      <span className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                        <Loader2 size={12} className="animate-spin" /> Reading entity trial balances…
+                      </span>
+                    )}
+                  </div>
+                )}
+                {(racmUpload === 'done' || Object.keys(uploads).length > 0) && (
+                  <div className="border border-border-light rounded-lg bg-white divide-y divide-border-light">
+                    {racmUpload === 'done' && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 min-w-0">
+                        <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
+                        <span className="text-[11px] font-mono text-text-secondary truncate">airline-group-racm.xlsx</span>
+                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {SEED_ENTITIES.length} entities · {racmProcesses.length} processes extracted</span>
+                        <button
+                          onClick={() => setRacmUpload('idle')}
+                          aria-label="Remove airline-group-racm.xlsx"
+                          className="ml-auto p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    )}
+                    {Object.entries(uploads).map(([entId, up]) => typeof up === 'object' && (
+                      <div key={entId} className="flex items-center gap-1.5 px-2.5 py-1.5 min-w-0">
+                        <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
+                        <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
+                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
+                        <button
+                          onClick={() => removeTbFile(entId)}
+                          aria-label={`Remove ${up.file}`}
+                          className="ml-auto p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <FieldLabel>Entities in scope of the group audit</FieldLabel>
+            <FieldLabel>
+              Entities in scope of the group audit
+              {(racmUpload === 'done' || tbUpload === 'done') && entities.length > 0 && ' — mapped from the uploads'}
+            </FieldLabel>
             {/* Ownership % column — parked for now (grid was
                 [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
                 per-row input; the data still seeds and shows downstream):
@@ -361,11 +461,16 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 </div>
             */}
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[2.4fr_1fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                <div>Entity</div><div>Type</div><div />
+              <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                <div>Entity</div><div>Type</div><div>Processes — extracted</div><div />
               </div>
+              {entities.length === 0 && (
+                <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
+                  No entities yet — upload the RACM or trial balances above and they're mapped from the data, or add one by hand.
+                </div>
+              )}
               {entities.map((ent, i) => (
-                <div key={ent.id} className="grid grid-cols-[2.4fr_1fr_44px] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
+                <div key={ent.id} className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
                   <div className="flex items-center gap-2 min-w-0">
                     {ent.type === 'Holding'
                       ? <Landmark size={14} className="text-brand-700 shrink-0" />
@@ -384,6 +489,14 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     <option>Holding</option>
                     <option>Subsidiary</option>
                   </select>
+                  {(() => {
+                    const procs = extractedReady ? entityProcesses(ent.id) : [];
+                    return (
+                      <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
+                        {procs.length ? procs.join(' · ') : '—'}
+                      </div>
+                    );
+                  })()}
                   <button
                     onClick={() => setEntities(prev => prev.filter((_, j) => j !== i))}
                     disabled={entities.length === 1}
@@ -401,6 +514,69 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 <Plus size={13} /> Add entity
               </button>
             </div>
+            {entities.length > 0 && tbUpload !== 'done' && (
+              <Hint text="Upload the trial balances to continue — scoping runs on their numbers." />
+            )}
+
+            {/* Mapping lives here now (absorbed from the old Mapping step) —
+                ALL extracted captions, since materiality hasn't run yet. */}
+            {extractedReady && entities.length > 0 && (
+              <>
+                <div className="mt-5">
+                  <FieldLabel>Map accounts to processes — every extracted caption</FieldLabel>
+                  <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+                    <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                      <div>Extracted caption</div><div>Entity</div><div>Process</div>
+                    </div>
+                    <div className="max-h-[360px] overflow-y-auto">
+                      {captions.map(row => (
+                        <div key={row.id} className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
+                          <div className="text-[12.5px] text-text truncate">{row.caption}</div>
+                          <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
+                          <select
+                            value={captionProcess(row)}
+                            onChange={e => setMapping(prev => ({ ...prev, [row.id]: e.target.value as ProcessName }))}
+                            className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                          >
+                            {PROCESS_NAMES.map(p => <option key={p}>{p}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-2">Each in-scope process becomes one RACM once materiality decides the scope.</p>
+                </div>
+
+                <div className="mt-4 border border-border-light rounded-xl bg-white p-4">
+                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance</div>
+                  <p className="text-[11px] text-text-muted mb-3 leading-relaxed">Always considered for scope — they never appear as TB captions.</p>
+                  <div className="space-y-1.5">
+                    {BEYOND_TB.map(b => {
+                      const on = beyond[b.id];
+                      return (
+                        <button
+                          key={b.id}
+                          onClick={() => setBeyond(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
+                          className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                            on ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
+                            on ? 'bg-primary border-primary text-white' : 'border-border bg-white'
+                          }`}>
+                            {on && <Check size={10} />}
+                          </span>
+                          <span>
+                            <span className="block text-[12px] font-semibold text-text">{b.name}</span>
+                            <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </StepShell>
         )}
 
@@ -508,90 +684,6 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
 
         {step === 3 && (
           <StepShell
-            title="Trial balance — quantitative scoping"
-            sub={`Upload each entity's trial balance. Captions with a closing balance at or above overall materiality (${fmtCr(overallCr)}) are flagged in scope automatically.`}
-          >
-            <div className="grid grid-cols-3 gap-2.5 mb-5">
-              {entities.map(ent => {
-                const up = uploads[ent.id];
-                return (
-                  <div key={ent.id} className="border border-border-light rounded-xl bg-white p-3.5">
-                    <div className="text-[12.5px] font-semibold text-text truncate">{ent.name || 'Unnamed entity'}</div>
-                    <div className="text-[10.5px] text-text-muted mb-2.5">{ent.type} · {ent.ownership}%</div>
-                    {up === undefined && (
-                      <button
-                        onClick={() => simulateUpload(ent.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
-                      >
-                        <Upload size={12} /> Upload trial balance
-                      </button>
-                    )}
-                    {up === 'parsing' && (
-                      <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-                        <Loader2 size={12} className="animate-spin" /> Parsing captions…
-                      </div>
-                    )}
-                    {typeof up === 'object' && (
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
-                        <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
-                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {allUploaded && (
-              <>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[12px] font-semibold text-text">
-                    {quantScope.length} of {captions.length} captions flagged
-                  </span>
-                  <span className="text-[11.5px] text-text-muted">across {entities.length} entities · threshold {fmtCr(overallCr)}</span>
-                </div>
-                <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-                  {entities.map(ent => {
-                    const rows = captions.filter(c => c.entityId === ent.id);
-                    return (
-                      <div key={ent.id}>
-                        <div className="px-4 py-2 bg-surface-2/60 border-b border-border-light text-[11px] font-semibold text-text-secondary flex items-center gap-2">
-                          {ent.type === 'Holding' ? <Landmark size={12} /> : <Building2 size={12} />}
-                          {ent.name}
-                          <span className="text-text-muted font-normal">· {rows.filter(r => r.balance >= overallCr).length}/{rows.length} in scope</span>
-                        </div>
-                        {rows.map(row => {
-                          const inQ = row.balance >= overallCr;
-                          return (
-                            <div key={row.id} className="grid grid-cols-[1.9fr_0.9fr_1fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
-                              <div className={`text-[12.5px] ${inQ ? 'text-text' : 'text-text-muted'}`}>{row.caption}</div>
-                              <div className={`text-[12px] font-mono tabular-nums text-right ${inQ ? 'text-text' : 'text-text-muted'}`}>{fmtCr(row.balance)}</div>
-                              <div className="justify-self-end">
-                                {inQ ? (
-                                  <span title="Above overall materiality" className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700">
-                                    <Check size={10} /> In scope
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-medium bg-surface-2 text-text-muted">
-                                    Below threshold
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </StepShell>
-        )}
-
-        {step === 4 && (
-          <StepShell
             title="Qualitative overlay"
             sub="Some captions sit below materiality but still belong in scope — small balances with huge flows, or complex accounting. Scope them in with a reason."
           >
@@ -605,6 +697,13 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               </div>
             )}
             {belowThreshold.length > 0 && (
+            <>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[12px] font-semibold text-text">
+                {quantScope.length} of {captions.length} captions cleared materiality automatically
+              </span>
+              <span className="text-[11.5px] text-text-muted">across {entities.length} entities · threshold {fmtCr(overallCr)}</span>
+            </div>
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
               <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Caption (below {fmtCr(overallCr)})</div><div>Entity</div><div className="text-right">Balance</div><div>Scope in</div>
@@ -653,6 +752,18 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 );
               })}
             </div>
+            </>
+            )}
+            {/* Empty-scope guard — lived on the Mapping step until it was
+                absorbed into Scoping; this is now the last gate before Review. */}
+            {inScope.length === 0 && (
+              <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-8 text-center mt-4">
+                <AlertCircle size={18} className="mx-auto text-risk-700 mb-2" />
+                <div className="text-[13px] font-semibold text-text">Nothing is in scope at {fmtCr(overallCr)}</div>
+                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                  No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no programme to create. Lower the threshold on the materiality step, or scope captions in above.
+                </p>
+              </div>
             )}
             <p className="text-[11.5px] text-text-muted mt-3">
               {qualScope.length} caption{qualScope.length === 1 ? '' : 's'} scoped in qualitatively — they join the {quantScope.length} quantitative flags.
@@ -660,106 +771,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           </StepShell>
         )}
 
-        {step === 5 && (
-          <StepShell
-            title="Map accounts to processes"
-            sub="Every in-scope caption maps to the business process that produces it — and each in-scope process becomes one RACM. Adjust any suggestion that's off."
-          >
-            {inScope.length === 0 && (
-              <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center mb-4">
-                <AlertCircle size={18} className="mx-auto text-risk-700 mb-2" />
-                <div className="text-[13px] font-semibold text-text">Nothing is in scope at {fmtCr(overallCr)}</div>
-                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
-                  No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no programme to create. Lower the threshold on the materiality step, or scope captions in on the qualitative step.
-                </p>
-              </div>
-            )}
-            {inScope.length > 0 && (
-            <div className="grid grid-cols-1 gap-4">
-              <div className="border border-border-light rounded-xl bg-white overflow-hidden self-start">
-                <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                  <div>In-scope caption</div><div>Entity</div><div>Process</div>
-                </div>
-                <div className="max-h-[420px] overflow-y-auto">
-                  {inScope.map(row => (
-                    <div key={row.id} className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[12.5px] text-text truncate">{row.caption}</span>
-                        {qualIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 shrink-0" title="Scoped in qualitatively">
-                            Qual
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
-                      <select
-                        value={row.process}
-                        onChange={e => setMapping(prev => ({ ...prev, [row.id]: e.target.value as ProcessName }))}
-                        className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
-                      >
-                        {PROCESS_NAMES.map(p => <option key={p}>{p}</option>)}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {/* Derived processes preview */}
-                <div className="border border-border-light rounded-xl bg-white p-4">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <Sparkles size={13} className="text-brand-700" />
-                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Derived in-scope processes</span>
-                  </div>
-                  <div className="space-y-2">
-                    {derived.map(r => (
-                      <div key={r.process} className="flex items-center justify-between gap-2">
-                        <span className="text-[12.5px] font-semibold text-text">{r.process}</span>
-                        <span className="text-[11px] text-text-muted tabular-nums">{r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.length} entit{r.entities.length === 1 ? 'y' : 'ies'}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-text-muted mt-3 pt-3 border-t border-border-light leading-relaxed">
-                    Each of these becomes one RACM when the programme is created.
-                  </p>
-                </div>
-
-                {/* Beyond the TB */}
-                <div className="border border-border-light rounded-xl bg-white p-4">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance</div>
-                  <p className="text-[11px] text-text-muted mb-3 leading-relaxed">Always considered for scope — they never appear as TB captions.</p>
-                  <div className="space-y-1.5">
-                    {BEYOND_TB.map(b => {
-                      const on = beyond[b.id];
-                      return (
-                        <button
-                          key={b.id}
-                          onClick={() => setBeyond(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
-                          className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
-                            on ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
-                          }`}
-                        >
-                          <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
-                            on ? 'bg-primary border-primary text-white' : 'border-border bg-white'
-                          }`}>
-                            {on && <Check size={10} />}
-                          </span>
-                          <span>
-                            <span className="block text-[12px] font-semibold text-text">{b.name}</span>
-                            <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-            )}
-          </StepShell>
-        )}
-
-        {step === 6 && (
+        {step === 4 && (
           <StepShell
             title="Review — scoping decides the programme"
             sub="Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances."
@@ -848,11 +860,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
 
 /* ------------------------------------------------------------------ */
 
-function StepShell({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+/** The step rail is the only header — steps open straight with their one-line
+ *  explainer (the user asked the duplicate per-step titles removed). */
+function StepShell({ sub, children }: { title?: string; sub: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-[18px] font-bold text-text">{title}</h2>
-      <p className="text-[12.5px] text-text-secondary mt-1 mb-5 max-w-2xl leading-relaxed">{sub}</p>
+      <p className="text-[12.5px] text-text-secondary mb-5 leading-relaxed">{sub}</p>
       {children}
     </div>
   );

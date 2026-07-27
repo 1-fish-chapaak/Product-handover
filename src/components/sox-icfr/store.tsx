@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
+import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
@@ -27,16 +27,16 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 import { ROLE_LABEL } from './types';
 
 // The five primary tabs — mirrors how other engagements are laid out.
-export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs';
-// 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs'
+export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs' | 'config';
+// 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs' | 'config'
 // are root-level views; the rest are drill-ins reached from them.
-type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
+type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'config' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
 export interface RacmEditorMeta { name: string; process?: string }
 
-const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs' };
+const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs', config: 'config' };
 
 /** What a drill-in can return to — everything except the drill-ins themselves. */
-const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'deficiencies', 'scope', 'handoffs'];
+const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'config', 'deficiencies', 'scope', 'handoffs'];
 
 /** The create-control form's payload — everything else on the Control is derived. */
 export interface NewControlDraft {
@@ -139,6 +139,10 @@ interface IcfrCtx {
   updateRules: (patch: Partial<MaterialityRules>) => void;
   applyRules: (patch: RulesPatch, reason: string) => void;
   updateMateriality: (patch: { materiality?: number; performanceMateriality?: number }) => void;
+  /** Configuration tab — after a scope re-derive, reconcile the live control
+   *  set: keep controls of still-in-scope processes, seed fresh shells for
+   *  newly-scoped ones, drop the rest. */
+  reconcileScope: (processes: string[]) => void;
   // deficiencies / exception lifecycle
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
@@ -783,6 +787,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
   }, [role]);
+  const reconcileScope = useCallback<IcfrCtx['reconcileScope']>((processes) => {
+    setEng(prev => {
+      const want = new Set(processes);
+      const have = new Set(prev.controls.map(c => c.process));
+      const kept = prev.controls.filter(c => want.has(c.process));
+      const missing = processes.filter(p => !have.has(p));
+      return { ...prev, controls: missing.length ? [...kept, ...racmTemplateForProcesses(missing, 'fresh')] : kept };
+    });
+  }, []);
   // The guarded path for changing the ground rules mid-engagement: applies the
   // patch, records who/what/why and every exception whose grade moved.
   const applyRules = useCallback<IcfrCtx['applyRules']>((patch, reason) => {
@@ -1128,11 +1141,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

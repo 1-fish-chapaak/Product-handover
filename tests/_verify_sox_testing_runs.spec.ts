@@ -112,16 +112,11 @@ test('B — fresh programme: validation, empty registry, first bulk test', async
   await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill('FY27 ICFR — Airline Group');
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
 
-  // TB step gates on every entity's upload
+  // Group step gates on the bulk trial-balance upload — entities map from it
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  const uploads = page.getByRole('button', { name: 'Upload trial balance' });
-  while (await uploads.count() > 0) {
-    await uploads.first().click();
-    await page.waitForTimeout(950);
-  }
+  await page.getByRole('button', { name: 'Upload trial balances' }).click();
+  await page.waitForTimeout(1100);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -169,6 +164,8 @@ test('D — scoping guardrails: threshold extremes explain themselves', async ({
   await page.waitForTimeout(400);
   await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill('FY27 guardrail check');
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Upload trial balances' }).click();
+  await page.waitForTimeout(1100);
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Custom materiality set absurdly LOW → everything is quantitative, and the
@@ -176,28 +173,20 @@ test('D — scoping guardrails: threshold extremes explain themselves', async ({
   await page.getByRole('button', { name: /Custom amount/ }).click();
   await page.getByRole('spinbutton').first().fill('0.5');
   await page.getByRole('button', { name: 'Continue' }).click();
-  const uploads = page.getByRole('button', { name: 'Upload trial balance' });
-  while (await uploads.count() > 0) {
-    await uploads.first().click();
-    await page.waitForTimeout(950);
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText(/Nothing sits below/)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/d01-qual-empty.png`, fullPage: true });
 
   // Custom materiality set absurdly HIGH + quals unticked → empty scope blocks
   // the wizard with an explanation instead of deriving zero RACMs
   await page.getByRole('button', { name: 'Back' }).click();
-  await page.getByRole('button', { name: 'Back' }).click();
   await page.getByRole('spinbutton').first().fill('10000');
-  await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   const switches = page.getByRole('switch', { checked: true });
   while (await switches.count() > 0) {
     await switches.first().click();
     await page.waitForTimeout(200);
   }
-  await page.getByRole('button', { name: 'Continue' }).click();
+  // The empty-scope guard now lives on the Qualitative step itself
   await expect(page.getByText(/Nothing is in scope at/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await page.screenshot({ path: `${SHOT_DIR}/d02-scope-empty-blocked.png`, fullPage: true });
