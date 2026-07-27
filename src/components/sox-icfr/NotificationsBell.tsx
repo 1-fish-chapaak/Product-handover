@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { controlConclusion, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -33,9 +33,12 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, openControl, setTab } = useIcfr();
+  const { eng, role, meOwner, openControl, openRegister, setTab, setView } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // reduced-motion: the panel's scale/translate are JS transforms, which the
+  // global CSS reduced-motion rule can't reach — gate them here to opacity-only.
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
@@ -50,16 +53,18 @@ export default function NotificationsBell() {
     const out: Item[] = [];
     const go = (controlId: string) => { setOpen(false); openControl(controlId); };
 
-    // ── the auditor's verdicts — shown to the risk owner first, unmissable ──────
+    // ── the auditor's verdicts — shown to the risk owner first, unmissable.
+    //    Person-lane: only this persona's controls, tasks and rows. ───────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
+        if (c.owner !== meOwner) continue;
         if (controlConclusion(c) !== 'Ineffective') continue;
         const track = trackResult(c.design) === 'Ineffective' ? 'design' : 'operating';
         const who = (track === 'design' ? c.design.testedBy : c.operating.testedBy) ?? 'Auditor';
         out.push({
           id: `ineff-${c.id}`, kind: 'ineffective',
           title: `${c.wpRef} concluded INEFFECTIVE (${track})`,
-          detail: `${c.description} — by ${who}`,
+          detail: `${c.description} — by ${who} · open to plan remediation.`,
           onOpen: () => go(c.id),
         });
       }
@@ -67,26 +72,27 @@ export default function NotificationsBell() {
 
     // ── open tasks assigned to me — due today / overdue jump the queue and land
     //    right after the verdicts; clicking goes to the control's TOD / TOE ───────
-    const myTasks = eng.tasks.filter(t => t.status === 'open' && t.assigneeRole === role);
+    const myTasks = eng.tasks.filter(t => t.status === 'open'
+      && (role === 'risk-owner' ? isOwnerTask(eng, t, meOwner) : t.assigneeRole === role));
     const isDueNow = (t: typeof myTasks[number]) => t.overdue || /today/i.test(t.dueLabel);
     for (const t of myTasks.filter(isDueNow)) {
       out.push({
         id: `due-${t.id}`, kind: 'due',
         title: `${t.controlId} ${t.overdue ? 'is OVERDUE' : 'is due today'} · ${t.id}`,
-        detail: `${t.title} — open the control to complete TOD / TOE.`,
+        detail: `${t.title} — ${role === 'risk-owner' ? 'open the control to attest & evidence.' : 'open the control to complete TOD / TOE.'}`,
         onOpen: () => go(t.controlId),
       });
     }
     // ── control tests due — every control has a due date on its testing cycle.
     //    Regular testing is how the risk owner lives in the tool, so due tests
     //    are first-class notifications, not just document requests. ─────────────
-    const dueTests = testsDueNow(eng.controls);
+    const dueTests = testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls);
     for (const c of dueTests.slice(0, 5)) {
       const dd = testDueInDays(c);
       out.push({
         id: `test-${c.id}`, kind: 'due',
         title: `${c.wpRef} · control test ${dd < 0 ? `overdue ${-dd}d` : 'due today'}`,
-        detail: `${c.description} — ${c.frequency.toLowerCase()} control · open to run TOD / TOE.`,
+        detail: `${c.description} — ${c.frequency.toLowerCase()} control · ${role === 'risk-owner' ? 'open to attest & evidence.' : 'open to run TOD / TOE.'}`,
         onOpen: () => go(c.id),
       });
     }
@@ -95,7 +101,7 @@ export default function NotificationsBell() {
         id: 'tests-more', kind: 'due',
         title: `${dueTests.length - 5} more control tests due`,
         detail: 'Open the Control Library "Due now" view to run the rest.',
-        onOpen: () => { setOpen(false); setTab('controls'); },
+        onOpen: () => { setOpen(false); openRegister({ view: 'due' }); },
       });
     }
 
@@ -111,12 +117,41 @@ export default function NotificationsBell() {
     // ── the auditor's remarks on my rows ────────────────────────────────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
-        if (c.racmReview?.status !== 'Remark') continue;
+        if (c.owner !== meOwner || c.racmReview?.status !== 'Remark') continue;
         out.push({
           id: `rem-${c.id}`, kind: 'remark',
           title: `Auditor remark on ${c.wpRef}`,
           detail: c.racmReview.remark ?? '',
           onOpen: () => go(c.id),
+        });
+      }
+    }
+
+    // ── the reviewer's court, mirrored from the queue — papers, notes, closes ────
+    if (role === 'reviewer') {
+      const papers = eng.controls.filter(isAwaitingReview);
+      if (papers.length) {
+        out.push({
+          id: 'rev-papers', kind: 'review',
+          title: `${papers.length} paper${papers.length === 1 ? '' : 's'} awaiting your countersign`,
+          detail: 'Open the reviewer queue — countersign each paper or return it with a note.',
+          onOpen: () => { setOpen(false); setTab('overview'); },
+        });
+      }
+      for (const n of eng.reviewNotes.filter(x => x.status === 'Resolved')) {
+        out.push({
+          id: `note-${n.id}`, kind: 'remark',
+          title: `Verify resolution · ${n.controlId}`,
+          detail: n.resolution?.text ?? n.text,
+          onOpen: () => go(n.controlId),
+        });
+      }
+      for (const d of eng.deficiencies.filter(x => x.status === 'Awaiting reviewer')) {
+        out.push({
+          id: `close-${d.id}`, kind: 'exception',
+          title: `${d.id} · retest passed — yours to close`,
+          detail: d.description,
+          onOpen: () => { setOpen(false); setView('deficiencies'); },
         });
       }
     }
@@ -142,32 +177,36 @@ export default function NotificationsBell() {
       }
     }
     return out;
-  }, [eng.controls, eng.tasks, eng.deficiencies, role, openControl, setTab]);
+  }, [eng, role, meOwner, openControl, setTab, setView]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
+  // The badge tells the truth even where the list truncates: the "+N more"
+  // rollup line is one ROW but N pieces of work — count the work, not the row.
+  const hiddenTests = Math.max(0, testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls).length - 5);
+  const pending = items.length - (hiddenTests > 0 ? 1 : 0) + hiddenTests;
 
   return (
     <div ref={rootRef} className="relative">
-      <button onClick={() => setOpen(o => !o)} aria-label={`Notifications — ${items.length} pending`}
+      <button onClick={() => setOpen(o => !o)} aria-label={`To-do — ${pending} pending`}
         className={cn('relative h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors cursor-pointer',
           open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300')}>
         <Bell size={16} />
-        {items.length > 0 && (
+        {pending > 0 && (
           <span className={cn('absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white inline-flex items-center justify-center tabular-nums',
             urgent > 0 ? 'bg-risk-600' : 'bg-brand-600')}>
-            {items.length}
+            {pending}
           </span>
         )}
       </button>
 
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.14 }}
+          <motion.div initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.14 }}
             className="absolute right-0 top-[calc(100%+8px)] z-50 w-[400px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_20px_50px_-18px_rgba(15,8,30,0.45)] overflow-hidden">
             <div className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
               <div>
-                <div className="text-[13px] font-semibold text-ink-900">Notifications</div>
-                <div className="text-[11px] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : 'Risk Owner'}</div>
+                <div className="text-[13px] font-semibold text-ink-900">To-do</div>
+                <div className="text-[11px] text-ink-500 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
               </div>
               {urgent > 0 && <span className="text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
             </div>
@@ -180,7 +219,7 @@ export default function NotificationsBell() {
                     <span className={cn('w-7 h-7 rounded-lg border inline-flex items-center justify-center shrink-0', meta.cls)}><meta.Icon size={14} /></span>
                     <span className="min-w-0 flex-1">
                       <span className={cn('block text-[12px] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
-                      <span className="block text-[11px] text-ink-500 mt-0.5 line-clamp-2">{it.detail}</span>
+                      <span className="block text-[11px] text-ink-600 mt-0.5 line-clamp-2">{it.detail}</span>
                     </span>
                   </button>
                 );

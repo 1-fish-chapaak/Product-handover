@@ -38,6 +38,7 @@ import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
 import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
+import SoxTestingView from './components/audit/sox-testing/SoxTestingView';
 import ComplianceEngagementApp from './components/engagement-configurable/ComplianceEngagementApp';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
@@ -363,6 +364,13 @@ function AppInner() {
   // One-shot: open the Engagements view directly on its Approval Flow tab (e.g. from
   // the report "Create new approval flow" action).
   const [engApprovalFlow, setEngApprovalFlow] = useState(false);
+  // One-shot: backing out of an engagement workspace lands on the All Engagements
+  // list (not the portfolio overview) — the list is where the user came from.
+  const [engBackToList, setEngBackToList] = useState(false);
+  const backToEngagementList = () => { setEngBackToList(true); setView('engagements'); };
+  // A SOX workspace opened from the SOX Testing section backs out to that
+  // section, not to the Engagement Library.
+  const [soxFromTesting, setSoxFromTesting] = useState(false);
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -933,21 +941,32 @@ function AppInner() {
           />
         );
 
+      case 'sox-testing':
+        return <SoxTestingView onOpenEngagement={(id) => { setSoxFromTesting(true); openEngagement(id); }} />;
+
       case 'sox-icfr':
-        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return (
+          <SoxIcfrApp
+            engagementId={state.selectedEngagementId ?? undefined}
+            onBack={soxFromTesting ? () => setView('sox-testing') : backToEngagementList}
+            backLabel={soxFromTesting ? 'Back to SOX Testing' : undefined}
+          />
+        );
 
       case 'compliance-engagement':
-        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
         return (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
-            onOpenEngagement={openEngagement}
+            onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
             initialTypeFilter={engagementsSoxFilter ? 'Compliance' : undefined}
             onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
             initialApprovalFlow={engApprovalFlow}
             onApprovalFlowConsumed={() => setEngApprovalFlow(false)}
+            initialList={engBackToList}
+            onInitialListConsumed={() => setEngBackToList(false)}
           />
         );
 
@@ -955,7 +974,7 @@ function AppInner() {
         return (
           <EngagementOverviewView
             engagementId={state.selectedEngagementId ?? ''}
-            onBack={() => setView('engagements')}
+            onBack={backToEngagementList}
             onOpenExecution={(engId) => {
               setEngagementBackView('audit-planning');
               openAuditExecution(engId);

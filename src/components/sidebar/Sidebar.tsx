@@ -6,7 +6,7 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, Layers, Bell, Inbox, BarChart3,
+  ClipboardCheck, FlaskConical, Layers, Bell, Inbox, BarChart3,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -363,6 +363,8 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
           {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('engagements')} />}
+          {/* The scoping-first SOX flow — its own section, right below Engagements. */}
+          {can('eng_view') && <NavItem icon={FlaskConical} label="SOX Testing" active={view === 'sox-testing'} expanded={isExpanded} onClick={() => setView('sox-testing')} />}
           {/* Personal cross-engagement queue — same eng_view gate as the
               routed 'my-queue' view (rbac VIEW_PERMISSIONS); risk owners hold
               it via VIEW_ALL, so their home screen is always reachable. */}

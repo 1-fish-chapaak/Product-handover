@@ -2,7 +2,7 @@ import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
-  RacmReview, Role, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  RacmReview, ReviewNote, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -129,7 +129,13 @@ export const PROCESS_DATASETS: Record<string, RequiredDataset[]> = {
     { name: 'Change tickets export', format: 'CSV', description: 'Transports with test evidence and approver per change.' },
     { name: 'Batch job run log', format: 'CSV', description: 'Scheduled job outcomes with failure resolution notes.' },
   ],
+  'Fixed Assets': [
+    { name: 'Fixed asset register (AS03)', format: 'XLSX', description: 'Asset master with cost, useful life and accumulated depreciation.' },
+    { name: 'Depreciation run log (AFAB)', format: 'CSV', description: 'Monthly depreciation postings with run status and exceptions.' },
+  ],
 };
+// The scoping flow names the process in full — reuse the Payroll dataset list.
+PROCESS_DATASETS['Payroll (Hire to Retire)'] = PROCESS_DATASETS['Payroll']!;
 
 /** Which datasets a control needs for bulk testing — deterministic, deduped across
  *  a selection by dataset name. Attestation-only manual controls need no files. */
@@ -158,6 +164,8 @@ const DETAILED: Control[] = [
     owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
+    // fully through the review gate — signed and countersigned, the paper is final
+    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '17 Apr' }, reviewer: { by: REVIEWER, at: '18 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
@@ -223,6 +231,8 @@ const DETAILED: Control[] = [
     owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
+    // concluded ineffective, paper signed — sitting in the reviewer's court
+    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '16 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
       doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
@@ -238,6 +248,7 @@ const DETAILED: Control[] = [
   },
   {
     id: 'P2P-C-05', wpRef: 'P-05', description: 'Manual journals to AP control account are reviewed and approved by the Financial Controller.',
+    isMrc: true, mrcThreshold: 250_000,
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: true,
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
@@ -277,6 +288,7 @@ const DETAILED: Control[] = [
   },
   {
     id: 'P2P-C-07', wpRef: 'P-07', description: 'Aged GR/IR items are reviewed and cleared each month.',
+    isMrc: true,   // review control tagged, threshold not yet documented — surfaces the precision warning
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
@@ -288,23 +300,70 @@ const DETAILED: Control[] = [
 ];
 
 // ── generator — fills the register to scale ──────────────────────────────────────
-type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string };
+// Each spread carries its process's real risk register: a few risk-phrased
+// statements, each covering the controls (by title index) that answer it. Both
+// generation batches map a title to the SAME risk, so the Risk Library groups
+// base + station controls under one risk instead of minting one risk per control.
+type SpreadRisk = { id: string; text: string; covers: number[] };
+type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string; risks: SpreadRisk[] };
 const SPREADS: Spread[] = [
   { process: 'Order to Cash', prefix: 'O2C', wp: 'O', owner: 'P. Sharma · Revenue', subs: ['Credit', 'Billing', 'Collections', 'Revenue recognition'], titles: [
-    'Credit limits are approved before order release', 'Sales invoices priced from the approved price master', 'Revenue cut-off at period-end agrees to dispatch', 'Credit notes are approved before issue', 'Customer master changes are independently reviewed', 'AR ageing reviewed and provisioned monthly', 'Manual revenue journals are reviewed before posting', 'Cash receipts applied to correct customer accounts', 'Disputed receivables escalated per policy', 'Rebates accrued per contract terms' ] },
+    'Credit limits are approved before order release', 'Sales invoices priced from the approved price master', 'Revenue cut-off at period-end agrees to dispatch', 'Credit notes are approved before issue', 'Customer master changes are independently reviewed', 'AR ageing reviewed and provisioned monthly', 'Manual revenue journals are reviewed before posting', 'Cash receipts applied to correct customer accounts', 'Disputed receivables escalated per policy', 'Rebates accrued per contract terms' ],
+    risks: [
+      { id: 'R-40', text: 'Sales released to customers beyond approved credit limits.', covers: [0] },
+      { id: 'R-41', text: 'Customers billed at incorrect prices or terms.', covers: [1] },
+      { id: 'R-42', text: 'Revenue recorded in the wrong period or without basis (cut-off).', covers: [2, 6] },
+      { id: 'R-43', text: 'Revenue overstated through unapproved credit notes or unaccrued rebates.', covers: [3, 9] },
+      { id: 'R-44', text: 'Receivables overstated — uncollectable or disputed balances not provisioned.', covers: [5, 8] },
+      { id: 'R-45', text: 'Cash receipts misapplied or customer master data manipulated.', covers: [4, 7] },
+    ] },
   { process: 'Record to Report', prefix: 'R2R', wp: 'R', owner: 'D. Rao · Controller', subs: ['Journals', 'Reconciliations', 'Close', 'Consolidation'], titles: [
-    'Balance-sheet reconciliations reviewed monthly', 'Manual journals approved before posting', 'Intercompany balances agreed and eliminated', 'FX revaluation reviewed at month-end', 'Close checklist completed and signed', 'Consolidation entries reviewed', 'Accruals supported and approved', 'Suspense accounts cleared within policy', 'Trial balance mapped to FS line items', 'Management review of flux analysis' ] },
+    'Balance-sheet reconciliations reviewed monthly', 'Manual journals approved before posting', 'Intercompany balances agreed and eliminated', 'FX revaluation reviewed at month-end', 'Close checklist completed and signed', 'Consolidation entries reviewed', 'Accruals supported and approved', 'Suspense accounts cleared within policy', 'Trial balance mapped to FS line items', 'Management review of flux analysis' ],
+    risks: [
+      { id: 'R-50', text: 'Unsupported or unauthorised journals and accruals misstate the ledger.', covers: [1, 6] },
+      { id: 'R-51', text: 'Account balances unreconciled or parked in suspense unexplained.', covers: [0, 7] },
+      { id: 'R-52', text: 'Intercompany and consolidation entries misstate group results.', covers: [2, 5] },
+      { id: 'R-53', text: 'Period close performed incompletely or without review.', covers: [4, 9] },
+      { id: 'R-54', text: 'Foreign-currency balances revalued incorrectly.', covers: [3] },
+      { id: 'R-55', text: 'Trial balance mis-mapped to financial-statement lines.', covers: [8] },
+    ] },
   { process: 'Inventory', prefix: 'INV', wp: 'I', owner: 'K. Bose · Supply Chain', subs: ['Costing', 'Counts', 'Provisions'], titles: [
-    'Standard costs reviewed and approved', 'Cycle counts performed and variances investigated', 'Slow-moving provision calculated and reviewed', 'Inventory movements restricted to authorised users', 'Net realisable value assessed at period-end', 'GRN matched to physical receipt' ] },
+    'Standard costs reviewed and approved', 'Cycle counts performed and variances investigated', 'Slow-moving provision calculated and reviewed', 'Inventory movements restricted to authorised users', 'Net realisable value assessed at period-end', 'GRN matched to physical receipt' ],
+    risks: [
+      { id: 'R-60', text: 'Inventory valued incorrectly — cost, obsolescence or net realisable value.', covers: [0, 2, 4] },
+      { id: 'R-61', text: 'Recorded inventory does not exist or receipts do not match physical stock.', covers: [1, 5] },
+      { id: 'R-62', text: 'Unauthorised inventory movements misstate stock.', covers: [3] },
+    ] },
   { process: 'Treasury', prefix: 'TRY', wp: 'T', owner: 'A. Verma · Treasury', subs: ['Payments', 'Banking', 'Investments'], titles: [
-    'Payment runs approved by two authorisers', 'Bank reconciliations reviewed monthly', 'New payee setup independently verified', 'Borrowing within board-approved limits', 'FX deals confirmed independently of dealing' ] },
+    'Payment runs approved by two authorisers', 'Bank reconciliations reviewed monthly', 'New payee setup independently verified', 'Borrowing within board-approved limits', 'FX deals confirmed independently of dealing' ],
+    risks: [
+      { id: 'R-70', text: 'Payments released without dual authorisation or to unverified payees.', covers: [0, 2] },
+      { id: 'R-71', text: 'Bank balances misstated through unreconciled differences.', covers: [1] },
+      { id: 'R-72', text: 'Treasury exposures taken outside board-approved limits.', covers: [3, 4] },
+    ] },
   { process: 'Payroll', prefix: 'PAY', wp: 'Y', owner: 'N. Pillai · HR', subs: ['Masterdata', 'Processing'], titles: [
-    'Joiner/leaver changes approved before payroll run', 'Payroll reconciled to GL each cycle', 'Overtime approved before payment', 'Statutory deductions reconciled and remitted' ] },
+    'Joiner/leaver changes approved before payroll run', 'Payroll reconciled to GL each cycle', 'Overtime approved before payment', 'Statutory deductions reconciled and remitted' ],
+    risks: [
+      { id: 'R-75', text: 'Fictitious, departed or unapproved employees paid.', covers: [0] },
+      { id: 'R-76', text: 'Payroll costs unapproved or unreconciled to the ledger.', covers: [1, 2] },
+      { id: 'R-77', text: 'Statutory deductions under-remitted, exposing penalties.', covers: [3] },
+    ] },
   { process: 'Tax', prefix: 'TAX', wp: 'X', owner: 'S. Gupta · Tax', subs: ['Direct', 'Indirect'], titles: [
-    'GST returns reviewed before filing', 'Tax provision reviewed by tax lead', 'TDS reconciled to GL and remitted' ] },
+    'GST returns reviewed before filing', 'Tax provision reviewed by tax lead', 'TDS reconciled to GL and remitted' ],
+    risks: [
+      { id: 'R-80', text: 'Indirect-tax filings incorrect, late or unreconciled.', covers: [0, 2] },
+      { id: 'R-81', text: 'Tax provision materially misstated.', covers: [1] },
+    ] },
   { process: 'IT General Controls', prefix: 'ITGC', wp: 'G', owner: 'V. Menon · IT', subs: ['Access', 'Change', 'Operations'], titles: [
-    'Privileged access reviewed quarterly', 'User access granted via approved request', 'Terminated users disabled within 24h', 'Program changes tested and approved before deploy', 'Emergency changes reviewed post-implementation', 'Batch job failures monitored and resolved', 'Database backups completed and tested', 'Segregation-of-duties conflicts reviewed' ] },
+    'Privileged access reviewed quarterly', 'User access granted via approved request', 'Terminated users disabled within 24h', 'Program changes tested and approved before deploy', 'Emergency changes reviewed post-implementation', 'Batch job failures monitored and resolved', 'Database backups completed and tested', 'Segregation-of-duties conflicts reviewed' ],
+    risks: [
+      { id: 'R-85', text: 'Unauthorised or excessive access to financial systems.', covers: [0, 1, 2, 7] },
+      { id: 'R-86', text: 'Unauthorised or untested changes reach production.', covers: [3, 4] },
+      { id: 'R-87', text: 'Processing failures or data loss corrupt financial data.', covers: [5, 6] },
+    ] },
 ];
+const riskFor = (sp: Spread, titleIdx: number): SpreadRisk =>
+  sp.risks.find(r => r.covers.includes(titleIdx)) ?? sp.risks[0]!;
 
 const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
 const STATIONS = ['BOM', 'DEL', 'COK', 'BLR'];
@@ -348,10 +407,17 @@ function generate(): Control[] {
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
         isKey: i % 4 !== 0, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
-        owner: sp.owner, riskId: `R-${40 + n}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
+        owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
         assertions: ['Accuracy', 'Existence / Occurrence'],
         // review spread: fully-tested rows approved, one recurring remark pattern, rest pending
         racmReview: pat <= 1 ? approved('18 Apr') : pat === 3 ? remark('Precision statement is generic — state the threshold, the reviewer and the evidence retained.', '18 Apr') : undefined,
+        // paper sign-off spread: most concluded rows are countersigned; every other
+        // pat-6 row is signed but still waits on the reviewer (feeds the queue)
+        wpSignoff: design === 'Effective' && operating === 'Effective'
+          ? (pat === 6 && idx % 2 === 0
+            ? { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' } }
+            : { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' }, reviewer: { by: REVIEWER, at: '19 Apr' } })
+          : undefined,
         design: designTrack(design, docs, points),
         operating: op,
       });
@@ -389,12 +455,27 @@ const DEFICIENCIES: Deficiency[] = [
   { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
 ];
 
+// ── review notes — one at each lifecycle stage, so every hat sees its move ───────
+const REVIEW_NOTES: ReviewNote[] = [
+  // open — blocks P2P-C-04's countersign until the auditor responds and the reviewer verifies
+  { id: 'rn-1', controlId: 'P2P-C-04', text: 'The paper concludes on reference-variant duplicates but doesn’t evidence which variants were in the sample — attach the variant list behind D2.', raisedBy: REVIEWER, raisedAt: '2d', status: 'Open' },
+  // resolved — waiting on the reviewer's verification (R2R-C-03 sits in the queue)
+  { id: 'rn-2', controlId: 'R2R-C-03', text: 'Elimination entries are agreed, but the paper doesn’t show the out-of-balance items over the ₹1L threshold were investigated.', raisedBy: REVIEWER, raisedAt: '3d', status: 'Resolved', resolution: { text: 'Added the intercompany break report — all 3 items over threshold traced to timing differences, cleared in Apr close.', by: 'A. Mehta · Auditor', at: '1d' } },
+  // closed — the full raise → resolve → verify history on the final P2P-C-01 paper
+  { id: 'rn-3', controlId: 'P2P-C-01', text: 'Confirm the approver-segregation check covers emergency changes routed outside SAP.', raisedBy: REVIEWER, raisedAt: '6d', status: 'Closed', resolution: { text: 'Emergency changes land in the same vendor-master change log — run #4821 covers them; noted in the walkthrough.', by: 'A. Mehta · Auditor', at: '5d' }, verified: { by: REVIEWER, at: '5d' } },
+];
+
 const ACCOUNTS: SignificantAccount[] = [
-  { id: 'a1', name: 'Accounts Payable', balance: 184_000_000, inScope: true, assertions: ['Completeness', 'Accuracy', 'Cut-off'] },
-  { id: 'a2', name: 'Inventory', balance: 96_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Valuation'] },
-  { id: 'a3', name: 'Revenue', balance: 412_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Cut-off'] },
-  { id: 'a4', name: 'Cash & bank', balance: 58_000_000, inScope: true, assertions: ['Existence / Occurrence'] },
-  { id: 'a5', name: 'Property, plant & equipment', balance: 240_000_000, inScope: false, assertions: ['Existence / Occurrence', 'Valuation'] },
+  { id: 'a1', name: 'Accounts Payable', balance: 184_000_000, inScope: true, assertions: ['Completeness', 'Accuracy', 'Cut-off'], process: 'Procure to Pay',
+    wcgw: ['Invoices are recorded twice or against the wrong PO', 'Liabilities at period end are incomplete (unrecorded GRNs)'] },
+  { id: 'a2', name: 'Inventory', balance: 96_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Valuation'], process: 'Inventory',
+    wcgw: ['Recorded stock does not exist (shrinkage, phantom receipts)', 'Slow-moving stock is not written down'] },
+  { id: 'a3', name: 'Revenue', balance: 412_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Cut-off'], process: 'Order to Cash',
+    wcgw: ['Revenue recognised for undelivered services', 'Sales near period end recorded in the wrong period'] },
+  { id: 'a4', name: 'Cash & bank', balance: 58_000_000, inScope: true, assertions: ['Existence / Occurrence'], process: 'Treasury',
+    wcgw: ['Payments made to altered or fictitious bank accounts'] },
+  { id: 'a5', name: 'Property, plant & equipment', balance: 240_000_000, inScope: false, assertions: ['Existence / Occurrence', 'Valuation'], process: 'Record to Report',
+    wcgw: ['Assets no longer in use remain on the register'] },
 ];
 
 // ── execution history — both personas act; each sees the other's runs ─────────────
@@ -414,6 +495,34 @@ const EXECUTIONS: ExecutionEvent[] = [
   ex('P2P-C-01', 'design', 'conclude', 'concluded design effective', 'A. Mehta · Auditor', 'auditor', '5d', undefined, 'Effective'),
   ex('P2P-C-01', 'design', 'validate', 'validated 3 considerations', 'A. Mehta · Auditor', 'auditor', '5d'),
   ex('P2P-C-01', 'design', 'receive-doc', 'provided', 'R. Khanna · Risk Owner', 'risk-owner', '6d', 'Walkthrough'),
+];
+
+// ── run history — the Runs tab's seed; outcomes/checks derive from the control seed ──
+const runOutcome = (id: string, outcome: RunControlOutcome['outcome']): RunControlOutcome => {
+  const c = DETAILED.find(x => x.id === id)!;
+  return { controlId: c.id, wpRef: c.wpRef, description: c.description, outcome, checks: c.design.points.length + c.operating.steps.length };
+};
+// Newest first — the store prepends, so the seed matches that order.
+const RUNS: RunRecord[] = [
+  {
+    id: 'run-s3', kind: 'control-test', label: 'Control test — all attributes',
+    detail: 'Design considerations & operating attributes tested from the control page',
+    controls: [runOutcome('P2P-C-04', 'Ineffective')],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+  },
+  {
+    id: 'run-s2', kind: 'workflow-run', label: 'Workflow run — Approver-segregation check',
+    detail: 'run #4821 · 0 conflicts',
+    controls: [runOutcome('P2P-C-01', 'Effective')],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
+  },
+  {
+    id: 'run-s1', kind: 'bulk-test', label: 'Bulk test — 2 controls',
+    detail: 'Scoping run across PO approval and vendor master controls',
+    controls: [runOutcome('P2P-C-01', 'Effective'), runOutcome('P2P-C-02', 'Effective')],
+    datasets: ['PO release log (ME2N)', 'Vendor master snapshot'],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '6d ago',
+  },
 ];
 
 const ENGAGEMENT: IcfrEngagement = {
@@ -441,11 +550,15 @@ const ENGAGEMENT: IcfrEngagement = {
   deficiencies: DEFICIENCIES,
   tasks: TASKS,
   discussions: DISCUSSIONS,
+  reviewNotes: REVIEW_NOTES,
   executions: EXECUTIONS,
+  runs: RUNS,
+  signoff: {},
+  rulesLog: [],
 };
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
-export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
@@ -464,23 +577,127 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     }
     return base;
   }
-  // Any other engagement → a fresh engagement scoped to the picked process, ready to configure.
+  // Any other engagement → a fresh engagement scoped to the picked process —
+  // or, when a scoping-derived process list is supplied, one RACM per process.
   const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
+  const controls = meta.processes?.length ? racmTemplateForProcesses(meta.processes, meta.seedMode) : racmTemplate(proc);
+  // A 'live' cycle claims tested controls — back that claim with the bulk run
+  // that produced them, so the Test runs registry isn't empty on arrival.
+  const runs: RunRecord[] = [];
+  if (meta.seedMode === 'live') {
+    const tested = controls.filter(c => c.design.conclusion === 'Effective' && c.operating.conclusion === 'Effective');
+    if (tested.length) {
+      const datasets = Array.from(new Set(tested.flatMap(c => requiredDatasetsFor(c).map(d => d.name))));
+      const checks = tested.reduce((n, c) => n + c.design.points.length + c.operating.steps.length, 0);
+      runs.push({
+        id: 'run-seed-live', kind: 'bulk-test',
+        label: `Bulk test — ${tested.length} control${tested.length === 1 ? '' : 's'}`,
+        detail: `${checks} checks · ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
+        controls: tested.map(c => ({ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: 'Effective' as const, checks: c.design.points.length + c.operating.steps.length })),
+        datasets, by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+      });
+    }
+  }
   return {
     ...base,
+    // Scoping-derived engagements set materiality in the scoping wizard — the
+    // flagship's worksheet basis would contradict those numbers, so it stays
+    // flagship-only and the scope page falls back to the three threshold fields.
+    materialityBasis: undefined,
     id: meta.id,
     code: meta.code ?? base.code,
     name: meta.name ?? base.name,
-    period: 'Interim',
     periodStart: meta.periodStart ?? base.periodStart,
     periodEnd: meta.periodEnd ?? base.periodEnd,
     preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
-    controls: racmTemplate(proc),
+    controls,
     deficiencies: [],
     tasks: [],
     discussions: [],
+    reviewNotes: [],
     executions: [],
+    runs,
+    signoff: {},
+    rulesLog: [],
   };
+}
+
+/**
+ * One template RACM per scoping-derived process. Catalogue processes reuse
+ * their spread (relabelled to the caller's name, e.g. "Payroll (Hire to
+ * Retire)"); processes outside the catalogue (e.g. Fixed Assets) get a
+ * five-control generic shell so the RACM tab always mirrors the scoping.
+ *
+ * Every control seeds real design considerations and operating attributes so
+ * a bulk test has checks to run. `mode` sets how far testing has progressed:
+ * 'fresh' — nothing tested; 'live' — all but the last control per RACM
+ * concluded effective (the scoping summary's n−1 story); 'carried' — design
+ * conclusions carried from the prior cycle, operating retest pending.
+ */
+export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live' | 'carried' = 'fresh'): Control[] {
+  const GENERIC_TITLES: Record<string, string[]> = {
+    'Fixed Assets': [
+      'Capex additions are approved per the delegation of authority',
+      'Assets are capitalised with correct useful lives and start dates',
+      'Depreciation run is reviewed against the asset register monthly',
+      'Disposals are approved and derecognised in the period of sale',
+      'Physical verification results are reconciled to the fixed asset register',
+    ],
+  };
+  return names.flatMap(name => {
+    const norm = name.startsWith('Payroll') ? 'Payroll' : name;
+    const sp = SPREADS.find(s => s.process === norm);
+    const prefix = name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'GEN';
+    const shells: Control[] = sp
+      ? racmTemplate(sp.process).map(c => ({ ...c, process: name }))
+      : (GENERIC_TITLES[name] ?? [
+          `${name} transactions are approved before processing`,
+          `${name} balances are reconciled to the ledger monthly`,
+          `${name} master data changes are independently reviewed`,
+          `${name} period-end cut-off is reviewed`,
+          `${name} exceptions are escalated and resolved per policy`,
+        ]).map((title, i) => ({
+          id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
+          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
+          isKey: true, precision: `${title}.`, owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
+          riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
+          assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
+          design: designTrack('Not tested', [], []),
+          operating: manualTrack('Not tested', [], undefined, 0),
+        }));
+    return shells.map((c, i) => {
+      const last = i === shells.length - 1;
+      const designDone = mode === 'carried' || (mode === 'live' && !last);
+      const opDone = mode === 'live' && !last;
+      const nature: Nature = i % 3 === 1 ? 'Automated' : 'Manual';
+      const title = c.description.replace(/\.$/, '');
+      const docs: DesignDoc[] = [
+        doc('Process narrative', `${name} narrative.pdf`, 'Received'),
+        doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
+        doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
+      ];
+      const points: DesignPoint[] = [
+        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
+        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
+      ];
+      const stepExtra = (k: number): Partial<OperatingStep> => nature === 'Automated'
+        ? wf(`wf-${c.id.toLowerCase()}-${k}`, `${title} — check ${k}`, opDone ? `run #${6000 + i * 3 + k}` : undefined)
+        : {};
+      const opSteps: OperatingStep[] = [
+        step(`${i + 1}.1`, `${title} — primary attribute tested.`, 'Accuracy', 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], opDone ? 'Pass' : 'Not tested', stepExtra(1)),
+        step(`${i + 1}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], opDone ? 'Pass' : 'Not tested', stepExtra(2)),
+      ];
+      return {
+        ...c,
+        nature,
+        frequency: nature === 'Automated' ? 'Recurring' as const : c.frequency,
+        design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
+        operating: nature === 'Automated'
+          ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
+          : manualTrack(opDone ? 'Effective' : 'Not tested', opSteps, opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, opDone ? 2000 + i * 7 : 0),
+      };
+    });
+  });
 }
 
 // ── RACM template for the setup wizard ──────────────────────────────────────────
@@ -489,11 +706,10 @@ export function racmTemplate(process: string): Control[] {
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-    isKey: true, precision: `${title}.`, owner: sp.owner, riskId: `R-${i + 1}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
+    isKey: true, precision: `${title}.`, owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),
     operating: manualTrack('Not tested', [], undefined, 0),
   }));
 }
 
-export const TEMPLATE_ACCOUNTS = ACCOUNTS;

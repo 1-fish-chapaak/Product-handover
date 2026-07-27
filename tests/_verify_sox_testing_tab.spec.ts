@@ -1,0 +1,215 @@
+import { test, expect } from './_helpers';
+
+const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/f35a67c3-b996-41ba-98cf-ba36cd071334/scratchpad/sox-testing-shots';
+
+/**
+ * SOX Testing tab — the scoping-first flow prototype on the Engagement Library.
+ * Landing = programme list. Card click opens the classic SOX workspace (tabs +
+ * control testing); "Scoping summary" opens the 800×800 modal; "+ New
+ * Engagement" runs the 5-step wizard (classic Type & basics first; the Scoping
+ * step holds the bulk RACM / trial-balance uploads, the mapped entities with
+ * their extracted processes, the caption→process table and the beyond-TB
+ * workstreams) in the same modal and registers a real runtime engagement.
+ */
+test('SOX Testing tab walks the scoping-first journey end to end', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(800);
+
+  // Engagement Library keeps its classic tabs — SOX Testing moved to the sidebar
+  await expect(page.getByRole('tab', { name: /All Engagements/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Approval Flow' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'SOX Testing' })).toHaveCount(0);
+  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
+  await page.waitForTimeout(800);
+
+  // Landing: its own page — header chrome + programme list only; the pipeline
+  // explainer is parked, and the scoping-window note lives inside the modal
+  await expect(page.getByRole('heading', { name: 'SOX Testing' })).toBeVisible();
+  await expect(page.getByText('How a programme gets its scope')).toHaveCount(0);
+  await expect(page.getByText(/Scoping window open since/)).toHaveCount(0);
+  await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/01-landing.png`, fullPage: true });
+
+  // "Scoping summary" opens the derivation story in the 800×800 modal
+  await page.getByRole('button', { name: 'Scoping summary', exact: true }).click();
+  await page.waitForTimeout(600);
+  const modal = page.getByRole('dialog');
+  await expect(modal).toBeVisible();
+  const box = await modal.boundingBox();
+  expect(Math.round(box!.width)).toBe(1000);
+  expect(Math.round(box!.height)).toBe(800);
+  // No breadcrumb in the summary — a plain modal header, then the engagement
+  await expect(modal.getByText('Scoping summary', { exact: true })).toBeVisible();
+  await expect(modal.locator('nav[aria-label="Breadcrumb"]')).toHaveCount(0);
+  await expect(page.getByText('Opinion as of 31 Mar 2026')).toBeVisible();
+  await expect(page.getByText('In-scope processes — one RACM each')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/02-fy26-programme.png`, fullPage: true });
+  await modal.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(400);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // Card click opens the classic SOX workspace — tabs, control testing, the lot.
+  // Opened from the SOX Testing section, the back line points back to it.
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
+  await page.waitForTimeout(1000);
+  await expect(page.getByRole('button', { name: 'Back to SOX Testing' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
+  // The RACM tab mirrors the scoping summary: the same 7 derived processes,
+  // including the ones the classic catalogue doesn't have
+  await page.getByText('RACM', { exact: true }).first().click();
+  await page.waitForTimeout(800);
+  await expect(page.getByText('Fixed Assets').first()).toBeVisible();
+  await expect(page.getByText('Payroll (Hire to Retire)').first()).toBeVisible();
+  await expect(page.getByText('Procure to Pay').first()).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/02b-fy26-workspace.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('heading', { name: 'SOX Testing' })).toBeVisible();
+
+  // "+ New Engagement" (tab CTA — the later of the two same-named buttons)
+  await page.getByRole('button', { name: 'New Engagement' }).last().click();
+  await page.waitForTimeout(400);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const wizBox = await page.getByRole('dialog').boundingBox();
+  expect(Math.round(wizBox!.width)).toBe(1000);
+  expect(Math.round(wizBox!.height)).toBe(800);
+
+  // Step 1 — the classic "Type & basics" screen, as-is (SOX preselected)
+  await expect(page.getByText('Type & basics').first()).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('SOX / ICFR', { exact: true })).toBeVisible();
+  await expect(page.getByText('Process audit aligned to RACM + SOPs')).toBeVisible();
+  await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill('FY27 ICFR — Airline Group');
+  // No start/end dates and no "as of" field — the cycle is a year type
+  // (financial / calendar) + audit period (defaults financial, FY 2026-27)
+  await expect(page.getByRole('button', { name: /Financial year/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Calendar year/ })).toBeVisible();
+  await expect(page.getByText(/testing runs Apr 2026 – Mar 2027/)).toBeVisible();
+  await expect(page.getByText(/Opinion/)).toHaveCount(0);
+  await expect(page.getByText('Select date')).toHaveCount(0);
+  await page.screenshot({ path: `${SHOT_DIR}/03a-wizard-basics.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 2 — Scoping: uploads → entities (with extracted processes) →
+  // caption→process mapping → beyond-TB workstreams, all on one step
+  await expect(page.getByText(/Upload the RACM and trial balances/)).toBeVisible();
+  await expect(page.getByText(/No entities yet/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  // RACM upload extracts entities + processes
+  await page.getByRole('button', { name: 'Upload RACM' }).click();
+  await page.waitForTimeout(1100);
+  await expect(page.getByText(/\d+ processes extracted/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove SkyCargo Logistics Pvt Ltd' })).toBeVisible();
+  // Each mapped entity row carries its extracted processes
+  await expect(page.getByTitle(/Order to Cash/).first()).toBeVisible();
+  // The absorbed mapping surfaces: caption→process table + beyond-TB toggles
+  await expect(page.getByText('Map accounts to processes')).toBeVisible();
+  await expect(page.getByText('Beyond the trial balance')).toBeVisible();
+  await expect(page.getByText('Entity-level controls (ELC)')).toBeVisible();
+  // Trial balances still gate the step — scoping runs on their numbers
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByText(/Upload the trial balances to continue/)).toBeVisible();
+  await page.getByRole('button', { name: 'Upload trial balances' }).click();
+  await page.waitForTimeout(1100);
+  await expect(page.getByText('airline-group-tb-fy27.xlsx')).toBeVisible();
+  await expect(page.getByText(/mapped from the uploads/)).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/03-wizard-entities.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 3 — materiality (basis → computed ladder)
+  await expect(page.getByText(/thresholds cascade from it/)).toBeVisible();
+  await expect(page.getByText('Computed thresholds')).toBeVisible();
+  await expect(page.getByText('₹ 21 Cr').first()).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/04-wizard-materiality.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 4 — qualitative overlay, straight after materiality (the per-entity
+  // TB step is gone — the bulk upload happened on the group step); the quant
+  // flags surface as a one-line summary here
+  await expect(page.getByText(/below materiality but still belong in scope/)).toBeVisible();
+  await expect(page.getByText(/of 34 captions cleared materiality automatically/)).toBeVisible();
+  await expect(page.getByText(/daily fare collections/)).toBeVisible();
+  await expect(page.getByText(/fuel-hedge accounting complexity/i)).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/06-wizard-qualitative.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 5 — review & create (mapping was absorbed into Scoping)
+  await expect(page.getByText(/Confirm the derivation/)).toBeVisible();
+  await expect(page.getByText('RACMs to be generated — one per in-scope process')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/08-wizard-review.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Create FY27 programme' }).click();
+  await page.waitForTimeout(700);
+
+  // Creation closes the modal — the new programme lands on the listing
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText(/FY27 programme created — 7 RACMs derived/)).toBeVisible();
+  await expect(page.getByText('as of 31 Mar 2027')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/09-fy27-created.png`, fullPage: true });
+
+  // Landing lists both; the new card opens its own classic SOX workspace
+  await expect(page.getByText('FY26 ICFR — Airline P2P & O2C')).toBeVisible();
+  await page.getByText('FY27 ICFR — Airline Group').first().click();
+  await page.waitForTimeout(1000);
+  await expect(page.getByRole('heading', { name: 'FY27 ICFR — Airline Group' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to SOX Testing' })).toBeVisible();
+  // Fresh workspace seeds one RACM per scoping-derived process too
+  await expect(page.getByText('Fixed Assets').first()).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/10-fy27-workspace.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
+  await page.waitForTimeout(800);
+
+  // The classic Engagement Library is untouched — its list still has the seed
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('tab', { name: /All Engagements/ })).toBeVisible();
+  await expect(page.getByText('FY26 ICFR — Airline P2P & O2C').first()).toBeVisible();
+
+  // ── Roll forward: the annual action lives on the LATEST cycle only ──
+  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
+  await page.waitForTimeout(800);
+  const rollBtns = page.getByRole('button', { name: 'Roll forward', exact: true });
+  await expect(rollBtns).toHaveCount(1);
+  await rollBtns.click();
+  await page.waitForTimeout(500);
+
+  // Step 1 — cycle is pure recurrence: FY28, as-of auto, everything prefilled
+  await expect(page.getByText('Roll forward from FY27')).toBeVisible();
+  await expect(page.getByText('opinion as of 31 Mar 2028')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/11-roll-cycle.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 2 — materiality re-set + fresh TBs → year-over-year movement
+  await expect(page.getByText('Refresh the numbers')).toBeVisible();
+  const rollUploads = page.getByRole('button', { name: /Upload FY28 trial balance/ });
+  while (await rollUploads.count() > 0) {
+    await rollUploads.first().click();
+    await page.waitForTimeout(950);
+  }
+  await expect(page.getByText('Year-over-year movement')).toBeVisible();
+  await expect(page.getByText('Newly in scope').first()).toBeVisible();
+  await expect(page.getByText('Fell below — review')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/12-roll-movement.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 3 — only deltas need decisions; RACMs carry with design
+  await expect(page.getByText('Review the changes — everything else carries')).toBeVisible();
+  await expect(page.getByText('Provisions').first()).toBeVisible();
+  await expect(page.getByText(/Marketing & promotion expense/).first()).toBeVisible();
+  await expect(page.getByText('Qualitative judgements — carried (2)')).toBeVisible();
+  await expect(page.getByText('ELC — carried')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/13-roll-review.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Create FY28 programme' }).click();
+  await page.waitForTimeout(700);
+
+  // Creation closes the modal — the rolled cycle lands on the listing with provenance
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText(/programme rolled forward from FY27/)).toBeVisible();
+  await expect(page.getByText('as of 31 Mar 2028')).toBeVisible();
+  await page.screenshot({ path: `${SHOT_DIR}/14-fy28-rolled.png`, fullPage: true });
+
+  // Landing: FY28 card exists and now owns the Roll forward action
+  await expect(page.getByText('FY28 ICFR — Airline Group')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(1);
+});

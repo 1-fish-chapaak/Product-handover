@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
+  FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
@@ -10,8 +10,8 @@ import {
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designCompleteness, discussionsFor, operatingProgress, trackResult,
-  pointResult, stepResult,
+  controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
+  trackResult, pointResult, stepResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -83,6 +83,7 @@ const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[0.78125rem] te
 function RequestDataModal({ control, onClose }: { control: Control; onClose: () => void }) {
   const { requestDataByEmail } = useIcfr();
   const logEvent = useAuditLog();
+  const { addToast } = useToast();
   const [sel, setSel] = useState<Set<string>>(() => new Set(control.design.documents.filter(d => d.status !== 'Received').map(d => d.id)));
   const [emails, setEmails] = useState<string[]>(['controls.owner@airindiaexpress.in']);
   const [draft, setDraft] = useState('');
@@ -127,7 +128,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           <span className="text-[0.71875rem] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} design document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' }); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
+            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} design document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' }); addToast({ type: 'success', title: 'Request sent', message: `${sel.size} document request${sel.size === 1 ? '' : 's'} emailed to ${emails.length === 1 ? emails[0] : `${emails.length} recipients`}.` }); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
           </div>
         </div>
       </motion.div>
@@ -436,6 +437,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   };
   const completeness = designCompleteness(control);
   const complete = completeness.total > 0 && completeness.pct === 100;
+  const unvalidated = d.points.filter(p => pointResult(p) === 'Not tested').length;
   const missing = d.documents.filter(x => x.status !== 'Received');
   const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
     : missing.length > 0 || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
@@ -530,9 +532,15 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           )}
 
           {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence or request it from the control owner.</div>}
+          {/* effective needs BOTH gates: evidence complete AND every design
+              check validated — an unvalidated check is an untested opinion */}
           <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit}
-            disableEffective={!complete}
-            disableEffectiveNote={complete ? undefined : `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`} />
+            disableEffective={!complete || unvalidated > 0}
+            disableEffectiveNote={!complete
+              ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
+              : unvalidated > 0
+                ? `Locked — ${unvalidated} design check${unvalidated === 1 ? '' : 's'} not validated yet`
+                : undefined} />
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>
@@ -540,25 +548,241 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   );
 }
 
+// ── sample extraction (step 2) — population → logic → filters → approve ───────────
+/** Deterministic mock row facts so filters and specs are stable across runs. */
+function sampleRowFacts(i: number): { date: string; amountL: number } {
+  const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+  const day = ((i * 7) % 27) + 1;
+  const amountL = 8 + ((i * 37) % 190); // ₹ lakh, 8–197
+  return { date: `${day} ${MONTHS[(i * 5) % 12]} FY26`, amountL };
+}
+
+const FOLLOW_UP_FILTERS: { id: string; label: string; keep: (i: number) => boolean }[] = [
+  { id: 'amt', label: 'Amount ≥ ₹50L', keep: i => sampleRowFacts(i).amountL >= 50 },
+  { id: 'h2', label: 'H2 only (Oct–Mar)', keep: i => (i * 5) % 12 >= 6 },
+  { id: 'nround', label: 'Exclude round amounts', keep: i => sampleRowFacts(i).amountL % 10 !== 0 },
+];
+
+function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
+  const { setPopulation, setSampling, me } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const o = control.operating;
+
+  type Stage = 'upload' | 'uploading' | 'logic' | 'extracting' | 'review';
+  const [stage, setStage] = useState<Stage>('upload');
+  const [popFile, setPopFile] = useState<{ name: string; count: number } | null>(null);
+  const [logic, setLogic] = useState('');
+  const [sentLogic, setSentLogic] = useState('');
+  const [rows, setRows] = useState(25);
+  const [drawn, setDrawn] = useState<string[]>([]);
+  const [filters, setFilters] = useState<Set<string>>(new Set());
+  const [rejecting, setRejecting] = useState(false);
+
+  // The journey stays LOCAL until approval — nothing is written to the control,
+  // so "Reject and try again" is a pure state reset with no store cleanup.
+  const uploadPop = () => {
+    setStage('uploading');
+    logEvent({ action: 'Upload', description: `Uploaded sample population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+    window.setTimeout(() => { setPopFile({ name: 'population.xlsx', count: 2640 }); setStage('logic'); }, 1400);
+  };
+  const sendLogic = () => {
+    if (!logic.trim()) return;
+    setSentLogic(logic.trim());
+    setStage('extracting');
+    logEvent({ action: 'Run', description: `Extracted sample for ${control.id} — logic-based, ${rows} rows`, module: 'SOX ICFR', entity: 'Test Result' });
+    window.setTimeout(() => { setDrawn(sampleRefs(control.process, rows)); setStage('review'); }, 1800);
+  };
+  const visible = drawn.map((ref, i) => ({ ref, i })).filter(({ i }) =>
+    FOLLOW_UP_FILTERS.every(f => !filters.has(f.id) || f.keep(i)));
+
+  const approve = () => {
+    const kept = visible.map(v => v.ref);
+    const applied = FOLLOW_UP_FILTERS.filter(f => filters.has(f.id)).map(f => f.label);
+    setPopulation(control.id, {
+      source: `Uploaded — ${popFile?.name ?? 'population.xlsx'}`, count: popFile?.count ?? 2640,
+      tieOut: 'Agreed to GL control account',
+      evidence: [{ id: 'pop-ev', name: popFile?.name ?? 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
+    });
+    const s: Sampling = {
+      basis: `${kept.length} items — extracted by logic: “${sentLogic}”${applied.length ? ` · refined: ${applied.join(', ')}` : ''}`,
+      method: 'Targeted', size: kept.length,
+      samples: kept.map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })),
+    };
+    setSampling(control.id, s);
+    logEvent({ action: 'Update', description: `Approved extracted sample for ${control.id} — ${kept.length} items`, module: 'SOX ICFR', entity: 'Test Result' });
+    addToast({ type: 'success', title: 'Sample approved', message: `${kept.length} items locked in — continue to the test of operating effectiveness.` });
+    document.getElementById('vstep-toe')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const restart = () => {
+    setRejecting(false);
+    setStage('upload'); setPopFile(null); setLogic(''); setSentLogic(''); setRows(25); setDrawn([]); setFilters(new Set());
+    logEvent({ action: 'Delete', description: `Rejected extracted sample for ${control.id} — journey restarted`, module: 'SOX ICFR', entity: 'Test Result' });
+  };
+
+  if (locked) {
+    return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked" hint="Conclude the Test of Design as effective first — the sample is only worth pulling for a control that is designed effectively.">
+          <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
+        </EmptyState>
+      </div>
+    );
+  }
+
+  // Already approved (this session or seeded) — read-only summary.
+  if (o.sampling) {
+    return (
+      <div className="p-5">
+        <div className="rounded-xl border border-compliant-200 bg-compliant-50/30 p-4 flex items-start gap-3">
+          <CheckCircle2 size={16} className="text-compliant-700 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-bold text-ink-900">Sample approved — {o.sampling.size} items</div>
+            <p className="text-[11.5px] text-ink-500 mt-0.5">{o.sampling.method} · {o.sampling.basis}</p>
+            {o.population && <p className="text-[11px] text-ink-400 mt-1">Population {o.population.count.toLocaleString()} · {o.population.source} · {o.population.tieOut}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A frozen (concluded + signed) control never re-opens the journey.
+  if (!canEdit || isControlLocked(control)) {
+    return <div className="p-5"><p className="text-[0.75rem] text-ink-400">No sample extracted yet — the auditor or risk owner pulls it from the uploaded population.</p></div>;
+  }
+
+  return (
+    <div className="p-5">
+      {/* 1 — population upload */}
+      <div className="subcard p-3.5 mb-3">
+        <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population file</div>
+        {popFile ? (
+          <div className="flex items-center gap-2 text-[0.75rem] text-ink-700">
+            <Paperclip size={12} className="text-compliant-700 shrink-0" />
+            <span className="font-mono text-[0.71875rem]">{popFile.name}</span>
+            <span className="text-ink-400 tabular-nums">· {popFile.count.toLocaleString()} rows · tie-out agreed to GL</span>
+          </div>
+        ) : (
+          <button disabled={stage === 'uploading'} onClick={uploadPop} className="h-9 px-3 text-[0.75rem] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center disabled:opacity-70">
+            {stage === 'uploading' ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Upload size={13} /> Upload population file</>}
+          </button>
+        )}
+      </div>
+
+      {/* 2 — the extraction chat: explain the logic, set the row count, send */}
+      {popFile && (
+        <div className="subcard p-3.5 mb-3">
+          <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><MessageSquare size={12} /> Extraction logic</div>
+          {sentLogic ? (
+            <div className="flex items-start gap-2 mb-2">
+              <CornerDownRight size={12} className="text-ink-400 mt-0.5 shrink-0" />
+              <p className="text-[0.75rem] text-ink-700 bg-paper-50 border border-canvas-border rounded-lg px-2.5 py-1.5 flex-1">{sentLogic}</p>
+            </div>
+          ) : (
+            <>
+              <textarea rows={2} value={logic} onChange={e => setLogic(e.target.value)} placeholder="Explain how to pull the sample — e.g. payment runs above ₹10L, weighted to quarter-ends, excluding intercompany"
+                className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[0.71875rem] text-ink-500">Rows to extract</span>
+                <input type="number" min={1} max={60} value={rows} onChange={e => setRows(Math.max(1, Math.min(60, +e.target.value || 1)))}
+                  className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" aria-label="Rows to extract" />
+                <div className="flex-1" />
+                <button disabled={!logic.trim() || stage === 'extracting'} onClick={sendLogic}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                  {stage === 'extracting' ? <><Loader2 size={13} className="animate-spin" /> Extracting…</> : <><Send size={13} /> Send</>}
+                </button>
+              </div>
+            </>
+          )}
+          {stage === 'extracting' && (
+            <div className="flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Applying your logic to {popFile.count.toLocaleString()} rows…</div>
+          )}
+        </div>
+      )}
+
+      {/* 3 — extracted result + second-level filters + approve / reject */}
+      {stage === 'review' && (
+        <div className="subcard p-3.5">
+          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Extracted sample <span className="font-normal text-ink-400">· {visible.length} of {drawn.length} rows{filters.size ? ' after filters' : ''}</span></div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {FOLLOW_UP_FILTERS.map(f => {
+                const on = filters.has(f.id);
+                return (
+                  <button key={f.id} onClick={() => setFilters(prev => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })}
+                    className={cn('h-7 px-2.5 rounded-full border text-[0.6875rem] font-semibold transition-colors cursor-pointer', on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-brand-200')}>
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
+            <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+              <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
+            </div>
+            {visible.slice(0, 8).map(({ ref, i }) => {
+              const f = sampleRowFacts(i);
+              return (
+                <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                  <span className="font-mono text-ink-700">{ref}</span>
+                  <span className="text-ink-500">{f.date}</span>
+                  <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+                </div>
+              );
+            })}
+            {visible.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{visible.length - 8} more rows in the extract</div>}
+            {visible.length === 0 && <div className="px-3 py-4 text-[0.71875rem] text-ink-400 text-center">Every row is filtered out — loosen a filter, or reject and try different logic.</div>}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+              <RotateCcw size={13} /> Reject and try again
+            </button>
+            <button disabled={visible.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+              <Check size={14} /> Approve and continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* reject → everything resets, the user starts the journey over */}
+      {rejecting && createPortal(
+        <div className="modal-backdrop" onClick={() => setRejecting(false)}>
+          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div>
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">Your progress will be gone and you'll have to try again — upload the population file and enter the extraction logic from the start.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
+              <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+    </div>
+  );
+}
+
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { me, setPopulation, setSampling, addAttribute, testAllAttributes } = useIcfr();
+  const { addAttribute, testAllAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
   const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
-  const [sampleSize, setSampleSize] = useState(25);
-  const [uploading, setUploading] = useState(false);
-  const [drawing, setDrawing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
   const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
-  const uploadPop = () => { setUploading(true); logEvent({ action: 'Upload', description: `Uploaded population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); window.setTimeout(() => { setPopulation(control.id, { source: control.process === 'Procure to Pay' ? 'SAP ECC — ME2N PO release log, FY26 YTD' : 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
-  const drawSample = () => { setDrawing(true); logEvent({ action: 'Run', description: `Drew sample for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
   const runAll = () => { setTesting(true); logEvent({ action: 'Run', description: `Tested all attributes for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
 
   if (locked) {
@@ -573,30 +797,21 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   return (
     <div className="p-5">
-      {/* optional sampling context */}
-      {o.method === 'Manual' && (
-        <div className="mb-5 grid grid-cols-2 gap-3">
-          <div className="subcard p-3.5">
-            <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population <span className="font-normal text-ink-400">· optional</span></div>
-            {o.population ? (
-              <div className="text-[0.75rem] text-ink-700"><div className="font-semibold tabular-nums text-[0.9375rem] text-ink-900">{o.population.count.toLocaleString()}</div><div className="text-[0.6875rem] text-ink-400">{o.population.source}</div><div className="text-[0.6875rem] text-compliant-700 mt-0.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> {o.population.tieOut}</div></div>
-            ) : canEdit ? <button disabled={uploading} onClick={uploadPop} className="h-9 px-3 text-[0.75rem] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center disabled:opacity-70">{uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Upload size={13} /> Upload population</>}</button> : <span className="text-[0.71875rem] text-ink-400">Not uploaded</span>}
+      {/* sample context — extraction happens in step 2; this is read-only.
+          Every control tests against a sample now, whatever its evidence mode. */}
+      <div className="mb-5">
+        {o.sampling ? (
+          <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3 flex items-center gap-3 flex-wrap text-[0.71875rem] text-ink-500">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-ink-700"><FlaskConical size={12} /> Testing {o.sampling.size} sampled items</span>
+            <span>{o.sampling.method} · {o.sampling.basis}</span>
+            {o.population && <span className="text-ink-400">Population {o.population.count.toLocaleString()} · {o.population.tieOut}</span>}
           </div>
-          <div className="subcard p-3.5">
-            <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample <span className="font-normal text-ink-400">· optional</span></div>
-            {o.sampling ? (
-              <div className="text-[0.75rem] text-ink-700"><div className="font-semibold tabular-nums text-[0.9375rem] text-ink-900">{o.sampling.size} items</div><div className="text-[0.6875rem] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div></div>
-            ) : canEdit ? (
-              drawing ? <div className="h-9 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-600"><Loader2 size={13} className="animate-spin" /> Processing sample…</div> : (
-                <div className="flex items-center gap-2">
-                  <input type="number" min={1} max={60} value={sampleSize} onChange={e => setSampleSize(Math.max(1, +e.target.value || 1))} className="h-9 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                  <button disabled={!o.population} onClick={drawSample} className="h-9 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer"><FlaskConical size={13} /> Draw</button>
-                </div>
-              )
-            ) : <span className="text-[0.71875rem] text-ink-400">Not drawn</span>}
+        ) : !isControlLocked(control) && (
+          <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.71875rem] text-ink-500 inline-flex items-center gap-1.5">
+            <FlaskConical size={12} className="text-ink-400" /> No sample yet — extract and approve one in step 2 to test against sampled items.
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* attributes */}
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -621,15 +836,20 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
         <div className="space-y-3 mb-1">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
       )}
 
-      {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit} />}
+      {/* no sample, no opinion — TOE can't conclude effective on an untested population */}
+      {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit}
+        disableEffective={!o.sampling}
+        disableEffectiveNote={o.sampling ? undefined : 'Locked — extract and approve a sample in step 2 first'} />}
     </div>
   );
 }
 
 // ── vertical stepper step ─────────────────────────────────────────────────────────
-function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
+// `hideStatus` suppresses the default pill/stamp + flash — used by the sample step,
+// whose status drives the node visual only (a "Sample approved" chip rides in `right`).
+function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
-  const concluded = status === 'Effective' || status === 'Ineffective';
+  const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
   const [open, setOpen] = useState(defaultOpen);
   const [flash, setFlash] = useState(false);
   const prev = useRef(status);
@@ -644,7 +864,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
   }, [status]);
 
   return (
-    <motion.div className="vstep" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+    <motion.div id={id} className="vstep" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
       <div className="vstep-rail" />
       <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
       <div className={cn('panel relative', locked && 'panel-locked')}>
@@ -656,7 +876,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
               {open && <p className="text-[0.71875rem] text-ink-500 mt-0.5 max-w-[520px]">{subtitle}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">{right}{concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} animate={false} /> : <TrackPill c={status} />}</div>
+          <div className="flex items-center gap-2 shrink-0">{right}{hideStatus ? null : concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} animate={false} /> : <TrackPill c={status} />}</div>
         </button>
         <AnimatePresence initial={false}>
           {open && (
@@ -683,6 +903,8 @@ const ANCHORS: { id: DiscussionAnchor | 'all'; label: string }[] = [
 const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string; label: string }> = {
   auditor: { Icon: Gavel, accent: 'var(--color-brand-400)', chip: 'bg-brand-50 text-brand-700', label: 'Auditor' },
   'risk-owner': { Icon: UserCheck, accent: 'var(--color-mitigated-500)', chip: 'bg-mitigated-50 text-mitigated-700', label: 'Risk owner' },
+  // our branch carries a third persona — the reviewer who countersigns
+  reviewer: { Icon: UserCheck, accent: 'var(--color-evidence-500)', chip: 'bg-evidence-50 text-evidence-700', label: 'Reviewer' },
 };
 const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' }] as const;
 
@@ -809,7 +1031,8 @@ export default function ControlDossier() {
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Back</button>
+      {/* no local Back button — the breadcrumb above (always rendered by
+          SoxIcfrApp for the dossier view) already carries ← and the trail */}
 
       {/* leadsheet header */}
       <motion.div className="leadsheet mb-5" variants={{ hidden: { opacity: 0, y: 14, scale: 0.99 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
@@ -856,7 +1079,16 @@ export default function ControlDossier() {
           <VStep n={1} title="Test of design" subtitle="Is the control designed to prevent or detect the risk? Grounded in the documents and walkthrough — each consideration validated by a workflow." status={designResult}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
-          <VStep n={2} title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={2} title="Extract sample" subtitle="Pull the testing sample out of the population — upload the file, explain the extraction logic, refine with filters, then approve it for testing." hideStatus
+            status={toeLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={toeLocked}
+            right={toeLocked
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
+              : control.operating.sampling
+                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Sample approved · {control.operating.sampling.size} items</span>
+                : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting extraction</span>}>
+            <SampleExtractSection control={control} canEdit={canEdit} locked={toeLocked} />
+          </VStep>
+          <VStep n={3} id="vstep-toe" title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>

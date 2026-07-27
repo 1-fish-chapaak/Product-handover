@@ -9,6 +9,7 @@ import Orb from '../shared/Orb';
 import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import { FilterSelect } from '../shared/FilterSelect';
 import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
@@ -33,6 +34,11 @@ interface Props {
   initialApprovalFlow?: boolean;
   /** Called once the Approval Flow tab has been opened, to clear the one-shot flag. */
   onApprovalFlowConsumed?: () => void;
+  /** Open directly on the All Engagements list — set when backing out of an
+   *  engagement workspace, so the arrow returns you to the list you came from. */
+  initialList?: boolean;
+  /** Called once the list has been opened, to clear the one-shot flag. */
+  onInitialListConsumed?: () => void;
 }
 
 const STATUS_CLS: Record<EngStatus, string> = {
@@ -88,20 +94,22 @@ function healthTier(pct: number): { bar: string; text: string } {
   return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
-export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed }: Props) {
+export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed, initialList, onInitialListConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
   // onto the list view, pre-filtered to that type. When routed to create an
-  // approval flow, open straight onto the Approval Flow tab.
-  const [mode, setMode] = useState<EngViewMode>(initialApprovalFlow ? 'approval-flow' : presetType ? 'list' : 'overview');
+  // approval flow, open straight onto the Approval Flow tab. When backing out
+  // of an engagement workspace, open straight onto the All Engagements list.
+  const [mode, setMode] = useState<EngViewMode>(initialApprovalFlow ? 'approval-flow' : (presetType || initialList) ? 'list' : 'overview');
   // Which side's flows the Approval Flow tab manages.
   const [flowRole, setFlowRole] = useState<Persona>('risk-owner');
-  // Clear the parent's one-shot approval-flow flag once consumed (mode itself is
-  // already initialized from the flag in the useState initializer above).
+  // Clear the parent's one-shot flags once consumed (mode itself is already
+  // initialized from the flags in the useState initializer above).
   useEffect(() => { if (initialApprovalFlow) onApprovalFlowConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (initialList) onInitialListConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>(initialTypeFilter ?? 'All');
   // Clear the parent's one-shot flag once we've taken the initial filter, so a
@@ -416,31 +424,32 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
                   {/* Actions column */}
                   <div className="flex items-start justify-end gap-1">
-                    <button
+                    <IconAction
+                      label="Open engagement"
                       onClick={(e) => { e.stopPropagation(); onOpenEngagement(eng.id); }}
-                      className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                      title="Open engagement"
+                      className="text-text-muted hover:text-primary hover:bg-primary/10"
                     >
                       <Play size={14} />
-                    </button>
+                    </IconAction>
                     {can('eng_edit') && (
-                      <button
+                      <IconAction
+                        label="Edit engagement"
                         onClick={(e) => { e.stopPropagation(); setEditTarget(eng); setWizardOpen(true); }}
-                        className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-canvas transition-colors cursor-pointer"
-                        title="Edit"
+                        className="text-text-muted hover:text-text-secondary hover:bg-canvas"
                       >
                         <Pencil size={14} />
-                      </button>
+                      </IconAction>
                     )}
                     {can('eng_assign') && (
                       <div className="relative">
-                        <button
+                        <IconAction
+                          label="Assign owner"
+                          hideTip={assignFor === eng.id}
                           onClick={(e) => { e.stopPropagation(); setAssignFor(prev => prev === eng.id ? null : eng.id); }}
-                          className={`p-1.5 rounded-md transition-colors cursor-pointer ${assignFor === eng.id ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/10'}`}
-                          title="Assign owner"
+                          className={assignFor === eng.id ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/10'}
                         >
                           <UserPlus size={14} />
-                        </button>
+                        </IconAction>
                         {assignFor === eng.id && (
                           <>
                             {/* click-away layer */}
@@ -469,22 +478,22 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       </div>
                     )}
                     {can('eng_close') && eng.status !== 'Closed' && (
-                      <button
+                      <IconAction
+                        label="Close / finalize"
                         onClick={(e) => { e.stopPropagation(); handleClose(eng); }}
-                        className="p-1.5 rounded-md text-text-muted hover:text-evidence-700 hover:bg-evidence-50 transition-colors cursor-pointer"
-                        title="Close / finalize"
+                        className="text-text-muted hover:text-evidence-700 hover:bg-evidence-50"
                       >
                         <CheckCircle2 size={14} />
-                      </button>
+                      </IconAction>
                     )}
                     {can('eng_delete') && (
-                      <button
+                      <IconAction
+                        label="Delete engagement"
                         onClick={(e) => { e.stopPropagation(); setDeleteTarget(eng); }}
-                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                        title="Delete"
+                        className="text-text-muted hover:text-risk-700 hover:bg-risk-50"
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </IconAction>
                     )}
                   </div>
                 </motion.div>
@@ -499,6 +508,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           </div>
         )}
         </>)}
+
 
         {mode === 'approval-flow' && (
           <div>
@@ -583,7 +593,39 @@ function ViewToggle({
   );
 }
 
-/** Compact dropdown filter — replaces the old chip panel. Highlights when a non-"All" value is picked. */
+/** Row action — icon button with the product's hover tooltip (the Process Hub
+ *  row-action pattern). The label doubles as the accessible name, so the native
+ *  `title` is dropped: it would fire a second, slower tooltip alongside this one.
+ *  `hideTip` suppresses the tip while the button's own popover is open. */
+function IconAction({ label, onClick, className, hideTip, children }: {
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  className: string;
+  hideTip?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative group/act">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={`p-1.5 rounded-md transition-colors cursor-pointer ${className}`}
+      >
+        {children}
+      </button>
+      {!hideTip && (
+        <span role="tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/act:opacity-100 pointer-events-none transition-opacity z-50">
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Compact dropdown filter — replaces the old chip panel. Highlights when a
+ *  non-"All" value is picked. The menu is the product's themed popover (the
+ *  native <select> popup can't be styled), so it matches every other filter. */
 function MinimalFilter<T extends string>({
   label, allLabel, options, value, onChange, counts,
 }: {
@@ -594,23 +636,12 @@ function MinimalFilter<T extends string>({
   onChange: (next: T) => void;
   counts: Record<string, number>;
 }) {
-  const active = value !== 'All';
   return (
-    <select
+    <FilterSelect
       value={value}
-      onChange={e => onChange(e.target.value as T)}
-      aria-label={`Filter by ${label}`}
-      className={`py-2 px-3 rounded-lg border text-[0.78125rem] font-semibold outline-none cursor-pointer transition-colors focus:ring-2 focus:ring-primary/10 ${
-        active
-          ? 'border-primary/40 text-primary bg-primary-xlight/30'
-          : 'border-border bg-white text-text-secondary hover:border-primary/30'
-      }`}
-    >
-      {options.map(opt => (
-        <option key={opt} value={opt}>
-          {opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}`}
-        </option>
-      ))}
-    </select>
+      options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}` }))}
+      onChange={v => onChange(v as T)}
+      ariaLabel={`Filter by ${label}`}
+    />
   );
 }
