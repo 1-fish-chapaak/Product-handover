@@ -31,6 +31,12 @@ const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: str
   { type: 'Automation',     icon: <Zap size={22} />,             tagline: 'Continuous monitoring / reconciliation / MIS / forensic',      tint: 'bg-compliant-50/70 hover:bg-compliant-50 text-compliant-700 border-compliant-100', ring: 'ring-compliant-500 ring-offset-2 ring-offset-canvas-elevated', iconWrap: 'bg-compliant-100 text-compliant-700' },
 ];
 
+/** The "Beyond the trial balance" workstream card is parked (user ask) — flip
+ *  to true to bring it back. The beyond ids still store on the programme with
+ *  their seeded defaults (all on), so the summary's workstreams strip keeps
+ *  working. */
+const BEYOND_TB_CARD = false;
+
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
 const uploadBtnCls = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer';
@@ -164,7 +170,46 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     if (Object.keys(next).length === 0) setTbUpload('idle');
   };
 
+  /** "Upload more" — one button once anything is uploaded; parses whatever is
+   *  still missing (a removed RACM, missing TBs, TBs for hand-added rows). */
+  const simulateUploadMore = () => {
+    setUploadingMore(true);
+    window.setTimeout(() => {
+      setUploadingMore(false);
+      if (racmUpload !== 'done') setRacmUpload('done');
+      if (tbUpload !== 'done') setTbUpload('done');
+      mergeExtractedEntities();
+      setUploads(prev => {
+        const next = { ...prev };
+        const known = [...entities, ...SEED_ENTITIES.filter(s => !entities.some(e => e.name.trim().toLowerCase() === s.name.toLowerCase()))];
+        for (const e of known) {
+          if (typeof next[e.id] !== 'object') {
+            const slug = e.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') || 'entity';
+            next[e.id] = SEED_TB_FILES[e.id] ?? { file: `${slug}-tb-fy27.xlsx`, lines: 96 };
+          }
+        }
+        return next;
+      });
+    }, 800);
+  };
+
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
+  const [uploadingMore, setUploadingMore] = useState(false);
+  /** Hand-added entities have nothing extracted — the user types their
+   *  processes; matching names remap the entity's generic captions. */
+  const [manualProcs, setManualProcs] = useState<Record<string, string>>({});
+  const applyManualProcs = (entId: string, text: string) => {
+    setManualProcs(prev => ({ ...prev, [entId]: text }));
+    const tokens = text.split(/[,·;]/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    const chosen = PROCESS_NAMES.filter(p => tokens.some(t => p.toLowerCase().includes(t)));
+    if (!chosen.length) return;
+    const capIds = [1, 2, 3, 4].map(n => `tb-${entId}-0${n}`);
+    setMapping(prev => {
+      const next = { ...prev };
+      capIds.forEach((cid, i) => { next[cid] = chosen[i % chosen.length]; });
+      return next;
+    });
+  };
 
   const simulateTbUpload = () => {
     setTbUpload('parsing');
@@ -371,11 +416,11 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
             title="Scoping"
             sub="Upload the RACM and trial balances — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted before materiality decides what's in scope."
           >
-            {/* Both uploads live at group level (user ask), with the uploaded
-                docs managed as ONE list — each file removable, buttons return
-                for whatever isn't uploaded. */}
-            <div className="mb-5 flex items-start gap-4 flex-wrap">
-              <div className="flex-1 max-w-xl min-w-[260px]">
+            {/* Uploads live with the group (user ask): the docs render as ONE
+                line of chips under the name, and after the first upload the two
+                buttons collapse into "Upload more" for anything left out. */}
+            <div className="mb-5">
+              <div className="max-w-xl">
                 <FieldLabel>Group (listed / holding)</FieldLabel>
                 <input
                   value={groupName}
@@ -383,63 +428,66 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                   className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
               </div>
-              <div className="min-w-[320px] max-w-md flex-1">
-                <FieldLabel>Uploaded documents</FieldLabel>
-                {(racmUpload !== 'done' || tbUpload !== 'done') && (
-                  <div className="flex items-center gap-2 flex-wrap mb-2 min-h-[30px]">
-                    {racmUpload === 'idle' && (
-                      <button onClick={simulateRacmUpload} title="Risk & control matrix — entity and process information extracts from it" className={uploadBtnCls}>
-                        <Upload size={12} /> Upload RACM
-                      </button>
-                    )}
-                    {racmUpload === 'parsing' && (
-                      <span className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-                        <Loader2 size={12} className="animate-spin" /> Extracting entities & processes…
-                      </span>
-                    )}
-                    {tbUpload === 'idle' && (
-                      <button onClick={simulateTbUpload} title="Bulk upload — one file per entity or one workbook; entities extract from it" className={uploadBtnCls}>
-                        <Upload size={12} /> Upload trial balances
-                      </button>
-                    )}
-                    {tbUpload === 'parsing' && (
-                      <span className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-                        <Loader2 size={12} className="animate-spin" /> Reading entity trial balances…
-                      </span>
-                    )}
-                  </div>
+              <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                {racmUpload === 'done' && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mr-0.5">RACM</span>
                 )}
-                {(racmUpload === 'done' || Object.keys(uploads).length > 0) && (
-                  <div className="border border-border-light rounded-lg bg-white divide-y divide-border-light">
-                    {racmUpload === 'done' && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 min-w-0">
-                        <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
-                        <span className="text-[11px] font-mono text-text-secondary truncate">airline-group-racm.xlsx</span>
-                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {SEED_ENTITIES.length} entities · {racmProcesses.length} processes extracted</span>
-                        <button
-                          onClick={() => setRacmUpload('idle')}
-                          aria-label="Remove airline-group-racm.xlsx"
-                          className="ml-auto p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    )}
-                    {Object.entries(uploads).map(([entId, up]) => typeof up === 'object' && (
-                      <div key={entId} className="flex items-center gap-1.5 px-2.5 py-1.5 min-w-0">
-                        <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
-                        <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
-                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
-                        <button
-                          onClick={() => removeTbFile(entId)}
-                          aria-label={`Remove ${up.file}`}
-                          className="ml-auto p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                {racmUpload === 'done' && (
+                  <span className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white min-w-0">
+                    <FileSpreadsheet size={12} className="text-compliant-700 shrink-0" />
+                    <span className="text-[11px] font-mono text-text-secondary truncate">airline-group-racm.xlsx</span>
+                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {SEED_ENTITIES.length} entities · {racmProcesses.length} processes extracted</span>
+                    <button
+                      onClick={() => setRacmUpload('idle')}
+                      aria-label="Remove airline-group-racm.xlsx"
+                      className="p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                )}
+                {Object.values(uploads).some(u => typeof u === 'object') && (
+                  <span className={`text-[10px] font-bold uppercase tracking-wider text-text-muted mr-0.5 ${racmUpload === 'done' ? 'ml-2.5' : ''}`}>Trial balances</span>
+                )}
+                {Object.entries(uploads).map(([entId, up]) => typeof up === 'object' && (
+                  <span key={entId} className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white min-w-0">
+                    <FileSpreadsheet size={12} className="text-compliant-700 shrink-0" />
+                    <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
+                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
+                    <button
+                      onClick={() => removeTbFile(entId)}
+                      aria-label={`Remove ${up.file}`}
+                      className="p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+                {(racmUpload === 'parsing' || tbUpload === 'parsing' || uploadingMore) && (
+                  <span className="inline-flex items-center gap-1.5 h-7 px-1 text-[11.5px] text-text-muted">
+                    <Loader2 size={12} className="animate-spin" /> Parsing…
+                  </span>
+                )}
+                {/* Each doc keeps its own button until it's in; only when BOTH
+                    are uploaded do they collapse into "Upload more". */}
+                {racmUpload === 'idle' && (
+                  <button onClick={simulateRacmUpload} title="Risk & control matrix — entity and process information extracts from it" className={uploadBtnCls}>
+                    <Upload size={12} /> Upload RACM
+                  </button>
+                )}
+                {tbUpload === 'idle' && (
+                  <button onClick={simulateTbUpload} title="Bulk upload — one file per entity or one workbook; entities extract from it" className={uploadBtnCls}>
+                    <Upload size={12} /> Upload trial balances
+                  </button>
+                )}
+                {racmUpload === 'done' && tbUpload === 'done' && !uploadingMore && (
+                  <button
+                    onClick={simulateUploadMore}
+                    title="Upload anything left out — extra or replacement files"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold transition-colors cursor-pointer ml-1"
+                  >
+                    <Upload size={12} /> Upload more
+                  </button>
                 )}
               </div>
             </div>
@@ -490,6 +538,18 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     <option>Subsidiary</option>
                   </select>
                   {(() => {
+                    // Hand-added rows: nothing was extracted — the user fills it in
+                    if (ent.id.startsWith('ent-new-')) {
+                      return (
+                        <input
+                          value={manualProcs[ent.id] ?? ''}
+                          onChange={e => applyManualProcs(ent.id, e.target.value)}
+                          aria-label={`Processes for ${ent.name || 'new entity'}`}
+                          placeholder="Type the processes — e.g. Order to Cash, Treasury"
+                          className="w-full text-[11px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                        />
+                      );
+                    }
                     const procs = extractedReady ? entityProcesses(ent.id) : [];
                     return (
                       <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
@@ -544,9 +604,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                       ))}
                     </div>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-2">Each in-scope process becomes one RACM once materiality decides the scope.</p>
+                  {/* Helper line parked (user ask):
+                  <p className="text-[11px] text-text-muted mt-2">The processes come from the uploaded RACM — adjust any caption that landed on the wrong one.</p>
+                  */}
                 </div>
 
+                {BEYOND_TB_CARD && (
                 <div className="mt-4 border border-border-light rounded-xl bg-white p-4">
                   <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance</div>
                   <p className="text-[11px] text-text-muted mb-3 leading-relaxed">Always considered for scope — they never appear as TB captions.</p>
@@ -575,6 +638,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                     })}
                   </div>
                 </div>
+                )}
               </>
             )}
           </StepShell>

@@ -9,9 +9,11 @@ import { findEngagement } from '../../data/engagements';
 import { useIcfr } from './store';
 import {
   BASIS_OPTIONS, PROGRAMMES, SEED_QUAL_PICKS, SEED_TB_FILES,
-  captionsForEntities, deriveRacms, fmtCr, ruleOverall,
+  captionsForEntities, deriveRacms, fmtCr, registerProgramme, ruleOverall,
   type GroupEntity, type MaterialityRule, type SoxProgramme,
 } from '../audit/sox-testing/soxTestingData';
+import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
+import RollForwardWizard from '../audit/sox-testing/RollForwardWizard';
 
 /** The programme's group-default rule always sits first and can't be deleted. */
 const GROUP_RULE_ID = 'rule-group';
@@ -60,6 +62,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [lastDerive, setLastDerive] = useState<string | null>(null);
+  const [rolling, setRolling] = useState(false);
 
   const groupRule = rules[0];
   const groupOverall = ruleOverall(groupRule);
@@ -172,10 +175,20 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
   return (
     <div className="w-full space-y-4 pb-8">
-      <p className="text-[12.5px] text-ink-500 max-w-2xl">
-        The working surface for this engagement's scoping configuration. Edits save instantly;
-        the Materiality &amp; scope page remains the formal record and reflects the latest numbers.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-[12.5px] text-ink-500 max-w-2xl">
+          The working surface for this engagement's scoping configuration. Edits save instantly;
+          the Materiality &amp; scope page remains the formal record and reflects the latest numbers.
+        </p>
+        {/* Roll forward moved here from the programme card (user ask). */}
+        <button
+          onClick={() => setRolling(true)}
+          title={`Carry ${prog.fy} scoping and RACMs into the next cycle`}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[12px] font-semibold text-ink-700 hover:text-brand-700 transition-colors cursor-pointer"
+        >
+          <RefreshCw size={13} /> Roll forward
+        </button>
+      </div>
 
       {stale && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-evidence-200 bg-evidence-50">
@@ -457,6 +470,20 @@ function ConfigInner({ prog, engId, reconcileScope }: {
           </div>
         </div>
       </section>
+
+      {rolling && (
+        <FlowModal label="Roll forward" widthCls="w-[1000px]" onClose={() => setRolling(false)}>
+          <RollForwardWizard
+            prior={prog}
+            onCancel={() => setRolling(false)}
+            onCreated={p => {
+              registerProgramme(p);
+              setRolling(false);
+              addToast({ message: `${p.fy} programme rolled forward from ${p.rolledFromFy} — find it under SOX Testing`, type: 'success' });
+            }}
+          />
+        </FlowModal>
+      )}
     </div>
   );
 }

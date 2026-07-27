@@ -57,12 +57,20 @@ test('SOX workspace Configuration tab edits scoping and re-derives', async ({ pa
   await expect(page.getByText(/processes in scope — \d+ quantitative/)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/03-rederived.png`, fullPage: true });
 
-  // The scoping summary carries the new configuration
+  // Roll forward lives here now (card actions are parked)
+  await expect(page.getByRole('button', { name: 'Roll forward' })).toBeVisible();
+
+  // Back on the landing the card actions are gone; re-entering Configuration
+  // shows the changes persisted
   await page.getByRole('button', { name: 'Back to SOX Testing' }).click();
   await page.waitForTimeout(800);
-  await page.getByRole('button', { name: 'Scoping summary', exact: true }).click();
-  await page.waitForTimeout(600);
-  await expect(page.getByText('Nordwind Services Pvt Ltd')).toBeVisible();
-  await expect(page.getByText('SkyCargo Logistics Pvt Ltd')).toHaveCount(0);
-  await page.screenshot({ path: `${SHOT_DIR}/04-summary.png`, fullPage: true });
+  await expect(page.getByRole('button', { name: 'Scoping summary', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Roll forward', exact: true })).toHaveCount(0);
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
+  await page.waitForTimeout(1000);
+  await page.getByText('Configuration', { exact: true }).first().click();
+  await page.waitForTimeout(500);
+  await expect(page.getByRole('button', { name: 'Remove Nordwind Services Pvt Ltd' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove SkyCargo Logistics Pvt Ltd' })).toHaveCount(0);
+  await page.screenshot({ path: `${SHOT_DIR}/04-persisted.png`, fullPage: true });
 });
