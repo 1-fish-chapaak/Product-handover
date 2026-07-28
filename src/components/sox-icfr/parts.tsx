@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -214,30 +214,59 @@ export function Bar({ value, total, tone = 'bg-brand-500' }: { value: number; to
 // One rule everywhere: red below 40, amber to 79, green from 80 — except gate
 // metrics (they lock a conclusion, so green only at 100) and forceRed (an
 // ineffective conclusion is red no matter the percentage).
-export type RagMeterDef = { label: string; pct: number; detail: string; gate?: boolean; forceRed?: boolean };
+export type RagMeterDef = {
+  label: string;
+  pct: number;
+  detail: string;
+  /** One grey sentence under the title — what the score means and what gates on it. */
+  explainer?: string;
+  gate?: boolean;
+  forceRed?: boolean;
+};
 
 export const ragColor = (m: RagMeterDef): string =>
   m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
 const ragWord = (m: RagMeterDef): string => (ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
 
-export function RagStrip({ meters, gridCls = 'grid-cols-3' }: { meters: RagMeterDef[]; gridCls?: string }) {
+/** Confidence scores in a 3-column grid — each card carries the big ring with
+ *  the status word beside it, then a bold "label — detail" title and a
+ *  one-line explainer; the whole card tints with its RAG state. */
+export function RagStrip({ meters }: { meters: RagMeterDef[] }) {
   return (
-    <div className={cn('grid gap-3', gridCls)}>
-      {meters.map(m => (
-        <div key={m.label} className="flex flex-col items-center text-center gap-1.5" role="img" aria-label={`${m.label} ${m.pct}% — ${ragWord(m)}`}>
-          <div className="relative w-11 h-11">
-            <svg viewBox="0 0 44 44" className="w-11 h-11 -rotate-90">
-              <circle cx="22" cy="22" r="18" fill="none" stroke="var(--color-paper-200)" strokeWidth="5" />
-              <circle cx="22" cy="22" r="18" fill="none" stroke={ragColor(m)} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * 113} 113`} />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[10.5px] font-bold tabular-nums text-ink-800">{m.pct}%</span>
+    <div className="grid gap-2.5 sm:grid-cols-3">
+      {meters.map(m => {
+        const state = ragWord(m);
+        const tint = state === 'red' ? 'border-risk-200 bg-risk-50/50'
+          : state === 'amber' ? 'border-high-200 bg-high-50/50'
+          : 'border-compliant-200 bg-compliant-50/50';
+        const statusCls = state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
+        const StatusIcon = state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
+        const statusWord = state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
+        return (
+          <div key={m.label} role="img" aria-label={`${m.label} ${m.pct}% — ${state}`}
+            className={cn('rounded-2xl border p-4 flex items-start gap-3.5', tint)}>
+            <div className="relative w-14 h-14 shrink-0">
+              <svg viewBox="0 0 44 44" className="w-14 h-14 -rotate-90">
+                <circle cx="22" cy="22" r="18" fill="var(--color-canvas-elevated)" stroke="var(--color-paper-200)" strokeWidth="5.5" />
+                <circle cx="22" cy="22" r="18" fill="none" stroke={ragColor(m)} strokeWidth="5.5" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * 113} 113`} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold tabular-nums text-ink-900">{m.pct}%</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-bold text-ink-900 leading-snug">{m.label}</div>
+                  <div className="text-[12px] font-semibold text-ink-700 mt-0.5">{m.detail}</div>
+                </div>
+                <span className={cn('inline-flex items-center gap-1.5 text-[12.5px] font-bold shrink-0', statusCls)}>
+                  <StatusIcon size={14} /> {statusWord}
+                </span>
+              </div>
+              {m.explainer && <p className="text-[11.5px] text-ink-500 mt-1 leading-relaxed">{m.explainer}</p>}
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold text-ink-700 leading-tight">{m.label}</div>
-            <div className="text-[10px] text-ink-400 mt-0.5 leading-tight">{m.detail}</div>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

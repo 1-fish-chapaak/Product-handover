@@ -558,12 +558,29 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 function designRagMeters(c: Control): RagMeterDef[] {
   const comp = designCompleteness(c);
   const points = c.design.points;
-  const validated = points.filter(p => pointResult(p) !== 'Not tested').length;
   const passed = points.filter(p => pointResult(p) === 'Pass').length;
+  // Evidence validated reads the TOE (user ask): operating checks run across
+  // the drawn samples — sample × attribute when a sample exists, attribute
+  // level before one is drawn. Same counting rule as Overview's Sample testing.
+  const steps = c.operating.steps;
+  const samples = c.operating.sampling?.samples ?? [];
+  const toeTotal = samples.length ? samples.length * steps.length : steps.length;
+  const toeDone = samples.length
+    ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+    : steps.filter(s => s.result !== 'Not tested').length;
   return [
-    { label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} evidenced`, gate: true },
-    { label: 'Evidence validated', pct: points.length ? Math.round((validated / points.length) * 100) : 0, detail: `${validated}/${points.length} checks run`, gate: true },
-    { label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass` },
+    {
+      label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
+      explainer: "Every required element needs evidence attached before the design can be concluded effective. Optional elements strengthen the file but don't gate.",
+    },
+    {
+      label: 'Evidence validated', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
+      explainer: 'Each operating check has to be run against the sampled evidence — unvalidated checks hold back an effective conclusion.',
+    },
+    {
+      label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
+      explainer: 'How much of the design the considerations cover and pass — higher confidence means a stronger test of design.',
+    },
   ];
 }
 

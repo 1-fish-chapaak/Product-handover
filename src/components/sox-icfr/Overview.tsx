@@ -148,9 +148,18 @@ export default function Overview() {
         : steps.filter(s => s.result !== 'Not tested').length;
     });
     return [
-      { label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}` },
-      { label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0 },
-      { label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done` },
+      {
+        label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
+        explainer: 'Pre-testing review across the register — every row needs approval before testing leans on it, and open remarks pull this down.',
+      },
+      {
+        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
+        explainer: 'Controls concluded effective across the engagement — a single ineffective conclusion turns this red until it is remediated and retested.',
+      },
+      {
+        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
+        explainer: 'Sample-by-attribute checks completed across the operating tests — how much of the drawn testing ground is actually covered.',
+      },
     ];
   }, [eng.controls]);
 
