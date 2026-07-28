@@ -58,7 +58,7 @@ test('SOX creation walks Engagements → handoff → scoping → workspace', asy
   await page.waitForTimeout(400);
 
   // Scoping — the Recommended-files card with ONE bulk upload button
-  await expect(sheet.getByText('Recommended files')).toBeVisible();
+  await expect(sheet.getByText('Recommended files', { exact: true })).toBeVisible();
   await expect(sheet.getByText('3 recommended · 3 total')).toBeVisible();
   await expect(sheet.getByText('RACM / SOP', { exact: true }).first()).toBeVisible();
   await expect(sheet.getByText('Trial balance (TB)')).toBeVisible();
@@ -74,7 +74,7 @@ test('SOX creation walks Engagements → handoff → scoping → workspace', asy
     { name: 'airline-group-gl.csv', mimeType: 'text/csv', buffer: Buffer.from('gl') },
   ]);
   await page.waitForTimeout(1500);
-  await expect(sheet.getByText('Attached', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('Attached').first()).toBeVisible();
   await expect(sheet.getByText('3/3 recommended inputs satisfied')).toBeVisible();
   // the button flips to Add more once something is attached
   await expect(sheet.getByText('Add more')).toBeVisible();
@@ -99,7 +99,7 @@ test('SOX creation walks Engagements → handoff → scoping → workspace', asy
   await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
 
   // Workspace: one RACM per derived process, and the Configuration tab exists
-  await page.getByText('RACM', { exact: true }).first().click();
+  await page.getByRole('main').getByRole('button', { name: 'RACM', exact: true }).first().click();
   await page.waitForTimeout(800);
   await expect(page.getByText('Fixed Assets').first()).toBeVisible();
   await expect(page.getByText('Payroll (Hire to Retire)').first()).toBeVisible();

@@ -46,8 +46,11 @@ export async function createSoxEngagement(page: Page, name: string, opts?: { ski
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
-/** Library card click → the SOX workspace. */
+/** Library card click → the SOX workspace. The Engagements page opens on its
+ * Overview tab; the cards live on the All Engagements tab. */
 export async function openFromLibrary(page: Page, name: string) {
+  await page.getByRole('tab', { name: /All Engagements/ }).click();
+  await page.waitForTimeout(700);
   await page.getByText(name).first().click();
   await page.waitForTimeout(1100);
   await expect(page.getByRole('heading', { name })).toBeVisible();

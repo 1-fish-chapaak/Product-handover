@@ -6,7 +6,7 @@ import {
   Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
-import { ENGAGEMENTS, findEngagement, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
+import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
@@ -130,7 +130,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
    *  Type step showing SOX / ICFR still selected. Cleared on normal opens. */
   const [wizardInitialType, setWizardInitialType] = useState<EngType | undefined>(undefined);
   /** Session list — seeds + anything created/edited/closed/deleted this session. */
-  const [all, setAll] = useState<Engagement[]>(() => [...ENGAGEMENTS]);
+  const [all, setAll] = useState<Engagement[]>(() => libraryEngagements());
   /** Engagements created outside this view (e.g. One-Click Audit from Knowledge
    *  Hub / Ask Ira) — merged into the session list without disturbing edits. */
   const createdEngagements = useCreatedEngagements();

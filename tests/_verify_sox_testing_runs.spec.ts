@@ -19,9 +19,13 @@ test('A — flagship: bulk test modal pre-excludes concluded controls', async ({
   await page.waitForTimeout(800);
   await openFromLibrary(page, 'FY26 ICFR — Airline P2P & O2C');
 
-  // The flagship carries concluded controls — the bulk modal locks them out
-  await page.getByRole('main').getByRole('button', { name: /Control Library/ }).first().click();
+  // Bulk testing lives on the drilled RACM matrix — open the P2P one
+  await page.getByRole('main').getByRole('button', { name: 'RACM', exact: true }).first().click();
   await page.waitForTimeout(600);
+  await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
+  await page.waitForTimeout(900);
+
+  // The flagship carries concluded controls — the bulk modal locks them out
   await page.getByRole('button', { name: /Bulk test all/ }).click();
   await page.waitForTimeout(400);
   expect(await page.getByText('Concluded — locked').count()).toBeGreaterThan(0);
@@ -37,14 +41,16 @@ test('B — fresh programme: empty registry, first bulk test lands a run', async
   await openFromLibrary(page, 'FY27 ICFR — Airline Group');
 
   // Fresh workspace: nothing tested, and the run registry says so
-  await page.getByText('Test runs', { exact: true }).first().click();
+  await page.getByRole('main').getByRole('button', { name: 'Test runs', exact: true }).first().click();
   await page.waitForTimeout(500);
   await expect(page.getByText(/No runs here yet/)).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/b01-runs-empty.png`, fullPage: true });
 
-  // First bulk test — every control is open, none pre-excluded
-  await page.getByText('Control Library', { exact: true }).first().click();
+  // First bulk test — from the drilled P2P RACM matrix, every row is open
+  await page.getByRole('main').getByRole('button', { name: 'RACM', exact: true }).first().click();
   await page.waitForTimeout(600);
+  await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
+  await page.waitForTimeout(900);
   await page.getByRole('button', { name: /Bulk test all/ }).click();
   await page.waitForTimeout(400);
   await expect(page.getByText('Concluded — locked')).toHaveCount(0);
