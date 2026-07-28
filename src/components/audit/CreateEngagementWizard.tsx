@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronLeft, ChevronRight, ShieldCheck, ClipboardList, Zap,
   Check, AlertCircle, Edit3, Users, Sparkles, ChevronDown, ChevronUp,
-  Plus, Trash2, FileText, Loader2, CalendarClock,
+  Plus, Trash2, FileText, Loader2, CalendarClock, Info,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -86,19 +86,28 @@ interface Props {
   onCreated: (eng: Engagement) => void;
   /** When set, the wizard opens prefilled in edit mode and preserves id / status / metrics. */
   initial?: Engagement;
+  /** SOX / ICFR is scoped, not configured — entities, processes and RACMs are
+   *  derived from uploaded trial balances rather than typed in here. When this
+   *  is supplied, choosing that type hands off to the SOX scoping journey
+   *  instead of continuing through these steps. Absent (or in edit mode) the
+   *  classic SOX steps still run. */
+  onPickSox?: () => void;
+  /** Preselects the engagement type on open — used when the SOX scoping sheet's
+   *  Back returns here, so the Type step shows the earlier pick intact. */
+  initialType?: EngType;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;
 const STEP_LABELS = ['Type', 'Basics', 'Scope', 'Team & timeline', 'Review'] as const;
 
-export default function CreateEngagementWizard({ onClose, onCreated, initial }: Props): JSX.Element {
+export default function CreateEngagementWizard({ onClose, onCreated, initial, onPickSox, initialType }: Props): JSX.Element {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const isEdit = Boolean(initial);
   const [step, setStep] = useState<Step>(1);
 
   // ── Steps 1–2 — Type, then Basics ──
-  const [type, setType] = useState<EngType | null>(initial?.type ?? null);
+  const [type, setType] = useState<EngType | null>(initial?.type ?? initialType ?? null);
   const [name, setName] = useState(initial?.name ?? '');
   const [code, setCode] = useState(initial?.code ?? genCode());
   const [entity, setEntity] = useState(initial?.entity ?? '');
@@ -243,7 +252,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
   let scopeValid = false;
   if (type === 'Compliance')          scopeValid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
-  else if (type === 'SOX / ICFR')     scopeValid = overallMateriality > 0 && pmPct > 0 && pmPct <= 100 && cttPct >= 0 && cttPct < 100;
+  else if (type === 'SOX / ICFR')     scopeValid = true; // workspace-owned — nothing to validate here
   else if (type === 'Internal Audit') scopeValid = linkedRacms.length > 0 && tatDays > 0 && (scopeLevel !== 'Sub-process' || subProcessSel.length > 0);
   else if (type === 'Automation')     scopeValid = inputSources.length > 0 && alertRecipients.length > 0;
 
@@ -253,12 +262,20 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
   const canAdvanceFrom: Record<Step, boolean> = { 1: typeValid, 2: basicsValid, 3: scopeValid, 4: teamValid, 5: true };
 
+  // Leaving the Type step having chosen SOX hands the journey over — the rest
+  // of this wizard asks for a period and materiality that SOX derives instead.
+  const handsOffToSox = !isEdit && !!onPickSox && type === 'SOX / ICFR';
   const goToStep = (target: Step) => {
     if (target <= step) { setStep(target); return; }
+    if (step === 1 && handsOffToSox) { onPickSox!(); return; }
     for (let i = step; i < target; i++) if (!canAdvanceFrom[i as Step]) return;
     setStep(target);
   };
-  const nextStep = () => { if (canAdvanceFrom[step] && step < 5) setStep((step + 1) as Step); };
+  const nextStep = () => {
+    if (!canAdvanceFrom[step]) return;
+    if (step === 1 && handsOffToSox) { onPickSox!(); return; }
+    if (step < 5) setStep((step + 1) as Step);
+  };
   const prevStep = () => { if (step > 1) setStep((step - 1) as Step); };
 
   // ── Build the complete engagement — everything captured above is carried ──
@@ -277,12 +294,14 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
       subtype: type === 'Automation' ? autoSubtype : undefined,
       process: (process === 'Cross' ? 'P2P' : process) as ProcessCode,
       framework: type === 'SOX / ICFR' ? 'COSO 2013 / SOX 404' : type === 'Compliance' ? framework : 'Internal Policy',
-      soxConfig: type === 'SOX / ICFR' ? {
+      // SOX materiality is workspace-owned — edit mode carries the existing
+      // config through untouched; the state fallback only covers legacy paths.
+      soxConfig: type === 'SOX / ICFR' ? (initial?.soxConfig ?? {
         overallMateriality,
         performanceMateriality: Math.round(overallMateriality * pmPct / 100),
         clearlyTrivial: Math.round(overallMateriality * cttPct / 100),
         sdBandPct: 20, aggregate: true, keyOnly,
-      } : undefined,
+      }) : undefined,
       complianceConfig: type === 'Compliance' ? {
         racmVersion, samplingMethod,
         sampleSize: samplingMethod === 'Manual upload' ? undefined : sampleSize,
@@ -418,6 +437,17 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                         );
                       })}
                     </div>
+                    {/* mirrors the note the scoping wizard shows for the other
+                        three types — say the flow changes before it changes */}
+                    {handsOffToSox && (
+                      <div className="mt-2 flex items-start gap-2 p-3 rounded-lg bg-brand-50/40 border border-brand-100">
+                        <Info size={13} className="text-brand-700 shrink-0 mt-0.5" />
+                        <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+                          SOX / ICFR is scoped rather than configured — Continue opens the scoping journey, where the entities,
+                          processes and RACMs are derived from the group RACM and trial balances you upload.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -478,7 +508,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
               {/* ═══ STEP 3: SCOPE ═══ */}
               {step === 3 && (
                 <div className="space-y-4">
-                  {/* AI draft affordance */}
+                  {/* AI draft affordance — hidden for SOX, whose scope fields live in the workspace */}
+                  {type !== 'SOX / ICFR' && (
                   <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50/40 p-3.5">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0"><Sparkles size={14} /></div>
@@ -514,6 +545,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                       </button>
                     </div>
                   </div>
+                  )}
 
                   <AnimatePresence>
                     {aiBanner && (
@@ -564,51 +596,22 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     </>
                   )}
 
-                  {type === 'SOX / ICFR' && (() => {
-                    const pm = overallMateriality * pmPct / 100;
-                    const ctt = overallMateriality * cttPct / 100;
-                    const sd = overallMateriality * 0.20;
-                    return (
-                      <>
-                        <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Ground rules that drive how exceptions are evaluated" />
-                        <Field label="Framework">
-                          <div className="px-3 py-2.5 border border-border-light bg-canvas/60 rounded-lg text-[0.8125rem] text-ink-700 font-medium">COSO 2013 / SOX 404(b)</div>
-                        </Field>
-                        <Field label="Control scope">
-                          <button type="button" onClick={() => setKeyOnly(k => !k)} className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg text-[0.8125rem] transition-all cursor-pointer ${keyOnly ? segActiveCls : segIdleCls}`}>
-                            <span className="font-medium">Key controls only</span>
-                            <span className={`w-9 h-5 rounded-full relative transition-colors ${keyOnly ? 'bg-brand-600' : 'bg-ink-200'}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${keyOnly ? 'left-[1.125rem]' : 'left-0.5'}`} /></span>
-                          </button>
-                        </Field>
-                        <Field label="Overall materiality">
-                          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-500 pointer-events-none">{'₹'}</span><input type="number" min={0} value={overallMateriality} onChange={e => setOverallMateriality(parseInt(e.target.value) || 0)} className={inputCls + ' pl-7'} /></div>
-                          {overallMateriality <= 0 && <Hint text="Overall materiality must be greater than zero" />}
-                        </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="Performance materiality (% of overall)">
-                            <input type="number" min={1} max={100} value={pmPct} onChange={e => setPmPct(parseInt(e.target.value) || 0)} className={inputCls} />
-                            <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(pm)}</div>
-                          </Field>
-                          <Field label="Clearly-trivial threshold (% of overall)">
-                            <input type="number" min={0} max={99} value={cttPct} onChange={e => setCttPct(parseInt(e.target.value) || 0)} className={inputCls} />
-                            <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(ctt)}</div>
-                          </Field>
-                        </div>
-                        <div className="rounded-lg border border-border-light bg-canvas/60 p-3 space-y-1.5">
-                          <div className={labelCls + ' mb-0.5'}>Exception severity — computed automatically</div>
-                          {[
-                            [`≤ ${fmtR(ctt)}`, 'Clearly trivial — logged, not aggregated', 'text-ink-500'],
-                            [`> ${fmtR(ctt)} and < ${fmtR(sd)}`, 'Deficiency', 'text-mitigated-700'],
-                            [`≥ ${fmtR(sd)} (20% of materiality)`, 'Significant deficiency', 'text-high-700'],
-                            [`≥ ${fmtR(overallMateriality)} or an MW indicator`, 'Material weakness', 'text-risk-700'],
-                          ].map(([band, label, cls]) => (
-                            <div key={band} className="flex items-center justify-between text-[0.75rem]"><span className="text-ink-600 tabular-nums">{band}</span><span className={`font-semibold ${cls}`}>{label}</span></div>
-                          ))}
-                          <div className="text-[0.7rem] text-ink-500 pt-1 border-t border-border-light mt-1">Full rule set — bands, aggregation, compensating controls, auto-routing — is managed in the engagement's Materiality workspace.</div>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  {/* SOX / ICFR — reachable only in EDIT mode now (new SOX
+                      creations hand off to the scoping journey at step 1).
+                      Materiality & scoping are workspace-owned (user ask), so
+                      this step just points there; soxConfig is preserved
+                      untouched on save. */}
+                  {type === 'SOX / ICFR' && (
+                    <>
+                      <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Managed in the engagement workspace" />
+                      <div className="rounded-lg border border-border-light bg-canvas/60 p-3.5 text-[0.75rem] text-ink-600 leading-relaxed">
+                        Materiality and scoping for a SOX engagement live in the workspace — the
+                        Configuration tab and the Materiality &amp; scope page are the source of
+                        truth. Open the engagement to change them; editing here only touches
+                        basics, team and timeline.
+                      </div>
+                    </>
+                  )}
 
                   {type === 'Internal Audit' && (
                     <>
@@ -827,10 +830,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     {type === 'SOX / ICFR' && (
                       <>
                         <ReviewRow k="Framework" v="COSO 2013 / SOX 404(b)" />
-                        <ReviewRow k="Control scope" v={keyOnly ? 'Key controls only' : 'All controls'} />
-                        <ReviewRow k="Overall materiality" v={fmtR(overallMateriality)} />
-                        <ReviewRow k="Performance materiality" v={`${pmPct}% = ${fmtR(overallMateriality * pmPct / 100)}`} />
-                        <ReviewRow k="Clearly trivial" v={`${cttPct}% = ${fmtR(overallMateriality * cttPct / 100)}`} />
+                        <ReviewRow k="Materiality & scoping" v="Managed in the engagement workspace" />
                       </>
                     )}
                     {type === 'Internal Audit' && (

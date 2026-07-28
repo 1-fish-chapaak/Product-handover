@@ -45,13 +45,17 @@ interface Props {
 export default function SoxTestingTab({ onOpenEngagement }: Props) {
   const { addToast } = useToast();
   const [view, setView] = useState<TabView>('home');
-  const [programmes, setProgrammes] = useState<SoxProgramme[]>(() => [...PROGRAMMES]);
+  // Unlisted records (back-filled duplicates of a card already here, e.g.
+  // ENG-001 ≡ the seeded FY26 programme) power the workspace Configuration
+  // tab but stay off this listing.
+  const listed = () => PROGRAMMES.filter(p => !p.unlisted);
+  const [programmes, setProgrammes] = useState<SoxProgramme[]>(listed);
 
   // Creation lands the user on the list — the modal closes and the new
   // programme card is right there (its Scoping summary is one click away).
   const handleCreated = (p: SoxProgramme) => {
     registerProgramme(p);
-    setProgrammes([...PROGRAMMES]);
+    setProgrammes(listed());
     setView('home');
     addToast({
       message: p.rolledFromFy

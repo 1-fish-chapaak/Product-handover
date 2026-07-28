@@ -96,11 +96,21 @@ const PROCESS_NAMES: ProcessName[] = [
 interface Props {
   onCancel: () => void;
   onCreated: (p: SoxProgramme) => void;
+  /** Entered from the Engagements page, where SOX / ICFR was already picked —
+   *  the Type step is dropped and Back on Basics returns to that page, so the
+   *  type isn't asked for twice. */
+  typePreselected?: boolean;
+  /** With `typePreselected`, Back on the first reachable step (Basics) goes to
+   *  the immediate last step the user saw — the classic wizard's Type step —
+   *  instead of just closing. X / Escape still close outright. */
+  onBackToType?: () => void;
 }
 
-export default function ScopingWizard({ onCancel, onCreated }: Props) {
+export default function ScopingWizard({ onCancel, onCreated, typePreselected, onBackToType }: Props) {
   const logEvent = useAuditLog();
-  const [step, setStep] = useState(0);
+  // the first step the user can actually reach — Type is skipped on handoff
+  const firstStep = typePreselected ? 1 : 0;
+  const [step, setStep] = useState(firstStep);
 
   // Step 1 — type & basics. Only identity lives here: entity/company and
   // processes are NOT asked — the scoping steps collect and derive them.
@@ -366,7 +376,10 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           scrolls beneath (mirror of the sticky footer; user ask). */}
       <div className="sticky top-0 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-6 pb-1">
         <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
-        <StepRail steps={STEPS} step={step} onStepClick={setStep} />
+        <StepRail
+          steps={typePreselected ? STEPS.slice(1) : STEPS}
+          step={step - firstStep}
+          onStepClick={i => setStep(i + firstStep)} />
       </div>
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
@@ -964,10 +977,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
       <div className="mt-auto pt-6" />
       <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
-          onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
+          onClick={() => (step === firstStep
+            ? (typePreselected && onBackToType ? onBackToType() : onCancel())
+            : setStep(s => s - 1))}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
         >
-          <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
+          <ArrowLeft size={13} /> {step === firstStep && !(typePreselected && onBackToType) ? 'Cancel' : 'Back'}
         </button>
         {step < STEPS.length - 1 ? (
           <span className="flex items-center gap-2">

@@ -1,4 +1,4 @@
-import { registerEngagement } from '../../../data/engagements';
+import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
 
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
@@ -311,6 +311,10 @@ export interface SoxProgramme {
    *  flags the missing RACM and GL / trial balances until they're added
    *  (RACM tab / Configuration tab). */
   scopingSkipped?: boolean;
+  /** Hidden from the SOX Testing listing — used by back-filled records whose
+   *  story is already a card there (ENG-001 ≡ the seeded FY26 programme). The
+   *  record still powers the workspace Configuration tab. */
+  unlisted?: boolean;
 }
 
 const ENTITY_SHORT: Record<string, string> = {
@@ -478,6 +482,61 @@ function buildSeedProgramme(): SoxProgramme {
  * pattern as RUNTIME_ENGAGEMENTS). Seeds the completed FY26 example.
  */
 export const PROGRAMMES: SoxProgramme[] = [buildSeedProgramme()];
+
+/** Back-fill (user ask): SOX / ICFR engagements born before the scoping flow
+ *  (classic seeds like ENG-002 / ENG-010) get a programme record synthesized
+ *  from what they already carry — that record lights up the workspace
+ *  Configuration tab and lists the cycle on SOX Testing. Their own numbers
+ *  are kept: materiality from soxConfig when present, else the workspace
+ *  default rules (₹50 L / 75% / 5%); one RACM shell for the anchor process.
+ *  ENG-001 gets a record too (its workspace needs the Configuration tab) but
+ *  stays UNLISTED on SOX Testing — the seeded FY26 programme already carries
+ *  that story there under the same name and code. */
+const BF_CR = 10_000_000;
+const BF_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const BF_PROC: Record<string, string> = {
+  P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report',
+  S2C: 'Source to Contract', ITGC: 'IT General Controls',
+};
+for (const eng of ENGAGEMENTS) {
+  if (eng.type !== 'SOX / ICFR') continue;
+  if (PROGRAMMES.some(p => p.engagementId === eng.id)) continue;
+  const codeCollides = PROGRAMMES.some(p => p.code && p.code === eng.code);
+  const overallCr = (eng.soxConfig?.overallMateriality ?? 5_000_000) / BF_CR;
+  const end = eng.endDate ? new Date(eng.endDate + 'T00:00:00') : null;
+  const fyYear = end?.getFullYear() ?? 2026;
+  PROGRAMMES.push({
+    id: `sox-bf-${eng.id}`,
+    engagementId: eng.id,
+    name: eng.name,
+    code: eng.code,
+    owner: eng.owner,
+    fy: `FY${String(fyYear).slice(-2)}`,
+    asOf: end ? `${end.getDate()} ${BF_MONTHS[end.getMonth()]} ${fyYear}` : '31 Mar 2026',
+    phase: eng.status === 'Planned' || eng.status === 'Draft' ? 'Scoping'
+      : eng.status === 'Closed' ? 'Reporting' : 'Design testing',
+    groupName: eng.entity ?? SEED_GROUP_NAME,
+    entities: [],
+    materiality: {
+      basis: 'custom',
+      benchmarkLabel: 'Overall materiality',
+      benchmark: overallCr,
+      pct: 100,
+      overall: overallCr,
+      pmPct: eng.soxConfig ? Math.round(eng.soxConfig.performanceMateriality / eng.soxConfig.overallMateriality * 100) : 75,
+      cttPct: eng.soxConfig ? Math.round(eng.soxConfig.clearlyTrivial / eng.soxConfig.overallMateriality * 100) : 5,
+    },
+    totalCaptions: 0,
+    quantCount: 0,
+    qualCount: 0,
+    // 'Record to Report' isn't in the scoping catalogue's ProcessName union —
+    // the workspace already seeds non-catalogue names as generic shells, so
+    // the label is carried through as-is.
+    racms: [{ process: (BF_PROC[eng.process] ?? eng.process) as ProcessName, sources: [], entities: [] }],
+    beyondTb: [],
+    unlisted: codeCollides || undefined,
+  });
+}
 
 export function registerProgramme(p: SoxProgramme) {
   const i = PROGRAMMES.findIndex(x => x.id === p.id);
