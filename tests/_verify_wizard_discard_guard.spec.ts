@@ -3,7 +3,8 @@ import { test, expect } from './_helpers';
 /**
  * E4 — the creation wizard never loses typed input on one click: while dirty
  * the backdrop is inert and Cancel/X ask before discarding; a clean wizard
- * still closes freely.
+ * still closes freely. Step 1 is Type-only now — picking a type is the first
+ * dirtying action; the name field lives on the Basics step.
  */
 test('wizard guards typed input against one-click discard', async ({ page }) => {
   test.setTimeout(90_000);
@@ -20,10 +21,13 @@ test('wizard guards typed input against one-click discard', async ({ page }) => 
   await page.waitForTimeout(500);
   await expect(drawer).toHaveCount(0);
 
-  // reopen and type something
+  // reopen, pick a type (dirty) and type a name on Basics
   await page.getByRole('button', { name: /New Engagement/i }).first().click();
   await page.waitForTimeout(600);
-  await drawer.getByPlaceholder(/e\.g\./i).first().fill('FY27 ICFR draft');
+  await drawer.getByText('Internal Audit', { exact: true }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.waitForTimeout(400);
+  await drawer.getByPlaceholder(/e\.g\./i).first().fill('FY27 audit draft');
   await page.waitForTimeout(300);
 
   // dirty: backdrop is inert
@@ -37,7 +41,7 @@ test('wizard guards typed input against one-click discard', async ({ page }) => 
   await page.getByRole('button', { name: 'Keep editing' }).click();
   await page.waitForTimeout(300);
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByPlaceholder(/e\.g\./i).first()).toHaveValue('FY27 ICFR draft');
+  await expect(drawer.getByPlaceholder(/e\.g\./i).first()).toHaveValue('FY27 audit draft');
 
   // Discard really closes
   await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();

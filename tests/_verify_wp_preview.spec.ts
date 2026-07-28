@@ -1,4 +1,5 @@
 import { test, expect } from './_helpers';
+import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
 
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/b428675a-455c-4a0e-9017-16bd4ea1aa22/scratchpad/wp-preview-shots';
 
@@ -6,16 +7,16 @@ const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Iram
  * Engagement working-paper preview on the control library: an excel-style
  * sheet-tab strip, one sheet on screen at a time (preview ≡ xlsx), the live
  * sign-off on its own sheet — and the paper follows the register's filters,
- * only visible controls' data goes in.
+ * only visible controls' data goes in. Walked on a scoping-born engagement
+ * created from Engagements (7 derived processes, so the Treasury search has
+ * something to narrow to).
  */
 test('working-paper preview is sheet-wise and follows filters', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
-  await page.getByRole('navigation').getByRole('button', { name: 'SOX Testing', exact: true }).click();
-  await page.waitForTimeout(800);
-  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
-  await page.waitForTimeout(1000);
+  await createSoxEngagement(page, 'FY27 ICFR — Airline Group');
+  await openFromLibrary(page, 'FY27 ICFR — Airline Group');
   await page.getByText('Control Library', { exact: true }).first().click();
   await page.waitForTimeout(600);
 
