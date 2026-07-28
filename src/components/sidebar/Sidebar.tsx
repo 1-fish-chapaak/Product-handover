@@ -363,8 +363,20 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
           {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('engagements')} />}
-          {/* The scoping-first SOX flow — its own section, right below Engagements. */}
+          {/* SOX Testing — PARKED from the sidebar (user ask). Creating a SOX
+              engagement now runs the same scoping journey from Engagements, so
+              the separate section was a second door to the same flow. Only this
+              nav item is commented out: the 'sox-testing' route, the page and
+              its components stay wired and compiling, so restoring the section
+              is uncommenting this one line.
+              Known consequence while it's off — the seeded FY26 programme
+              (sox-prog-fy26) was only reachable from this page's card. Opening
+              "FY26 ICFR — Airline P2P & O2C" from Engagements opens eng-1
+              instead, which carries no soxProcesses / soxSeedMode / soxConfig
+              and so seeds a thinner workspace. Fix when wanted: add those three
+              fields to the eng-1 seed in data/engagements.ts.
           {can('eng_view') && <NavItem icon={FlaskConical} label="SOX Testing" active={view === 'sox-testing'} expanded={isExpanded} onClick={() => setView('sox-testing')} />}
+          */}
           {/* Personal cross-engagement queue — same eng_view gate as the
               routed 'my-queue' view (rbac VIEW_PERMISSIONS); risk owners hold
               it via VIEW_ALL, so their home screen is always reachable. */}
