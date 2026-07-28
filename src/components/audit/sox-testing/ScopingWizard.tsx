@@ -376,10 +376,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           scrolls beneath (mirror of the sticky footer; user ask). */}
       <div className="sticky top-0 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-6 pb-1">
         <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
+        {/* Type stays on the rail even when it was answered on the classic
+            wizard — it reads as a completed step of one journey, not a step
+            that never existed. Clicking it goes back to where it was answered. */}
         <StepRail
-          steps={typePreselected ? STEPS.slice(1) : STEPS}
-          step={step - firstStep}
-          onStepClick={i => setStep(i + firstStep)} />
+          steps={STEPS}
+          step={step}
+          onStepClick={i => {
+            if (typePreselected && i === 0) { onBackToType ? onBackToType() : onCancel(); return; }
+            setStep(i);
+          }} />
       </div>
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>

@@ -5,14 +5,15 @@ import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
-  trackResult, pointResult, stepResult,
+  sampleSizeGuide, trackResult, pointResult, stepResult,
 } from './helpers';
+import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
@@ -59,21 +60,54 @@ function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; ti
   );
 }
 
+/** The menu is portalled to the body and positioned against the trigger, so a
+ *  card's own bounds can never clip it — it opens over the page, and flips
+ *  above the button when there isn't room below. */
 function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ y: number; right: number; flip: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const MENU_H = 272;                     // max-h-64 + padding, the worst case
+      const below = window.innerHeight - r.bottom;
+      const flip = below < MENU_H && r.top > below;
+      setPos({
+        y: flip ? window.innerHeight - r.top + 6 : r.bottom + 6,
+        right: window.innerWidth - r.right,
+        flip,
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+  }, [open]);
+
   return (
     <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
-      <AnimatePresence>
-        {open && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 mt-1.5 z-20 w-56 max-h-64 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
-              {children(() => setOpen(false))}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
+      {createPortal(
+        <AnimatePresence>
+          {open && pos && (
+            <>
+              {/* below the modal layer (z-50) so a dialog still wins */}
+              <div className="fixed inset-0 z-[45]" onClick={() => setOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: pos.flip ? 4 : -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: pos.flip ? 4 : -4 }}
+                style={{ position: 'fixed', right: pos.right, ...(pos.flip ? { bottom: pos.y } : { top: pos.y }) }}
+                className="z-[46] w-56 max-h-64 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+                {children(() => setOpen(false))}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -701,40 +735,172 @@ function sampleRowFacts(i: number): { date: string; amountL: number } {
   return { date: `${day} ${MONTHS[(i * 5) % 12]} FY26`, amountL };
 }
 
+/** The two inputs the sample step needs — the sample is drawn from the master
+ *  population, and the transactions tested against each drawn item come from
+ *  the transactions file. Mirrors the creation flow's required-files card. */
+const REQUIRED_SAMPLE_FILES: { id: 'pop' | 'txn'; name: string; formats: string; tag: string }[] = [
+  { id: 'pop', name: 'Population (master data)', formats: 'XLSX', tag: 'Population' },
+  { id: 'txn', name: 'Transactions', formats: 'XLSX / CSV', tag: 'Transactions' },
+];
+
 const FOLLOW_UP_FILTERS: { id: string; label: string; keep: (i: number) => boolean }[] = [
   { id: 'amt', label: 'Amount ≥ ₹50L', keep: i => sampleRowFacts(i).amountL >= 50 },
   { id: 'h2', label: 'H2 only (Oct–Mar)', keep: i => (i * 5) % 12 >= 6 },
   { id: 'nround', label: 'Exclude round amounts', keep: i => sampleRowFacts(i).amountL % 10 !== 0 },
 ];
 
+/**
+ * Add a required file — one entry point for both slots. Either bring a new
+ * file, or reuse one the engagement already has: the trial balances, general
+ * ledger and RACM / SOP uploaded when the engagement was scoped are usually
+ * exactly the transaction data being asked for here.
+ */
+function FilePickerModal({ existing, onUpload, onChoose, onClose }: {
+  existing: { name: string; kind: string; rows: number; from: string }[];
+  onUpload: () => void;
+  onChoose: (f: { name: string; rows: number }) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'pick' | 'existing'>('pick');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40';
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add a file">
+        <div className="px-5 pt-4 pb-3 border-b border-canvas-border flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink-900">Add a file</h2>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">Add the file — it's read and matched to the requirement it satisfies.</p>
+          </div>
+          <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
+        </div>
+        <div className="p-5">
+          {mode === 'pick' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={onUpload} className={cardCls}>
+                <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
+                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload</span>
+                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Bring a file from your device (.xlsx / .csv).</span>
+              </button>
+              <button onClick={() => setMode('existing')} className={cardCls}>
+                <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Paperclip size={15} className="text-brand-600" /></span>
+                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Choose existing</span>
+                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Reuse a file uploaded when the engagement was created.</span>
+              </button>
+            </div>
+          ) : existing.length === 0 ? (
+            <p className="text-[12.5px] text-ink-600 leading-relaxed">
+              This engagement has no files on record yet — the trial balances, general ledger and RACM are uploaded during scoping. Upload one here instead.
+            </p>
+          ) : (
+            <div className="rounded-lg border border-canvas-border overflow-hidden">
+              {existing.map(f => (
+                <button key={f.name} onClick={() => onChoose({ name: f.name, rows: f.rows })}
+                  className="w-full text-left px-3 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer flex items-center gap-2.5">
+                  <Paperclip size={12} className="text-ink-400 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[12px] text-ink-800 truncate">{f.name}</span>
+                    <span className="block text-[11px] text-ink-400">{f.kind} · {f.rows.toLocaleString()} rows · {f.from}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { setPopulation, setSampling, me } = useIcfr();
+  const { eng, racmDocs, setPopulation, setSampling, me } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating;
 
-  type Stage = 'upload' | 'uploading' | 'logic' | 'extracting' | 'review';
+  // 'upload' covers everything before Send — the files card and the logic card
+  // are gated on the files themselves, not on a stage
+  type Stage = 'upload' | 'extracting' | 'review';
   const [stage, setStage] = useState<Stage>('upload');
+  // two inputs, two jobs: samples are drawn from the master population, and the
+  // transactions tested against each of them come from the transactions file
   const [popFile, setPopFile] = useState<{ name: string; count: number } | null>(null);
+  const [txnFile, setTxnFile] = useState<{ name: string; count: number } | null>(null);
+  const [uploading, setUploading] = useState<'pop' | 'txn' | null>(null);
+  const [picking, setPicking] = useState(false);
   const [logic, setLogic] = useState('');
   const [sentLogic, setSentLogic] = useState('');
-  const [rows, setRows] = useState(25);
+  // how many to draw is the system's call, not a free guess — the handbook sizes
+  // it from the control's nature and frequency; the auditor picks off that ladder
+  const guide = sampleSizeGuide(control);
+  const [rows, setRows] = useState(guide.suggested);
   const [drawn, setDrawn] = useState<string[]>([]);
   const [filters, setFilters] = useState<Set<string>>(new Set());
   const [rejecting, setRejecting] = useState(false);
+  // sending with no filter rule is the one thing that can't be guessed — IRA
+  // asks for it rather than silently pulling everything
+  const [askedForLogic, setAskedForLogic] = useState(false);
+  const filesReady = !!popFile && !!txnFile;
+  const attachedFiles = REQUIRED_SAMPLE_FILES
+    .map(d => { const f = d.id === 'pop' ? popFile : txnFile; return f ? { id: d.id, name: f.name, tag: d.tag } : null; })
+    .filter(Boolean) as { id: 'pop' | 'txn'; name: string; tag: string }[];
 
   // The journey stays LOCAL until approval — nothing is written to the control,
   // so "Reject and try again" is a pure state reset with no store cleanup.
-  const uploadPop = () => {
-    setStage('uploading');
-    logEvent({ action: 'Upload', description: `Uploaded sample population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-    window.setTimeout(() => { setPopFile({ name: 'population.xlsx', count: 2640 }); setStage('logic'); }, 1400);
+  // What the engagement already holds — the scoping uploads are usually the
+  // very transaction data being asked for here, so they're offered for reuse.
+  const existingFiles = useMemo(() => {
+    const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
+    const out: { name: string; kind: string; rows: number; from: string }[] = [];
+    prog?.entities.forEach(en => {
+      if (en.tbFile) out.push({ name: en.tbFile, kind: 'Trial balance', rows: en.tbLines ?? 1240, from: `${en.name} · engagement scoping` });
+    });
+    if (prog) out.push({ name: `general_ledger_${prog.fy}.csv`, kind: 'General ledger', rows: 18432, from: 'Engagement scoping' });
+    racmDocs.forEach(d => out.push({ name: d.name, kind: 'RACM / SOP', rows: 480, from: d.process ? `${d.process} RACM` : 'RACM page' }));
+    return out;
+  }, [eng.id, racmDocs]);
+
+  // The file is matched to the requirement it satisfies — by what it's called,
+  // falling back to whichever slot is still open. The auditor never picks.
+  const classify = (name: string): 'pop' | 'txn' => {
+    const n = name.toLowerCase();
+    if (/popul|master/.test(n)) return 'pop';
+    if (/transact|txn|ledger|\bgl\b|journal|invoice|payment/.test(n)) return 'txn';
+    return popFile ? 'txn' : 'pop';
+  };
+  const attach = (file: { name: string; count: number }) => {
+    const which = classify(file.name);
+    if (which === 'pop') setPopFile(file); else setTxnFile(file);
+    return which;
+  };
+  const uploadFile = () => {
+    setPicking(false);
+    // the simulated pick fills whichever requirement is still open
+    const which: 'pop' | 'txn' = popFile ? 'txn' : 'pop';
+    setUploading(which);
+    window.setTimeout(() => {
+      const f = which === 'pop' ? { name: 'population.xlsx', count: 2640 } : { name: 'transactions.xlsx', count: 18432 };
+      attach(f);
+      setUploading(null);
+      logEvent({ action: 'Upload', description: `Added "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
+    }, 1400);
+  };
+  const chooseFile = (f: { name: string; rows: number }) => {
+    setPicking(false);
+    const which = attach({ name: f.name, count: f.rows });
+    logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
   const sendLogic = () => {
-    if (!logic.trim()) return;
+    if (!logic.trim()) { setAskedForLogic(true); return; }
+    setAskedForLogic(false);
     setSentLogic(logic.trim());
     setStage('extracting');
-    logEvent({ action: 'Run', description: `Extracted sample for ${control.id} — logic-based, ${rows} rows`, module: 'SOX ICFR', entity: 'Test Result' });
+    logEvent({ action: 'Run', description: `Extracted sample for ${control.id} — ${rows} items from the population, transactions filtered by logic`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { setDrawn(sampleRefs(control.process, rows)); setStage('review'); }, 1800);
   };
   const visible = drawn.map((ref, i) => ({ ref, i })).filter(({ i }) =>
@@ -746,10 +912,13 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     setPopulation(control.id, {
       source: `Uploaded — ${popFile?.name ?? 'population.xlsx'}`, count: popFile?.count ?? 2640,
       tieOut: 'Agreed to GL control account',
-      evidence: [{ id: 'pop-ev', name: popFile?.name ?? 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
+      evidence: [
+        { id: 'pop-ev', name: popFile?.name ?? 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' },
+        { id: 'txn-ev', name: txnFile?.name ?? 'transactions.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' },
+      ],
     });
     const s: Sampling = {
-      basis: `${kept.length} items — extracted by logic: “${sentLogic}”${applied.length ? ` · refined: ${applied.join(', ')}` : ''}`,
+      basis: `${kept.length} items drawn from ${popFile?.name ?? 'the population'} — transactions filtered by: “${sentLogic}”${applied.length ? ` · refined: ${applied.join(', ')}` : ''}`,
       method: 'Targeted', size: kept.length,
       samples: kept.map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })),
     };
@@ -760,7 +929,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   };
   const restart = () => {
     setRejecting(false);
-    setStage('upload'); setPopFile(null); setLogic(''); setSentLogic(''); setRows(25); setDrawn([]); setFilters(new Set());
+    setStage('upload'); setPopFile(null); setTxnFile(null); setLogic(''); setSentLogic(''); setRows(guide.suggested); setDrawn([]); setFilters(new Set()); setAskedForLogic(false);
     logEvent({ action: 'Delete', description: `Rejected extracted sample for ${control.id} — journey restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
 
@@ -797,26 +966,74 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
 
   return (
     <div className="p-5">
-      {/* 1 — population upload */}
-      <div className="subcard p-3.5 mb-3">
-        <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population file</div>
-        {popFile ? (
-          <div className="flex items-center gap-2 text-[0.75rem] text-ink-700">
-            <Paperclip size={12} className="text-compliant-700 shrink-0" />
-            <span className="font-mono text-[0.71875rem]">{popFile.name}</span>
-            <span className="text-ink-400 tabular-nums">· {popFile.count.toLocaleString()} rows · tie-out agreed to GL</span>
-          </div>
-        ) : (
-          <button disabled={stage === 'uploading'} onClick={uploadPop} className="h-9 px-3 text-[0.75rem] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center disabled:opacity-70">
-            {stage === 'uploading' ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Upload size={13} /> Upload population file</>}
+      {/* 1 — the two required files, in the creation flow's card language:
+          requirement chips that tick off, one bulk button, attached list below */}
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated mb-3">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <FileText size={14} className="text-brand-600 shrink-0" />
+          <span className="text-[13px] font-bold text-ink-900">Required files</span>
+          <span className="text-[11.5px] text-ink-400">{REQUIRED_SAMPLE_FILES.length} required · {REQUIRED_SAMPLE_FILES.length} total</span>
+          {/* one button for both slots — the picker asks which, and offers the
+              engagement's own files as well as a fresh upload */}
+          <button onClick={() => setPicking(true)}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[11.5px] font-semibold transition-colors cursor-pointer">
+            <Upload size={12} /> {attachedFiles.length > 0 ? 'Add more' : 'Upload'}
           </button>
-        )}
+        </div>
+        <div className="px-4 pb-3.5 flex flex-wrap gap-2">
+          {REQUIRED_SAMPLE_FILES.map(d => {
+            const done = !!(d.id === 'pop' ? popFile : txnFile);
+            return (
+              <div key={d.id} className={cn('inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border', done ? 'border-compliant-100 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated')}>
+                <span className="text-[12.5px] font-semibold text-ink-900">{d.name}</span>
+                <span className="px-1.5 py-0.5 rounded-md border border-canvas-border text-[10px] font-bold text-ink-400">{d.formats}</span>
+                {done && <Check size={13} className="text-compliant-600 shrink-0" />}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* 2 — the extraction chat: explain the logic, set the row count, send */}
-      {popFile && (
-        <div className="subcard p-3.5 mb-3">
-          <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><MessageSquare size={12} /> Extraction logic</div>
+      {attachedFiles.length > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-400">
+              Attached
+              <span className="w-[18px] h-[18px] rounded-full bg-ink-900 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">{attachedFiles.length}</span>
+            </span>
+            <span className="text-[11.5px] text-ink-400 tabular-nums">{attachedFiles.length}/{REQUIRED_SAMPLE_FILES.length} required inputs satisfied</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {attachedFiles.map(a => (
+              <span key={a.id} className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-9 rounded-lg border border-canvas-border bg-canvas-elevated min-w-0">
+                <FileText size={12} className="text-ink-400 shrink-0" />
+                <span className="text-[12px] text-ink-800 truncate">{a.name}</span>
+                <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{a.tag}</span>
+                <button onClick={() => (a.id === 'pop' ? setPopFile(null) : setTxnFile(null))} aria-label={`Remove ${a.name}`}
+                  className="ml-auto p-1 rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} /></button>
+              </span>
+            ))}
+          </div>
+          {uploading && <span className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</span>}
+        </div>
+      )}
+
+      {/* something's been added but a requirement is still open — say which,
+          without waiting for the auditor to try and move on */}
+      {attachedFiles.length > 0 && !filesReady && !uploading && (
+        <div className="mb-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-start gap-1.5">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          <span>
+            {REQUIRED_SAMPLE_FILES.find(d => !(d.id === 'pop' ? popFile : txnFile))!.name} is still missing — the sample can't be pulled until both files are in.
+          </span>
+        </div>
+      )}
+
+      {/* 2 — how many to draw, and the rule that filters the transactions */}
+      {/* always here — the logic can be written before the files land; only
+          sending waits on them */}
+      <div className="subcard p-3.5 mb-3">
+          <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><MessageSquare size={12} /> Extraction logic {txnFile && <span className="font-normal text-ink-400">· filters {txnFile.name}</span>}</div>
           {sentLogic ? (
             <div className="flex items-start gap-2 mb-2">
               <CornerDownRight size={12} className="text-ink-400 mt-0.5 shrink-0" />
@@ -824,25 +1041,46 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
             </div>
           ) : (
             <>
-              <textarea rows={2} value={logic} onChange={e => setLogic(e.target.value)} placeholder="Explain how to pull the sample — e.g. payment runs above ₹10L, weighted to quarter-ends, excluding intercompany"
-                className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[0.71875rem] text-ink-500">Rows to extract</span>
-                <input type="number" min={1} max={60} value={rows} onChange={e => setRows(Math.max(1, Math.min(60, +e.target.value || 1)))}
-                  className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" aria-label="Rows to extract" />
+              {/* no rule, no filter — IRA says so and asks for one rather than
+                  quietly pulling every transaction */}
+              {askedForLogic && (
+                <div className="mb-2 rounded-lg border border-mitigated-200 bg-mitigated-50/50 px-2.5 py-2">
+                  <p className="text-[0.71875rem] font-semibold text-mitigated-800 inline-flex items-start gap-1.5">
+                    <AlertTriangle size={11} className="mt-0.5 shrink-0" /> No extraction logic — nothing to filter the transactions on.
+                  </p>
+                  <p className="text-[0.71875rem] text-ink-700 leading-relaxed mt-1.5 inline-flex items-start gap-1.5">
+                    <Sparkles size={11} className="text-brand-600 mt-0.5 shrink-0" />
+                    <span>Which transactions should I pull for each sampled item — by amount, by date window, by counterparty? Tell me the rule and I'll apply it to {txnFile?.name ?? 'the transactions file'}.</span>
+                  </p>
+                </div>
+              )}
+              <textarea rows={2} value={logic} onChange={e => { setLogic(e.target.value); if (e.target.value.trim()) setAskedForLogic(false); }}
+                placeholder="Explain how to filter the transactions — e.g. payment runs above ₹10L, weighted to quarter-ends, excluding intercompany"
+                className={cn('w-full px-3 py-2 rounded-lg border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 resize-none',
+                  askedForLogic ? 'border-mitigated-300 focus:ring-mitigated-200' : 'border-canvas-border focus:ring-brand-200')} />
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="text-[0.71875rem] text-ink-500">Sample rows</span>
+                <select value={rows} onChange={e => setRows(+e.target.value)} aria-label="Sample rows"
+                  className="h-8 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                  {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
+                    <option key={n} value={n}>{n}{n === guide.suggested ? ' — suggested' : ''}</option>
+                  ))}
+                </select>
+                <span className="text-[0.6875rem] text-ink-400">{control.frequency} · {control.nature} — {guide.range}. {guide.note}</span>
                 <div className="flex-1" />
-                <button disabled={!logic.trim() || stage === 'extracting'} onClick={sendLogic}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                {/* the logic can be written first — sending needs the data */}
+                <button disabled={!filesReady || stage === 'extracting'} onClick={sendLogic}
+                  title={filesReady ? undefined : 'Add the required files first — there is nothing to draw from yet'}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                   {stage === 'extracting' ? <><Loader2 size={13} className="animate-spin" /> Extracting…</> : <><Send size={13} /> Send</>}
                 </button>
               </div>
             </>
           )}
           {stage === 'extracting' && (
-            <div className="flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Applying your logic to {popFile.count.toLocaleString()} rows…</div>
+            <div className="flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {popFile!.count.toLocaleString()} and filtering {txnFile!.count.toLocaleString()} transactions…</div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* 3 — extracted result + second-level filters + approve / reject */}
       {stage === 'review' && (
@@ -890,6 +1128,15 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
       )}
 
       {/* reject → everything resets, the user starts the journey over */}
+      {picking && (
+        <FilePickerModal
+          existing={existingFiles}
+          onUpload={uploadFile}
+          onChoose={chooseFile}
+          onClose={() => setPicking(false)}
+        />
+      )}
+
       {rejecting && createPortal(
         <div className="modal-backdrop" onClick={() => setRejecting(false)}>
           <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>

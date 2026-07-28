@@ -529,11 +529,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
       </div>
 
-      <AnimatePresence>
+      {/* `custom` = "is the SOX sheet taking over?" — while true, the exiting
+          wizard drops its slide/fade so the handoff reads as a step change. */}
+      <AnimatePresence custom={soxWizardOpen}>
         {wizardOpen && (
           <CreateEngagementWizard
             initial={editTarget ?? undefined}
             initialType={wizardInitialType}
+            enterInstant={wizardInitialType !== undefined}
             onClose={() => { setWizardOpen(false); setEditTarget(null); }}
             onCreated={(eng) => {
               registerEngagement(eng);
@@ -551,12 +554,16 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
       {/* SOX / ICFR — the scoping journey, the same one the SOX Testing tab
           opens. It registers the engagement itself, so we only re-read the
           library and record the programme. */}
-      <AnimatePresence>
+      {/* `custom` = "is the classic wizard coming back?" — Back-to-type swaps
+          instantly; a plain close still slides the sheet away. The sheet also
+          enters in place: the classic wizard was already showing there. */}
+      <AnimatePresence custom={wizardOpen}>
         {soxWizardOpen && (
           <FlowModal
             label="New engagement"
             widthCls="w-full max-w-[560px]"
             variant="sheet"
+            enterInstant
             onClose={() => setSoxWizardOpen(false)}
           >
             <ScopingWizard

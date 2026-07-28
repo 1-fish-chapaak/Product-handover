@@ -244,10 +244,15 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
  *  full-height side sheet sliding in from the right; the scoping summary keeps
  *  the centred 800px-tall modal. Closes on X or Escape only — an overlay click
  *  mid-wizard would silently discard scoping work. */
-export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', onClose, children }: {
+export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', enterInstant, onClose, children }: {
   label: string;
   widthCls?: string;
   variant?: 'modal' | 'sheet';
+  /** Sheet only: render already in place (no slide-in) — used when another
+   *  sheet hands off to this one so the swap reads as a step change. The
+   *  matching instant exit comes via AnimatePresence `custom` at the call
+   *  site (see EngagementsView); plain closes still slide out. */
+  enterInstant?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -270,12 +275,22 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', on
   return (
     <>
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        variants={{
+          show: { opacity: 1 },
+          out: (handback?: boolean) => handback ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0 },
+        }}
+        initial={enterInstant ? false : { opacity: 0 }}
+        animate="show" exit="out"
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
       />
       {variant === 'sheet' ? (
         <motion.div
-          initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+          variants={{
+            show: { x: 0 },
+            out: (handback?: boolean) => handback ? { x: 0, transition: { duration: 0 } } : { x: '100%' },
+          }}
+          initial={enterInstant ? false : { x: '100%' }}
+          animate="show" exit="out"
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           role="dialog" aria-modal="true" aria-label={label}
           className={`fixed right-0 top-0 bottom-0 z-50 ${widthCls} bg-canvas border-l border-border-light shadow-2xl overflow-hidden flex flex-col`}

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronLeft, ChevronRight, ShieldCheck, ClipboardList, Zap,
   Check, AlertCircle, Edit3, Users, Sparkles, ChevronDown, ChevronUp,
-  Plus, Trash2, FileText, Loader2, CalendarClock, Info,
+  Plus, Trash2, FileText, Loader2, CalendarClock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -95,12 +95,17 @@ interface Props {
   /** Preselects the engagement type on open — used when the SOX scoping sheet's
    *  Back returns here, so the Type step shows the earlier pick intact. */
   initialType?: EngType;
+  /** Render the sheet already in place (no slide-in) — used when the SOX
+   *  scoping sheet hands back to this one, so the swap reads as a step change
+   *  rather than one sheet leaving and another arriving. The matching instant
+   *  exit is driven by AnimatePresence `custom` in EngagementsView. */
+  enterInstant?: boolean;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;
 const STEP_LABELS = ['Type', 'Basics', 'Scope', 'Team & timeline', 'Review'] as const;
 
-export default function CreateEngagementWizard({ onClose, onCreated, initial, onPickSox, initialType }: Props): JSX.Element {
+export default function CreateEngagementWizard({ onClose, onCreated, initial, onPickSox, initialType, enterInstant }: Props): JSX.Element {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const isEdit = Boolean(initial);
@@ -362,14 +367,28 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <>
+      {/* AnimatePresence `custom` (EngagementsView) is true while the SOX
+          scoping sheet is taking over — the dynamic exit variants then drop
+          the slide/fade so the handoff reads as an in-sheet step change. */}
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        variants={{
+          show: { opacity: 1 },
+          out: (handoff?: boolean) => handoff ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0 },
+        }}
+        initial={enterInstant ? false : { opacity: 0 }}
+        animate="show" exit="out"
         transition={{ duration: 0.15 }}
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
         onClick={dirty ? undefined : onClose}
       />
       <motion.aside
-        initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
+        variants={{
+          hidden: { x: 24, opacity: 0 },
+          show: { x: 0, opacity: 1 },
+          out: (handoff?: boolean) => handoff ? { x: 0, opacity: 1, transition: { duration: 0 } } : { x: 24, opacity: 0 },
+        }}
+        initial={enterInstant ? false : 'hidden'}
+        animate="show" exit="out"
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label={isEdit ? 'Edit Engagement' : 'Create Engagement'}
@@ -437,17 +456,6 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                         );
                       })}
                     </div>
-                    {/* mirrors the note the scoping wizard shows for the other
-                        three types — say the flow changes before it changes */}
-                    {handsOffToSox && (
-                      <div className="mt-2 flex items-start gap-2 p-3 rounded-lg bg-brand-50/40 border border-brand-100">
-                        <Info size={13} className="text-brand-700 shrink-0 mt-0.5" />
-                        <p className="text-[0.75rem] text-ink-600 leading-relaxed">
-                          SOX / ICFR is scoped rather than configured — Continue opens the scoping journey, where the entities,
-                          processes and RACMs are derived from the group RACM and trial balances you upload.
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
