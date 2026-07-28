@@ -60,19 +60,22 @@ test('SOX Testing tab walks the scoping-first journey end to end', async ({ page
   await page.getByRole('button', { name: 'New Engagement' }).last().click();
   await page.waitForTimeout(400);
   await expect(page.getByRole('dialog')).toBeVisible();
+  // the creation flow is a full-height 560px side sheet (the centred 1000x800
+  // modal is now only used for the scoping summary)
   const wizBox = await page.getByRole('dialog').boundingBox();
-  expect(Math.round(wizBox!.width)).toBe(1000);
-  expect(Math.round(wizBox!.height)).toBe(800);
+  expect(Math.round(wizBox!.width)).toBe(560);
 
   // Step 1 — the classic "Type & basics" screen, as-is (SOX preselected)
   await expect(page.getByText('Type & basics').first()).toBeVisible();
   await expect(page.getByRole('dialog').getByText('SOX / ICFR', { exact: true })).toBeVisible();
   await expect(page.getByText('Process audit aligned to RACM + SOPs')).toBeVisible();
   await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill('FY27 ICFR — Airline Group');
-  // No start/end dates and no "as of" field — the cycle is a year type
-  // (financial / calendar) + audit period (defaults financial, FY 2026-27)
-  await expect(page.getByRole('button', { name: /Financial year/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Calendar year/ })).toBeVisible();
+  // No start/end dates and no "as of" field — just the audit period, which
+  // is always on the financial-year basis (FY 2026-27). The year-type picker
+  // is parked (YEAR_TYPE_PICKER), so neither basis button renders.
+  await expect(page.getByRole('button', { name: /Financial year/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Calendar year/ })).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByText('Audit period')).toBeVisible();
   await expect(page.getByText(/testing runs Apr 2026 – Mar 2027/)).toBeVisible();
   await expect(page.getByText(/Opinion/)).toHaveCount(0);
   await expect(page.getByText('Select date')).toHaveCount(0);

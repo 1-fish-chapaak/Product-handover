@@ -307,6 +307,10 @@ export interface SoxProgramme {
   qualCount: number;
   racms: DerivedRacm[];
   beyondTb: string[];
+  /** Set when the wizard's Scoping step was skipped — the workspace Overview
+   *  flags the missing RACM and GL / trial balances until they're added
+   *  (RACM tab / Configuration tab). */
+  scopingSkipped?: boolean;
 }
 
 const ENTITY_SHORT: Record<string, string> = {

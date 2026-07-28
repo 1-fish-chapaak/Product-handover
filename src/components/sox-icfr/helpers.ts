@@ -193,9 +193,11 @@ export function wfRunRef(key: string, fail: boolean): string {
 }
 
 /** Plain-language summary the AI returns after checking the uploaded file. */
-export function validationSummary(text: string, fail: boolean, key = text): string {
+export function validationSummary(text: string, fail: boolean, key = text, sampleCount?: number): string {
   const h = hnum(key);
-  const n = [15, 25, 25, 40][h % 4]!;
+  // the real drawn-sample count when there is one — the summary sits directly
+  // above the per-sample table, so an invented number would contradict it
+  const n = sampleCount || [15, 25, 25, 40][h % 4]!;
   const ex = 1 + ((h >>> 5) % 3);
   const po = `45000${12840 + (h % 25) * 7}`;
   const vendor = SAMPLE_VENDORS[h % SAMPLE_VENDORS.length]!;

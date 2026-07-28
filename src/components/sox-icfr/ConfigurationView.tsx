@@ -180,7 +180,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
   return (
     <div className="w-full space-y-4 pb-8">
       <div className="flex items-start justify-between gap-4">
-        <p className="text-[12.5px] text-ink-500 max-w-2xl">
+        <p className="text-[12.5px] text-ink-500">
           The working surface for this engagement's scoping configuration. Edits save instantly;
           the Materiality &amp; scope page remains the formal record and reflects the latest numbers.
         </p>
@@ -478,7 +478,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       </section>
 
       {rolling && (
-        <FlowModal label="Roll forward" widthCls="w-[1000px]" onClose={() => setRolling(false)}>
+        <FlowModal label="Roll forward" widthCls="w-full max-w-[560px]" variant="sheet" onClose={() => setRolling(false)}>
           <RollForwardWizard
             prior={prog}
             onCancel={() => setRolling(false)}

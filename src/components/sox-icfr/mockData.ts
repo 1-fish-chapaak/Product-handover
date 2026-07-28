@@ -302,7 +302,7 @@ const DETAILED: Control[] = [
 // ── generator — fills the register to scale ──────────────────────────────────────
 // Each spread carries its process's real risk register: a few risk-phrased
 // statements, each covering the controls (by title index) that answer it. Both
-// generation batches map a title to the SAME risk, so the Risk Library groups
+// generation batches map a title to the SAME risk, so the Risk Register groups
 // base + station controls under one risk instead of minting one risk per control.
 type SpreadRisk = { id: string; text: string; covers: number[] };
 type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string; risks: SpreadRisk[] };
@@ -579,8 +579,13 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   }
   // Any other engagement → a fresh engagement scoped to the picked process —
   // or, when a scoping-derived process list is supplied, one RACM per process.
+  // A supplied-but-EMPTY list means scoping was skipped: seed NOTHING (the
+  // user adds the RACM from the RACM tab); only an absent list gets the
+  // classic single-process default.
   const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
-  const controls = meta.processes?.length ? racmTemplateForProcesses(meta.processes, meta.seedMode) : racmTemplate(proc);
+  const controls = meta.processes
+    ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode) : [])
+    : racmTemplate(proc);
   // A 'live' cycle claims tested controls — back that claim with the bulk run
   // that produced them, so the Test runs registry isn't empty on arrival.
   const runs: RunRecord[] = [];

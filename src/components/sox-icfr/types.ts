@@ -48,13 +48,17 @@ export interface EvidenceFile {
 
 export type DesignDocKind =
   | 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP'
-  | 'Precision & thresholds' | 'Segregation of duties';
+  | 'Precision & thresholds' | 'Segregation of duties'
+  // an element the auditor named themselves — its title is `name`, not the kind
+  | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
 /** One design element — a completeness requirement evidenced by attached files. */
 export interface DesignDoc {
   id: string;
   kind: DesignDocKind;
   name: string;
+  /** What the auditor is asking for — only set on a Custom element. */
+  description?: string;
   status: DocStatus;
   /** Required elements gate the design conclusion; optional ones don't. Default true. */
   required?: boolean;

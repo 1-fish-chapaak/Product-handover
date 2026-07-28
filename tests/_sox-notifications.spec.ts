@@ -35,7 +35,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   // Phase 3 — the owner's SOX is a to-do list: the audit-side tabs are gone
   const soxNav = page.locator('.sox-book-ui');
   await expect(soxNav.getByRole('button', { name: 'RACM', exact: true })).toHaveCount(0);
-  await expect(soxNav.getByRole('button', { name: 'Risk Library', exact: true })).toHaveCount(0);
+  await expect(soxNav.getByRole('button', { name: 'Risk Register', exact: true })).toHaveCount(0);
   await expect(soxNav.getByRole('button', { name: 'Runs', exact: true })).toHaveCount(0);
   await expect(soxNav.getByRole('button', { name: 'Control Library', exact: true })).toBeVisible();
 });

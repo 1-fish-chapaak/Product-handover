@@ -11,7 +11,7 @@ import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
 /**
- * Risk Library — the engagement's risk register with inherent / residual
+ * Risk Register — the engagement's risks with inherent / residual
  * heatmaps. Risks are derived from the RACM (one row per risk id); residual
  * scores move with control test results, so the two heatmaps show how far
  * testing has actually pulled exposure down. Clicking a heatmap cell filters

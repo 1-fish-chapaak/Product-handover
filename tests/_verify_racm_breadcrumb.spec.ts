@@ -93,7 +93,8 @@ test('RACM matrix drops the engagement header for a breadcrumb', async ({ page }
   await expect(page.getByRole('button', { name: 'Back to Engagements' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toHaveCount(0);
   await expect(page.getByText('Viewing as')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Risk Library', exact: true })).toHaveCount(0);
+  // scoped to the SOX workspace — the platform sidebar has its own "Risk Register" nav item
+  await expect(page.locator('.sox-book-ui').getByRole('button', { name: 'Risk Register', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'RACMs', exact: true })).toHaveCount(0);
 
   // the standalone back ARROW goes one level up — to the RACM listing

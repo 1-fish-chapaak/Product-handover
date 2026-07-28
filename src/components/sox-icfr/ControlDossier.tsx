@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
-  Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
+  Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
 } from 'lucide-react';
@@ -13,16 +13,16 @@ import {
   controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
   trackResult, pointResult, stepResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
-import { Sparkles } from 'lucide-react';
-import { downloadControlWorkingPaper } from './icfrWorkingPaper';
+import { Sparkles, FileSpreadsheet } from 'lucide-react';
+import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  Control, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, OperatingStep,
+  Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -175,12 +175,65 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
 }
 
 // ── validation results modal — what the AI concluded against the file ─────────────
-function QAResultsModal({ title, validation, onClose }: { title: string; validation: ValidationResult; onClose: () => void }) {
+/**
+ * Per-extracted-sample results for one attribute. Both read-outs — AI
+ * validation and a pulled workflow run — test the attribute against every item
+ * the sample step drew, so both show this same table. Renders nothing when no
+ * sample has been extracted; the caller says what that means in its own words.
+ */
+function SampleResultsTable({ control, step }: { control: Control; step: OperatingStep }) {
+  const samples = control.operating.sampling?.samples ?? [];
+  if (samples.length === 0) return null;
+  const rows = samples.map((s, i) => ({ ...s, i, res: step.sampleResults?.[s.id] ?? ('Not tested' as TestResult) }));
+  const passed = rows.filter(r => r.res === 'Pass').length;
+  // a run pulled before the sample existed carries no per-item verdicts — say so
+  // rather than showing a table that reads as "everything untested"
+  const stale = rows.every(r => r.res === 'Not tested');
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400">Result against each extracted sample</div>
+        {!stale && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{passed}/{rows.length} passed</span>}
+      </div>
+      {stale && (
+        <p className="text-[0.71875rem] text-mitigated-700 inline-flex items-start gap-1 mb-2">
+          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+          This ran before the sample was extracted — run it again to test each item.
+        </p>
+      )}
+      <div className="rounded-lg border border-canvas-border overflow-hidden">
+        <div className="grid grid-cols-[1.2fr_1fr_0.8fr_0.7fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+          <span>Reference</span><span>Date</span><span className="text-right">Amount</span><span className="text-right">Result</span>
+        </div>
+        {rows.map(r => {
+          const f = sampleRowFacts(r.i);
+          return (
+            <div key={r.id} className="grid grid-cols-[1.2fr_1fr_0.8fr_0.7fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem] items-center">
+              <span className="font-mono text-ink-700">{r.ref}</span>
+              <span className="text-ink-500">{f.date}</span>
+              <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+              <span className={cn('inline-flex items-center justify-end gap-1 font-bold', r.res === 'Pass' ? 'text-compliant-700' : r.res === 'Fail' ? 'text-risk-700' : 'text-ink-400')}>
+                <Tickmark result={r.res} size={13} /> {r.res}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
   const { qa, summary, table, result, fileName } = validation;
   const passed = qa.filter(x => x.pass).length;
+  // An operating attribute is tested against the drawn sample, so its real
+  // item-level answer is the sample table. The generated evidence table is the
+  // fallback for design considerations, which aren't sampled at all.
+  const sampled = !!control?.operating.sampling?.samples.length && !!step;
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+      {/* same width as the workflow-run read-out — both carry the per-sample table */}
+      <motion.div className="modal modal-wide" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
           <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[0.875rem] font-bold text-ink-900">Ask IRA — validation results</h3></div>
           <div className="flex items-center gap-2">
@@ -196,7 +249,8 @@ function QAResultsModal({ title, validation, onClose }: { title: string; validat
               <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{summary}</p>
             </div>
           )}
-          {table && (
+          {sampled && <SampleResultsTable control={control!} step={step!} />}
+          {table && !sampled && (
             <div>
               <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Evidence checked</div>
               <div className="rounded-lg border border-canvas-border overflow-hidden">
@@ -230,6 +284,49 @@ function QAResultsModal({ title, validation, onClose }: { title: string; validat
         </div>
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
           <span className="text-[0.71875rem] text-ink-500">{passed}/{qa.length} checks passed</span>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Workflow run results — the read-out behind a pulled run, the workflow twin of
+ * the AI validation's Q&A modal. A run tests the attribute against every
+ * extracted sample, so the answer worth showing isn't the attribute's single
+ * Pass / Fail — it's which sampled items passed and which didn't.
+ */
+function RunResultsModal({ control, step, onClose }: { control: Control; step: OperatingStep; onClose: () => void }) {
+  const samples = control.operating.sampling?.samples ?? [];
+  const passed = samples.filter(s => step.sampleResults?.[s.id] === 'Pass').length;
+  const eff = stepResult(step);
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <motion.div className="modal modal-wide" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
+          <div className="flex items-center gap-2"><WorkflowIcon size={16} className="text-evidence-700" /><h3 className="text-[0.875rem] font-bold text-ink-900">Workflow run — results</h3></div>
+          <div className="flex items-center gap-2">
+            {eff !== 'Not tested' && <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', eff === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={eff} size={13} /> {eff}</span>}
+            <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer" aria-label="Close"><X size={16} /></button>
+          </div>
+        </div>
+        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap">
+          <p className="text-[0.75rem] text-ink-600"><b className="text-ink-800">Tested —</b> {step.code} · {step.description}</p>
+          {step.workflowName && <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px]"><WorkflowIcon size={9} />{step.workflowName}</span>}
+          {step.workflowRunRef && <span className="font-mono text-[0.65625rem] text-ink-400">{step.workflowRunRef}</span>}
+        </div>
+        <div className="px-5 py-4 max-h-[58vh] overflow-y-auto">
+          {samples.length === 0
+            ? <p className="text-[0.78125rem] text-ink-500 leading-relaxed">
+                No sample has been extracted for this control yet, so the run has nothing to report per item — it recorded an overall result only.
+                Extract a sample in step 2 and re-pull the run to see it item by item.
+              </p>
+            : <SampleResultsTable control={control} step={step} />}
+        </div>
+        {/* the pass count lives on the table's own header — not repeated here */}
+        <div className="flex items-center justify-end px-5 py-3.5 border-t border-canvas-border">
           <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
         </div>
       </motion.div>
@@ -287,6 +384,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  const [showRun, setShowRun] = useState(false);
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
@@ -349,7 +447,8 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
                 <Sparkles size={14} className="text-brand-600 shrink-0" />
                 <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[0.65625rem] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
-                {step.validation?.result && !validatingWf && <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold', step.validation.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={step.validation.result} size={13} /> {step.validation.result}</span>}
+                {/* the verdict lives on the attribute's tickmark above — repeating
+                    it here said the same thing twice */}
                 {canEdit && (validatingWf
                   ? <span className="text-[0.71875rem] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
                   : <button onClick={runAI} disabled={!step.inputFile} title={step.inputFile ? '' : 'Upload the required file first'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
@@ -363,6 +462,10 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               <div className="rounded-md border border-evidence-100 bg-evidence-50/40 px-2.5 py-2 flex items-center gap-2.5">
                 <Cpu size={14} className="text-evidence-700 shrink-0" />
                 <div className="min-w-0 flex-1"><div className="text-[0.75rem] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[0.65625rem] font-mono text-ink-400">{step.workflowRunRef ?? 'not run yet'}</div></div>
+                {/* no Pass / Fail chip here — the attribute's own tickmark above
+                    already carries the result; this is just the way into the
+                    per-sample detail behind it */}
+                {step.workflowRunRef && <button onClick={() => setShowRun(true)} className="text-[0.71875rem] font-semibold text-evidence-700 underline underline-offset-2 hover:text-evidence-800 inline-flex items-center gap-1 cursor-pointer shrink-0"><ListChecks size={12} /> View results</button>}
                 {canEdit && !busy && <>
                   <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
                   <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
@@ -408,16 +511,35 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             { label: 'Override · Pass', onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
             { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
-      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
+      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} control={control} step={step} onClose={() => setShowQA(false)} />}</AnimatePresence>
+      <AnimatePresence>{showRun && <RunResultsModal control={control} step={step} onClose={() => setShowRun(false)} />}</AnimatePresence>
     </div>
   );
+}
+
+// ── RAG health — this control's design-step meters, coloured red / amber / green ──
+// Only the meters this page is responsible for live here (completeness, evidence
+// validated, TOD coverage confidence); RACM, control effectiveness and sample
+// testing roll up engagement-wide on the Overview tab.
+function designRagMeters(c: Control): RagMeterDef[] {
+  const comp = designCompleteness(c);
+  const points = c.design.points;
+  const validated = points.filter(p => pointResult(p) !== 'Not tested').length;
+  const passed = points.filter(p => pointResult(p) === 'Pass').length;
+  return [
+    { label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} evidenced`, gate: true },
+    { label: 'Evidence validated', pct: points.length ? Math.round((validated / points.length) * 100) : 0, detail: `${validated}/${points.length} checks run`, gate: true },
+    { label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass` },
+  ];
 }
 
 // ── design section (TOD) ──────────────────────────────────────────────────────────
 // Realistic evidence file name for a design element — what the "upload" attaches.
 const EVIDENCE_EXT: Partial<Record<DesignDocKind, string>> = { 'Precision & thresholds': 'xlsx', 'Segregation of duties': 'xlsx' };
-function evidenceFileName(kind: DesignDocKind, wpRef: string): string {
-  return `${kind.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
+/** A custom element is titled by its name; the standard ones by their kind. */
+function docLabel(doc: DesignDoc): string { return doc.kind === 'Custom' ? doc.name : doc.kind; }
+function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): string {
+  return `${label.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
@@ -429,12 +551,48 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const [addingPoint, setAddingPoint] = useState(false);
   const [validatingAll, setValidatingAll] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
+  // custom element — named by the auditor, same inline-form shape as Add check
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customDesc, setCustomDesc] = useState('');
   const runValidateAll = () => { setValidatingAll(true); logEvent({ action: 'Run', description: `Validated all design considerations for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
-  const attach = (docId: string, kind: DesignDocKind) => {
-    setAttaching(docId);
-    logEvent({ action: 'Upload', description: `Attached design evidence (${kind}) to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
-    window.setTimeout(() => { attachDesignEvidence(control.id, docId, evidenceFileName(kind, control.wpRef)); setAttaching(null); }, 900);
+  const attach = (doc: DesignDoc) => {
+    setAttaching(doc.id);
+    const label = docLabel(doc);
+    logEvent({ action: 'Upload', description: `Attached design evidence (${label}) to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+    window.setTimeout(() => { attachDesignEvidence(control.id, doc.id, evidenceFileName(label, control.wpRef, doc.kind)); setAttaching(null); }, 900);
   };
+  const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
+  const saveCustom = () => {
+    if (!customName.trim()) return;
+    addDesignDoc(control.id, 'Custom', { name: customName.trim(), description: customDesc.trim() || undefined });
+    logEvent({ action: 'Create', description: `Added custom design element "${customName.trim()}" to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+    setCustomName(''); setCustomDesc(''); setAddingCustom(false);
+  };
+  // one definition, used by both the empty state and the section header
+  const addElementMenu = (
+    <Dropdown trigger={<><Plus size={12} /> Add element</>}>{close => <>
+      {DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addStandard(k); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}
+      <div className="my-1 border-t border-canvas-border" />
+      <button className={menuItem} onClick={() => { setAddingCustom(true); close(); }}><Plus size={12} className="text-brand-600" />Custom…</button>
+    </>}</Dropdown>
+  );
+  const customForm = addingCustom && (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/30 p-3 mb-2.5 space-y-2">
+      <input autoFocus value={customName} onChange={e => setCustomName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') saveCustom(); if (e.key === 'Escape') setAddingCustom(false); }}
+        placeholder="Element name — e.g. Delegation of authority matrix" aria-label="Custom element name"
+        className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      <textarea rows={2} value={customDesc} onChange={e => setCustomDesc(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape') setAddingCustom(false); }}
+        placeholder="Description (optional) — what this element should evidence" aria-label="Custom element description"
+        className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      <div className="flex items-center justify-end gap-2">
+        <button onClick={() => { setAddingCustom(false); setCustomName(''); setCustomDesc(''); }} className="h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+        <button disabled={!customName.trim()} onClick={saveCustom} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add element</button>
+      </div>
+    </div>
+  );
   const completeness = designCompleteness(control);
   const complete = completeness.total > 0 && completeness.pct === 100;
   const unvalidated = d.points.filter(p => pointResult(p) === 'Not tested').length;
@@ -446,40 +604,25 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
   return (
     <div className="p-5">
-      {empty ? (
+      {empty && !addingCustom ? (
         <EmptyState icon={<FileText size={18} />} title="Test of design isn’t set up yet" hint="Add the design elements to evidence (process narrative, flowchart, walkthrough, precision & thresholds) and the design checks to assess. You can request the documents from the control owner by email.">
           {canEdit && <>
-            <Dropdown trigger={<><Plus size={13} /> Add element</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>
+            {addElementMenu}
             <button onClick={() => setModal(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 cursor-pointer"><Mail size={13} /> Request data</button>
           </>}
         </EmptyState>
       ) : (
         <>
-          {/* completeness — the gate on the design conclusion */}
-          <div className={cn('rounded-xl border p-3.5 mb-4 flex items-center gap-4', complete ? 'border-compliant-200 bg-compliant-50/30' : 'border-canvas-border bg-paper-50/40')}>
-            <div className="relative w-12 h-12 shrink-0" role="img" aria-label={`Design completeness ${completeness.pct}%`}>
-              <svg viewBox="0 0 44 44" className="w-12 h-12 -rotate-90">
-                <circle cx="22" cy="22" r="18" fill="none" stroke="var(--color-paper-200)" strokeWidth="5" />
-                <circle cx="22" cy="22" r="18" fill="none" stroke={complete ? 'var(--color-compliant-500)' : 'var(--color-brand-500)'} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(completeness.pct / 100) * 113} 113`} />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums text-ink-800">{completeness.pct}%</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-bold text-ink-900">Design completeness — {completeness.done} of {completeness.total} required elements evidenced</div>
-              <p className="text-[11.5px] text-ink-500 mt-0.5">Every required element needs evidence attached before the design can be concluded effective. Optional elements strengthen the file but don’t gate.</p>
-            </div>
-            {complete && <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-compliant-700 shrink-0"><CheckCircle2 size={14} /> Complete</span>}
-          </div>
-
           {/* design elements — each one evidenced by attached files */}
           <div className="flex items-center justify-between mb-2.5">
             <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Design elements &amp; evidence</h4>
             <div className="flex items-center gap-2">
               {canEdit && <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button>}
-              {canEdit && <Dropdown trigger={<><Plus size={12} /> Add element</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>}
+              {canEdit && addElementMenu}
             </div>
           </div>
-          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No elements yet — add one or request data.</p> : (
+          {customForm}
+          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">{addingCustom ? '' : 'No elements yet — add one or request data.'}</p> : (
             <div className="mb-5 space-y-1.5">
               {d.documents.map(doc => {
                 const files = doc.files ?? (doc.status === 'Received' ? [{ id: doc.id + '-f', name: doc.name, kind: 'PDF' as const, uploadedBy: doc.uploadedBy ?? 'Risk Owner', uploadedAt: doc.at ?? '' }] : []);
@@ -489,9 +632,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                     {busy ? <Loader2 size={15} className="animate-spin text-brand-600 shrink-0" /> : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[0.75rem] font-semibold text-ink-800">{doc.kind}</span>
+                        <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
                         <span className={cn('text-[0.5625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
                       </div>
+                      {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
                         <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                           {files.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-600 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] max-w-[240px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.name}</span></span>)}
@@ -503,8 +647,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                     </div>
                     <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.status}</Pill>
                     {canEdit && <div className="flex items-center gap-1">
-                      {doc.status !== 'Received' && <button disabled={busy} onClick={() => attach(doc.id, doc.kind)} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
-                      {doc.status === 'Received' && <button disabled={busy} onClick={() => attach(doc.id, doc.kind)} title="Attach another file" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
+                      {doc.status !== 'Received' && <button disabled={busy} onClick={() => attach(doc)} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
+                      {doc.status === 'Received' && <button disabled={busy} onClick={() => attach(doc)} title="Attach another file" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
                       <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
                     </div>}
                   </div>
@@ -1020,6 +1164,8 @@ function ActivityRail({ control }: { control: Control }) {
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView } = useIcfr();
   const logEvent = useAuditLog();
+  // preview-before-download for this control's working paper
+  const [wpPreview, setWpPreview] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // Both personas can now execute TOD and TOE; the shared trail records who did what.
@@ -1066,11 +1212,17 @@ export default function ControlDossier() {
             <ChevronRight size={13} className="text-ink-300" />
             <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => { downloadControlWorkingPaper(eng, control); logEvent({ action: 'Export', description: `Exported working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
+              <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
               <span className="text-[0.6875rem] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
             </div>
           </div>
         </div>
+      </motion.div>
+
+      {/* control health — the design-step RAG trio, above the stepper (the
+          engagement-wide trio lives on the Overview tab) */}
+      <motion.div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 mb-5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+        <RagStrip meters={designRagMeters(control)} />
       </motion.div>
 
       {/* stepper + discussion */}
@@ -1101,6 +1253,11 @@ export default function ControlDossier() {
         </motion.div>
         <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}><ActivityRail control={control} /></motion.div>
       </div>
+
+      {wpPreview && (
+        <WorkingPaperModal eng={eng} control={control} onClose={() => setWpPreview(false)}
+          onDownload={() => logEvent({ action: 'Export', description: `Exported working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' })} />
+      )}
     </motion.div>
   );
 }

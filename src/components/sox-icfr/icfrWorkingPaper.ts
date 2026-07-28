@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, formatDueDate, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
+import { assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -150,9 +150,30 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   return blocks;
 }
 
+/** The control paper regrouped into sheet-style sections for the tabbed preview.
+ *  The .xlsx stays ONE flowing sheet (real-audit format) — the tabs just page
+ *  through that same reading order. */
+export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet[] {
+  const order = ['Control', 'Sign-off', 'Design Testing', 'Operating Testing', 'Results'] as const;
+  const sectionOf = (b: PaperBlock): (typeof order)[number] => {
+    if (b.kind === 'heading') return 'Control';
+    if (b.kind === 'kv') {
+      if (b.title === SIGNOFF_TITLE) return 'Sign-off';
+      if (b.title === 'Control') return 'Control';
+      if (b.title === 'Test legend') return 'Operating Testing';
+      return 'Results'; // linked exception
+    }
+    if (b.kind === 'table') return b.title === 'Test of design' ? 'Design Testing' : 'Operating Testing';
+    return b.label === 'Samples' ? 'Operating Testing' : 'Results'; // notes
+  };
+  const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));
+  buildControlPaper(eng, c).forEach(b => grouped.get(sectionOf(b))!.push(b));
+  return order.map(name => ({ name, blocks: grouped.get(name)! })).filter(s => s.blocks.length > 0);
+}
+
 // The sign-off block every working paper carries: who signed, who countersigned,
 // and the ICFR conclusion — stamped if signed, live-derived (and marked so) if not.
-function signoffRows(eng: IcfrEngagement): (string | number)[][] {
+function signoffRows(eng: IcfrEngagement): [string, string][] {
   const so = eng.signoff;
   const mwOpen = openMaterialWeaknesses(eng).length;
   return [
@@ -170,86 +191,135 @@ function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
 }
 const stepResult = (s: OperatingStep): string => (s.override ? `${s.override.result} (overridden)` : s.result);
 
-/** Consolidated ICFR working paper: Index · Control Summary · Design · Operating · Deficiencies · Scope. */
-export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
-  const wb = XLSX.utils.book_new();
-  const concl = eng.controls.map(controlConclusion);
+// ─── The consolidated engagement paper, sheet by sheet ───────────────────────────
+// Same contract as the control paper: the preview modal and the .xlsx writer both
+// render these blocks, so what you see before download is exactly what the file
+// contains. Pass the register's visible controls to export a filtered paper —
+// Deficiencies and every count follow the subset; Scope (significant accounts)
+// and the sign-off stay engagement-wide, they are not per-control facts.
+export type IcfrSheet = { name: string; blocks: PaperBlock[] };
+
+export const ENG_SIGNOFF_TITLE = 'Engagement sign-off';
+
+export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
+  const ids = new Set(controls.map(c => c.id));
+  const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
+  const concl = controls.map(controlConclusion);
   const overall = concl.includes('Ineffective')
     ? 'Deficiencies identified — see Deficiencies sheet'
     : concl.length && concl.every(c => c === 'Effective') ? 'Effective — no exceptions' : 'Testing in progress';
+  const filteredOut = eng.controls.length - controls.length;
 
-  const index: (string | number)[][] = [
-    ['Internal Control over Financial Reporting (ICFR) — Working Paper'],
-    [],
-    ['Entity', eng.entity],
-    ['Engagement', `${eng.name} (${eng.code})`],
-    ['Framework', eng.framework],
-    ['Period', `${eng.periodStart} – ${eng.periodEnd}`],
-    ['Overall materiality', eng.materiality],
-    ['Performance materiality', eng.performanceMateriality],
-    [],
-    ['Prepared by', eng.signoff.preparer ? `${eng.signoff.preparer.by} — signed off ${eng.signoff.preparer.at}` : eng.preparer],
-    ['Reviewed by', eng.signoff.reviewer ? `${eng.signoff.reviewer.by} — countersigned ${eng.signoff.reviewer.at}` : eng.reviewer],
-    [],
-    ['Controls in scope', eng.controls.length],
-    ['Key controls', eng.controls.filter(c => c.isKey).length],
-    ['Design concluded', eng.controls.filter(c => trackResult(c.design) !== 'Not tested').length],
-    ['Operating concluded', eng.controls.filter(c => trackResult(c.operating) !== 'Not tested').length],
-    ['Effective', concl.filter(c => c === 'Effective').length],
-    ['Ineffective', concl.filter(c => c === 'Ineffective').length],
-    ['Deficiencies', eng.deficiencies.length],
-    [],
-    ['Overall conclusion', overall],
-    [],
-    ['Legend', 'TOD = Test of Design (independent) · TOE = Test of Operating Effectiveness (independent) · severity = likelihood × magnitude vs materiality'],
-  ];
-  const ix = XLSX.utils.aoa_to_sheet(index);
-  ix['!cols'] = [{ wch: 26 }, { wch: 70 }];
-  ix['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-  XLSX.utils.book_append_sheet(wb, ix, 'Index');
+  const index: IcfrSheet = {
+    name: 'Index', blocks: [
+      { kind: 'heading', text: 'Internal Control over Financial Reporting (ICFR) — Working Paper', sub: `${eng.entity} · ${eng.name} (${eng.code})` },
+      ...(filteredOut > 0 ? [{ kind: 'note', label: 'Filtered', text: `This paper covers the ${controls.length} controls visible in the control library — ${filteredOut} filtered out.`, tone: 'neutral' } as PaperBlock] : []),
+      {
+        kind: 'kv', title: 'Engagement', rows: [
+          ['Entity', eng.entity],
+          ['Engagement', `${eng.name} (${eng.code})`],
+          ['Framework', eng.framework],
+          ['Period', `${eng.periodStart} – ${eng.periodEnd} · ${eng.period} round`],
+          ['Overall materiality', formatINR(eng.materiality)],
+          ['Performance materiality', formatINR(eng.performanceMateriality)],
+          ['Prepared by', eng.signoff.preparer ? `${eng.signoff.preparer.by} — signed off ${eng.signoff.preparer.at}` : eng.preparer],
+          ['Reviewed by', eng.signoff.reviewer ? `${eng.signoff.reviewer.by} — countersigned ${eng.signoff.reviewer.at}` : eng.reviewer],
+        ],
+      },
+      {
+        kind: 'kv', title: 'Progress', rows: [
+          ['Controls in scope', String(controls.length)],
+          ['Key controls', String(controls.filter(c => c.isKey).length)],
+          ['Design concluded', String(controls.filter(c => trackResult(c.design) !== 'Not tested').length)],
+          ['Operating concluded', String(controls.filter(c => trackResult(c.operating) !== 'Not tested').length)],
+          ['Effective', String(concl.filter(c => c === 'Effective').length)],
+          ['Ineffective', String(concl.filter(c => c === 'Ineffective').length)],
+          ['Deficiencies', String(defs.length)],
+          ['Overall conclusion', overall],
+        ],
+      },
+      {
+        kind: 'kv', title: 'Legend', rows: [
+          ['TOD', 'Test of Design (independent)'],
+          ['TOE', 'Test of Operating Effectiveness (independent)'],
+          ['Severity', 'likelihood × magnitude vs materiality'],
+        ],
+      },
+    ],
+  };
 
-  // Sign-off — its own sheet, first thing after the index
-  const soSheet = XLSX.utils.aoa_to_sheet([['Engagement sign-off'], [], ...signoffRows(eng)]);
-  soSheet['!cols'] = [{ wch: 22 }, { wch: 80 }];
-  soSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-  XLSX.utils.book_append_sheet(wb, soSheet, 'Sign-off');
+  const signoff: IcfrSheet = { name: 'Sign-off', blocks: [{ kind: 'kv', title: ENG_SIGNOFF_TITLE, rows: signoffRows(eng) }] };
 
-  const sumH = ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'TOD (design)', 'TOE (operating)', 'TOE method', 'Conclusion'];
-  const sumR: (string | number)[][] = eng.controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, trackResult(c.design), trackResult(c.operating), c.operating.method, controlConclusion(c)]);
-  const sum = XLSX.utils.aoa_to_sheet([sumH, ...sumR]); sum['!cols'] = autofit([sumH, ...sumR]);
-  XLSX.utils.book_append_sheet(wb, sum, 'Control Summary');
+  const summary: IcfrSheet = {
+    name: 'Control Summary', blocks: [{
+      kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'TOD (design)', 'TOE (operating)', 'TOE method', 'Conclusion'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, trackResult(c.design), trackResult(c.operating), c.operating.method, controlConclusion(c)]),
+    }],
+  };
 
   // Design testing — documents + considerations + conclusion
-  const dgH = ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Override', 'Tested by'];
-  const dgR: (string | number)[][] = eng.controls.map(c => {
-    const p = designProgress(c);
-    return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
-  });
-  const dg = XLSX.utils.aoa_to_sheet([dgH, ...dgR]); dg['!cols'] = autofit([dgH, ...dgR]);
-  XLSX.utils.book_append_sheet(wb, dg, 'Design Testing');
+  const design: IcfrSheet = {
+    name: 'Design Testing', blocks: [{
+      kind: 'table', title: 'Test of design', note: 'documents received · considerations ticked · conclusion per control',
+      headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Override', 'Tested by'],
+      rows: controls.map(c => {
+        const p = designProgress(c);
+        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
+      }),
+    }],
+  };
 
   // Operating testing — attribute-level (each attribute has its own workflow / attestation)
-  const opH = ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'];
-  const opR: (string | number)[][] = eng.controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
-  const op = XLSX.utils.aoa_to_sheet([opH, ...opR]); op['!cols'] = autofit([opH, ...opR]);
-  XLSX.utils.book_append_sheet(wb, op, 'Operating Testing');
+  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
+  const operating: IcfrSheet = {
+    name: 'Operating Testing', blocks: [{
+      kind: 'table', title: 'Test of operating effectiveness', note: `${opRows.length} attribute rows`,
+      headers: ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'],
+      rows: opRows,
+    }],
+  };
 
-  const dfH = ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status', 'Remediation evidence'];
-  const dfR: (string | number)[][] = eng.deficiencies.length
-    ? eng.deficiencies.map(d => {
+  const deficiencies: IcfrSheet = {
+    name: 'Deficiencies', blocks: [{
+      kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
+      headers: ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
+      rows: defs.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
-      })
-    : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—', '—', '—']];
-  const df = XLSX.utils.aoa_to_sheet([dfH, ...dfR]); df['!cols'] = autofit([dfH, ...dfR]);
-  XLSX.utils.book_append_sheet(wb, df, 'Deficiencies');
+        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
+      }),
+    }],
+  };
 
-  const scH = ['Account / disclosure', 'Balance', 'In scope', 'Assertions'];
-  const scR: (string | number)[][] = eng.accounts.map(a => [a.name, a.balance, a.inScope ? 'Yes' : 'No', a.assertions.join('; ')]);
-  const sc = XLSX.utils.aoa_to_sheet([scH, ...scR]); sc['!cols'] = autofit([scH, ...scR]);
-  XLSX.utils.book_append_sheet(wb, sc, 'Scope');
+  const scope: IcfrSheet = {
+    name: 'Scope', blocks: [{
+      kind: 'table', title: 'Scope — significant accounts', note: `${eng.accounts.length} significant accounts (engagement-wide)`,
+      headers: ['Account / disclosure', 'Balance', 'In scope', 'Assertions'],
+      rows: eng.accounts.map(a => [a.name, formatINR(a.balance), a.inScope ? 'Yes' : 'No', a.assertions.join('; ')]),
+    }],
+  };
 
+  return [index, signoff, summary, design, operating, deficiencies, scope];
+}
+
+/** Consolidated ICFR working paper — every sheet rendered from the same blocks the preview shows. */
+export function downloadIcfrWorkingPaper(eng: IcfrEngagement, controls: Control[] = eng.controls): void {
+  const wb = XLSX.utils.book_new();
+  for (const sheet of buildIcfrPaper(eng, controls)) {
+    const aoa: (string | number)[][] = [];
+    sheet.blocks.forEach(b => {
+      if (b.kind === 'heading') { aoa.push([b.text], [b.sub]); }
+      else if (b.kind === 'kv') { if (b.title) aoa.push([b.title.toUpperCase()]); b.rows.forEach(r => aoa.push([...r])); }
+      else if (b.kind === 'table') { aoa.push([b.title.toUpperCase()]); if (b.note) aoa.push([b.note]); aoa.push(b.headers, ...b.rows); }
+      else { aoa.push([b.label.toUpperCase(), b.text]); }
+      aoa.push([]); // breathing row between blocks
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = autofit(aoa, 90);
+    if (sheet.blocks[0]?.kind === 'heading') ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }];
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  }
   XLSX.writeFile(wb, `Working_Paper_ICFR_${eng.code}.xlsx`);
 }
 

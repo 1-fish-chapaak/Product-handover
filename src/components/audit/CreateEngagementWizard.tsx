@@ -88,8 +88,8 @@ interface Props {
   initial?: Engagement;
 }
 
-type Step = 1 | 2 | 3 | 4;
-const STEP_LABELS = ['Type & basics', 'Scope', 'Team & timeline', 'Review'] as const;
+type Step = 1 | 2 | 3 | 4 | 5;
+const STEP_LABELS = ['Type', 'Basics', 'Scope', 'Team & timeline', 'Review'] as const;
 
 export default function CreateEngagementWizard({ onClose, onCreated, initial }: Props): JSX.Element {
   const { addToast } = useToast();
@@ -97,7 +97,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   const isEdit = Boolean(initial);
   const [step, setStep] = useState<Step>(1);
 
-  // ── Step 1 — Type & basics ──
+  // ── Steps 1–2 — Type, then Basics ──
   const [type, setType] = useState<EngType | null>(initial?.type ?? null);
   const [name, setName] = useState(initial?.name ?? '');
   const [code, setCode] = useState(initial?.code ?? genCode());
@@ -113,20 +113,20 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
     [initial?.owner],
   );
 
-  // ── Step 2 — Compliance scope ──
+  // ── Step 3 — Compliance scope ──
   const [framework, setFramework] = useState(initial?.type === 'Compliance' && FRAMEWORKS.includes(initial.framework) ? initial.framework : FRAMEWORKS[0]);
   const [racmVersion, setRacmVersion] = useState(initial?.complianceConfig?.racmVersion ?? RACM_VERSIONS[0]);
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>((initial?.complianceConfig?.samplingMethod as SamplingMethod) ?? 'Random');
   const [sampleSize, setSampleSize] = useState(initial?.complianceConfig?.sampleSize ?? 25);
   const [materiality, setMateriality] = useState(initial?.complianceConfig?.materiality ?? 500000);
 
-  // ── Step 2 — SOX / ICFR scope (materiality ground rules; full rule set is managed in-engagement) ──
+  // ── Step 3 — SOX / ICFR scope (materiality ground rules; full rule set is managed in-engagement) ──
   const [overallMateriality, setOverallMateriality] = useState(initial?.soxConfig?.overallMateriality ?? 5_000_000);
   const [pmPct, setPmPct] = useState(initial?.soxConfig ? Math.round(initial.soxConfig.performanceMateriality / initial.soxConfig.overallMateriality * 100) : 75);
   const [cttPct, setCttPct] = useState(initial?.soxConfig ? Math.round(initial.soxConfig.clearlyTrivial / initial.soxConfig.overallMateriality * 100) : 5);
   const [keyOnly, setKeyOnly] = useState(initial?.soxConfig?.keyOnly ?? true);
 
-  // ── Step 2 — Internal Audit scope ──
+  // ── Step 3 — Internal Audit scope ──
   const [scopeLevel, setScopeLevel] = useState<ScopeLevel>((initial?.auditConfig?.scopeLevel as ScopeLevel) ?? 'Full process');
   const [subProcessSel, setSubProcessSel] = useState<string[]>(initial?.auditConfig?.subProcesses ?? []);
   const [linkedRacms, setLinkedRacms] = useState<string[]>(initial?.auditConfig?.linkedRacms ?? [RACM_VERSIONS[0]]);
@@ -135,7 +135,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   const [idrTemplate, setIdrTemplate] = useState(initial?.auditConfig?.idrTemplate ?? IDR_TEMPLATES[0]);
   const [cadence, setCadence] = useState<Cadence>((initial?.auditConfig?.cadence as Cadence) ?? 'Biweekly');
 
-  // ── Step 2 — Automation scope ──
+  // ── Step 3 — Automation scope ──
   const [autoSubtype, setAutoSubtype] = useState<AutomationSubtype>(initial?.subtype ?? 'CCM');
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>(initial?.automationConfig?.templates ?? []);
   const [inputSources, setInputSources] = useState<InputSource[]>((initial?.automationConfig?.inputSources as InputSource[]) ?? ['Excel']);
@@ -143,14 +143,14 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   const [threshold, setThreshold] = useState(initial?.automationConfig?.threshold ?? 0.85);
   const [alertRecipients, setAlertRecipients] = useState<string[]>(initial?.automationConfig?.alertRecipients ?? [OWNER_NAMES[0]]);
 
-  // ── Step 2 — AI draft affordance ──
+  // ── Step 3 — AI draft affordance ──
   const [aiDrafting, setAiDrafting] = useState(false);
   const [aiBanner, setAiBanner] = useState(false);
   const [aiFileName, setAiFileName] = useState('');
   const draftTimer = useRef<number | null>(null);
   useEffect(() => () => { if (draftTimer.current !== null) window.clearTimeout(draftTimer.current); }, []);
 
-  // ── Step 3 — Team & timeline ──
+  // ── Step 4 — Team & timeline ──
   const [reviewer, setReviewer] = useState(initial?.team?.reviewer ?? '');
   const [auditors, setAuditors] = useState<string[]>(initial?.team?.auditors ?? []);
   const [riskOwners, setRiskOwners] = useState<string[]>(initial?.team?.riskOwners ?? []);
@@ -236,29 +236,29 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   };
 
   // ── Validation — every step gates for real, no silent skips ──
-  const step1Valid = type !== null
-    && name.trim().length > 0
+  const typeValid = type !== null;
+  const basicsValid = name.trim().length > 0
     && code.trim().length > 0
     && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd;
 
-  let step2Valid = false;
-  if (type === 'Compliance')          step2Valid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
-  else if (type === 'SOX / ICFR')     step2Valid = overallMateriality > 0 && pmPct > 0 && pmPct <= 100 && cttPct >= 0 && cttPct < 100;
-  else if (type === 'Internal Audit') step2Valid = linkedRacms.length > 0 && tatDays > 0 && (scopeLevel !== 'Sub-process' || subProcessSel.length > 0);
-  else if (type === 'Automation')     step2Valid = inputSources.length > 0 && alertRecipients.length > 0;
+  let scopeValid = false;
+  if (type === 'Compliance')          scopeValid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
+  else if (type === 'SOX / ICFR')     scopeValid = overallMateriality > 0 && pmPct > 0 && pmPct <= 100 && cttPct >= 0 && cttPct < 100;
+  else if (type === 'Internal Audit') scopeValid = linkedRacms.length > 0 && tatDays > 0 && (scopeLevel !== 'Sub-process' || subProcessSel.length > 0);
+  else if (type === 'Automation')     scopeValid = inputSources.length > 0 && alertRecipients.length > 0;
 
   const reviewerInvalid = reviewer !== '' && reviewer === owner;
   const milestonesValid = milestones.length >= 2 && milestones.every(m => m.label.trim() !== '' && m.date !== '');
-  const step3Valid = reviewer !== '' && !reviewerInvalid && milestonesValid;
+  const teamValid = reviewer !== '' && !reviewerInvalid && milestonesValid;
 
-  const canAdvanceFrom: Record<Step, boolean> = { 1: step1Valid, 2: step2Valid, 3: step3Valid, 4: true };
+  const canAdvanceFrom: Record<Step, boolean> = { 1: typeValid, 2: basicsValid, 3: scopeValid, 4: teamValid, 5: true };
 
   const goToStep = (target: Step) => {
     if (target <= step) { setStep(target); return; }
     for (let i = step; i < target; i++) if (!canAdvanceFrom[i as Step]) return;
     setStep(target);
   };
-  const nextStep = () => { if (canAdvanceFrom[step] && step < 4) setStep((step + 1) as Step); };
+  const nextStep = () => { if (canAdvanceFrom[step] && step < 5) setStep((step + 1) as Step); };
   const prevStep = () => { if (step > 1) setStep((step - 1) as Step); };
 
   // ── Build the complete engagement — everything captured above is carried ──
@@ -363,12 +363,12 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
                 <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">{isEdit ? 'Edit Engagement' : 'Create Engagement'}</h2>
               </div>
-              <p className="text-[0.75rem] text-ink-500">Step {step} of 4 — {STEP_LABELS[step - 1]}</p>
+              <p className="text-[0.75rem] text-ink-500">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
             </div>
             <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4].map(n => (
+            {[1, 2, 3, 4, 5].map(n => (
               <button
                 key={n}
                 onClick={() => goToStep(n as Step)}
@@ -392,7 +392,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
               initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             >
-              {/* ═══ STEP 1: TYPE & BASICS ═══ */}
+              {/* ═══ STEP 1: TYPE ═══ */}
               {step === 1 && (
                 <div className="space-y-4">
                   <div>
@@ -419,6 +419,12 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ═══ STEP 2: BASICS ═══ */}
+              {step === 2 && (
+                <div className="space-y-4">
                   <div>
                     <label className={labelCls}>Engagement name <span className="text-risk-700">*</span></label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. P2P — SOX Q3 Testing" className={inputCls} />
@@ -469,8 +475,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 </div>
               )}
 
-              {/* ═══ STEP 2: SCOPE ═══ */}
-              {step === 2 && (
+              {/* ═══ STEP 3: SCOPE ═══ */}
+              {step === 3 && (
                 <div className="space-y-4">
                   {/* AI draft affordance */}
                   <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50/40 p-3.5">
@@ -726,17 +732,17 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 </div>
               )}
 
-              {/* ═══ STEP 3: TEAM & TIMELINE ═══ */}
-              {step === 3 && (
+              {/* ═══ STEP 4: TEAM & TIMELINE ═══ */}
+              {step === 4 && (
                 <div className="space-y-4">
                   <SectionTitle title="Team & timeline" subtitle="Who runs the engagement, and its key dates" />
-                  <Field label="Owner (from step 1)">
+                  <Field label="Owner (from step 2)">
                     <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas/60">
                       <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-800">
                         <Users size={14} className="text-brand-600" />
                         {owner}
                       </div>
-                      <button onClick={() => setStep(1)} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
+                      <button onClick={() => setStep(2)} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
                         <Edit3 size={11} /> Edit
                       </button>
                     </div>
@@ -794,8 +800,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 </div>
               )}
 
-              {/* ═══ STEP 4: REVIEW & CREATE ═══ */}
-              {step === 4 && (
+              {/* ═══ STEP 5: REVIEW & CREATE ═══ */}
+              {step === 5 && (
                 <div className="space-y-3">
                   <SectionTitle title={isEdit ? 'Review & save' : 'Review & create'} subtitle="Everything below is carried onto the engagement" />
                   <ReviewSection title="Type & basics" open={openSections.basics} onToggle={() => toggleSection('basics')}>
@@ -873,13 +879,13 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 <ChevronLeft size={14} /> Back
               </button>
             )}
-            {step < 4 && (
+            {step < 5 && (
               <button onClick={nextStep} disabled={!canAdvanceFrom[step]}
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 Next <ChevronRight size={14} />
               </button>
             )}
-            {step === 4 && (isEdit ? (
+            {step === 5 && (isEdit ? (
               <button onClick={() => submit(initial?.status ?? 'Draft')} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">Save changes</button>
             ) : (
               <>

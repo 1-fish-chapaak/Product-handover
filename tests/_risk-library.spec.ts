@@ -12,7 +12,7 @@ test('risk library tab shows heatmaps and register', async ({ page }) => {
   await page.waitForTimeout(800);
   await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
-  await page.getByRole('button', { name: 'Risk Library', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Risk Register', exact: true }).first().click();
   await page.waitForTimeout(800);
   await expect(page.getByRole('heading', { name: 'Risk library' })).toBeVisible();
   await expect(page.getByText('Inherent risk')).toBeVisible();

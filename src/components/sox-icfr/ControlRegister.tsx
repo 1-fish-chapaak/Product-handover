@@ -187,7 +187,7 @@ export default function ControlRegister() {
 
   return (
     <div>
-      {/* toolbar — first, matching the sibling tabs (RACM, Risk Library), so the
+      {/* toolbar — first, matching the sibling tabs (RACM, Risk Register), so the
           filters sit directly under the tab bar. Status folds the saved views in. */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="relative">
@@ -222,13 +222,6 @@ export default function ControlRegister() {
           {/* Roll forward to year-end — parked. The confirm modal and rollForward()
               wiring below stay intact; restore this trigger to bring it back. */}
           {/* {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setRollConfirm(true)} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>} */}
-          {role === 'auditor' && !isEngagementLocked(eng) && (
-            <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
-              title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
-              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-              <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
-            </button>
-          )}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -362,7 +355,8 @@ export default function ControlRegister() {
 
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
-      {wpPreview && <WorkingPaperModal eng={eng} onClose={() => setWpPreview(false)} />}
+      {/* the paper follows the filters — only the visible controls' data goes in */}
+      {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
 
       {/* roll-forward confirm — the move is one-way, so it never fires on a bare click */}
       {rollConfirm && (

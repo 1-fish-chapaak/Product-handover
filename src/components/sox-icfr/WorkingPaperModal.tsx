@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
 import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
-import { buildControlPaper, downloadControlWorkingPaper, downloadIcfrWorkingPaper, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
+import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
@@ -171,9 +171,12 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   );
 }
 
-export default function WorkingPaperModal({ eng, control, onClose }: { eng: IcfrEngagement; control?: Control; onClose: () => void }) {
+export default function WorkingPaperModal({ eng, control, controls, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[]; onClose: () => void; onDownload?: () => void }) {
   // an irreversible sign-off waits behind this attest confirm before it commits
   const [attest, setAttest] = useState<AttestReq | null>(null);
+  // the engagement paper reads sheet by sheet, like the workbook it exports to
+  const [sheetIx, setSheetIx] = useState(0);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   // Escape closes the preview — but while the attest confirm is open it only
   // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
@@ -187,68 +190,61 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
     return () => document.removeEventListener('keydown', onKey);
   }, [attest, onClose]);
 
-  const sheets: { name: string; detail: string }[] = [
-    { name: 'Index', detail: 'engagement header, materiality, progress' },
-    { name: 'Sign-off', detail: 'preparer · countersign · ICFR conclusion' },
-    { name: 'Control Summary', detail: `${eng.controls.length} controls` },
-    { name: 'Design Testing', detail: `${eng.controls.length} rows` },
-    { name: 'Operating Testing', detail: `${eng.controls.reduce((n, c) => n + c.operating.steps.length, 0)} attribute rows` },
-    { name: 'Deficiencies', detail: `${eng.deficiencies.length} exceptions` },
-    { name: 'Scope', detail: `${eng.accounts.length} significant accounts` },
-  ];
+  // the engagement paper follows the register's visible controls — a filtered
+  // library exports (and previews) a filtered paper
+  const included = controls ?? eng.controls;
   const fileName = control ? `Working_Paper_${control.id}.xlsx` : `Working_Paper_ICFR_${eng.code}.xlsx`;
-  const blocks = control ? buildControlPaper(eng, control) : [];
+  const sheets = control ? controlPaperSections(eng, control) : buildIcfrPaper(eng, included);
 
   return createPortal(
     <>
-    <div className="modal-backdrop" onClick={onClose}>
+    {/* centred on screen — the fixed-height paper reads like a document viewer,
+        not a top-anchored dialog */}
+    <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
           <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> Working paper — preview</h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto min-h-0" style={{ maxHeight: 'min(72vh, 760px)' }}>
-          {control ? (
-            // the paper itself — exactly what the file will contain
-            blocks.map((b, i) => {
-              if (b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} onAttest={setAttest} />;
-              if (b.kind === 'note' && b.label === 'Conclusion') {
-                const bad = b.tone === 'bad';
-                return (
-                  <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[13px] font-bold inline-flex items-center gap-2',
-                    b.tone === 'good' ? 'border-compliant-300 bg-compliant-50/50 text-compliant-700' : bad ? 'border-risk-300 bg-risk-50/50 text-risk-700' : 'border-canvas-border text-ink-600')}>
-                    <span className="uppercase tracking-wide text-[10.5px]">Conclusion</span> {b.text}
-                  </div>
-                );
-              }
-              return <Block key={i} b={b} />;
-            })
-          ) : (
-            <>
-              <EngagementSignoff eng={eng} onAttest={setAttest} />
-              <div>
-                <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">Sheets in {fileName}</div>
-                {/* a display list of what the file holds — inert rows, not tappable buttons */}
-                <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
-                  {sheets.map(s => (
-                    <div key={s.name} className="flex items-center gap-2.5 text-[12.5px] px-3 py-1.5">
-                      <FileSpreadsheet size={13} className="text-compliant-600 shrink-0" />
-                      <span className="font-semibold text-ink-800 w-[150px]">{s.name}</span>
-                      <span className="text-ink-500 truncate">{s.detail}</span>
-                    </div>
-                  ))}
+        {/* the workbook's sheet tabs — one sheet on screen at a time (for the
+            control paper these page through the sections of its single sheet) */}
+        <div className="flex items-end gap-1 px-5 pt-2.5 border-b border-canvas-border shrink-0 overflow-x-auto">
+          {sheets.map((s, i) => (
+            <button key={s.name} onClick={() => { setSheetIx(i); bodyRef.current?.scrollTo({ top: 0 }); }} aria-current={i === sheetIx ? 'true' : undefined}
+              className={cn('-mb-px shrink-0 inline-flex items-center gap-1.5 rounded-t-md border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors',
+                i === sheetIx ? 'border-canvas-border border-b-white bg-white text-ink-900' : 'border-canvas-border bg-paper-50 text-ink-500 hover:text-ink-800')}>
+              <FileSpreadsheet size={12} className={i === sheetIx ? 'text-compliant-600' : 'text-ink-300'} /> {s.name}
+            </button>
+          ))}
+        </div>
+
+        {/* fixed height — the modal doesn't jump as sheet tabs switch; short
+            sheets leave room, long ones scroll */}
+        <div ref={bodyRef} className="p-5 space-y-4 overflow-y-auto min-h-0" style={{ height: 'min(72vh, 760px)' }}>
+          {/* the active sheet, rendered in full — the sign-off blocks stay live
+              so the preparer / reviewer can sign right here */}
+          {sheets[sheetIx].blocks.map((b, i) => {
+            if (control && b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} onAttest={setAttest} />;
+            if (!control && b.kind === 'kv' && b.title === ENG_SIGNOFF_TITLE) return <EngagementSignoff key={i} eng={eng} onAttest={setAttest} />;
+            if (control && b.kind === 'note' && b.label === 'Conclusion') {
+              const bad = b.tone === 'bad';
+              return (
+                <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[13px] font-bold inline-flex items-center gap-2',
+                  b.tone === 'good' ? 'border-compliant-300 bg-compliant-50/50 text-compliant-700' : bad ? 'border-risk-300 bg-risk-50/50 text-risk-700' : 'border-canvas-border text-ink-600')}>
+                  <span className="uppercase tracking-wide text-[10.5px]">Conclusion</span> {b.text}
                 </div>
-              </div>
-            </>
-          )}
+              );
+            }
+            return <Block key={i} b={b} />;
+          })}
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
-          <span className="text-[11px] text-ink-400 truncate">{fileName}{control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : ''}</span>
+          <span className="text-[11px] text-ink-400 truncate">{fileName}{control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng); onClose(); }}
+            <button onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
               className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
           </div>
         </div>
@@ -257,7 +253,7 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
 
     {/* attest confirm — an irreversible signature never commits on a bare click */}
     {attest && (
-      <div className="modal-backdrop" onClick={() => setAttest(null)}>
+      <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={() => setAttest(null)}>
         <div className="modal" onClick={e => e.stopPropagation()}>
           <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
             <div className="flex items-center justify-between gap-3">

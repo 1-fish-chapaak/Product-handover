@@ -22,7 +22,7 @@ import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
-  { id: 'risks', label: 'Risk Library' },
+  { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
   { id: 'runs', label: 'Test runs' },
   { id: 'config', label: 'Configuration' },
@@ -34,7 +34,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
-  // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
+  // and their controls. RACM, Risk Register and Runs are audit-side surfaces.
   // Configuration only exists for scoping-backed engagements — it edits the
   // programme record the SOX Testing wizard created.
   const hasProgramme = PROGRAMMES.some(p => p.engagementId === eng.id);
@@ -162,7 +162,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
-            scope: 'Materiality & scope', runs: 'Test runs', overview: 'Overview', risks: 'Risk Library', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'Test runs', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

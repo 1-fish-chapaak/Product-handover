@@ -56,7 +56,9 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
     addToast({
       message: p.rolledFromFy
         ? `${p.fy} programme rolled forward from ${p.rolledFromFy} — ${p.racms.length} RACMs carried`
-        : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
+        : p.scopingSkipped
+          ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+          : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
       type: 'success',
     });
   };
@@ -206,14 +208,15 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         </div>
       </motion.div>
 
-      {/* The whole flow — scoping wizard and programme detail — lives in one
-          800×800 modal over the list. */}
+      {/* Creation flows (scoping wizard, roll-forward) slide in as a full-height
+          side sheet; the scoping summary keeps the centred modal. */}
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
             key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
             label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls="w-[1000px]"
+            widthCls={view === 'wizard' || rollFrom ? 'w-full max-w-[560px]' : 'w-[1000px]'}
+            variant={view === 'wizard' || rollFrom ? 'sheet' : 'modal'}
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
@@ -233,12 +236,14 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   );
 }
 
-/** Fixed-size modal shell for the SOX flow — 1000px wide for the wizard,
- *  800px for the scoping summary, both 800px tall. Closes on X or Escape
- *  only — an overlay click mid-wizard would silently discard scoping work. */
-export function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
+/** Shell for the SOX flow. Creation flows (wizard, roll-forward) render as a
+ *  full-height side sheet sliding in from the right; the scoping summary keeps
+ *  the centred 800px-tall modal. Closes on X or Escape only — an overlay click
+ *  mid-wizard would silently discard scoping work. */
+export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', onClose, children }: {
   label: string;
   widthCls?: string;
+  variant?: 'modal' | 'sheet';
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -248,33 +253,51 @@ export function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const closeBtn = (
+    <button
+      onClick={onClose}
+      aria-label="Close"
+      className="absolute top-3.5 right-3.5 z-10 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
+    >
+      <X size={16} />
+    </button>
+  );
+
   return (
     <>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      {variant === 'sheet' ? (
         <motion.div
-          initial={{ opacity: 0, y: 10, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.98 }}
-          transition={{ duration: 0.18 }}
+          initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           role="dialog" aria-modal="true" aria-label={label}
-          className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+          className={`fixed right-0 top-0 bottom-0 z-50 ${widthCls} bg-canvas border-l border-border-light shadow-2xl overflow-hidden flex flex-col`}
         >
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-3.5 right-3.5 z-10 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+          {closeBtn}
           <div className="flex-1 overflow-y-auto p-6 pb-0">
             {children}
           </div>
         </motion.div>
-      </div>
+      ) : (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            role="dialog" aria-modal="true" aria-label={label}
+            className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+          >
+            {closeBtn}
+            <div className="flex-1 overflow-y-auto p-6 pb-0">
+              {children}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </>
   );
 }

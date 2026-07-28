@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FlaskConical, Loader2, MessageSquareWarning,
-  Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
+  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileUp, FlaskConical, Loader2, MessageSquareWarning,
+  Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { controlConclusion, trackResult } from './helpers';
@@ -12,7 +12,32 @@ import { FilterSelect } from '../shared/FilterSelect';
 import BulkTestModal from './BulkTestModal';
 import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
+import { isEngagementLocked } from './helpers';
 import type { Control } from './types';
+
+/** The processes a SOX RACM can be created for — the scoping wizard's seven
+ *  plus the two cycles it doesn't scope from the trial balance. A process
+ *  already in scope is filtered out at the picker, since the landing lists
+ *  exactly one RACM per process; anything outside the list is named by hand. */
+const SOX_PROCESSES = [
+  'Order to Cash', 'Procure to Pay', 'Record to Report', 'Inventory', 'Fixed Assets',
+  'Payroll (Hire to Retire)', 'Treasury', 'Tax', 'IT General Controls',
+];
+
+/** Sentinel for the picker's "name it yourself" option — mirrors the New
+ *  control form's "＋ Add new process…". */
+const NEW_PROCESS = '__new__';
+
+/** Reads a RACM name out of an uploaded file name — drops the extension and the
+ *  RACM/SOP/version noise, then title-cases what's left (the Process Hub rule). */
+function racmNameFromFilename(filename: string): string {
+  return filename
+    .replace(/\.[^.]+$/, '')
+    .replace(/\b(racm|sop|final|draft|v?\d+(\.\d+)*)\b/gi, ' ')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]!; }
@@ -41,6 +66,118 @@ function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<
 }
 
 /**
+ * Create RACM — the Process Hub's chooser, carried over to SOX. Two ways in:
+ * bring an existing matrix, or let IRA draft one from a procedure. The one
+ * thing SOX has to ask that the Process Hub doesn't is WHICH process: the Hub
+ * runs inside a single business process, this landing spans all of them.
+ */
+function NewRacmModal({ available, inScope, onClose, onPick }: {
+  /** canonical processes with no RACM yet — the picker's options */
+  available: string[];
+  /** every process already carrying a RACM — guards a hand-typed duplicate */
+  inScope: string[];
+  onClose: () => void;
+  onPick: (process: string, source: 'racm' | 'sop') => void;
+}) {
+  // every process may already be in scope — then naming one is the only way in
+  const [choice, setChoice] = useState(available[0] ?? NEW_PROCESS);
+  const [custom, setCustom] = useState('');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const process = choice === NEW_PROCESS ? custom.trim() : choice;
+  const taken = !!process && inScope.some(p => p.toLowerCase() === process.toLowerCase());
+  const ready = !!process && !taken;
+  const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-canvas-border disabled:hover:bg-transparent';
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create RACM">
+        <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-semibold text-ink-900">Create RACM</h2>
+              <p className="text-[12.5px] text-ink-500 mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
+            </div>
+            <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
+          </div>
+        </div>
+        <div className="p-5">
+          <label htmlFor="new-racm-process" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Business process</label>
+          <select id="new-racm-process" value={choice} onChange={e => setChoice(e.target.value)}
+            className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+            {available.map(p => <option key={p} value={p}>{p}</option>)}
+            <option value={NEW_PROCESS}>＋ Name another process…</option>
+          </select>
+          <p className="text-[11.5px] text-ink-400 mt-1.5">
+            {available.length
+              ? "Processes already carrying a RACM aren't listed — a process has one."
+              : 'Every standard process already has a RACM, so name the new one yourself.'}
+          </p>
+          {choice === NEW_PROCESS && (
+            <input value={custom} onChange={e => setCustom(e.target.value)} autoFocus
+              placeholder="e.g. Leases" aria-label="New process name"
+              className="w-full h-9 px-3 mt-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          )}
+          {taken && <p className="text-[11.5px] text-risk-700 mt-1.5">{process} already has a RACM — open it from the list instead.</p>}
+
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <button onClick={() => onPick(process, 'racm')} disabled={!ready} className={cardCls}>
+              <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
+              <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload a RACM</span>
+              <span className="block text-[11.5px] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
+            </button>
+            <button onClick={() => onPick(process, 'sop')} disabled={!ready} className={cardCls}>
+              <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Sparkles size={15} className="text-brand-600" /></span>
+              <span className="block text-[13px] font-semibold text-ink-900 mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-ink-400">→</span> extract</span>
+              <span className="block text-[11.5px] text-ink-500 leading-relaxed">IRA reads a procedure (.pdf / .docx) and drafts the RACM.</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** SOP → RACM extraction: a docked progress card, not a blocking modal, so the
+ *  rest of the tab stays usable while IRA reads the procedure. */
+function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCancel: () => void }) {
+  const STEPS = ['Parsing the SOP document', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & test procedures'];
+  const [done, setDone] = useState(0);
+  useEffect(() => {
+    const timers = STEPS.map((_, i) => window.setTimeout(() => setDone(i + 1), (i + 1) * 380));
+    return () => timers.forEach(window.clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div role="status" aria-live="polite"
+      className="fixed bottom-6 right-6 z-[110] w-[360px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_60px_-20px_rgba(15,8,30,.55)] p-4">
+      <div className="flex items-start gap-2.5">
+        <Loader2 size={15} className="text-brand-600 animate-spin shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-semibold text-ink-900">Extracting a RACM</p>
+          <p className="text-[11.5px] text-ink-400 truncate">{filename}</p>
+        </div>
+        <button onClick={onCancel} className="text-[11.5px] font-semibold text-ink-400 hover:text-ink-700 cursor-pointer shrink-0">Cancel</button>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {STEPS.map((s, i) => (
+          <li key={s} className="flex items-center gap-2 text-[11.5px]">
+            {i < done
+              ? <CheckCircle2 size={12} className="text-compliant-600 shrink-0" />
+              : <Circle size={12} className={cn('shrink-0', i === done ? 'text-brand-500' : 'text-ink-300')} />}
+            <span className={i < done ? 'text-ink-600' : i === done ? 'text-ink-800 font-medium' : 'text-ink-400'}>{s}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * RACM tab landing — one RACM per business process, one row per RACM in the
  * module's register-table language. Every fact the old document cards carried
  * survives as a column: title (icon tile, spine colour, version), matrix
@@ -49,7 +186,8 @@ function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<
  * the spreadsheet editor stays one click away per RACM.
  */
 export function RacmLanding() {
-  const { eng, openRacmMatrix } = useIcfr();
+  const { eng, role, openRacmMatrix, createRacm } = useIcfr();
+  const { addToast } = useToast();
 
   const processes = useMemo(() => {
     const map = new Map<string, Control[]>();
@@ -57,10 +195,80 @@ export function RacmLanding() {
     return Array.from(map, ([name, rows]) => ({ name, rows }));
   }, [eng.controls]);
 
+  // Create RACM — chooser → file picker → (SOP only) extraction → new row.
+  const [creating, setCreating] = useState(false);
+  const [extracting, setExtracting] = useState<string | null>(null);
+  const racmFileRef = useRef<HTMLInputElement>(null);
+  const sopFileRef = useRef<HTMLInputElement>(null);
+  const pendingProcess = useRef<string>('');
+  const extractTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (extractTimer.current != null) window.clearTimeout(extractTimer.current); }, []);
+
+  const canCreate = role === 'auditor' && !isEngagementLocked(eng);
+  const inScope = useMemo(() => processes.map(p => p.name), [processes]);
+  const available = useMemo(() => {
+    const have = new Set(inScope);
+    return SOX_PROCESSES.filter(p => !have.has(p));
+  }, [inScope]);
+
+  // the chooser hands back the process + which door; the file picker follows
+  const onPick = (process: string, source: 'racm' | 'sop') => {
+    pendingProcess.current = process;
+    setCreating(false);
+    (source === 'racm' ? racmFileRef : sopFileRef).current?.click();
+  };
+
+  // an imported matrix lands straight away — there is nothing to read out of it
+  const onRacmFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const process = pendingProcess.current;
+    e.target.value = '';
+    if (!file || !process) return;
+    createRacm(process, file.name);
+    addToast({ type: 'success', title: 'RACM created', message: `Imported "${file.name}" — the ${process} RACM is now in the list.` });
+  };
+
+  // an SOP has to be read first — same staged extraction the Process Hub runs
+  const onSopFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const process = pendingProcess.current;
+    e.target.value = '';
+    if (!file || !process) return;
+    setExtracting(file.name);
+    extractTimer.current = window.setTimeout(() => {
+      extractTimer.current = null;
+      setExtracting(null);
+      createRacm(process, file.name);
+      const label = racmNameFromFilename(file.name);
+      addToast({ type: 'success', title: 'RACM extracted', message: `Drafted the ${process} RACM from "${label || file.name}" — review its rows before testing.` });
+    }, 1600);
+  };
+
+  const cancelExtraction = () => {
+    if (extractTimer.current != null) { window.clearTimeout(extractTimer.current); extractTimer.current = null; }
+    setExtracting(null);
+    addToast({ type: 'info', title: 'Extraction cancelled', message: 'No RACM was created.' });
+  };
+
   return (
     <>
-    {/* uploads live inside each process's matrix — a RACM is per-process, so the
-        drilled page (where the process is fixed) owns the "Upload RACM / SOP" */}
+    {/* toolbar — the landing's only action. Per-matrix uploads stay on the
+        drilled page (where the process is already fixed); this one creates the
+        matrix itself, so it asks which process first. */}
+    {canCreate && (
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex-1" />
+        <button onClick={() => setCreating(true)}
+          title="Create a RACM for a process — import a matrix, or extract one from an SOP"
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+          <Plus size={15} /> Create RACM
+        </button>
+      </div>
+    )}
+    <input ref={racmFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onRacmFile} aria-label="Upload a RACM workbook" />
+    <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} aria-label="Upload an SOP to extract a RACM from" />
+    {creating && <NewRacmModal available={available} inScope={inScope} onClose={() => setCreating(false)} onPick={onPick} />}
+    {extracting && <RacmExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}
     <div className="reg-wrap">
       <table className="w-full border-collapse">
         <thead className="reg-head">

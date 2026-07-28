@@ -7,7 +7,7 @@ import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclu
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
-// same label the tracks, the RACM roll-up and the Risk Library use
+// same label the tracks, the RACM roll-up and the Risk Register use
 export function ConclusionPill({ c }: { c: Conclusion }) { return <Pill tone={CONCLUSION_TONE[c]}>{c === 'Not started' ? 'Not tested' : c}</Pill>; }
 
 const TRACK_TONE: Record<TrackConclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'Not tested': 'draft' };
@@ -206,6 +206,38 @@ export function Bar({ value, total, tone = 'bg-brand-500' }: { value: number; to
     <div className="flex items-center gap-2">
       <div className="h-2 flex-1 rounded-full bg-paper-100 overflow-hidden"><div className={cn('h-full transition-all', tone)} style={{ width: `${pct}%` }} /></div>
       <span className="text-[0.6875rem] tabular-nums text-ink-500 font-medium w-12 text-right">{value}/{total}</span>
+    </div>
+  );
+}
+
+// ─── RAG meters — red / amber / green rings shared by the dossier and Overview ───
+// One rule everywhere: red below 40, amber to 79, green from 80 — except gate
+// metrics (they lock a conclusion, so green only at 100) and forceRed (an
+// ineffective conclusion is red no matter the percentage).
+export type RagMeterDef = { label: string; pct: number; detail: string; gate?: boolean; forceRed?: boolean };
+
+export const ragColor = (m: RagMeterDef): string =>
+  m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
+const ragWord = (m: RagMeterDef): string => (ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
+
+export function RagStrip({ meters, gridCls = 'grid-cols-3' }: { meters: RagMeterDef[]; gridCls?: string }) {
+  return (
+    <div className={cn('grid gap-3', gridCls)}>
+      {meters.map(m => (
+        <div key={m.label} className="flex flex-col items-center text-center gap-1.5" role="img" aria-label={`${m.label} ${m.pct}% — ${ragWord(m)}`}>
+          <div className="relative w-11 h-11">
+            <svg viewBox="0 0 44 44" className="w-11 h-11 -rotate-90">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="var(--color-paper-200)" strokeWidth="5" />
+              <circle cx="22" cy="22" r="18" fill="none" stroke={ragColor(m)} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * 113} 113`} />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-[10.5px] font-bold tabular-nums text-ink-800">{m.pct}%</span>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold text-ink-700 leading-tight">{m.label}</div>
+            <div className="text-[10px] text-ink-400 mt-0.5 leading-tight">{m.detail}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
