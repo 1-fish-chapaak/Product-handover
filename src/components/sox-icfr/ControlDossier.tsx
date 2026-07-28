@@ -5,7 +5,7 @@ import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -13,7 +13,7 @@ import {
   controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
   sampleSizeGuide, trackResult, pointResult, stepResult,
 } from './helpers';
-import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
+import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
@@ -743,8 +743,76 @@ const REQUIRED_SAMPLE_FILES: { id: 'pop' | 'txn'; name: string; formats: string;
   { id: 'txn', name: 'Transactions', formats: 'XLSX / CSV', tag: 'Transactions' },
 ];
 
+/**
+ * Add a required file — one entry point for both slots. Either bring a new
+ * file, or reuse one the engagement already has: the trial balances, general
+ * ledger and RACM / SOP uploaded when the engagement was scoped are usually
+ * exactly the transaction data being asked for here.
+ */
+function FilePickerModal({ existing, onUpload, onChoose, onClose }: {
+  existing: { name: string; kind: string; rows: number; from: string }[];
+  onUpload: () => void;
+  onChoose: (f: { name: string; rows: number }) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'pick' | 'existing'>('pick');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40';
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add a file">
+        <div className="px-5 pt-4 pb-3 border-b border-canvas-border flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink-900">Add a file</h2>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">Add the file — it's read and matched to the requirement it satisfies.</p>
+          </div>
+          <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
+        </div>
+        <div className="p-5">
+          {mode === 'pick' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={onUpload} className={cardCls}>
+                <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
+                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload</span>
+                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Bring a file from your device (.xlsx / .csv).</span>
+              </button>
+              <button onClick={() => setMode('existing')} className={cardCls}>
+                <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Paperclip size={15} className="text-brand-600" /></span>
+                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Choose existing</span>
+                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Reuse a file uploaded when the engagement was created.</span>
+              </button>
+            </div>
+          ) : existing.length === 0 ? (
+            <p className="text-[12.5px] text-ink-600 leading-relaxed">
+              This engagement has no files on record yet — the trial balances, general ledger and RACM are uploaded during scoping. Upload one here instead.
+            </p>
+          ) : (
+            <div className="rounded-lg border border-canvas-border overflow-hidden">
+              {existing.map(f => (
+                <button key={f.name} onClick={() => onChoose({ name: f.name, rows: f.rows })}
+                  className="w-full text-left px-3 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer flex items-center gap-2.5">
+                  <Paperclip size={12} className="text-ink-400 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[12px] text-ink-800 truncate">{f.name}</span>
+                    <span className="block text-[11px] text-ink-400">{f.kind} · {f.rows.toLocaleString()} rows · {f.from}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { setPopulation, setSampling, me } = useIcfr();
+  const { eng, racmDocs, setPopulation, setSampling, me } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating;
@@ -757,6 +825,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // transactions tested against each of them come from the transactions file
   const [popFile, setPopFile] = useState<{ name: string; count: number } | null>(null);
   const [txnFile, setTxnFile] = useState<{ name: string; count: number } | null>(null);
+  const [uploading, setUploading] = useState<'pop' | 'txn' | null>(null);
   const [picking, setPicking] = useState(false);
   const [logic, setLogic] = useState('');
   const [sentLogic, setSentLogic] = useState('');
@@ -776,26 +845,48 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
 
   // The journey stays LOCAL until approval — nothing is written to the control,
   // so "Reject and try again" is a pure state reset with no store cleanup.
-  // Each added file is matched to the requirement it satisfies — by what it's
-  // called, falling back to whichever slot is still open. The auditor never
-  // picks; row counts are simulated (no real bytes in the prototype).
-  const addSelections = (selections: AttachmentSelection[]) => {
+  // What the engagement already holds — the scoping uploads are usually the
+  // very transaction data being asked for here, so they're offered for reuse.
+  const existingFiles = useMemo(() => {
+    const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
+    const out: { name: string; kind: string; rows: number; from: string }[] = [];
+    prog?.entities.forEach(en => {
+      if (en.tbFile) out.push({ name: en.tbFile, kind: 'Trial balance', rows: en.tbLines ?? 1240, from: `${en.name} · engagement scoping` });
+    });
+    if (prog) out.push({ name: `general_ledger_${prog.fy}.csv`, kind: 'General ledger', rows: 18432, from: 'Engagement scoping' });
+    racmDocs.forEach(d => out.push({ name: d.name, kind: 'RACM / SOP', rows: 480, from: d.process ? `${d.process} RACM` : 'RACM page' }));
+    return out;
+  }, [eng.id, racmDocs]);
+
+  // The file is matched to the requirement it satisfies — by what it's called,
+  // falling back to whichever slot is still open. The auditor never picks.
+  const classify = (name: string): 'pop' | 'txn' => {
+    const n = name.toLowerCase();
+    if (/popul|master/.test(n)) return 'pop';
+    if (/transact|txn|ledger|\bgl\b|journal|invoice|payment/.test(n)) return 'txn';
+    return popFile ? 'txn' : 'pop';
+  };
+  const attach = (file: { name: string; count: number }) => {
+    const which = classify(file.name);
+    if (which === 'pop') setPopFile(file); else setTxnFile(file);
+    return which;
+  };
+  const uploadFile = () => {
     setPicking(false);
-    let pop = popFile;
-    for (const sel of selections) {
-      const n = sel.name.toLowerCase();
-      const which: 'pop' | 'txn' =
-        /popul|master/.test(n) ? 'pop'
-        : /transact|txn|ledger|(^|[^a-z])gl([^a-z]|$)|journal|invoice|payment/.test(n) ? 'txn'
-        : pop ? 'txn' : 'pop';
-      const f = { name: sel.name, count: which === 'pop' ? 2640 : 18432 };
-      if (which === 'pop') { pop = f; setPopFile(f); } else setTxnFile(f);
-      logEvent({
-        action: sel.kind === 'upload' ? 'Upload' : 'Update',
-        description: `${sel.kind === 'upload' ? 'Added' : 'Reused'} "${sel.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`,
-        module: 'SOX ICFR', entity: 'Evidence',
-      });
-    }
+    // the simulated pick fills whichever requirement is still open
+    const which: 'pop' | 'txn' = popFile ? 'txn' : 'pop';
+    setUploading(which);
+    window.setTimeout(() => {
+      const f = which === 'pop' ? { name: 'population.xlsx', count: 2640 } : { name: 'transactions.xlsx', count: 18432 };
+      attach(f);
+      setUploading(null);
+      logEvent({ action: 'Upload', description: `Added "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
+    }, 1400);
+  };
+  const chooseFile = (f: { name: string; rows: number }) => {
+    setPicking(false);
+    const which = attach({ name: f.name, count: f.rows });
+    logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
   const sendLogic = () => {
     if (!logic.trim()) { setAskedForLogic(true); return; }
@@ -914,12 +1005,13 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
               </span>
             ))}
           </div>
+          {uploading && <span className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</span>}
         </div>
       )}
 
       {/* something's been added but a requirement is still open — say which,
           without waiting for the auditor to try and move on */}
-      {attachedFiles.length > 0 && !filesReady && (
+      {attachedFiles.length > 0 && !filesReady && !uploading && (
         <div className="mb-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
           <span>
@@ -1014,17 +1106,14 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         </div>
       )}
 
-      {/* Same picker as the workflow executor — the Upload tab brings a new
-          file, the data tabs choose an existing one; each added item
-          auto-matches to the population / transactions slot by name. */}
-      <DataPickerModal
-        open={picking}
-        onClose={() => setPicking(false)}
-        onConfirm={addSelections}
-        defaultTab="upload"
-        title="Add a file"
-        confirmLabel="Add"
-      />
+      {picking && (
+        <FilePickerModal
+          existing={existingFiles}
+          onUpload={uploadFile}
+          onChoose={chooseFile}
+          onClose={() => setPicking(false)}
+        />
+      )}
 
       {rejecting && createPortal(
         <div className="modal-backdrop" onClick={() => setRejecting(false)}>
@@ -1367,7 +1456,7 @@ export default function ControlDossier() {
           <VStep n={1} title="Test of design" subtitle="Is the control designed to prevent or detect the risk? Grounded in the documents and walkthrough — each consideration validated by a workflow." status={designResult}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
-          <VStep n={2} title="Extract sample" subtitle="Pull the testing sample out of the population — add the population and transaction files, explain the extraction logic, refine with filters, then approve it for testing." hideStatus
+          <VStep n={2} title="Extract sample" subtitle="Pull the testing sample out of the population — add the population and transaction files, explain the extraction logic, then approve it for testing." hideStatus
             status={toeLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={toeLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
