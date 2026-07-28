@@ -305,3 +305,11 @@ export function findEngagement(id: string): Engagement | undefined {
   // Runtime first so session edits win over the static seed.
   return RUNTIME_ENGAGEMENTS.find(e => e.id === id) ?? ENGAGEMENTS.find(e => e.id === id);
 }
+/** The library's boot list — session-created engagements first (newest on top),
+ *  then the seeds, with any session-edited seed replaced by its runtime copy.
+ *  Without this a created engagement vanishes from the list when the library
+ *  remounts (e.g. Back to Engagements from its workspace). */
+export function libraryEngagements(): Engagement[] {
+  const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id));
+  return [...fresh, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
+}

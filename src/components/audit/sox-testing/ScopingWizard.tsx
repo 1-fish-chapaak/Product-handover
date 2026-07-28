@@ -1,11 +1,12 @@
-import { Fragment, useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
-  Building2, Landmark, Upload, FileSpreadsheet, Check, Plus, Trash2, X,
+  Building2, Landmark, Upload, FileText, Check, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info,
   ShieldCheck, ClipboardList, Zap, AlertCircle,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
+import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
@@ -17,7 +18,7 @@ import {
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
 
-const STEPS = ['Type & basics', 'Scoping', 'Materiality', 'Review'] as const;
+const STEPS = ['Type', 'Basics', 'Scoping', 'Review'] as const;
 
 /* ── Step 1 = the classic wizard's "Type & basics" screen, as-is ─────────── */
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -49,9 +50,43 @@ const QUAL_STEP = false;
  *  all follow this flag). */
 const TB_UPLOAD = true;
 
+/** The Materiality step is parked (user ask). To restore: flip this, add
+ *  'Materiality' back after 'Scoping' in STEPS, re-key its block to
+ *  step === 3 and the review block to step === 4, and move the
+ *  benchmark/pct + empty-scope gate back to its own canContinue entry.
+ *  The seeded basis defaults (PBT, 75/5) still set the thresholds, so the
+ *  derivation and the created programme's materiality are unchanged — the
+ *  review step keeps showing the resulting ladder. */
+const MATERIALITY_STEP = false;
+
+/** Year type (Financial / Calendar) picker — PARKED from the creation flow.
+ *  Every programme is created on the financial-year basis (Apr–Mar); the
+ *  yearBasis state below stays, pinned to 'fy', so the period fields on the
+ *  created programme are unchanged. Flip this back to true to let the user
+ *  choose, and the Audit period options re-label to CY on selection. */
+const YEAR_TYPE_PICKER = false;
+
+/** Audit period select — PARKED from the Basics step (user ask). The cycle
+ *  stays pinned to the fyEnd default (FY 2026-27); fy/asOf still compute and
+ *  store on the programme, and Review keeps showing the cycle. Flip to bring
+ *  the field (and its annual-cycle explainer) back. */
+const AUDIT_PERIOD_FIELD = false;
+
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
-const uploadBtnCls = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer';
+/** Required documents for scoping (user ask): listed in a "Required files"
+ *  card under the group name, fed by ONE bulk upload button (native picker,
+ *  multi-select). Files classify to a requirement by filename keywords, then
+ *  fall back to whichever requirement still has nothing. The TB row rides the
+ *  TB_UPLOAD park flag like the old dedicated button did. */
+type ReqDocId = 'racm' | 'tb' | 'gl';
+type AttachedDoc = { id: string; name: string; req: ReqDocId };
+const REQUIRED_DOCS: { id: ReqDocId; name: string; formats: string }[] = [
+  { id: 'racm', name: 'RACM / SOP', formats: 'XLSX' },
+  ...(TB_UPLOAD ? [{ id: 'tb' as ReqDocId, name: 'Trial balance (TB)', formats: 'XLSX' }] : []),
+  { id: 'gl', name: 'General ledger (GL)', formats: 'CSV' },
+];
+const REQ_TAG: Record<ReqDocId, string> = { racm: 'RACM / SOP', tb: 'Trial balance', gl: 'General ledger' };
 
 const PROCESS_NAMES: ProcessName[] = [
   'Order to Cash', 'Procure to Pay', 'Inventory', 'Fixed Assets',
@@ -61,11 +96,21 @@ const PROCESS_NAMES: ProcessName[] = [
 interface Props {
   onCancel: () => void;
   onCreated: (p: SoxProgramme) => void;
+  /** Entered from the Engagements page, where SOX / ICFR was already picked —
+   *  the Type step is dropped and Back on Basics returns to that page, so the
+   *  type isn't asked for twice. */
+  typePreselected?: boolean;
+  /** With `typePreselected`, Back on the first reachable step (Basics) goes to
+   *  the immediate last step the user saw — the classic wizard's Type step —
+   *  instead of just closing. X / Escape still close outright. */
+  onBackToType?: () => void;
 }
 
-export default function ScopingWizard({ onCancel, onCreated }: Props) {
+export default function ScopingWizard({ onCancel, onCreated, typePreselected, onBackToType }: Props) {
   const logEvent = useAuditLog();
-  const [step, setStep] = useState(0);
+  // the first step the user can actually reach — Type is skipped on handoff
+  const firstStep = typePreselected ? 1 : 0;
+  const [step, setStep] = useState(firstStep);
 
   // Step 1 — type & basics. Only identity lives here: entity/company and
   // processes are NOT asked — the scoping steps collect and derive them.
@@ -94,6 +139,20 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
   const [entities, setEntities] = useState<GroupEntity[]>([]);
   const [racmUpload, setRacmUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
   const [tbUpload, setTbUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
+
+  // Required-files card: the attached list is the source of truth for the
+  // step gate; RACM / TB attachments also trigger the simulated parses that
+  // fill the entity table (GL just satisfies its requirement — nothing
+  // downstream reads it in the prototype).
+  const [attached, setAttached] = useState<AttachedDoc[]>([]);
+  const reqSatisfied = REQUIRED_DOCS.filter(d => attached.some(a => a.req === d.id)).length;
+  const allReqsSatisfied = reqSatisfied === REQUIRED_DOCS.length;
+
+  // Scoping can be skipped (user ask): the programme is created without
+  // RACMs / TBs and the workspace Overview flags what's missing until the
+  // RACM is added (RACM tab) and the GL / TBs are uploaded (Configuration).
+  const [scopingSkipped, setScopingSkipped] = useState(false);
+  const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 
   // Step 2 — materiality
   const [basis, setBasis] = useState<MaterialityBasis>('pbt');
@@ -140,24 +199,22 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inScope]);
 
-  /** Distinct processes the seeded RACM "extracts" — shown after its parse. */
-  const racmProcesses = useMemo(
-    () => [...new Set(captionsForEntities(SEED_ENTITIES).map(c => c.process))], []);
-
   const canContinue = [
-    type === 'SOX / ICFR' && name.trim().length > 0 && code.trim().length > 0,
-    // Scoping runs on the trial-balance numbers, so the bulk TB upload gates
-    // this step — the RACM upload and manual rows are optional on top.
-    // The TB gate only applies while the TB upload isn't parked.
-    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && (!TB_UPLOAD || tbUpload === 'done'),
-    // Qualitative is parked (QUAL_STEP) — the empty-scope gate rides on
-    // Materiality; an empty scope derives zero RACMs.
-    benchmark > 0 && (basis === 'custom' || pct > 0) && inScope.length > 0,
+    // Type — this journey only continues for SOX / ICFR.
+    type === 'SOX / ICFR',
+    // Basics — identity only; entities and processes are derived by scoping.
+    name.trim().length > 0 && code.trim().length > 0,
+    // Scoping — every required document needs at least one attached file
+    // (RACM / TB attachments trigger the parses that fill the table). With
+    // the Materiality and Qualitative steps parked, the empty-scope gate
+    // rides here too — an empty scope derives zero RACMs.
+    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && allReqsSatisfied && inScope.length > 0,
     true,
   ][step];
 
   const goNext = () => {
     if (!canContinue) return;
+    if (step === 2) setScopingSkipped(false); // completed properly after all
     setStep(s => s + 1);
   };
 
@@ -175,42 +232,35 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     window.setTimeout(() => { setRacmUpload('done'); mergeExtractedEntities(); }, 800);
   };
 
-  /** Removing the last TB file re-arms the upload button (and the step gate). */
-  const removeTbFile = (entityId: string) => {
-    const next = { ...uploads };
-    delete next[entityId];
-    setUploads(next);
-    if (Object.keys(next).length === 0) setTbUpload('idle');
-  };
-
-  /** "Upload more" — one button once anything is uploaded; parses whatever is
-   *  still missing (a removed RACM, missing TBs, TBs for hand-added rows). */
-  const simulateUploadMore = () => {
-    setUploadingMore(true);
-    window.setTimeout(() => {
-      setUploadingMore(false);
-      if (racmUpload !== 'done') setRacmUpload('done');
-      mergeExtractedEntities();
-      // TB files only ride along while the TB upload isn't parked.
-      if (TB_UPLOAD) {
-        if (tbUpload !== 'done') setTbUpload('done');
-        setUploads(prev => {
-          const next = { ...prev };
-          const known = [...entities, ...SEED_ENTITIES.filter(s => !entities.some(e => e.name.trim().toLowerCase() === s.name.toLowerCase()))];
-          for (const e of known) {
-            if (typeof next[e.id] !== 'object') {
-              const slug = e.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') || 'entity';
-              next[e.id] = SEED_TB_FILES[e.id] ?? { file: `${slug}-tb-fy27.xlsx`, lines: 96 };
-            }
-          }
-          return next;
-        });
-      }
-    }, 800);
-  };
-
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
-  const [uploadingMore, setUploadingMore] = useState(false);
+
+  const classifyDoc = (fileName: string, existing: { req: ReqDocId }[]): ReqDocId => {
+    const n = fileName.toLowerCase();
+    if (/racm|sop/.test(n)) return 'racm';
+    if (TB_UPLOAD && /(^|[^a-z])tb([^a-z]|$)|trial/.test(n)) return 'tb';
+    if (/(^|[^a-z])gl([^a-z]|$)|ledger/.test(n)) return 'gl';
+    // No keyword — fill whichever requirement still has nothing.
+    return REQUIRED_DOCS.find(d => !existing.some(a => a.req === d.id))?.id ?? 'gl';
+  };
+
+  const onFilesSelected = (list: FileList | null) => {
+    if (!list?.length) return;
+    const batch: AttachedDoc[] = [];
+    for (const f of Array.from(list)) {
+      batch.push({ id: `att-${Date.now()}-${batch.length}`, name: f.name, req: classifyDoc(f.name, [...attached, ...batch]) });
+    }
+    setAttached(prev => [...prev, ...batch]);
+    if (batch.some(b => b.req === 'racm') && racmUpload !== 'done') simulateRacmUpload();
+    if (TB_UPLOAD && batch.some(b => b.req === 'tb') && tbUpload !== 'done') simulateTbUpload();
+  };
+
+  /** Removing the last file of a requirement re-arms it (and the step gate). */
+  const removeAttached = (id: string) => {
+    const next = attached.filter(a => a.id !== id);
+    setAttached(next);
+    if (!next.some(a => a.req === 'racm')) setRacmUpload('idle');
+    if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); }
+  };
   /** Hand-added entities have nothing extracted — the user types their
    *  processes; matching names remap the entity's generic captions. */
   const [manualProcs, setManualProcs] = useState<Record<string, string>>({});
@@ -311,6 +361,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
       qualCount: qualScope.length,
       racms: derived,
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
+      scopingSkipped: scopingSkipped || undefined,
     };
     onCreated(programme);
   };
@@ -321,20 +372,29 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
     <div className="flex flex-col min-h-full">
       {/* Modal header — same eyebrow pattern as the scoping summary; no
           breadcrumb or back affordance, close is X / Escape / Cancel. */}
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
-
-      <StepRail steps={STEPS} step={step} onStepClick={setStep} />
+      {/* Pinned header — eyebrow + stepper stay put while the step content
+          scrolls beneath (mirror of the sticky footer; user ask). */}
+      <div className="sticky top-0 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-6 pb-1">
+        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
+        {/* Type stays on the rail even when it was answered on the classic
+            wizard — it reads as a completed step of one journey, not a step
+            that never existed. Clicking it goes back to where it was answered. */}
+        <StepRail
+          steps={STEPS}
+          step={step}
+          onStepClick={i => {
+            if (typePreselected && i === 0) { onBackToType ? onBackToType() : onCancel(); return; }
+            setStep(i);
+          }} />
+      </div>
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
         {step === 0 && (
-          <StepShell
-            title="Type & basics"
-            sub="Pick the engagement type and identity — the classic first step. For SOX / ICFR, the scoping steps that follow derive everything else."
-          >
+          <StepShell title="Type">
             <div className="space-y-4">
               <div>
                 <label className={basicsLabelCls}>Engagement type <span className="text-risk-700">*</span></label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   {TYPE_TILES.map(t => {
                     const selected = type === t.type;
                     return (
@@ -364,6 +424,13 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                   </div>
                 )}
               </div>
+            </div>
+          </StepShell>
+        )}
+
+        {step === 1 && (
+          <StepShell title="Basics">
+            <div className="space-y-4">
               <div>
                 <label className={basicsLabelCls}>Engagement name <span className="text-risk-700">*</span></label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. P2P — SOX Q3 Testing" className={inputCls} />
@@ -378,37 +445,32 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                 </div>
                 <div>
                   <label className={basicsLabelCls}>Owner <span className="text-risk-700">*</span></label>
-                  <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
-                    {OWNER_NAMES.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  <FormSelect value={owner} options={OWNER_NAMES} onChange={setOwner} className={selectCls} ariaLabel="Owner" menuCls="w-full" />
                 </div>
               </div>
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-brand-50/50 border border-brand-100">
-                <Info size={13} className="text-brand-700 shrink-0 mt-0.5" />
-                <p className="text-[0.75rem] text-text-secondary leading-relaxed">
-                  No entity or process fields here — the group and its entities are listed in the next step, and the in-scope processes are derived from the trial-balance scoping.
-                </p>
-              </div>
+              {AUDIT_PERIOD_FIELD && (<>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={basicsLabelCls}>Year type <span className="text-risk-700">*</span></label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      onClick={() => { if (yearBasis !== 'fy') { setYearBasis('fy'); setFyEnd(y => y + 1); } }}
-                      className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? yeSegActive : yeSegIdle}`}
-                    >
-                      Financial year
-                      <span className="block text-[0.625rem] font-semibold opacity-70">Apr – Mar</span>
-                    </button>
-                    <button
-                      onClick={() => { if (yearBasis !== 'cy') { setYearBasis('cy'); setFyEnd(y => y - 1); } }}
-                      className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? yeSegActive : yeSegIdle}`}
-                    >
-                      Calendar year
-                      <span className="block text-[0.625rem] font-semibold opacity-70">Jan – Dec</span>
-                    </button>
+                {YEAR_TYPE_PICKER && (
+                  <div>
+                    <label className={basicsLabelCls}>Year type <span className="text-risk-700">*</span></label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => { if (yearBasis !== 'fy') { setYearBasis('fy'); setFyEnd(y => y + 1); } }}
+                        className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? yeSegActive : yeSegIdle}`}
+                      >
+                        Financial year
+                        <span className="block text-[0.625rem] font-semibold opacity-70">Apr – Mar</span>
+                      </button>
+                      <button
+                        onClick={() => { if (yearBasis !== 'cy') { setYearBasis('cy'); setFyEnd(y => y - 1); } }}
+                        className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? yeSegActive : yeSegIdle}`}
+                      >
+                        Calendar year
+                        <span className="block text-[0.625rem] font-semibold opacity-70">Jan – Dec</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div>
                   <label className={basicsLabelCls}>Audit period <span className="text-risk-700">*</span></label>
                   <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
@@ -419,6 +481,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               <p className="text-[0.75rem] text-ink-500 -mt-1">
                 An annual cycle, not a dated project — testing runs {yearBasis === 'fy' ? `Apr ${fyEnd - 1} – Mar ${fyEnd}` : `Jan – Dec ${fyEnd}`} and the programme carries the {fyLabel} name through testing and roll-forward.
               </p>
+              </>)}
               <div>
                 <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
                 <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
@@ -427,16 +490,12 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           </StepShell>
         )}
 
-        {step === 1 && (
-          <StepShell
-            title="Scoping"
-            sub={TB_UPLOAD
-              ? "Upload the RACM and trial balances — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted."
-              : "Upload the RACM — entities land below with the processes extracted for each, and every caption's process mapping can be adjusted."}
-          >
-            {/* Uploads live with the group (user ask): the docs render as ONE
-                line of chips under the name, and after the first upload the two
-                buttons collapse into "Upload more" for anything left out. */}
+        {step === 2 && (
+          <StepShell title="Scoping">
+            {/* Required-files card under the group name (user ask): the three
+                scoping documents listed as requirements, ONE bulk upload
+                button (native multi-select picker), attached files as tagged
+                chips beneath. */}
             <div className="mb-5">
               <div className="max-w-xl">
                 <FieldLabel>Group (listed / holding)</FieldLabel>
@@ -446,68 +505,69 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
                   className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
               </div>
-              <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                {racmUpload === 'done' && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mr-0.5">RACM</span>
-                )}
-                {racmUpload === 'done' && (
-                  <span className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white min-w-0">
-                    <FileSpreadsheet size={12} className="text-compliant-700 shrink-0" />
-                    <span className="text-[11px] font-mono text-text-secondary truncate">airline-group-racm.xlsx</span>
-                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {SEED_ENTITIES.length} entities · {racmProcesses.length} processes extracted</span>
-                    <button
-                      onClick={() => setRacmUpload('idle')}
-                      aria-label="Remove airline-group-racm.xlsx"
-                      className="p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
-                    >
-                      <X size={11} />
-                    </button>
-                  </span>
-                )}
-                {Object.values(uploads).some(u => typeof u === 'object') && (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider text-text-muted mr-0.5 ${racmUpload === 'done' ? 'ml-2.5' : ''}`}>Trial balances</span>
-                )}
-                {Object.entries(uploads).map(([entId, up]) => typeof up === 'object' && (
-                  <span key={entId} className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white min-w-0">
-                    <FileSpreadsheet size={12} className="text-compliant-700 shrink-0" />
-                    <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
-                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
-                    <button
-                      onClick={() => removeTbFile(entId)}
-                      aria-label={`Remove ${up.file}`}
-                      className="p-0.5 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
-                    >
-                      <X size={11} />
-                    </button>
-                  </span>
-                ))}
-                {(racmUpload === 'parsing' || tbUpload === 'parsing' || uploadingMore) && (
-                  <span className="inline-flex items-center gap-1.5 h-7 px-1 text-[11.5px] text-text-muted">
-                    <Loader2 size={12} className="animate-spin" /> Parsing…
-                  </span>
-                )}
-                {/* Each doc keeps its own button until it's in; only when BOTH
-                    are uploaded do they collapse into "Upload more". */}
-                {racmUpload === 'idle' && (
-                  <button onClick={simulateRacmUpload} title="Risk & control matrix — entity and process information extracts from it" className={uploadBtnCls}>
-                    <Upload size={12} /> Upload RACM
-                  </button>
-                )}
-                {TB_UPLOAD && tbUpload === 'idle' && (
-                  <button onClick={simulateTbUpload} title="Bulk upload — one file per entity or one workbook; entities extract from it" className={uploadBtnCls}>
-                    <Upload size={12} /> Upload trial balances
-                  </button>
-                )}
-                {racmUpload === 'done' && (!TB_UPLOAD || tbUpload === 'done') && !uploadingMore && (
-                  <button
-                    onClick={simulateUploadMore}
-                    title="Upload anything left out — extra or replacement files"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold transition-colors cursor-pointer ml-1"
-                  >
-                    <Upload size={12} /> Upload more
-                  </button>
-                )}
+
+              <div className="mt-3 border border-border-light rounded-xl bg-white">
+                <div className="flex items-center gap-2 px-4 py-3">
+                  <FileText size={14} className="text-primary shrink-0" />
+                  <span className="text-[13px] font-bold text-text">Recommended files</span>
+                  <span className="text-[11.5px] text-text-muted">{REQUIRED_DOCS.length} recommended · {REQUIRED_DOCS.length} total</span>
+                  <label className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold transition-colors cursor-pointer">
+                    <Upload size={12} /> {attached.length > 0 ? 'Add more' : 'Upload'}
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      aria-label="Upload recommended files"
+                      onChange={e => { onFilesSelected(e.target.files); e.target.value = ''; }}
+                    />
+                  </label>
+                </div>
+                <div className="px-4 pb-3.5 flex flex-wrap gap-2">
+                  {REQUIRED_DOCS.map(d => {
+                    const done = attached.some(a => a.req === d.id);
+                    return (
+                      <div key={d.id} className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border ${done ? 'border-compliant-100 bg-compliant-50/40' : 'border-border-light bg-white'}`}>
+                        <span className="text-[12.5px] font-semibold text-text">{d.name}</span>
+                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[10px] font-bold text-text-muted">{d.formats}</span>
+                        {done && <Check size={13} className="text-compliant-600 shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+
+              {attached.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-text-muted">
+                      Attached
+                      <span className="w-[18px] h-[18px] rounded-full bg-ink-900 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">{attached.length}</span>
+                    </span>
+                    <span className="text-[11.5px] text-text-muted tabular-nums">{reqSatisfied}/{REQUIRED_DOCS.length} recommended inputs satisfied</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {attached.map(a => (
+                      <span key={a.id} className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-9 rounded-lg border border-border-light bg-white min-w-0">
+                        <FileText size={12} className="text-text-muted shrink-0" />
+                        <span className="text-[12px] text-text truncate">{a.name}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{REQ_TAG[a.req]}</span>
+                        <button
+                          onClick={() => removeAttached(a.id)}
+                          aria-label={`Remove ${a.name}`}
+                          className="ml-auto p-1 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {(racmUpload === 'parsing' || tbUpload === 'parsing') && (
+                    <span className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                      <Loader2 size={12} className="animate-spin" /> Parsing…
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <FieldLabel>
               Entities in scope of the group audit
@@ -532,7 +592,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
               </div>
               {entities.length === 0 && (
                 <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
-                  No entities yet — upload the {TB_UPLOAD ? 'RACM or trial balances' : 'RACM'} above and they're mapped from the data, or add one by hand.
+                  No entities yet — upload the recommended files above and they're mapped from the data, or add one by hand.
                 </div>
               )}
               {entities.map((ent, i) => (
@@ -662,7 +722,7 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
           </StepShell>
         )}
 
-        {step === 2 && (
+        {MATERIALITY_STEP && (
           <StepShell
             title="Materiality — set before any testing"
             sub="Pick the basis that fits the group, and the thresholds cascade from it. These numbers decide which trial-balance captions get flagged in the next step."
@@ -858,6 +918,16 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
             title="Review — scoping decides the programme"
             sub="Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances."
           >
+            {scopingSkipped && (
+              <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-high-50 border border-high-100">
+                <AlertCircle size={13} className="text-high-700 shrink-0 mt-0.5" />
+                <p className="text-[0.75rem] text-text-secondary leading-relaxed">
+                  Scoping skipped — the engagement is created without a RACM or GL / trial balances.
+                  The workspace Overview will flag both: add or generate the RACM from the RACM tab,
+                  and upload the GL and trial balances from the Configuration tab.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 mb-4">
               <ReviewCard title="Group & entities">
                 <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
@@ -913,23 +983,36 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
       <div className="mt-auto pt-6" />
       <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
-          onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
+          onClick={() => (step === firstStep
+            ? (typePreselected && onBackToType ? onBackToType() : onCancel())
+            : setStep(s => s - 1))}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
         >
-          <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
+          <ArrowLeft size={13} /> {step === firstStep && !(typePreselected && onBackToType) ? 'Cancel' : 'Back'}
         </button>
         {step < STEPS.length - 1 ? (
-          <button
-            onClick={goNext}
-            disabled={!canContinue}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Continue <ArrowRight size={13} />
-          </button>
+          <span className="flex items-center gap-2">
+            {step === 2 && (
+              <button
+                onClick={skipScoping}
+                title="Create without scoping — the workspace Overview flags the missing RACM and GL / trial balances"
+                className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+              >
+                Skip for now
+              </button>
+            )}
+            <button
+              onClick={goNext}
+              disabled={!canContinue}
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Continue <ArrowRight size={13} />
+            </button>
+          </span>
         ) : (
           <button
             onClick={create}
-            disabled={derived.length === 0}
+            disabled={!scopingSkipped && derived.length === 0}
             className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={13} /> Create {fy} programme
@@ -943,53 +1026,44 @@ export default function ScopingWizard({ onCancel, onCreated }: Props) {
 /* ------------------------------------------------------------------ */
 
 /** The step rail is the only header — steps open straight with their one-line
- *  explainer (the user asked the duplicate per-step titles removed). */
-function StepShell({ sub, children }: { title?: string; sub: string; children: React.ReactNode }) {
+ *  explainer (the user asked the duplicate per-step titles removed; Basics
+ *  carries no explainer at all). */
+function StepShell({ sub, children }: { title?: string; sub?: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[12.5px] text-text-secondary mb-5 leading-relaxed">{sub}</p>
+      {sub && <p className="text-[12.5px] text-text-secondary mb-5 leading-relaxed">{sub}</p>}
       {children}
     </div>
   );
 }
 
-/** Step rail — fills the modal width; circles in a row with the label beneath
- *  each, connectors aligned to circle centre. Travelled path tints brand;
- *  upcoming steps stay quiet. Shared by the scoping and roll-forward flows. */
+/** Step rail — same visual language as the Engagements creation flow
+ *  (CreateEngagementWizard): thin segment bars, one per step, with the
+ *  uppercase labels beneath. Travelled segments tint brand and click back;
+ *  upcoming steps stay quiet and unclickable. Shared by the scoping and
+ *  roll-forward flows. */
 export function StepRail({ steps, step, onStepClick }: {
   steps: readonly string[];
   step: number;
   onStepClick: (i: number) => void;
 }) {
   return (
-    <div className="flex items-start w-full mb-6 pr-8">
-      {steps.map((label, i) => {
-        const done = i < step;
-        const active = i === step;
-        return (
-          <Fragment key={label}>
-            {i > 0 && <div className={`flex-1 h-px mt-3 mx-2 min-w-3 transition-colors ${i <= step ? 'bg-brand-300' : 'bg-border-light'}`} />}
-            <button
-              onClick={() => { if (done) onStepClick(i); }}
-              disabled={!done}
-              className={`flex flex-col items-center gap-1.5 shrink-0 ${done ? 'cursor-pointer group' : ''}`}
-            >
-              <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[10.5px] font-bold tabular-nums transition-colors ${
-                active ? 'bg-primary text-white shadow-sm shadow-brand-900/10'
-                : done ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
-                : 'border border-border bg-white text-text-muted'
-              }`}>
-                {done ? <Check size={11} /> : i + 1}
-              </span>
-              <span className={`text-[11px] font-semibold whitespace-nowrap transition-colors ${
-                active ? 'text-primary' : done ? 'text-brand-700' : 'text-text-muted'
-              }`}>
-                {label}
-              </span>
-            </button>
-          </Fragment>
-        );
-      })}
+    <div className="mb-6">
+      <div className="flex items-center gap-1.5">
+        {steps.map((label, i) => (
+          <button
+            key={label}
+            onClick={() => { if (i <= step) onStepClick(i); }}
+            className={`flex-1 h-1.5 rounded-full transition-colors ${i === step ? 'bg-brand-600' : i < step ? 'bg-brand-300' : 'bg-canvas-border'} ${i <= step ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
+            aria-label={`Go to step ${i + 1}`}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between mt-1.5 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
+        {steps.map((label, i) => (
+          <span key={label} className={i === step ? 'text-brand-700' : ''}>{label}</span>
+        ))}
+      </div>
     </div>
   );
 }

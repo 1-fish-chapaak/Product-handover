@@ -8,6 +8,8 @@ import {
   assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
+import { RagStrip, type RagMeterDef } from './parts';
+import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, Severity, TaskType } from './types';
@@ -59,6 +61,13 @@ export default function Overview() {
   const stats = engagementProgress(eng);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
+  // Scoping-skipped gap (wizard "Skip for now"): flag the missing RACM and
+  // GL / trial balances until they're added — RACM from the RACM tab, files
+  // from the Configuration tab.
+  const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
+  const racmMissing = eng.controls.length === 0;
+  const tbMissing = !prog?.entities.some(e => e.tbFile);
+  const scopingGap = !!prog?.scopingSkipped && (racmMissing || tbMissing);
   // The owner's overview is their court only — engagement-wide dashboards,
   // materiality and the sign-off chain are audit-side surfaces.
   const myControls = isOwner ? eng.controls.filter(c => c.owner === meOwner) : [];
@@ -118,6 +127,42 @@ export default function Overview() {
     }).sort((a, b) => b.total - a.total);
   }, [eng.controls]);
 
+  // engagement-wide RAG trio — the control-level trio (completeness, evidence
+  // validated, TOD coverage) lives on each control's own page
+  const ragMeters = useMemo<RagMeterDef[]>(() => {
+    const total = eng.controls.length;
+    const approved = eng.controls.filter(c => c.racmReview?.status === 'Approved').length;
+    const remarks = eng.controls.filter(c => c.racmReview?.status === 'Remark').length;
+    const concl = eng.controls.map(controlConclusion);
+    const effective = concl.filter(x => x === 'Effective').length;
+    const ineffective = concl.filter(x => x === 'Ineffective').length;
+    // sample testing counts every sample × attribute verdict across the register;
+    // controls without a drawn sample count at attribute level
+    let checksDone = 0; let checksTotal = 0;
+    eng.controls.forEach(c => {
+      const steps = c.operating.steps;
+      const samples = c.operating.sampling?.samples ?? [];
+      checksTotal += samples.length ? samples.length * steps.length : steps.length;
+      checksDone += samples.length
+        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+        : steps.filter(s => s.result !== 'Not tested').length;
+    });
+    return [
+      {
+        label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
+        explainer: 'Pre-testing review across the register — every row needs approval before testing leans on it, and open remarks pull this down.',
+      },
+      {
+        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
+        explainer: 'Controls concluded effective across the engagement — a single ineffective conclusion turns this red until it is remediated and retested.',
+      },
+      {
+        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
+        explainer: 'Sample-by-attribute checks completed across the operating tests — how much of the drawn testing ground is actually covered.',
+      },
+    ];
+  }, [eng.controls]);
+
   // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
     { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700', view: 'design-done' },
@@ -166,6 +211,28 @@ export default function Overview() {
         );
       })()}
 
+      {/* scoping was skipped in the wizard — say exactly what's missing and where it lands */}
+      {!isOwner && scopingGap && (
+        <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
+          <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[13px] font-bold text-ink-900">
+              Scoping was skipped — {racmMissing && tbMissing ? 'the RACM and the GL / trial balances are' : racmMissing ? 'the RACM is' : 'the GL / trial balances are'} missing
+            </h2>
+            <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
+              {racmMissing && (<>
+                Add or generate the RACM from the{' '}
+                <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.{' '}
+              </>)}
+              {tbMissing && (<>
+                Upload the GL and trial balances from the{' '}
+                <button onClick={() => setTab('config')} className="font-semibold text-brand-700 hover:underline cursor-pointer">Configuration tab</button>.
+              </>)}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* progress rail */}
       {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
@@ -175,6 +242,14 @@ export default function Overview() {
           </button>
         ))}
       </div>}
+
+      {/* engagement health — RAG roll-ups across the register */}
+      {!isOwner && (
+        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
+          <RagStrip meters={ragMeters} />
+        </div>
+      )}
 
       {/* exceptions · handoffs · materiality — engagement-wide, audit-side only */}
       {!isOwner && <div className="grid md:grid-cols-3 gap-4">

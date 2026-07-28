@@ -45,18 +45,24 @@ interface Props {
 export default function SoxTestingTab({ onOpenEngagement }: Props) {
   const { addToast } = useToast();
   const [view, setView] = useState<TabView>('home');
-  const [programmes, setProgrammes] = useState<SoxProgramme[]>(() => [...PROGRAMMES]);
+  // Unlisted records (back-filled duplicates of a card already here, e.g.
+  // ENG-001 ≡ the seeded FY26 programme) power the workspace Configuration
+  // tab but stay off this listing.
+  const listed = () => PROGRAMMES.filter(p => !p.unlisted);
+  const [programmes, setProgrammes] = useState<SoxProgramme[]>(listed);
 
   // Creation lands the user on the list — the modal closes and the new
   // programme card is right there (its Scoping summary is one click away).
   const handleCreated = (p: SoxProgramme) => {
     registerProgramme(p);
-    setProgrammes([...PROGRAMMES]);
+    setProgrammes(listed());
     setView('home');
     addToast({
       message: p.rolledFromFy
         ? `${p.fy} programme rolled forward from ${p.rolledFromFy} — ${p.racms.length} RACMs carried`
-        : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
+        : p.scopingSkipped
+          ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+          : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
       type: 'success',
     });
   };
@@ -206,14 +212,15 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         </div>
       </motion.div>
 
-      {/* The whole flow — scoping wizard and programme detail — lives in one
-          800×800 modal over the list. */}
+      {/* Creation flows (scoping wizard, roll-forward) slide in as a full-height
+          side sheet; the scoping summary keeps the centred modal. */}
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
             key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
             label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls="w-[1000px]"
+            widthCls={view === 'wizard' || rollFrom ? 'w-full max-w-[560px]' : 'w-[1000px]'}
+            variant={view === 'wizard' || rollFrom ? 'sheet' : 'modal'}
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
@@ -233,12 +240,19 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   );
 }
 
-/** Fixed-size modal shell for the SOX flow — 1000px wide for the wizard,
- *  800px for the scoping summary, both 800px tall. Closes on X or Escape
- *  only — an overlay click mid-wizard would silently discard scoping work. */
-export function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
+/** Shell for the SOX flow. Creation flows (wizard, roll-forward) render as a
+ *  full-height side sheet sliding in from the right; the scoping summary keeps
+ *  the centred 800px-tall modal. Closes on X or Escape only — an overlay click
+ *  mid-wizard would silently discard scoping work. */
+export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', enterInstant, onClose, children }: {
   label: string;
   widthCls?: string;
+  variant?: 'modal' | 'sheet';
+  /** Sheet only: render already in place (no slide-in) — used when another
+   *  sheet hands off to this one so the swap reads as a step change. The
+   *  matching instant exit comes via AnimatePresence `custom` at the call
+   *  site (see EngagementsView); plain closes still slide out. */
+  enterInstant?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -248,33 +262,61 @@ export function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const closeBtn = (
+    <button
+      onClick={onClose}
+      aria-label="Close"
+      className="absolute top-3.5 right-3.5 z-10 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
+    >
+      <X size={16} />
+    </button>
+  );
+
   return (
     <>
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        variants={{
+          show: { opacity: 1 },
+          out: (handback?: boolean) => handback ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0 },
+        }}
+        initial={enterInstant ? false : { opacity: 0 }}
+        animate="show" exit="out"
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      {variant === 'sheet' ? (
         <motion.div
-          initial={{ opacity: 0, y: 10, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.98 }}
-          transition={{ duration: 0.18 }}
+          variants={{
+            show: { x: 0 },
+            out: (handback?: boolean) => handback ? { x: 0, transition: { duration: 0 } } : { x: '100%' },
+          }}
+          initial={enterInstant ? false : { x: '100%' }}
+          animate="show" exit="out"
+          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           role="dialog" aria-modal="true" aria-label={label}
-          className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+          className={`fixed right-0 top-0 bottom-0 z-50 ${widthCls} bg-canvas border-l border-border-light shadow-2xl overflow-hidden flex flex-col`}
         >
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-3.5 right-3.5 z-10 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+          {closeBtn}
           <div className="flex-1 overflow-y-auto p-6 pb-0">
             {children}
           </div>
         </motion.div>
-      </div>
+      ) : (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            role="dialog" aria-modal="true" aria-label={label}
+            className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+          >
+            {closeBtn}
+            <div className="flex-1 overflow-y-auto p-6 pb-0">
+              {children}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </>
   );
 }

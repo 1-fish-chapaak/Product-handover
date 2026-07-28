@@ -6,12 +6,15 @@ import {
   Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
-import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
+import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
 import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
+import ScopingWizard from './sox-testing/ScopingWizard';
+import { FlowModal } from './sox-testing/SoxTestingTab';
+import { registerProgramme, type SoxProgramme } from './sox-testing/soxTestingData';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
@@ -120,8 +123,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const [wizardOpen, setWizardOpen] = useState(false);
   /** Engagement being edited in the wizard, or null for create mode. */
   const [editTarget, setEditTarget] = useState<Engagement | null>(null);
+  // SOX is scoped rather than configured, so picking that type in the wizard
+  // above hands over to the same journey the SOX Testing tab runs.
+  const [soxWizardOpen, setSoxWizardOpen] = useState(false);
+  /** Set when the SOX sheet's Back reopens the classic wizard — keeps the
+   *  Type step showing SOX / ICFR still selected. Cleared on normal opens. */
+  const [wizardInitialType, setWizardInitialType] = useState<EngType | undefined>(undefined);
   /** Session list — seeds + anything created/edited/closed/deleted this session. */
-  const [all, setAll] = useState<Engagement[]>(() => [...ENGAGEMENTS]);
+  const [all, setAll] = useState<Engagement[]>(() => libraryEngagements());
   /** Engagements created outside this view (e.g. One-Click Audit from Knowledge
    *  Hub / Ask Ira) — merged into the session list without disturbing edits. */
   const createdEngagements = useCreatedEngagements();
@@ -260,7 +269,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             </button>
             {can('eng_create') && (
               <button
-                onClick={() => setWizardOpen(true)}
+                onClick={() => { setWizardInitialType(undefined); setWizardOpen(true); }}
                 className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Plus size={14} />New Engagement
@@ -434,7 +443,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     {can('eng_edit') && (
                       <IconAction
                         label="Edit engagement"
-                        onClick={(e) => { e.stopPropagation(); setEditTarget(eng); setWizardOpen(true); }}
+                        onClick={(e) => { e.stopPropagation(); setWizardInitialType(undefined); setEditTarget(eng); setWizardOpen(true); }}
                         className="text-text-muted hover:text-text-secondary hover:bg-canvas"
                       >
                         <Pencil size={14} />
@@ -520,10 +529,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
       </div>
 
-      <AnimatePresence>
+      {/* `custom` = "is the SOX sheet taking over?" — while true, the exiting
+          wizard drops its slide/fade so the handoff reads as a step change. */}
+      <AnimatePresence custom={soxWizardOpen}>
         {wizardOpen && (
           <CreateEngagementWizard
             initial={editTarget ?? undefined}
+            initialType={wizardInitialType}
+            enterInstant={wizardInitialType !== undefined}
             onClose={() => { setWizardOpen(false); setEditTarget(null); }}
             onCreated={(eng) => {
               registerEngagement(eng);
@@ -533,7 +546,52 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               setWizardOpen(false);
               setEditTarget(null);
             }}
+            onPickSox={() => { setWizardOpen(false); setEditTarget(null); setSoxWizardOpen(true); }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* SOX / ICFR — the scoping journey, the same one the SOX Testing tab
+          opens. It registers the engagement itself, so we only re-read the
+          library and record the programme. */}
+      {/* `custom` = "is the classic wizard coming back?" — Back-to-type swaps
+          instantly; a plain close still slides the sheet away. The sheet also
+          enters in place: the classic wizard was already showing there. */}
+      <AnimatePresence custom={wizardOpen}>
+        {soxWizardOpen && (
+          <FlowModal
+            label="New engagement"
+            widthCls="w-full max-w-[560px]"
+            variant="sheet"
+            enterInstant
+            onClose={() => setSoxWizardOpen(false)}
+          >
+            <ScopingWizard
+              typePreselected
+              onBackToType={() => {
+                setSoxWizardOpen(false);
+                setWizardInitialType('SOX / ICFR');
+                setEditTarget(null);
+                setWizardOpen(true);
+              }}
+              onCancel={() => setSoxWizardOpen(false)}
+              onCreated={(p: SoxProgramme) => {
+                registerProgramme(p);
+                // the wizard already registered the engagement — pull it back
+                // out by id and put it at the top of the library, the same
+                // place a classic create lands it
+                const eng = p.engagementId ? findEngagement(p.engagementId) : undefined;
+                if (eng) setAll(prev => prev.some(e => e.id === eng.id) ? prev : [eng, ...prev]);
+                setSoxWizardOpen(false);
+                addToast({
+                  type: 'success',
+                  message: p.scopingSkipped
+                    ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+                    : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
+                });
+              }}
+            />
+          </FlowModal>
         )}
       </AnimatePresence>
 
