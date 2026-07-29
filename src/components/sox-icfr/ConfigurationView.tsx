@@ -9,11 +9,9 @@ import { findEngagement } from '../../data/engagements';
 import { useIcfr } from './store';
 import {
   BASIS_OPTIONS, PROGRAMMES, SEED_QUAL_PICKS, SEED_TB_FILES,
-  captionsForEntities, deriveRacms, fmtCr, registerProgramme, ruleOverall,
+  captionsForEntities, deriveRacms, fmtCr, ruleOverall,
   type GroupEntity, type MaterialityRule, type SoxProgramme,
 } from '../audit/sox-testing/soxTestingData';
-import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
-import RollForwardWizard from '../audit/sox-testing/RollForwardWizard';
 
 /** The programme's group-default rule always sits first and can't be deleted. */
 const GROUP_RULE_ID = 'rule-group';
@@ -21,15 +19,6 @@ const GROUP_RULE_ID = 'rule-group';
 /** Per-entity "Upload TB" button — was briefly parked, then the user
  *  reverted. Set false to park it again (rows without a TB show a dash). */
 const TB_UPLOAD_BTN = true;
-
-/** Roll forward — PARKED from the SOX engagement (user ask). This was the only
- *  live way in; the programme-card button is parked behind CARD_ACTIONS in
- *  SoxTestingTab and the Control Library trigger is commented out. It was
- *  also a dead end: the rolled cycle registers a programme and an engagement
- *  but neither reaches the Engagements library, so the new year had nowhere
- *  to be opened from. Flip to true to bring the button and its sheet back —
- *  RollForwardWizard and the store's rollForward() are untouched. */
-const ROLL_FORWARD = false;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 const selectCls = 'text-[12px] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer';
@@ -75,7 +64,6 @@ function ConfigInner({ prog, engId, reconcileScope }: {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [lastDerive, setLastDerive] = useState<string | null>(null);
-  const [rolling, setRolling] = useState(false);
 
   const groupRule = rules[0];
   const groupOverall = ruleOverall(groupRule);
@@ -193,15 +181,6 @@ function ConfigInner({ prog, engId, reconcileScope }: {
           The working surface for this engagement's scoping configuration. Edits save instantly;
           the Materiality &amp; scope page remains the formal record and reflects the latest numbers.
         </p>
-        {ROLL_FORWARD && (
-          <button
-            onClick={() => setRolling(true)}
-            title={`Carry ${prog.fy} scoping and RACMs into the next cycle`}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[12px] font-semibold text-ink-700 hover:text-brand-700 transition-colors cursor-pointer"
-          >
-            <RefreshCw size={13} /> Roll forward
-          </button>
-        )}
       </div>
 
       {stale && (
@@ -487,19 +466,6 @@ function ConfigInner({ prog, engId, reconcileScope }: {
         </div>
       </section>
 
-      {ROLL_FORWARD && rolling && (
-        <FlowModal label="Roll forward" widthCls="w-full max-w-[560px]" variant="sheet" onClose={() => setRolling(false)}>
-          <RollForwardWizard
-            prior={prog}
-            onCancel={() => setRolling(false)}
-            onCreated={p => {
-              registerProgramme(p);
-              setRolling(false);
-              addToast({ message: `${p.fy} programme rolled forward from ${p.rolledFromFy} — find it under SOX Testing`, type: 'success' });
-            }}
-          />
-        </FlowModal>
-      )}
     </div>
   );
 }

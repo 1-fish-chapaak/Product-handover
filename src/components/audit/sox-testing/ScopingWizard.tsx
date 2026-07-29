@@ -1,8 +1,8 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
   Building2, Landmark, Upload, FileText, Check, Plus, Trash2, X,
-  ArrowRight, ArrowLeft, Loader2, Info,
+  ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
@@ -18,11 +18,32 @@ import {
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
 
-const STEPS = ['Type', 'Basics', 'Scoping', 'Review'] as const;
+/** Scoping step — PARKED (user ask). SOX creation is now identity + entities +
+ *  a RACM attached to each entity; the trial balance and general ledger are
+ *  uploaded later, from the engagement's Configuration tab. Everything the step
+ *  rendered is still below, behind this flag: set it back to true and 'Scoping'
+ *  returns to STEPS at index 2, the `step === 2` block renders again, its gate
+ *  re-enters `canContinue`, and the Skip-for-now footer button comes back with
+ *  it. Entity RACMs register as `racm` attachments precisely so the step would
+ *  return already satisfied instead of asking for the same file twice. */
+const SCOPING_STEP = false;
+
+const STEPS: readonly string[] = SCOPING_STEP
+  ? ['Type', 'Basics', 'Scoping', 'Review']
+  : ['Type', 'Basics', 'Review'];
+/** Review is always last — the index shifts when Scoping is parked. */
+const REVIEW_STEP = STEPS.length - 1;
+
+/** Single entity standing in for the company itself (the "no separate
+ *  entities" checkbox). Kept off `ent-new-` so it never reads as hand-added. */
+const SOLO_ENTITY_ID = 'ent-self';
 
 /* ── Step 1 = the classic wizard's "Type & basics" screen, as-is ─────────── */
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
+/** Compact FormSelect for a table row — the sheet's dropdown look at row scale,
+ *  so the entity type matches Owner instead of falling back to a raw <select>. */
+const rowSelectCls = 'w-full text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none hover:border-primary/40 transition-colors';
 const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
@@ -140,6 +161,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const [racmUpload, setRacmUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
   const [tbUpload, setTbUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
 
+  /** A RACM attached to one entity, keyed by entity id. Optional — an entity
+   *  can be listed before its matrix exists. */
+  const [entityRacm, setEntityRacm] = useState<Record<string, { attId: string; name: string; state: 'parsing' | 'done' }>>({});
+
+  /** "No separate entities" — the company itself is the single entity in scope.
+   *  The list the user had before ticking is held so unticking restores it
+   *  rather than silently binning their typing. */
+  const [soloEntity, setSoloEntity] = useState(false);
+  const preSoloEntities = useRef<GroupEntity[]>([]);
+
   // Required-files card: the attached list is the source of truth for the
   // step gate; RACM / TB attachments also trigger the simulated parses that
   // fill the entity table (GL just satisfies its requirement — nothing
@@ -202,19 +233,25 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const canContinue = [
     // Type — this journey only continues for SOX / ICFR.
     type === 'SOX / ICFR',
-    // Basics — identity only; entities and processes are derived by scoping.
-    name.trim().length > 0 && code.trim().length > 0,
-    // Scoping — every required document needs at least one attached file
-    // (RACM / TB attachments trigger the parses that fill the table). With
+    // Basics — identity, the group it runs for, and who is in scope. With
+    // Scoping parked this is the only step that collects entities, so it gates
+    // on them: at least one named row, or the company itself via the checkbox.
+    // RACMs stay optional — an entity can be listed before its matrix exists.
+    name.trim().length > 0 && code.trim().length > 0 && groupName.trim().length > 0
+      && entities.length > 0 && entities.every(e => e.name.trim()),
+    // Scoping (parked) — every required document needs at least one attached
+    // file (RACM / TB attachments trigger the parses that fill the table). With
     // the Materiality and Qualitative steps parked, the empty-scope gate
     // rides here too — an empty scope derives zero RACMs.
-    groupName.trim().length > 0 && entities.length > 0 && entities.every(e => e.name.trim()) && allReqsSatisfied && inScope.length > 0,
+    ...(SCOPING_STEP
+      ? [entities.length > 0 && entities.every(e => e.name.trim()) && allReqsSatisfied && inScope.length > 0]
+      : []),
     true,
   ][step];
 
   const goNext = () => {
     if (!canContinue) return;
-    if (step === 2) setScopingSkipped(false); // completed properly after all
+    if (SCOPING_STEP && step === 2) setScopingSkipped(false); // completed properly after all
     setStep(s => s + 1);
   };
 
@@ -233,6 +270,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   };
 
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
+  /** RACMs attached to rows that are still in the list — entities dropped or
+   *  swapped out by the checkbox must not keep counting. */
+  const racmCount = entities.filter(e => entityRacm[e.id]).length;
 
   const classifyDoc = (fileName: string, existing: { req: ReqDocId }[]): ReqDocId => {
     const n = fileName.toLowerCase();
@@ -261,6 +301,59 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     if (!next.some(a => a.req === 'racm')) setRacmUpload('idle');
     if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); }
   };
+
+  /** RACM attached to one entity. It also registers as a group `racm`
+   *  attachment (user ask) so the parked Scoping step would come back already
+   *  satisfied rather than asking for the same matrix a second time. The
+   *  simulated parse fills that entity's process list, and deliberately does
+   *  NOT merge the seeded entities — this upload speaks for one row only. */
+  const onEntityRacmSelected = (entId: string, list: FileList | null) => {
+    const file = list?.[0];
+    if (!file) return;
+    const attId = `att-ent-${entId}-${Date.now()}`;
+    setEntityRacm(prev => ({ ...prev, [entId]: { attId, name: file.name, state: 'parsing' } }));
+    setAttached(prev => [...prev, { id: attId, name: file.name, req: 'racm' }]);
+    window.setTimeout(() => {
+      setEntityRacm(prev => (prev[entId]?.attId === attId
+        ? { ...prev, [entId]: { ...prev[entId], state: 'done' } }
+        : prev));
+    }, 800);
+  };
+
+  const removeEntityRacm = (entId: string) => {
+    const rec = entityRacm[entId];
+    if (!rec) return;
+    setEntityRacm(prev => { const next = { ...prev }; delete next[entId]; return next; });
+    removeAttached(rec.attId);
+  };
+
+  /** Dropping an entity takes its RACM with it — no orphan attachment left
+   *  ticking off a requirement for a row that no longer exists. */
+  const removeEntity = (entId: string) => {
+    removeEntityRacm(entId);
+    setEntities(prev => prev.filter(e => e.id !== entId));
+  };
+
+  /** "No separate entities" — swap the table for the company itself. */
+  const toggleSoloEntity = () => {
+    if (!soloEntity) {
+      preSoloEntities.current = entities;
+      setEntities([{ id: SOLO_ENTITY_ID, name: groupName.trim(), type: 'Holding', ownership: 100 }]);
+      setSoloEntity(true);
+      return;
+    }
+    removeEntityRacm(SOLO_ENTITY_ID);
+    setEntities(preSoloEntities.current);
+    setSoloEntity(false);
+  };
+
+  /** The company's own row is the group name — keep it in step while it's typed. */
+  useEffect(() => {
+    if (!soloEntity) return;
+    setEntities(prev => (prev.length === 1 && prev[0].id === SOLO_ENTITY_ID && prev[0].name !== groupName.trim()
+      ? [{ ...prev[0], name: groupName.trim() }]
+      : prev));
+  }, [groupName, soloEntity]);
   /** Hand-added entities have nothing extracted — the user types their
    *  processes; matching names remap the entity's generic captions. */
   const [manualProcs, setManualProcs] = useState<Record<string, string>>({});
@@ -361,7 +454,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       qualCount: qualScope.length,
       racms: derived,
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
-      scopingSkipped: scopingSkipped || undefined,
+      // With the Scoping step parked, NO engagement arrives with a trial
+      // balance or GL — so every one carries the gap flag and the workspace
+      // asks for them, exactly as the old Skip-for-now path did.
+      scopingSkipped: (scopingSkipped || !SCOPING_STEP) || undefined,
     };
     onCreated(programme);
   };
@@ -374,8 +470,31 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           breadcrumb or back affordance, close is X / Escape / Cancel. */}
       {/* Pinned header — eyebrow + stepper stay put while the step content
           scrolls beneath (mirror of the sticky footer; user ask). */}
-      <div className="sticky top-0 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-6 pb-1">
-        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
+      {/* Sticky clamps the MARGIN box, not the border box. -mt-6 (which cancels
+          FlowModal's p-6 so the header can cover the scrollport's top padding
+          when stuck) therefore made `top-0` shove the header 24px BELOW the
+          space layout reserved for it — it painted over the first 24px of every
+          step, swallowing the "Engagement name" label on Basics and slicing the
+          top off the Recommended-files card on Scoping.
+          `-top-6` cancels the margin in the clamp, so the header pins exactly at
+          its static position (flush to the scrollport top, still covering the
+          padding strip). pt-11 = pt-5 + the 24px the margin used to supply, so
+          the title sits where it always did. */}
+      <div className="sticky -top-6 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-11 pb-1">
+        {/* Same title block as the classic wizard's header (user ask) — the
+            journey keeps one identity across the handoff instead of the title
+            disappearing the moment scoping takes over. FlowModal's floating X
+            is suppressed for this sheet so there's only one close. */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles size={16} className="text-brand-600 shrink-0" />
+              <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
+            </div>
+            <p className="text-[0.75rem] text-ink-500">Step {step + 1} of {STEPS.length} — {STEPS[step]}</p>
+          </div>
+          <button onClick={onCancel} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
+        </div>
         {/* Type stays on the rail even when it was answered on the classic
             wizard — it reads as a completed step of one journey, not a step
             that never existed. Clicking it goes back to where it was answered. */}
@@ -486,27 +605,194 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
                 <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
               </div>
+
+              {/* Group & entities — moved up from Scoping (user ask): who the
+                  programme runs for is asked with the rest of the identity,
+                  before the documents. The table still starts empty — the RACM
+                  and trial-balance uploads on the Scoping step map entities in
+                  by name, so anything typed here is merged, never duplicated. */}
+              <div>
+                <label className={basicsLabelCls}>Group (listed / holding) <span className="text-risk-700">*</span></label>
+                <input value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
+                {groupName.trim().length === 0 && <Hint text="Group name is required" />}
+              </div>
+              <div>
+                <div className={basicsLabelCls}>
+                  {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
+                  {!soloEntity && (racmUpload === 'done' || tbUpload === 'done') && entities.length > 0 && ' — mapped from the uploads'}
+                </div>
+                {/* Ownership % column — parked for now (grid was
+                    [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
+                    per-row input; the data still seeds and shows downstream):
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min={1} max={100}
+                        value={ent.ownership}
+                        onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
+                        className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
+                      />
+                      <span className="text-[11px] text-text-muted">%</span>
+                    </div>
+                */}
+                <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+                  <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                    <div>Entity</div><div>Type</div><div>Processes — extracted</div><div />
+                  </div>
+                  {entities.length === 0 && (
+                    <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
+                      No entities yet — add the companies in scope, and attach each one's RACM. If there are none, tick the box below.
+                    </div>
+                  )}
+                  {entities.map((ent, i) => {
+                    const racm = entityRacm[ent.id];
+                    return (
+                    <div key={ent.id} className="border-b border-border-light last:border-b-0">
+                      <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 pt-2.5 items-center">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {ent.type === 'Holding'
+                          ? <Landmark size={14} className="text-brand-700 shrink-0" />
+                          : <Building2 size={14} className="text-text-muted shrink-0" />}
+                        {soloEntity ? (
+                          // The company's own row — its name is the group name.
+                          <span className="text-[13px] text-text truncate py-0.5">{ent.name || '—'}</span>
+                        ) : (
+                          <input
+                            value={ent.name}
+                            onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                            aria-label={`Entity ${i + 1} name`}
+                            className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                          />
+                        )}
+                      </div>
+                      {soloEntity ? (
+                        <span className="text-[12px] text-text-muted">Holding</span>
+                      ) : (
+                        <FormSelect
+                          value={ent.type}
+                          options={['Holding', 'Subsidiary']}
+                          onChange={v => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: v as GroupEntity['type'] } : x))}
+                          className={rowSelectCls}
+                          ariaLabel={`Type for ${ent.name || `entity ${i + 1}`}`}
+                          menuCls="w-full min-w-[150px]"
+                        />
+                      )}
+                      {(() => {
+                        // A parsed RACM speaks for its own entity, whoever added it.
+                        if (racm?.state === 'done') {
+                          const procs = entityProcesses(ent.id);
+                          return (
+                            <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
+                              {procs.length ? procs.join(' · ') : '—'}
+                            </div>
+                          );
+                        }
+                        // Hand-added rows: nothing was extracted — the user fills it in
+                        if (ent.id.startsWith('ent-new-') || ent.id === SOLO_ENTITY_ID) {
+                          return (
+                            <input
+                              value={manualProcs[ent.id] ?? ''}
+                              onChange={e => applyManualProcs(ent.id, e.target.value)}
+                              aria-label={`Processes for ${ent.name || 'new entity'}`}
+                              placeholder="Type the processes — e.g. Order to Cash, Treasury"
+                              className="w-full text-[11px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                            />
+                          );
+                        }
+                        const procs = extractedReady ? entityProcesses(ent.id) : [];
+                        return (
+                          <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
+                            {procs.length ? procs.join(' · ') : '—'}
+                          </div>
+                        );
+                      })()}
+                      <button
+                        onClick={() => removeEntity(ent.id)}
+                        disabled={soloEntity || entities.length === 1}
+                        aria-label={`Remove ${ent.name}`}
+                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer justify-self-end"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                      </div>
+                      {/* The entity's own RACM, on its own line — a filename needs
+                          the width, and a fifth column would crush the rest. */}
+                      <div className="pl-[38px] pr-4 pb-2.5 pt-1.5">
+                        {!racm ? (
+                          <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors">
+                            <Upload size={11} /> Upload RACM
+                            <input
+                              type="file"
+                              className="hidden"
+                              aria-label={`Upload RACM for ${ent.name || `entity ${i + 1}`}`}
+                              onChange={e => { onEntityRacmSelected(ent.id, e.target.files); e.target.value = ''; }}
+                            />
+                          </label>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white max-w-full min-w-0">
+                            <FileText size={11} className="text-text-muted shrink-0" />
+                            <span className="text-[11px] text-text truncate">{racm.name}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide shrink-0">RACM</span>
+                            {racm.state === 'parsing' ? (
+                              <Loader2 size={11} className="animate-spin text-text-muted shrink-0 mr-1" />
+                            ) : (
+                              <button
+                                onClick={() => removeEntityRacm(ent.id)}
+                                aria-label={`Remove RACM for ${ent.name || `entity ${i + 1}`}`}
+                                className="p-1 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                              >
+                                <X size={11} />
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    );
+                  })}
+                  {!soloEntity && (
+                    <button
+                      onClick={() => setEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', ownership: 100 }])}
+                      className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
+                    >
+                      <Plus size={13} /> Add entity
+                    </button>
+                  )}
+                </div>
+
+                {/* No subsidiaries is a real answer, not an empty table. */}
+                <button
+                  role="checkbox"
+                  aria-checked={soloEntity}
+                  onClick={toggleSoloEntity}
+                  className={`mt-2 w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                    soloEntity ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
+                    soloEntity ? 'bg-primary border-primary text-white' : 'border-border bg-white'
+                  }`}>
+                    {soloEntity && <Check size={10} />}
+                  </span>
+                  <span>
+                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
+                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
+                      {groupName.trim() || 'The company'} is audited as the single entity in scope — no subsidiaries to list.
+                    </span>
+                  </span>
+                </button>
+              </div>
             </div>
           </StepShell>
         )}
 
-        {step === 2 && (
+        {SCOPING_STEP && step === 2 && (
           <StepShell title="Scoping">
-            {/* Required-files card under the group name (user ask): the three
-                scoping documents listed as requirements, ONE bulk upload
-                button (native multi-select picker), attached files as tagged
-                chips beneath. */}
+            {/* Required-files card (user ask): the three scoping documents
+                listed as requirements, ONE bulk upload button (native
+                multi-select picker), attached files as tagged chips beneath.
+                The group name and entity table were asked on Basics. */}
             <div className="mb-5">
-              <div className="max-w-xl">
-                <FieldLabel>Group (listed / holding)</FieldLabel>
-                <input
-                  value={groupName}
-                  onChange={e => setGroupName(e.target.value)}
-                  className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-                />
-              </div>
-
-              <div className="mt-3 border border-border-light rounded-xl bg-white">
+              <div className="border border-border-light rounded-xl bg-white">
                 <div className="flex items-center gap-2 px-4 py-3">
                   <FileText size={14} className="text-primary shrink-0" />
                   <span className="text-[13px] font-bold text-text">Recommended files</span>
@@ -569,89 +855,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 </div>
               )}
             </div>
-            <FieldLabel>
-              Entities in scope of the group audit
-              {(racmUpload === 'done' || tbUpload === 'done') && entities.length > 0 && ' — mapped from the uploads'}
-            </FieldLabel>
-            {/* Ownership % column — parked for now (grid was
-                [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
-                per-row input; the data still seeds and shows downstream):
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number" min={1} max={100}
-                    value={ent.ownership}
-                    onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
-                    className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
-                  />
-                  <span className="text-[11px] text-text-muted">%</span>
-                </div>
-            */}
-            <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                <div>Entity</div><div>Type</div><div>Processes — extracted</div><div />
+            {/* The entity table lives on Basics now — say what the uploads did
+                to it here, so the derivation stays visible on the step that
+                caused it. */}
+            {extractedReady && entities.length > 0 && (
+              <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                <Check size={12} className="text-compliant-600 shrink-0" />
+                {entities.length} {entities.length === 1 ? 'entity' : 'entities'} mapped from the uploads — review them on Basics.
               </div>
-              {entities.length === 0 && (
-                <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
-                  No entities yet — upload the recommended files above and they're mapped from the data, or add one by hand.
-                </div>
-              )}
-              {entities.map((ent, i) => (
-                <div key={ent.id} className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {ent.type === 'Holding'
-                      ? <Landmark size={14} className="text-brand-700 shrink-0" />
-                      : <Building2 size={14} className="text-text-muted shrink-0" />}
-                    <input
-                      value={ent.name}
-                      onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                      className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
-                    />
-                  </div>
-                  <select
-                    value={ent.type}
-                    onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as GroupEntity['type'] } : x))}
-                    className="text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
-                  >
-                    <option>Holding</option>
-                    <option>Subsidiary</option>
-                  </select>
-                  {(() => {
-                    // Hand-added rows: nothing was extracted — the user fills it in
-                    if (ent.id.startsWith('ent-new-')) {
-                      return (
-                        <input
-                          value={manualProcs[ent.id] ?? ''}
-                          onChange={e => applyManualProcs(ent.id, e.target.value)}
-                          aria-label={`Processes for ${ent.name || 'new entity'}`}
-                          placeholder="Type the processes — e.g. Order to Cash, Treasury"
-                          className="w-full text-[11px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
-                        />
-                      );
-                    }
-                    const procs = extractedReady ? entityProcesses(ent.id) : [];
-                    return (
-                      <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
-                        {procs.length ? procs.join(' · ') : '—'}
-                      </div>
-                    );
-                  })()}
-                  <button
-                    onClick={() => setEntities(prev => prev.filter((_, j) => j !== i))}
-                    disabled={entities.length === 1}
-                    aria-label={`Remove ${ent.name}`}
-                    className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer justify-self-end"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => setEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', ownership: 100 }])}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
-              >
-                <Plus size={13} /> Add entity
-              </button>
-            </div>
+            )}
             {TB_UPLOAD && entities.length > 0 && tbUpload !== 'done' && (
               <Hint text="Upload the trial balances to continue — scoping runs on their numbers." />
             )}
@@ -913,10 +1125,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           </StepShell>
         )}
 
-        {step === 3 && (
+        {step === REVIEW_STEP && (
           <StepShell
-            title="Review — scoping decides the programme"
-            sub="Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances."
+            title="Review"
+            sub={SCOPING_STEP
+              ? 'Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances.'
+              : `Confirm who is in scope before the ${fy} programme is created. Trial balances and the general ledger are uploaded afterwards, from the engagement's Configuration tab.`}
           >
             {scopingSkipped && (
               <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-high-50 border border-high-100">
@@ -929,15 +1143,21 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
             )}
             <div className="grid grid-cols-1 gap-3 mb-4">
-              <ReviewCard title="Group & entities">
+              <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>
                 <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
                 {entities.map(e => (
-                  <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5">
-                    {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700" /> : <Building2 size={11} className="text-text-muted" />}
-                    {e.name} <span className="text-text-muted">· {e.ownership}%</span>
+                  <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5 min-w-0">
+                    {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
+                    <span className="truncate">{e.name}</span>
+                    {/* Say plainly whether the matrix is in — a missing RACM is
+                        the thing that stalls the engagement later. */}
+                    {entityRacm[e.id]
+                      ? <span className="inline-flex items-center gap-1 text-text-muted shrink-0"><FileText size={10} /> <span className="max-w-[140px] truncate">{entityRacm[e.id].name}</span></span>
+                      : <span className="text-text-muted shrink-0">· no RACM yet</span>}
                   </div>
                 ))}
               </ReviewCard>
+              {SCOPING_STEP && (<>
               <ReviewCard title="Materiality">
                 <LadderRow label="Overall" value={fmtCr(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
                 <LadderRow label="Performance" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall`} />
@@ -950,6 +1170,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <FunnelRow label="Processes derived" value={derived.length} />
                 <FunnelRow label="Group-level workstreams" value={BEYOND_TB.filter(b => beyond[b.id]).length} last />
               </ReviewCard>
+              </>)}
+              {!SCOPING_STEP && (
+                <ReviewCard title="What happens next">
+                  <p className="text-[11.5px] text-text-secondary leading-relaxed">
+                    The {fy} programme is created with {entities.length} {entities.length === 1 ? 'entity' : 'entities'} and
+                    {' '}{racmCount} RACM{racmCount === 1 ? '' : 's'} attached.
+                    Upload the trial balances and general ledger from the Configuration tab — materiality and the
+                    account-level scope are set there, once the numbers are in.
+                  </p>
+                </ReviewCard>
+              )}
             </div>
 
             <div className="border border-border-light rounded-xl bg-white p-4">
@@ -992,7 +1223,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         </button>
         {step < STEPS.length - 1 ? (
           <span className="flex items-center gap-2">
-            {step === 2 && (
+            {SCOPING_STEP && step === 2 && (
               <button
                 onClick={skipScoping}
                 title="Create without scoping — the workspace Overview flags the missing RACM and GL / trial balances"

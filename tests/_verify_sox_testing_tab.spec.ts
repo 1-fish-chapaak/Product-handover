@@ -41,6 +41,24 @@ test('SOX creation walks Engagements → handoff → scoping → workspace', asy
   await expect(sheet.getByText('Audit period')).toHaveCount(0);
   await expect(sheet.getByText(/annual cycle/)).toHaveCount(0);
   await expect(sheet.getByPlaceholder('e.g. P2P — SOX Q3 Testing')).toBeVisible();
+
+  // The pinned header must not paint over the first field. It used to: -mt-6
+  // cancelled the modal's p-6, but `sticky top-0` clamps the MARGIN box, so the
+  // header was pushed 24px below the space layout reserved for it and swallowed
+  // the "Engagement name" label whole. In the DOM, invisible on screen.
+  const overlap = await page.evaluate(() => {
+    const header = document.querySelector('.sticky.top-0.z-10.bg-canvas') as HTMLElement;
+    const label = Array.from(document.querySelectorAll('label'))
+      .find(l => /Engagement name/i.test(l.textContent || '')) as HTMLElement;
+    const hb = header.getBoundingClientRect();
+    const lb = label.getBoundingClientRect();
+    // topmost painted element at the label's centre must be the label itself
+    const hit = document.elementsFromPoint(lb.left + 40, lb.top + lb.height / 2)[0];
+    return { headerBottom: hb.bottom, labelTop: lb.top, topTag: hit?.tagName };
+  });
+  expect(overlap.topTag).toBe('LABEL');
+  expect(overlap.headerBottom).toBeLessThanOrEqual(overlap.labelTop);
+
   await page.screenshot({ path: `${SHOT_DIR}/02-basics.png` });
 
   // Back goes one step back — the classic type picker, SOX still selected

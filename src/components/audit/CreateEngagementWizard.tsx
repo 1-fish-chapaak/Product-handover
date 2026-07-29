@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronLeft, ChevronRight, ShieldCheck, ClipboardList, Zap,
   Check, AlertCircle, Edit3, Users, Sparkles, ChevronDown, ChevronUp,
-  Plus, Trash2, FileText, Loader2, CalendarClock,
+  Plus, Trash2, FileText, Loader2, CalendarClock, Landmark, Building2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import type {
   Engagement, EngType, AutomationSubtype, ProcessCode, EngagementMilestone,
+  EngagementEntity,
 } from '../../data/engagements';
 import { OWNER_NAMES, SUB_PROCESSES } from '../../data/grc-domain';
 
@@ -115,7 +116,10 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   const [type, setType] = useState<EngType | null>(initial?.type ?? initialType ?? null);
   const [name, setName] = useState(initial?.name ?? '');
   const [code, setCode] = useState(initial?.code ?? genCode());
+  // `entity` is the group (listed / holding) company — the one name the
+  // engagement card shows. The legal entities under it live in groupEntities.
   const [entity, setEntity] = useState(initial?.entity ?? '');
+  const [groupEntities, setGroupEntities] = useState<EngagementEntity[]>(initial?.groupEntities ?? []);
   const [description, setDescription] = useState(initial?.description ?? '');
   const [process, setProcess] = useState<UIProcess>(initial?.process ?? 'P2P');
   const [periodStart, setPeriodStart] = useState(initial?.startDate ?? '');
@@ -290,6 +294,9 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
       .map(m => ({ label: m.label.trim(), date: m.date }))
       .sort((a, b) => a.date.localeCompare(b.date));
     const next = cleanMilestones.find(m => m.date >= todayIso()) ?? cleanMilestones[cleanMilestones.length - 1];
+    const cleanEntities = groupEntities
+      .filter(e => e.name.trim())
+      .map(e => ({ ...e, name: e.name.trim() }));
     return {
       id: initial?.id ?? `eng-new-${Date.now()}`,
       code: code.trim().toUpperCase(),
@@ -325,6 +332,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
       startDate: periodStart,
       endDate: periodEnd,
       entity: entity.trim() || undefined,
+      // Half-typed rows are dropped rather than saved blank.
+      groupEntities: cleanEntities.length ? cleanEntities : undefined,
       team: { reviewer, auditors, riskOwners },
       milestones: cleanMilestones,
       controls: initial?.controls ?? 0,
@@ -355,7 +364,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   // The wizard is dirty once any data field moves off its opening value (edit
   // mode opens prefilled, so compare — never truthy-check). While dirty, the
   // backdrop goes inert (a stray click is the #1 accident) and X/Cancel ask.
-  const dataSnap = JSON.stringify([type, name, entity, description, process, periodStart, periodEnd, owner,
+  const dataSnap = JSON.stringify([type, name, entity, groupEntities, description, process, periodStart, periodEnd, owner,
     framework, racmVersion, samplingMethod, sampleSize, materiality,
     overallMateriality, pmPct, cttPct, keyOnly, scopeLevel, subProcessSel, linkedRacms]);
   const initialSnapRef = useRef<string | null>(null);
@@ -476,8 +485,10 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                       {code.trim().length === 0 && <Hint text="Code is required" />}
                     </div>
                     <div>
-                      <label className={labelCls}>Entity</label>
-                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
+                      <label className={labelCls}>Owner <span className="text-risk-700">*</span></label>
+                      <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
+                        {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
                     </div>
                   </div>
                   <div>
@@ -501,14 +512,74 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                   </div>
                   {periodStart && periodEnd && periodStart > periodEnd && <Hint text="End must be after start" />}
                   <div>
-                    <label className={labelCls}>Owner <span className="text-risk-700">*</span></label>
-                    <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
-                      {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div>
                     <label className={labelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
                     <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                  </div>
+
+                  {/* ── Group & entities ─────────────────────────────────────
+                      Who the engagement runs for: the listed / holding company
+                      on top, and the legal entities under it that the work
+                      actually covers. Both optional — an engagement scoped to a
+                      single company just names the group and adds no rows.
+                      The SOX / ICFR sheet asks the same pair on its Basics
+                      step, where each entity also carries its own RACM. */}
+                  <div className="pt-4 border-t border-canvas-border space-y-3">
+                    <SectionTitle title="Group & entities" subtitle="The company the engagement runs for, and the legal entities it covers" />
+                    <div>
+                      <label className={labelCls}>Group (listed / holding)</label>
+                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Entities in scope</label>
+                      <div className="border border-canvas-border rounded-xl bg-white overflow-hidden">
+                        <div className="grid grid-cols-[2fr_0.9fr_40px] gap-3 px-3.5 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-400 border-b border-canvas-border bg-canvas/60">
+                          <div>Entity</div><div>Type</div><div />
+                        </div>
+                        {groupEntities.length === 0 && (
+                          <div className="px-3.5 py-5 text-center text-[0.75rem] text-ink-500 border-b border-canvas-border">
+                            No entities yet — add the legal entities this engagement covers.
+                          </div>
+                        )}
+                        {groupEntities.map((ent, i) => (
+                          <div key={ent.id} className="grid grid-cols-[2fr_0.9fr_40px] gap-3 px-3.5 py-2 items-center border-b border-canvas-border last:border-b-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {ent.type === 'Holding'
+                                ? <Landmark size={14} className="text-brand-700 shrink-0" />
+                                : <Building2 size={14} className="text-ink-400 shrink-0" />}
+                              <input
+                                value={ent.name}
+                                onChange={e => setGroupEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                                aria-label={`Entity ${i + 1} name`}
+                                placeholder="Legal entity name"
+                                className="w-full text-[0.8125rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                              />
+                            </div>
+                            <select
+                              value={ent.type}
+                              onChange={e => setGroupEntities(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as EngagementEntity['type'] } : x))}
+                              aria-label={`Entity ${i + 1} type`}
+                              className="text-[0.75rem] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                            >
+                              <option>Holding</option>
+                              <option>Subsidiary</option>
+                            </select>
+                            <button
+                              onClick={() => setGroupEntities(prev => prev.filter((_, j) => j !== i))}
+                              aria-label={`Remove ${ent.name || `entity ${i + 1}`}`}
+                              className="p-1.5 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer justify-self-end"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setGroupEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: prev.length === 0 ? 'Holding' : 'Subsidiary' }])}
+                          className="flex items-center gap-1.5 px-3.5 py-2.5 text-[0.75rem] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
+                        >
+                          <Plus size={13} /> Add entity
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -819,7 +890,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                     <ReviewRow k="Type" v={type ?? '—'} />
                     <ReviewRow k="Name" v={name || '—'} />
                     <ReviewRow k="Code" v={<span className="font-mono">{code.toUpperCase()}</span>} />
-                    <ReviewRow k="Entity" v={entity.trim() || '—'} />
+                    <ReviewRow k="Group" v={entity.trim() || '—'} />
+                    <ReviewRow k="Entities" v={groupEntities.filter(e => e.name.trim()).map(e => e.name.trim()).join(', ') || '—'} />
                     <ReviewRow k="Process" v={process} />
                     <ReviewRow k="Period" v={`${periodStart || '—'} → ${periodEnd || '—'}`} />
                     <ReviewRow k="Owner" v={owner} />

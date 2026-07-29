@@ -564,6 +564,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             widthCls="w-full max-w-[560px]"
             variant="sheet"
             enterInstant
+            hideClose
             onClose={() => setSoxWizardOpen(false)}
           >
             <ScopingWizard
@@ -585,8 +586,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 setSoxWizardOpen(false);
                 addToast({
                   type: 'success',
+                  // Skipped scoping points at the RACM, not the trial balances:
+                  // the Configuration tab this used to name is now Audit logs
+                  // and carries no upload. Matches the Overview banner.
                   message: p.scopingSkipped
-                    ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+                    ? `${p.fy} programme created — add the RACM from the RACM tab`
                     : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
                 });
               }}

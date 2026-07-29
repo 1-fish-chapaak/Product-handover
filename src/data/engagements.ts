@@ -63,6 +63,15 @@ export interface AutomationConfig {
   alertRecipients: string[];
 }
 
+/** One legal entity inside the group the engagement covers. Mirrors the SOX
+ *  scoping flow's GroupEntity, minus the ownership % and trial-balance fields
+ *  that only the SOX derivation needs. */
+export interface EngagementEntity {
+  id: string;
+  name: string;
+  type: 'Holding' | 'Subsidiary';
+}
+
 export interface Engagement {
   id: string;
   code: string;
@@ -102,8 +111,13 @@ export interface Engagement {
   lastActivity: string;
   /** Human-readable next milestone — sign-off due / report due / next run. */
   nextScheduled: string;
-  /** Legal entity / business unit in scope. */
+  /** Group (listed / holding) company the engagement runs under — shown on the
+   *  engagement card as the entity in scope. */
   entity?: string;
+  /** Legal entities inside that group covered by the engagement, captured on
+   *  the creation wizard's Basics step. SOX engagements derive theirs from the
+   *  scoping uploads instead (see SoxProgramme.entities). */
+  groupEntities?: EngagementEntity[];
   /** ISO period bounds (yyyy-mm-dd) — the machine-readable twin of periodStart/periodEnd. */
   startDate?: string;
   endDate?: string;

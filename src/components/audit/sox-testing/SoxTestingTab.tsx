@@ -60,8 +60,11 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
     addToast({
       message: p.rolledFromFy
         ? `${p.fy} programme rolled forward from ${p.rolledFromFy} — ${p.racms.length} RACMs carried`
+        // Same correction as the EngagementsView toast: the Configuration tab
+        // this named is now Audit logs and carries no upload, so skipped
+        // scoping points at the RACM instead.
         : p.scopingSkipped
-          ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+          ? `${p.fy} programme created — add the RACM from the RACM tab`
           : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
       type: 'success',
     });
@@ -221,6 +224,8 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
             label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
             widthCls={view === 'wizard' || rollFrom ? 'w-full max-w-[560px]' : 'w-[1000px]'}
             variant={view === 'wizard' || rollFrom ? 'sheet' : 'modal'}
+            /* the scoping sheet carries its own header close */
+            hideClose={view === 'wizard'}
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
@@ -244,10 +249,13 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
  *  full-height side sheet sliding in from the right; the scoping summary keeps
  *  the centred 800px-tall modal. Closes on X or Escape only — an overlay click
  *  mid-wizard would silently discard scoping work. */
-export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', enterInstant, onClose, children }: {
+export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', enterInstant, hideClose, onClose, children }: {
   label: string;
   widthCls?: string;
   variant?: 'modal' | 'sheet';
+  /** The content renders its own close in a header — drop the floating one so
+   *  the sheet doesn't show two X's. Escape still closes. */
+  hideClose?: boolean;
   /** Sheet only: render already in place (no slide-in) — used when another
    *  sheet hands off to this one so the swap reads as a step change. The
    *  matching instant exit comes via AnimatePresence `custom` at the call
@@ -262,7 +270,7 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', en
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const closeBtn = (
+  const closeBtn = hideClose ? null : (
     <button
       onClick={onClose}
       aria-label="Close"

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
-  Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
+  Assertion, Attestation, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   MaterialityRules, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, SignificantAccount, TestResult, TrackConclusion,
@@ -124,6 +124,9 @@ interface IcfrCtx {
   remarkRacmRow: (controlId: string, remark: string) => void;
   clearRacmReview: (controlId: string) => void;
   bulkTestControls: (controlIds: string[]) => void;
+  // Audit logs tab — the New audit wizard hands back everything but the
+  // stamp (id / by / role / at), which the store adds.
+  createAudit: (draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => void;
   // RACM / SOP source documents uploaded on the RACM page
   // an uploaded RACM/SOP belongs to ONE process's matrix (a RACM is per-process);
   // docs without a process are legacy engagement-wide pins and show everywhere
@@ -170,9 +173,6 @@ interface IcfrCtx {
   resolveReviewNote: (noteId: string, response: string) => void;
   verifyReviewNote: (noteId: string) => void;
   reopenReviewNote: (noteId: string) => void;
-  // testing period — interim vs year-end, and the roll-forward that moves between them
-  togglePeriod: () => void;
-  rollForward: () => void;
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -503,6 +503,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const run: RunRecord = { id: uid('run'), by: me, role, at: 'just now', ...draft };
       return { ...prev, runs: [run, ...prev.runs] };
     });
+  }, [me, role]);
+
+  // Newest first, matching pushRun — the Audit logs list reads it in order.
+  const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => {
+    setEng(prev => ({
+      ...prev,
+      audits: [{ id: uid('audit'), by: me, role, at: 'just now', ...draft }, ...prev.audits],
+    }));
   }, [me, role]);
 
   const controlOutcome = (c: Control): RunControlOutcome => ({
@@ -1118,26 +1126,6 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     return id;
   }, [eng]);
 
-  const togglePeriod = useCallback(() => {
-    if (role !== 'auditor') return;   // the testing period is the auditor's dial
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
-  }, [role]);
-
-  const rollForward = useCallback(() => {
-    setEng(prev => {
-      if (isEngagementLocked(prev)) return prev;
-      return {
-        ...prev,
-        period: 'Year-end',
-        controls: prev.controls.map(c => {
-          // design carries forward; operating re-tests unless automated + benchmarkable
-          if (c.nature === 'Automated') return c;
-          return { ...c, operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null, steps: c.operating.steps.map(s => ({ ...s, result: 'Not tested', override: undefined, sampleResults: undefined })) } };
-        }),
-      };
-    });
-  }, []);
-
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
   // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
   // Same-person guard: one human never holds both signatures on the opinion.
@@ -1161,14 +1149,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
-    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, createRacm,
+    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, racmDocs, addRacmDoc, createRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-    togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

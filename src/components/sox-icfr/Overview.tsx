@@ -61,13 +61,14 @@ export default function Overview() {
   const stats = engagementProgress(eng);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
-  // Scoping-skipped gap (wizard "Skip for now"): flag the missing RACM and
-  // GL / trial balances until they're added — RACM from the RACM tab, files
-  // from the Configuration tab.
+  // Scoping-skipped gap (wizard "Skip for now"): flag the missing RACM until
+  // it's added from the RACM tab.
   const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
   const racmMissing = eng.controls.length === 0;
-  const tbMissing = !prog?.entities.some(e => e.tbFile);
-  const scopingGap = !!prog?.scopingSkipped && (racmMissing || tbMissing);
+  // The GL / trial-balance half of this banner is gone: it pointed at the
+  // Configuration tab, which is now Audit logs and carries no upload. Nagging
+  // about a missing file with nowhere to add it is worse than staying quiet.
+  const scopingGap = !!prog?.scopingSkipped && racmMissing;
   // The owner's overview is their court only — engagement-wide dashboards,
   // materiality and the sign-off chain are audit-side surfaces.
   const myControls = isOwner ? eng.controls.filter(c => c.owner === meOwner) : [];
@@ -211,23 +212,16 @@ export default function Overview() {
         );
       })()}
 
-      {/* scoping was skipped in the wizard — say exactly what's missing and where it lands */}
+      {/* scoping was skipped in the wizard and no RACM has arrived since — say
+          what's missing and where it lands */}
       {!isOwner && scopingGap && (
         <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-ink-900">
-              Scoping was skipped — {racmMissing && tbMissing ? 'the RACM and the GL / trial balances are' : racmMissing ? 'the RACM is' : 'the GL / trial balances are'} missing
-            </h2>
+            <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
             <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
-              {racmMissing && (<>
-                Add or generate the RACM from the{' '}
-                <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.{' '}
-              </>)}
-              {tbMissing && (<>
-                Upload the GL and trial balances from the{' '}
-                <button onClick={() => setTab('config')} className="font-semibold text-brand-700 hover:underline cursor-pointer">Configuration tab</button>.
-              </>)}
+              Add or generate the RACM from the{' '}
+              <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.
             </p>
           </div>
         </div>

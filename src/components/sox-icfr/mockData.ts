@@ -527,7 +527,7 @@ const RUNS: RunRecord[] = [
 
 const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Airline P2P & O2C', entity: 'Airline Group Ltd', framework: 'COSO 2013 / SOX 404',
-  periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
+  periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026',
   materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
   live: true, wentLiveAt: '01 Apr 2025',
   entityDetected: { name: 'Airline Group Ltd', companyCode: 'AG01', source: 'GL upload · Mar 2025' },
@@ -553,6 +553,9 @@ const ENGAGEMENT: IcfrEngagement = {
   reviewNotes: REVIEW_NOTES,
   executions: EXECUTIONS,
   runs: RUNS,
+  // The Audit logs tab starts empty on purpose — audits only exist once someone
+  // runs the New audit wizard, so the empty state is the honest first view.
+  audits: [],
   signoff: {},
   rulesLog: [],
 };
