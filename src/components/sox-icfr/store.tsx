@@ -10,6 +10,64 @@ import type {
 
 let _uid = 0;
 const uid = (p: string) => `${p}-${(++_uid).toString(36)}`;
+
+/**
+ * A control returned to the state a fresh audit finds it in: both tracks Not
+ * tested, and the journey back at zero.
+ *
+ * Not tested has to mean untouched, not just unconcluded. `designStarted` reads
+ * a Received design document and `operatingStarted` reads a drawn population —
+ * so a control whose conclusions were cleared but whose evidence survived still
+ * reports "In progress", and the auditor arrives at a step already half-walked.
+ * A new cycle proves itself with the new cycle's evidence.
+ *
+ * The working paper is emptied, not just uncleared. Both tracks open on their
+ * "isn't set up yet" first state, which each renders only when its lists are
+ * empty — design on `documents.length === 0 && points.length === 0`, operating
+ * on `steps.length === 0`. Leaving the rows behind as Missing would drop the
+ * auditor into a paper someone else had already framed.
+ *
+ * What goes: the design elements and design checks, the test attributes and how
+ * each was evidenced, both tracks' conclusions and overrides, the population and
+ * the IPE behind it, the drawn sample and its per-item results, every
+ * attestation and uploaded file, and the paper's sign-offs.
+ *
+ * What stays: the control — its description, risk, assertions, owner, nature,
+ * frequency, precision. That is the RACM row, and the RACM is confirmed at
+ * scoping, not re-authored per cycle. Everything above is the working paper the
+ * auditor builds on top of it, and each cycle builds its own.
+ */
+function untested(c: Control): Control {
+  return {
+    ...c,
+    // The paper is this cycle's. A signature on last cycle's conclusions cannot
+    // stand over results that no longer exist.
+    wpSignoff: undefined,
+    reviewReturn: undefined,
+    design: {
+      ...c.design,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      documents: [],
+      points: [],
+    },
+    operating: {
+      ...c.operating,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      // Period-bound: the population is an extract over last cycle's dates.
+      // (The IPE test that backs it is being built in parallel — when
+      // `OperatingTrack.ipe` lands, clear it here too, for the same reason.)
+      population: undefined,
+      sampling: undefined,
+      steps: [],
+    },
+  };
+}
 /** What gets logged for one execution — actor/id/time are stamped by pushExec. */
 type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecKind; verb: string; target?: string; result?: TestResult | TrackConclusion };
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -25,15 +83,18 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
   return { ...s, sampleResults: m };
 };
 import { ROLE_LABEL } from './types';
+import { normaliseProcess, processesForAudit } from './auditScope';
 
 // The five primary tabs — mirrors how other engagements are laid out.
-export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs' | 'config';
+// 'deficiencies' is a TAB now, not a drill-in: deficiency management is a place
+// you go, not somewhere you land from an Overview card.
+export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs' | 'deficiencies' | 'config';
 // 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs' | 'config'
 // are root-level views; the rest are drill-ins reached from them.
 type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'config' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
 export interface RacmEditorMeta { name: string; process?: string }
 
-const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs', config: 'config' };
+const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs', deficiencies: 'deficiencies', config: 'config' };
 
 /** What a drill-in can return to — everything except the drill-ins themselves. */
 const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'config', 'deficiencies', 'scope', 'handoffs'];
@@ -41,6 +102,9 @@ const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register'
 /** The create-control form's payload — everything else on the Control is derived. */
 export interface NewControlDraft {
   description: string;
+  /** The RACM's Control Activity narrative — optional, because a control can be
+   *  raised from the one-line statement and written up afterwards. */
+  controlActivity?: string;
   process: string;
   subProcess: string;
   riskId: string;
@@ -127,6 +191,14 @@ interface IcfrCtx {
   // Audit logs tab — the New audit wizard hands back everything but the
   // stamp (id / by / role / at), which the store adds.
   createAudit: (draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => void;
+  /** Edit an audit from its own Configuration tab. The stamp (who / when) is
+   *  left alone — it records creation, not the last touch. */
+  updateAudit: (auditId: string, patch: Partial<Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>>) => void;
+  /** Which audit is open. null = the engagement level (Dashboard / Audit logs);
+   *  set = drilled into that audit's Overview / RACM / Control Library / Config. */
+  openAuditId: string | null;
+  openAudit: (auditId: string) => void;
+  closeAudit: () => void;
   // RACM / SOP source documents uploaded on the RACM page
   // an uploaded RACM/SOP belongs to ONE process's matrix (a RACM is per-process);
   // docs without a process are legacy engagement-wide pins and show everywhere
@@ -506,12 +578,71 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me, role]);
 
   // Newest first, matching pushRun — the Audit logs list reads it in order.
+  //
+  // A new audit starts from zero: every control it covers goes back to Not tested
+  // on both tracks, and everything last cycle's testing left behind goes with
+  // them. An audit is a fresh cycle, so inheriting any of it would claim work this
+  // audit never did.
+  //
+  // Only the controls in THIS audit's scope are reset — another audit scoped to
+  // different entities keeps its own progress.
   const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => {
+    setEng(prev => {
+      const audit: AuditRecord = { id: uid('audit'), by: me, role, at: 'just now', ...draft };
+      // Same precedence the workspace filter uses: controls picked one by one on
+      // the scope step decide, and only when none were does the process filter.
+      const picked = audit.controlIds?.length ? new Set(audit.controlIds) : null;
+      const procs = processesForAudit(audit, prev.id);
+      const covers = (c: Control) => (picked
+        ? picked.has(c.id)
+        : !procs || procs.includes(normaliseProcess(c.process)));
+      const resetIds = new Set(prev.controls.filter(covers).map(c => c.id));
+      const hit = (controlId: string) => resetIds.has(controlId);
+
+      return {
+        ...prev,
+        audits: [audit, ...prev.audits],
+        controls: prev.controls.map(c => (resetIds.has(c.id) ? untested(c) : c)),
+        // A deficiency is a conclusion about a control, so it cannot outlive the
+        // result it came from.
+        deficiencies: prev.deficiencies.filter(d => !hit(d.controlId)),
+        // The control page reads its history out of `executions`; leaving last
+        // cycle's runs there would show "tested by A. Mehta" on a control the
+        // page also calls Not tested.
+        executions: prev.executions.filter(e => !hit(e.controlId)),
+        // Open PBCs and queries were raised against evidence that is no longer
+        // received, and remediations against deficiencies that no longer exist.
+        tasks: prev.tasks.filter(t => !hit(t.controlId)),
+        // Review notes challenge a paper. The paper is unsigned and unconcluded
+        // again, so an open note would block a countersign on nothing.
+        reviewNotes: prev.reviewNotes.filter(n => !hit(n.controlId)),
+        // A run whose every control was reset has no surviving outcome to show.
+        runs: prev.runs.filter(r => !r.controls.every(rc => hit(rc.controlId))),
+        // The ICFR opinion covered last cycle's results. Keeping it would leave
+        // the engagement locked (isEngagementLocked) with nothing tested under it.
+        signoff: resetIds.size ? {} : prev.signoff,
+      };
+    });
+  }, [me, role]);
+
+  const updateAudit = useCallback((auditId: string, patch: Partial<AuditRecord>) => {
     setEng(prev => ({
       ...prev,
-      audits: [{ id: uid('audit'), by: me, role, at: 'just now', ...draft }, ...prev.audits],
+      audits: prev.audits.map(a => (a.id === auditId ? { ...a, ...patch } : a)),
     }));
-  }, [me, role]);
+  }, []);
+
+  // Drilling into an audit swaps the whole level: the engagement's Dashboard /
+  // Audit logs tabs give way to that audit's Overview / RACM / Control Library /
+  // Configuration. Opening one resets to its Overview so the drill-in never
+  // lands on a tab left over from a previous audit.
+  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
+  const openAudit = useCallback((auditId: string) => {
+    setOpenAuditId(auditId);
+    setTabState('overview');
+    setView('overview');
+  }, []);
+  const closeAudit = useCallback(() => setOpenAuditId(null), []);
 
   const controlOutcome = (c: Control): RunControlOutcome => ({
     controlId: c.id, wpRef: c.wpRef, description: c.description,
@@ -1108,6 +1239,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (eng.controls.some(c => c.id === id)) id = uid(idBase);
     const control: Control = {
       id, wpRef, description: draft.description, process: draft.process,
+      controlActivity: draft.controlActivity?.trim() || undefined,
       subProcess: draft.subProcess.trim() || 'General',
       nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
       isKey: draft.isKey, precision: draft.description, owner: draft.owner,
@@ -1149,13 +1281,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
-    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, racmDocs, addRacmDoc, createRacm,
+    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
+    createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

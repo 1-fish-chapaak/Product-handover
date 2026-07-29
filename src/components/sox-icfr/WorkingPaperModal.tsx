@@ -200,7 +200,7 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
     <>
     {/* centred on screen — the fixed-height paper reads like a document viewer,
         not a top-anchored dialog */}
-    <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
           <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> Working paper — preview</h3>
@@ -253,7 +253,7 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
 
     {/* attest confirm — an irreversible signature never commits on a bare click */}
     {attest && (
-      <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={() => setAttest(null)}>
+      <div className="modal-backdrop" onClick={() => setAttest(null)}>
         <div className="modal" onClick={e => e.stopPropagation()}>
           <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
             <div className="flex items-center justify-between gap-3">

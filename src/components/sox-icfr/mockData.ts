@@ -1,7 +1,7 @@
 import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
-  EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
+  EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
   RacmReview, ReviewNote, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
@@ -13,6 +13,33 @@ const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: stri
   ({ id: `dd${++_d}`, kind, name, status, required: !OPTIONAL_KINDS.includes(kind),
      files: status === 'Received' ? [{ id: `ddf${_d}`, name, kind: name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: by ?? 'Risk Owner', uploadedAt: '12 Apr' }] : undefined,
      uploadedBy: status === 'Received' ? (by ?? 'Risk Owner') : undefined, at: status === 'Received' ? '12 Apr' : undefined });
+
+/**
+ * The RACM's Control Activity narrative — WHO performs it, over WHAT records,
+ * WHEN, HOW it is evidenced, and where exceptions go.
+ *
+ * Deliberately NOT a restatement of `description`: the header prints the control
+ * statement as its heading, so an activity that paraphrased it would read as the
+ * title twice over. This says how the control is actually run.
+ */
+const activityOf = (owner: string, subProcess: string, frequency: Frequency, nature: Nature): string => {
+  const [who, team] = owner.split('·').map(s => s.trim());
+  const when: Record<Frequency, string> = {
+    Daily: 'each business day',
+    Weekly: 'each week',
+    Monthly: 'each month, before the ledger closes',
+    Quarterly: 'each quarter',
+    Annual: 'once a year, ahead of the year-end close',
+    Recurring: 'on every transaction, as it is raised',
+    'Ad-hoc': 'whenever the event arises',
+  };
+  const how = nature === 'Automated'
+    ? 'The rule is configured in SAP S/4HANA and blocks anything that fails it; the exception log is the evidence.'
+    : nature === 'IT-dependent'
+      ? 'SAP S/4HANA produces the exception report and the reviewer clears each line, evidencing the outcome on the report itself.'
+      : 'The review is performed against the supporting documentation and evidenced by dated sign-off.';
+  return `${who}${team ? ` (${team})` : ''} performs this control over ${subProcess.toLowerCase()} records ${when[frequency]}. ${how} Anything that fails is held and escalated to the process owner before release.`;
+};
 
 let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
@@ -161,6 +188,7 @@ const DETAILED: Control[] = [
     id: 'P2P-C-01', wpRef: 'P-01', description: 'Vendor master additions and bank-detail changes require dual approval before activation.',
     process: 'Procure to Pay', subProcess: 'Vendor master', nature: 'Automated', type: 'Preventive', frequency: 'Recurring', isKey: true,
     precision: 'Any change to a vendor bank account is blocked until a second authoriser approves in SAP.',
+    controlActivity: 'R. Khanna (Master Data) raises every vendor addition and bank-detail change in SAP S/4HANA against the signed vendor request form and the bank confirmation letter. The record stays inactive until a second Master Data authoriser, independent of the raiser, approves the change in the workflow; the approval log is the evidence. Nothing pays out of an unapproved record.',
     owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
@@ -185,6 +213,7 @@ const DETAILED: Control[] = [
     id: 'P2P-C-02', wpRef: 'P-02', description: 'Purchase orders are approved per the delegation-of-authority matrix before release.',
     process: 'Procure to Pay', subProcess: 'Purchasing', nature: 'Manual', type: 'Preventive', frequency: 'Daily', isKey: true,
     precision: 'POs above ₹5L route to the next authority tier; release is blocked without approval at the correct tier.',
+    controlActivity: 'S. Iyer (Procurement) reviews each purchase requisition against the delegation-of-authority matrix before it is converted to a PO. SAP S/4HANA routes the order to the authority tier its value demands and blocks release until that tier approves; the approval trail on the PO is the evidence. Orders raised at the wrong tier are returned to the buyer, not overridden.',
     owner: 'S. Iyer · Procurement', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(), testDueInDays: 0,
@@ -207,6 +236,7 @@ const DETAILED: Control[] = [
     id: 'P2P-C-03', wpRef: 'P-03', description: 'Invoices are matched three-way (PO, GRN, invoice) before payment; exceptions route to buyer.',
     process: 'Procure to Pay', subProcess: 'Invoice processing', nature: 'IT-dependent', type: 'Detective', frequency: 'Daily', isKey: true,
     precision: 'Quantity/price tolerance breaches are held and cannot pay until cleared by the buyer.',
+    controlActivity: 'M. Nair (Accounts Payable) works the daily blocked-invoice report from SAP S/4HANA, which holds any invoice whose quantity or price falls outside tolerance on the three-way match against the PO and goods receipt. The buyer investigates each held line and clears or rejects it, evidencing the outcome on the report. A held invoice cannot be paid until it is cleared.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
     assertions: ['Accuracy', 'Existence / Occurrence'],
     racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'), testDueInDays: 0,
@@ -228,6 +258,7 @@ const DETAILED: Control[] = [
     id: 'P2P-C-04', wpRef: 'P-04', description: 'Duplicate-invoice block prevents posting of invoices matching an existing reference.',
     process: 'Procure to Pay', subProcess: 'Invoice processing', nature: 'Automated', type: 'Preventive', frequency: 'Recurring', isKey: true,
     precision: 'SAP blocks postings where vendor + invoice number + amount match an existing document.',
+    controlActivity: 'The duplicate-invoice check is configured in SAP S/4HANA and runs on every invoice as it is posted, comparing vendor, invoice number and amount against documents already on the ledger. A match is blocked at posting; the block log is the evidence. M. Nair (Accounts Payable) reviews the log and releases only after confirming the second document is genuine.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
@@ -251,6 +282,7 @@ const DETAILED: Control[] = [
     isMrc: true, mrcThreshold: 250_000,
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: true,
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
+    controlActivity: 'D. Rao (Controller) reviews every manual journal to the AP control account each month, before the ledger closes, against the supporting schedule and the originating document. The journal is posted only after review, and the sign-off on the journal package is the evidence. Journals raised without support are returned to the preparer.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
     assertions: ['Accuracy', 'Completeness'],
     racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
@@ -272,6 +304,7 @@ const DETAILED: Control[] = [
     id: 'P2P-C-06', wpRef: 'P-06', description: 'Goods-receipt cut-off: receipts at period-end are recorded in the correct period.',
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'Receipts in the last/first 5 days are checked to GRN dates for correct-period recording.',
+    controlActivity: 'M. Nair (Accounts Payable) takes the goods-receipt listing for the last five days of the period and the first five of the next, and agrees each line to the GRN date and the carrier documentation. Receipts recorded in the wrong period are reclassified before close; the reviewed listing carries dated sign-off as evidence.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-21', riskDescription: 'Goods/liabilities recorded in the wrong period (cut-off).',
     assertions: ['Cut-off', 'Completeness'],
     testDueInDays: 0,
@@ -291,6 +324,7 @@ const DETAILED: Control[] = [
     isMrc: true,   // review control tagged, threshold not yet documented — surfaces the precision warning
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
+    controlActivity: 'M. Nair (Accounts Payable) reviews the aged GR/IR report from SAP S/4HANA each month and investigates every entry open beyond 60 days with the buyer and the receiving site. Each item is cleared, accrued or written back with a documented reason; the annotated report is retained as evidence and the closing balance is agreed to the ledger.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
     assertions: ['Completeness', 'Accuracy'],
     racmReview: remark('Row is incomplete — no design documents or test attributes defined yet. Complete the RACM row, then resubmit for approval.'),
@@ -667,7 +701,8 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         ]).map((title, i) => ({
           id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
           process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-          isKey: true, precision: `${title}.`, owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
+          isKey: true, precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
+          owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
           riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
           assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
           design: designTrack('Not tested', [], []),
@@ -695,10 +730,16 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         step(`${i + 1}.1`, `${title} — primary attribute tested.`, 'Accuracy', 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], opDone ? 'Pass' : 'Not tested', stepExtra(1)),
         step(`${i + 1}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], opDone ? 'Pass' : 'Not tested', stepExtra(2)),
       ];
+      const frequency: Frequency = nature === 'Automated' ? 'Recurring' : c.frequency;
       return {
         ...c,
         nature,
-        frequency: nature === 'Automated' ? 'Recurring' as const : c.frequency,
+        frequency,
+        // re-derived, not inherited: the shell was built Manual/Monthly and the
+        // activity has to describe the nature and cadence this row ended up with.
+        // 'General' is the placeholder sub-process on generated rows — naming the
+        // process reads better than "over general records".
+        controlActivity: activityOf(c.owner, c.subProcess === 'General' ? name : c.subProcess, frequency, nature),
         design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
         operating: nature === 'Automated'
           ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
@@ -714,7 +755,8 @@ export function racmTemplate(process: string): Control[] {
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-    isKey: true, precision: `${title}.`, owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
+    isKey: true, precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
+    owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),
     operating: manualTrack('Not tested', [], undefined, 0),

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Building2, ChevronRight, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
+import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
 import { SeverityPill } from './parts';
@@ -501,6 +502,8 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 export function DeficienciesView() {
   const { eng, role, me, meOwner, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence } = useIcfr();
   const { addToast } = useToast();
+  // Classic engagements still call these exceptions; the rework renamed them.
+  const W = defWord(eng.id);
   const M = eng.materiality; const rules = eng.rules;
   // closing an exception is the terminal four-eyes act — it commits behind an attest confirm
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -529,7 +532,7 @@ export function DeficienciesView() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? 'My exceptions' : 'Exceptions'}</h1>
+            <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? W.mine : W.page}</h1>
             {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 bg-paper-100 border border-canvas-border rounded-full px-2 h-[20px]">
               <Lock size={11} className="text-ink-400" /> Engagement concluded · read-only
             </span>}
@@ -538,7 +541,7 @@ export function DeficienciesView() {
             {locked
               ? 'The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.'
               : isOwner
-              ? 'Exceptions on your controls — commit the plan, execute the fix, and submit for retest. The auditor evaluates severity; the reviewer closes.'
+              ? `${W.Many} on your controls — commit the plan, execute the fix, and submit for retest. The auditor evaluates severity; the reviewer closes.`
               : <>Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</>}
           </p>
         </div>
@@ -581,7 +584,7 @@ export function DeficienciesView() {
       })()}
 
       {defs.length === 0 ? (
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? 'No exceptions on your controls.' : 'No exceptions — all tested controls effective.'}</div>
+        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? `No ${W.many} on your controls.` : `No ${W.many} — all tested controls effective.`}</div>
       ) : (
         <div className="space-y-3">
           {defs.map(d => {
@@ -741,7 +744,7 @@ export function DeficienciesView() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Close this exception?</h2>
+                <h2 className="text-[15px] font-semibold text-ink-900">Close this {W.one}?</h2>
                 <button onClick={() => setClosingId(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
