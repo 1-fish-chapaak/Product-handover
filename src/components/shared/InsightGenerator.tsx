@@ -113,6 +113,11 @@ interface Props {
    *  phases and the cache mechanics are untouched; the callback receives the
    *  built insight and a regenerate trigger. Single-subject mode only. */
   generatedView?: (insight: LayeredInsight, regenerate: () => void) => ReactNode;
+  /** Replace the default buildLayeredInsight call with a caller-supplied
+   *  builder — for surfaces whose insight derives from their own output (the
+   *  executor's run card). Gate, pipeline and cache mechanics are untouched.
+   *  Single-subject mode only. */
+  buildInsight?: () => LayeredInsight;
   /** Force the generation outcome — for demos and for states the mock engine
    *  can't reach organically. The ?insightDemo= URL param overrides this. */
   simulateOutcome?: Outcome;
@@ -122,7 +127,7 @@ export default function InsightGenerator({
   layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false,
   labelOverride, scanOverride, stepsOverride, onCheckMore,
   subjects, stackScopeLabel, initialOpen = 1,
-  previewCount, onSeeAll, stackFoldLedger, stackGroupByAnchor, generatedView, simulateOutcome,
+  previewCount, onSeeAll, stackFoldLedger, stackGroupByAnchor, generatedView, buildInsight, simulateOutcome,
 }: Props) {
   const multi = (subjects?.length ?? 0) > 0;
   const key = multi ? `${cacheKey(layer, subjectId)}:stack:${subjects!.length}` : cacheKey(layer, subjectId);
@@ -196,7 +201,10 @@ export default function InsightGenerator({
         built.forEach(b => CACHE.set(cacheKey(b.layer, b.subjectId), b));
         setStack(built);
       } else {
-        const built = { ...buildLayeredInsight({ layer, subjectId, subjectLabel, status, priority, isKey, flagship }), generatedAt: stamp };
+        const built = {
+          ...(buildInsight ? buildInsight() : buildLayeredInsight({ layer, subjectId, subjectLabel, status, priority, isKey, flagship })),
+          generatedAt: stamp,
+        };
         CACHE.set(key, built);
         setInsight(built);
       }

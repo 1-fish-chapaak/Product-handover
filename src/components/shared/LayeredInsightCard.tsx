@@ -31,6 +31,7 @@ import {
 import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
 import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
+import RunTrajectoryBand from './RunTrajectoryBand';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
 
@@ -262,6 +263,11 @@ export default function LayeredInsightCard({
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
+              {/* Across runs — the anchor metric's trajectory over stored run
+                  history. Only single-output insights carry one; its absence
+                  is itself the honest "no cross-run claim" state. */}
+              {insight.trajectory && <RunTrajectoryBand trajectory={insight.trajectory} className="mt-3.5" />}
+
               {/* What we found · Root cause · What's at stake — three open
                   columns, no boxes; the gutters do the separating. */}
               <div className="grid gap-x-8 gap-y-4 mt-3.5 lg:grid-cols-3">

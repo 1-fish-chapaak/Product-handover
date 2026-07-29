@@ -29,12 +29,13 @@ import {
 } from 'lucide-react';
 import {
   RUN_OUTPUT_COMPARE, STAGE3_CURRENT, ENTITY_MEMORY, ENTERPRISE_CONTEXT,
-  PROCESS_INSIGHTS, correlatedRecords, compareForWorkflow,
+  PROCESS_INSIGHTS, correlatedRecords, /* compareForWorkflow — parked with the output-compare card below */
   type OutputCompare, type RunSnapshot, type KpiDef, type KpiFormat,
   type Stage3Record, type Stage3EvidenceRow,
 } from '../../data/insightMemory';
 import type { LayeredInsight, VerdictTone, CheckMoreOption } from '../../data/layeredInsights';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
+import RunSelector from '../shared/RunSelector';
 import {
   RecommendedActions, EvidenceDisclosure,
   type RecItem, type EvidenceRow,
@@ -239,114 +240,6 @@ function TrendKpiRow({ tiles }: { tiles: { def: KpiDef; series: number[] }[] }) 
   );
 }
 
-// Run-window selector — the descriptor label itself is the dropdown trigger, so
-// the header text always names the current selection. Free multi-select of prior
-// runs (with Last-run / Last-3 / All shortcuts); the current run is the fixed
-// anchor and can't be unpicked, and at least one prior must stay selected.
-function RunSelector({ priors, current, selectedIds, descriptor, onToggle, onQuick }: {
-  priors: RunSnapshot[]; current?: RunSnapshot; selectedIds: Set<string>;
-  descriptor: string;
-  onToggle: (id: string) => void;
-  onQuick: (ids: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-
-  const recent = [...priors].reverse(); // most-recent first in the list
-  const lastId = priors[priors.length - 1]?.id;
-  const quicks = [
-    { label: 'Last run', ids: lastId ? [lastId] : [] },
-    { label: 'Last 3', ids: priors.slice(-2).map(r => r.id) }, // 2 priors + current = 3 runs
-    { label: 'All', ids: priors.map(r => r.id) },
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className="group inline-flex items-center gap-1.5 -ml-1 rounded-lg px-1.5 py-1 hover:bg-canvas transition-colors cursor-pointer"
-      >
-        <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
-          <GitCompareArrows size={13} />
-        </span>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">{descriptor}</span>
-        <ChevronDown size={13} className={`text-brand-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute left-0 top-[calc(100%+6px)] z-30 w-64 rounded-xl border border-canvas-border bg-canvas-elevated p-2 shadow-lg shadow-ink-900/5"
-          >
-            <div className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">Compare against</div>
-            <div className="flex flex-wrap gap-1 px-1 pb-2">
-              {quicks.map(q => {
-                const active = q.ids.length === selectedIds.size && q.ids.every(id => selectedIds.has(id));
-                return (
-                  <button key={q.label} type="button" onClick={() => onQuick(q.ids)}
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${active ? 'bg-brand-600 text-white' : 'bg-canvas text-ink-600 hover:bg-brand-50 hover:text-brand-700'}`}>
-                    {q.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="max-h-56 overflow-y-auto">
-              {recent.map(r => {
-                const checked = selectedIds.has(r.id);
-                const lockLast = checked && selectedIds.size === 1; // keep ≥1 prior
-                return (
-                  <button key={r.id} type="button"
-                    onClick={() => { if (!lockLast) onToggle(r.id); }}
-                    disabled={lockLast}
-                    title={lockLast ? 'Keep at least one run to compare against' : undefined}
-                    className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${lockLast ? 'cursor-default' : 'cursor-pointer hover:bg-canvas'}`}>
-                    <span className={`size-4 shrink-0 rounded-[5px] border flex items-center justify-center ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-canvas'}`}>
-                      {checked && <Check size={11} />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[12px] font-semibold text-ink-800">{r.label}</span>
-                      <span className="block text-[10.5px] text-ink-400">{r.date}</span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-mono text-ink-500 tabular-nums" title="exceptions">{r.kpis.exceptions}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {current && (
-              <div className="mt-1 flex items-center gap-2.5 border-t border-canvas-border px-2 pt-2">
-                <span className="size-4 shrink-0 rounded-[5px] border border-brand-200 bg-brand-50 flex items-center justify-center text-brand-500">
-                  <Check size={11} />
-                </span>
-                <span className="min-w-0 flex-1 text-[11.5px] text-ink-500">
-                  <span className="font-semibold text-ink-700">{current.label}</span> · this run
-                </span>
-                <span className="shrink-0 text-[11px] font-mono text-ink-500 tabular-nums">{current.kpis.exceptions}</span>
-              </div>
-            )}
-            <p className="px-2 pt-2 text-[10.5px] text-ink-400">
-              {selectedIds.size + 1} runs in view · {selectedIds.size >= 2 ? 'trend' : 'delta'}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 // One small "what changed" column — new / fixed / still-open.
 function DiffColumn({
   Icon, label, count, tone, children,
@@ -391,10 +284,11 @@ export function OutputComparePanel({
   const current = history.find(r => r.current) ?? history[history.length - 1];
   const mostRecentPriorId = priors[priors.length - 1]?.id;
 
-  // Default to the single most-recent prior — i.e. today's "compared to last
-  // run" behaviour. Picking 2+ priors flips the card into trend mode.
+  // Default to the view the history honestly supports: with 2+ priors the card
+  // opens in trend mode ("Across last 3 runs"); with one prior it falls back to
+  // the 1-vs-1 delta. The analyst can still narrow to last-run in the selector.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(mostRecentPriorId ? [mostRecentPriorId] : []),
+    () => new Set(priors.slice(-2).map(r => r.id)),
   );
 
   const toggle = (id: string) => setSelectedIds(prev => {
@@ -524,7 +418,10 @@ export function OutputComparePanel({
         {/* Header — run selector (doubles as the descriptor) + AI chip + verdict */}
         <div className="flex items-center gap-2">
           {history.length > 0 ? (
-            <RunSelector priors={priors} current={current} selectedIds={selectedIds}
+            <RunSelector
+              priors={priors.map(r => ({ id: r.id, label: r.label, date: r.date, meta: int0(r.kpis.exceptions) }))}
+              current={current ? { id: current.id, label: current.label, date: current.date, meta: int0(current.kpis.exceptions) } : undefined}
+              selectedIds={selectedIds}
               descriptor={descriptor} onToggle={toggle} onQuick={quick} />
           ) : (
             <>
@@ -892,14 +789,12 @@ export function CrossWorkflowCorrelationPanel({
 
 export default function WorkflowFollowUpInsights({
   onAction,
-  workflowId,
 }: {
   onAction?: (query: string) => void;
-  /** Drives which KPI set the output-compare card trends (wider set for the
-   *  sandbox test workflows). */
+  /** Drives which KPI set the (currently parked) output-compare card trends —
+   *  kept in the signature so call sites stay stable while the card is parked. */
   workflowId?: string;
 }) {
-  const compare = compareForWorkflow(workflowId);
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
@@ -915,7 +810,13 @@ export default function WorkflowFollowUpInsights({
       </div>
 
       <div className="flex flex-col gap-3">
-        <OutputComparePanel compare={compare} onAction={onAction} />
+        {/* Output-compare card — PARKED, not retired: the run-output insight's
+            trajectory band now covers this surface's job here, but the panel
+            may move to another surface. To bring it back, destructure
+            `workflowId` above and render:
+
+        <OutputComparePanel compare={compareForWorkflow(workflowId)} onAction={onAction} />
+        */}
         <CrossWorkflowCorrelationPanel onAction={onAction} />
       </div>
     </motion.section>

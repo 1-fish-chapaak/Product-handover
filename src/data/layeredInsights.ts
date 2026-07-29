@@ -17,7 +17,7 @@
 // Determinism: no Date.now()/Math.random() in module or render paths. All ids,
 // dates and figures are literals or derived from the caller's real subject.
 
-import type { ConfidenceFactors, InsightSeverity, DetectionMethod } from './insightMemory';
+import type { ConfidenceFactors, InsightSeverity, DetectionMethod, KpiFormat } from './insightMemory';
 
 // ─── The altitudes ─────────────────────────────────────────────────────────
 
@@ -104,6 +104,86 @@ export interface LayerEvidenceItem {
  *  determinism rule. `escalated` outranks `new` for attention: an old finding
  *  getting worse matters more than a fresh low one. */
 export type InsightFreshness = 'new' | 'escalated' | 'recurring' | 'resolved';
+
+// ─── Run trajectory — the concrete trend behind a single-output insight ─────
+// The PRD's honesty ladder (§9 "no fake sparklines") decides what may render:
+// one point claims nothing, two points make a DELTA (never drawn as a line),
+// three or more make a TREND the band can chart. Every point is a stored run —
+// no interpolation, no smoothing — so the visual is evidence, not decoration.
+// One anchor metric only: the moment a card trends three KPIs it stops being
+// an insight and becomes a dashboard (multi-KPI stays in the compare card).
+
+export interface TrajectoryPoint {
+  runId: string;
+  /** Full run label, e.g. "Jun 2026". */
+  label: string;
+  /** Short axis label, e.g. "Jun". */
+  month: string;
+  /** Human date, e.g. "02 Jun 2026". */
+  date: string;
+  value: number;
+  /** The run being viewed — always the last point of the series. */
+  current?: boolean;
+}
+
+export interface RunTrajectory {
+  /** The ONE anchor metric the card's verdict hangs on, e.g. "Duplicate pairs". */
+  metricLabel: string;
+  /** Unit line under the hero value, e.g. "duplicate pairs this run". */
+  unitLabel: string;
+  format: KpiFormat;
+  /** Drives delta colour: rising exceptions warn, rising volume stays neutral. */
+  polarity: 'lowerBetter' | 'neutral';
+  /** Ordered oldest → newest, current run last. */
+  points: TrajectoryPoint[];
+  /** Entity-recurrence strip (PRD §3.1): which runs flagged `entityLabel`.
+   *  Parallel to `points`; omit both to render the KPI line alone. */
+  entityLabel?: string;
+  flaggedRuns?: boolean[];
+}
+
+export interface TrajectoryReading {
+  current: number;
+  previous: number;
+  first: number;
+  /** current − previous, raw units. */
+  lastDelta: number;
+  /** % move vs the previous run. */
+  lastPct: number;
+  /** % move across the whole window (first → current). */
+  windowPct: number;
+  direction: 'up' | 'down' | 'flat';
+  /** Consecutive runs the metric moved in `direction`, latest-run backward. */
+  streak: number;
+  /** Polarity-aware colour of the latest move. */
+  tone: 'bad' | 'good' | 'neutral';
+}
+
+/** One reading shared by the band, the takeaway copy and any derived
+ *  recommendation, so every claim quotes the same numbers. */
+export function readTrajectory(t: RunTrajectory): TrajectoryReading {
+  const vals = t.points.map(p => p.value);
+  const current = vals[vals.length - 1] ?? 0;
+  const previous = vals.length > 1 ? vals[vals.length - 2] : current;
+  const first = vals[0] ?? current;
+  const lastDelta = current - previous;
+  const lastPct = previous ? Math.round((lastDelta / previous) * 100) : 0;
+  const windowPct = first ? Math.round(((current - first) / first) * 100) : 0;
+  const direction = lastDelta > 0 ? 'up' : lastDelta < 0 ? 'down' : 'flat';
+  let streak = 0;
+  if (direction !== 'flat') {
+    const rising = direction === 'up';
+    for (let i = vals.length - 1; i > 0; i--) {
+      if (rising ? vals[i] > vals[i - 1] : vals[i] < vals[i - 1]) streak++;
+      else break;
+    }
+  }
+  const tone: TrajectoryReading['tone'] =
+    t.polarity === 'neutral' || direction === 'flat'
+      ? 'neutral'
+      : (direction === 'up') === (t.polarity === 'lowerBetter') ? 'bad' : 'good';
+  return { current, previous, first, lastDelta, lastPct, windowPct, direction, streak, tone };
+}
 
 // ─── AI recommendations — the forward-looking audit-quality layer ───────────
 // An insight is backward-looking (a violated baseline). A recommendation is the
@@ -199,6 +279,11 @@ export interface LayeredInsight {
   freshness?: InsightFreshness;
   /** Short provenance behind the tag, e.g. "12 new breaks since June". */
   freshnessNote?: string;
+  /** Cross-run trajectory of the card's anchor metric — the quantified proof
+   *  behind the freshness tag. Absent = no cross-run claim (its very absence
+   *  is information). Single-output insights only: the cross-workflow card
+   *  correlates entities, it doesn't trend a metric. */
+  trajectory?: RunTrajectory;
   /** Bulleted "what we found" — the observation, structured for scanning.
    *  Cards without it fall back to [reasoning, atStake] as two bullets. */
   observations?: string[];
