@@ -3,6 +3,8 @@ import {
   CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileUp, FlaskConical, Loader2, MessageSquareWarning,
   Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
+import { useAuditControls } from './useAuditControls';
+import { defWord } from './flow';
 import { useIcfr } from './store';
 import { controlConclusion, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
@@ -57,9 +59,9 @@ function openEditorTab(engId: string, process: string): void {
 type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
 
 /** Roll-up status of one RACM — shared by the landing cards and the matrix header. */
-function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
+function matrixStatusOf(controls: Control[], engagementId: string): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
   const concl = controls.map(controlConclusion);
-  if (concl.includes('Ineffective')) return { label: 'Exceptions', tone: 'risk' };
+  if (concl.includes('Ineffective')) return { label: defWord(engagementId).Many, tone: 'risk' };
   if (concl.every(x => x === 'Not started')) return { label: 'Not tested', tone: 'draft' };
   if (concl.every(x => x === 'Effective')) return { label: 'Concluded', tone: 'compliant' };
   return { label: 'In testing', tone: 'evidence' };
@@ -189,11 +191,14 @@ export function RacmLanding() {
   const { eng, role, openRacmMatrix, createRacm } = useIcfr();
   const { addToast } = useToast();
 
+  // The matrix shows what the OPEN audit covers — its entities' processes.
+  // Falls back to every control when no audit is open or its scope is empty.
+  const scoped = useAuditControls(eng.controls);
   const processes = useMemo(() => {
     const map = new Map<string, Control[]>();
-    eng.controls.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
+    scoped.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
     return Array.from(map, ([name, rows]) => ({ name, rows }));
-  }, [eng.controls]);
+  }, [scoped]);
 
   // Create RACM — chooser → file picker → (SOP only) extraction → new row.
   const [creating, setCreating] = useState(false);
@@ -283,7 +288,7 @@ export function RacmLanding() {
         </thead>
         <tbody>
           {processes.map(({ name, rows }) => {
-            const status = matrixStatusOf(rows);
+            const status = matrixStatusOf(rows, eng.id);
             const risks = new Set(rows.map(c => c.riskId)).size;
             const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
             const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
@@ -399,7 +404,7 @@ export default function Racm() {
     pending: controls.filter(c => !c.racmReview).length,
   }), [controls]);
 
-  const matrixStatus = useMemo(() => matrixStatusOf(controls), [controls]);
+  const matrixStatus = useMemo(() => matrixStatusOf(controls, eng.id), [controls, eng.id]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();

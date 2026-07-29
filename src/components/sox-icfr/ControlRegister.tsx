@@ -4,7 +4,9 @@ import {
   Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, StickyNote,
 } from 'lucide-react';
 import { HeaderFilter } from '../shared/FilterSelect';
+import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
+import { defWord } from './flow';
 import {
   controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
@@ -28,7 +30,7 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'operating', label: 'Operating' },
   { id: 'operating-done', label: 'Operating concluded' },
   { id: 'effective', label: 'Effective' },
-  { id: 'exceptions', label: 'Exceptions' },
+  { id: 'exceptions', label: 'Exceptions' },  // relabelled per engagement — see viewOptions below
   { id: 'review', label: 'Awaiting review' },
   { id: 'owner', label: 'Waiting on owner' },
   { id: 'open', label: 'Not concluded' },
@@ -106,6 +108,13 @@ export default function ControlRegister() {
   const { addToast } = useToast();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
+  // The register shows what the OPEN audit covers — its entities' processes.
+  const auditScoped = useAuditControls(eng.controls);
+  // Classic engagements still say Exceptions; the rework renamed them.
+  const viewOptions = useMemo(
+    () => VIEWS.map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
+    [eng.id],
+  );
   // preview-before-download for the consolidated working paper
   const [wpPreview, setWpPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
@@ -128,8 +137,8 @@ export default function ControlRegister() {
 
   // Person-lane: the owner's register is their own controls, never the engagement's.
   const scoped = useMemo(
-    () => (role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls),
-    [eng.controls, role, meOwner],
+    () => (role === 'risk-owner' ? auditScoped.filter(c => c.owner === meOwner) : auditScoped),
+    [auditScoped, role, meOwner],
   );
   const stats = useMemo(() => ({
     effective: scoped.filter(c => controlConclusion(c) === 'Effective').length,
@@ -198,7 +207,7 @@ export default function ControlRegister() {
             (HeaderFilter on Control / Nature / Conclusion). Resurrect by
             restoring the FilterSelect import alongside HeaderFilter.
         <FilterSelect prefix="Status" engaged={savedView !== 'all'} value={savedView}
-          options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+          options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
           onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
         <FilterSelect value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
         <FilterSelect value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" />
@@ -277,7 +286,7 @@ export default function ControlRegister() {
               <th style={{ width: 168 }}>② Operating</th>
               <th style={{ width: 116 }}>
                 <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
-                  options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+                  options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
                   onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
               </th>
               <th style={{ width: 116 }} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</th>

@@ -3,6 +3,7 @@ import {
   AlertTriangle, BadgeCheck, CheckCircle2, ChevronRight, Circle, Hourglass, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning, X,
 } from 'lucide-react';
 import { useIcfr } from './store';
+import { defWord, isNewFlow } from './flow';
 import { useToast } from '../shared/Toast';
 import {
   assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
@@ -61,14 +62,18 @@ export default function Overview() {
   const stats = engagementProgress(eng);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
-  // Scoping-skipped gap (wizard "Skip for now"): flag the missing RACM until
-  // it's added from the RACM tab.
+  // Scoping-skipped gap (wizard "Skip for now"): flag what's missing until it
+  // is added.
+  const W = defWord(eng.id);
+  const newFlow = isNewFlow(eng.id);
   const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
   const racmMissing = eng.controls.length === 0;
-  // The GL / trial-balance half of this banner is gone: it pointed at the
-  // Configuration tab, which is now Audit logs and carries no upload. Nagging
-  // about a missing file with nowhere to add it is worse than staying quiet.
-  const scopingGap = !!prog?.scopingSkipped && racmMissing;
+  // The GL / trial-balance half only exists on classic engagements. On the new
+  // flow the Configuration tab it pointed at became Audit logs and carries no
+  // upload, and nagging about a file with nowhere to add it is worse than
+  // staying quiet — there, the files arrive on the audit.
+  const tbMissing = !prog?.entities.some(e => e.tbFile);
+  const scopingGap = !!prog?.scopingSkipped && (racmMissing || (!newFlow && tbMissing));
   // The owner's overview is their court only — engagement-wide dashboards,
   // materiality and the sign-off chain are audit-side surfaces.
   const myControls = isOwner ? eng.controls.filter(c => c.owner === meOwner) : [];
@@ -130,39 +135,7 @@ export default function Overview() {
 
   // engagement-wide RAG trio — the control-level trio (completeness, evidence
   // validated, TOD coverage) lives on each control's own page
-  const ragMeters = useMemo<RagMeterDef[]>(() => {
-    const total = eng.controls.length;
-    const approved = eng.controls.filter(c => c.racmReview?.status === 'Approved').length;
-    const remarks = eng.controls.filter(c => c.racmReview?.status === 'Remark').length;
-    const concl = eng.controls.map(controlConclusion);
-    const effective = concl.filter(x => x === 'Effective').length;
-    const ineffective = concl.filter(x => x === 'Ineffective').length;
-    // sample testing counts every sample × attribute verdict across the register;
-    // controls without a drawn sample count at attribute level
-    let checksDone = 0; let checksTotal = 0;
-    eng.controls.forEach(c => {
-      const steps = c.operating.steps;
-      const samples = c.operating.sampling?.samples ?? [];
-      checksTotal += samples.length ? samples.length * steps.length : steps.length;
-      checksDone += samples.length
-        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
-        : steps.filter(s => s.result !== 'Not tested').length;
-    });
-    return [
-      {
-        label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
-        explainer: 'Pre-testing review across the register — every row needs approval before testing leans on it, and open remarks pull this down.',
-      },
-      {
-        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
-        explainer: 'Controls concluded effective across the engagement — a single ineffective conclusion turns this red until it is remediated and retested.',
-      },
-      {
-        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
-        explainer: 'Sample-by-attribute checks completed across the operating tests — how much of the drawn testing ground is actually covered.',
-      },
-    ];
-  }, [eng.controls]);
+  const ragMeters = useMemo<RagMeterDef[]>(() => engagementRagMeters(eng.controls), [eng.controls]);
 
   // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
@@ -200,13 +173,13 @@ export default function Overview() {
               <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
             </button>
             <button onClick={() => setView('deficiencies')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
-              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> My exceptions</h2>
+              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
                 <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
                 {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
                 {inRetest > 0 && <span><b className="font-bold text-evidence-700">{inRetest}</b> with the auditor</span>}
               </div>
-              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage my exceptions <ArrowRight size={13} /></span>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
             </button>
           </div>
         );
@@ -218,10 +191,20 @@ export default function Overview() {
         <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
+            <h2 className="text-[13px] font-bold text-ink-900">
+              {newFlow
+                ? 'The RACM is missing'
+                : `Scoping was skipped — ${racmMissing && tbMissing ? 'the RACM and the GL / trial balances are' : racmMissing ? 'the RACM is' : 'the GL / trial balances are'} missing`}
+            </h2>
             <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
-              Add or generate the RACM from the{' '}
-              <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.
+              {racmMissing && (<>
+                Add or generate the RACM from the{' '}
+                <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.{' '}
+              </>)}
+              {!newFlow && tbMissing && (<>
+                Upload the GL and trial balances from the{' '}
+                <button onClick={() => setTab('config')} className="font-semibold text-brand-700 hover:underline cursor-pointer">Configuration tab</button>.
+              </>)}
             </p>
           </div>
         </div>
@@ -250,7 +233,7 @@ export default function Overview() {
         {/* exceptions */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> Exceptions</h2>
+            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
             <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {eng.deficiencies.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
@@ -263,7 +246,7 @@ export default function Overview() {
             ))}
             {sev.trivial > 0 && <div className="text-[11px] text-ink-400 pt-1">{sev.trivial} clearly trivial (logged, not evaluated)</div>}
           </div>
-          <button onClick={() => setView('deficiencies')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage exceptions <ArrowRight size={13} /></button>
+          <button onClick={() => setView('deficiencies')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
         </div>
 
         {/* handoffs */}
@@ -335,7 +318,7 @@ export default function Overview() {
           { key: 'mw', show: sev.mwOpen > 0, onClick: () => setView('deficiencies'), icon: <AlertTriangle size={13} className="text-risk-600" />,
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
           { key: 'other', show: openOther > 0, onClick: () => setView('deficiencies'), icon: <Circle size={11} className="text-high-600" />,
-            label: <><b className="font-semibold text-ink-900">{openOther}</b> exception{openOther === 1 ? '' : 's'} still working through remediation → retest → close</> },
+            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through remediation → retest → close</> },
           { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
             label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
           { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
@@ -497,4 +480,46 @@ export default function Overview() {
       )}
     </div>
   );
+}
+
+/**
+ * The engagement-wide RAG trio: how much of the RACM is reviewed, how much of it
+ * is concluded effective, and how much of the drawn sample ground is covered.
+ *
+ * Exported because the Dashboard (engagement level) and the Overview tab (inside
+ * an audit) both read it. One computation, so the two can never disagree about
+ * the same engagement.
+ */
+export function engagementRagMeters(controls: Control[]): RagMeterDef[] {
+    const total = controls.length;
+    const approved = controls.filter(c => c.racmReview?.status === 'Approved').length;
+    const remarks = controls.filter(c => c.racmReview?.status === 'Remark').length;
+    const concl = controls.map(controlConclusion);
+    const effective = concl.filter(x => x === 'Effective').length;
+    const ineffective = concl.filter(x => x === 'Ineffective').length;
+    // sample testing counts every sample × attribute verdict across the register;
+    // controls without a drawn sample count at attribute level
+    let checksDone = 0; let checksTotal = 0;
+    controls.forEach(c => {
+      const steps = c.operating.steps;
+      const samples = c.operating.sampling?.samples ?? [];
+      checksTotal += samples.length ? samples.length * steps.length : steps.length;
+      checksDone += samples.length
+        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+        : steps.filter(s => s.result !== 'Not tested').length;
+    });
+    return [
+      {
+        label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
+        explainer: 'Pre-testing review across the register — every row needs approval before testing leans on it, and open remarks pull this down.',
+      },
+      {
+        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
+        explainer: 'Controls concluded effective across the engagement — a single ineffective conclusion turns this red until it is remediated and retested.',
+      },
+      {
+        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
+        explainer: 'Sample-by-attribute checks completed across the operating tests — how much of the drawn testing ground is actually covered.',
+      },
+    ];
 }

@@ -1,19 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Building2, CalendarRange, Check, FileSpreadsheet, Grid3x3,
-  Landmark, Paperclip, Scale, Sparkles, Trash2, X,
+  ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet, Grid3x3,
+  Landmark, Paperclip, Scale, Sparkles, Star, Trash2, X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
 import { StepRail } from '../audit/sox-testing/ScopingWizard';
 import { FormSelect } from '../shared/FilterSelect';
 import {
-  BASIS_OPTIONS, PROGRAMMES, SEED_ENTITIES, ruleOverall,
+  BASIS_OPTIONS, currentFyEnd, cycleYears, ruleOverall,
   type GroupEntity, type MaterialityBasis,
 } from '../audit/sox-testing/soxTestingData';
+import { entitiesFor } from './auditScope';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
-import type { AuditScopeKind } from './types';
+import type { AuditScopeKind, Control } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -46,8 +47,6 @@ const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border round
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 const labelCls = 'block text-[11px] font-semibold text-ink-500 mb-1.5';
 
-/** Year options mirror the Configuration tab's, so the two read the same. */
-const YEARS = [2026, 2027, 2028];
 const fyLabel = (y: number) => `FY ${y - 1}-${String(y).slice(-2)}`;
 const cyLabel = (y: number) => `CY ${y}`;
 const spanOf = (basis: 'fy' | 'cy', y: number) =>
@@ -80,7 +79,10 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
 
   // ── Period ───────────────────────────────────────────────────────────────
   const [yearBasis, setYearBasis] = useState<'fy' | 'cy'>('fy');
-  const [year, setYear] = useState(2027);
+  // Defaults to the financial year in progress, same as engagement creation —
+  // the audit is almost always for the current cycle, and the picker below
+  // stays available for the exceptions.
+  const [year, setYear] = useState(currentFyEnd);
   const periodLabel = yearBasis === 'fy' ? fyLabel(year) : cyLabel(year);
   const periodSpan = spanOf(yearBasis, year);
 
@@ -88,21 +90,51 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   const [scopeKind, setScopeKind] = useState<AuditScopeKind>('entity');
   const [picked, setPicked] = useState<string[]>([]);
 
-  const entities: GroupEntity[] = useMemo(() => {
-    const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
-    return prog?.entities ?? SEED_ENTITIES;
-  }, [eng.id]);
+  // entitiesFor looks in BOTH programme stores — the classic one and the V2
+  // tab's, which is where the Altura group lives. Reading PROGRAMMES alone
+  // silently offered the demo group's entities instead of the engagement's.
+  const entities: GroupEntity[] = useMemo(() => entitiesFor(eng.id), [eng.id]);
 
-  // A RACM is a process's set of controls — same grouping Racm.tsx uses.
+  // A RACM is a process's set of controls — same grouping Racm.tsx uses. The
+  // rows come along because the RACM side of this step picks control by control.
   const racms = useMemo(() => {
-    const map = new Map<string, number>();
-    eng.controls.forEach(c => map.set(c.process, (map.get(c.process) ?? 0) + 1));
-    return Array.from(map, ([name, count]) => ({ name, count }))
+    const map = new Map<string, Control[]>();
+    eng.controls.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
+    return Array.from(map, ([name, rows]) => ({ name, rows, count: rows.length }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [eng.controls]);
 
+  /** Which RACM is expanded. One at a time — the sheet is 560px, and two open
+   *  lists turn the step into a scroll hunt. */
+  const [openRacm, setOpenRacm] = useState<string | null>(null);
+  /** Key controls only. SOX scopes to key controls far more often than not, so
+   *  this is the switch that does the picking rather than a filter on the eye. */
+  const [keyOnly, setKeyOnly] = useState(false);
+  /** Controls chosen inside the RACMs, by id. A RACM ticked whole puts all of
+   *  its ids in; unticking one row leaves the RACM partly selected. */
+  const [pickedControls, setPickedControls] = useState<string[]>([]);
+
+  /** What `keyOnly` lets you choose from within one RACM. */
+  const rowsOf = useCallback(
+    (name: string) => {
+      const rows = racms.find(r => r.name === name)?.rows ?? [];
+      return keyOnly ? rows.filter(c => c.isKey) : rows;
+    },
+    [racms, keyOnly],
+  );
+
+  // Turning "key controls only" on must not leave non-key controls selected
+  // underneath it — the switch decides the scope, so it prunes what it excludes.
+  useEffect(() => {
+    if (!keyOnly) return;
+    const keyIds = new Set(eng.controls.filter(c => c.isKey).map(c => c.id));
+    setPickedControls(prev => prev.filter(id => keyIds.has(id)));
+  }, [keyOnly, eng.controls]);
+
+  // Entities are picked by id — the workspace filter maps ids to processes.
+  // RACMs are picked by process name, which IS their identity.
   const options = scopeKind === 'entity'
-    ? entities.map(e => ({ id: e.name, primary: e.name, secondary: e.type }))
+    ? entities.map(e => ({ id: e.id, primary: e.name, secondary: e.type }))
     : racms.map(r => ({ id: r.name, primary: r.name, secondary: `${r.count} control${r.count === 1 ? '' : 's'}` }));
 
   // Switching sides clears the other side's picks — the two are never merged.
@@ -110,9 +142,34 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     if (kind === scopeKind) return;
     setScopeKind(kind);
     setPicked([]);
+    setPickedControls([]);
+    setOpenRacm(null);
   };
-  const togglePick = (id: string) =>
-    setPicked(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  /** Ticking a RACM takes its controls with it — whole RACM in, whole RACM out.
+   *  Individual rows are then unticked inside, which leaves the RACM partly
+   *  selected but still in scope. */
+  const togglePick = (id: string) => {
+    const on = picked.includes(id);
+    setPicked(prev => (on ? prev.filter(x => x !== id) : [...prev, id]));
+    if (scopeKind !== 'racm') return;
+    const ids = rowsOf(id).map(c => c.id);
+    setPickedControls(prev => (on
+      ? prev.filter(x => !ids.includes(x))
+      : Array.from(new Set([...prev, ...ids]))));
+  };
+  /** One control row. Unticking the last row of a RACM drops the RACM too —
+   *  a RACM in scope with nothing selected under it covers nothing. */
+  const toggleControl = (racm: string, controlId: string) => {
+    setPickedControls(prev => {
+      const next = prev.includes(controlId) ? prev.filter(x => x !== controlId) : [...prev, controlId];
+      const ids = rowsOf(racm).map(c => c.id);
+      const anyLeft = ids.some(id => next.includes(id));
+      setPicked(p => (anyLeft ? (p.includes(racm) ? p : [...p, racm]) : p.filter(x => x !== racm)));
+      return next;
+    });
+  };
+  /** Display-ready labels for what's picked — ids are storage, not copy. */
+  const pickedNames = picked.map(id => options.find(o => o.id === id)?.primary ?? id);
 
   // ── Files (optional) ─────────────────────────────────────────────────────
   const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
@@ -145,7 +202,9 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   // Scope & files gates on the scope half only — the TB / GL half is optional,
   // so an empty file list must never block Continue.
   const canContinue = step === 0 ? true
-    : step === 1 ? picked.length > 0
+    // Scoping by RACM means picking controls: a RACM ticked with nothing
+    // under it covers nothing, so Continue waits for at least one row.
+    : step === 1 ? (scopeKind === 'entity' ? picked.length > 0 : pickedControls.length > 0)
     : step === 2 ? benchmark > 0 && (basis === 'custom' || pct > 0)
     : true;
 
@@ -155,7 +214,11 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
       yearBasis,
       periodSpan,
       scopeKind,
-      scopeNames: picked,
+      scopeNames: pickedNames,
+      scopeIds: scopeKind === 'entity' ? picked : [],
+      // Only the RACM side picks control by control; scoping by entity lets the
+      // entities' processes decide, so it leaves this empty on purpose.
+      controlIds: scopeKind === 'racm' ? pickedControls : [],
       files,
       materiality: { basisLabel: basisOpt.label, benchmark, pct },
       overall,
@@ -163,7 +226,9 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     addToast({
       type: 'success',
       title: 'Audit created',
-      message: `${periodLabel} — ${picked.length} ${scopeKind === 'entity' ? 'entity' : 'RACM'}${picked.length === 1 ? '' : 's'} in scope.`,
+      message: scopeKind === 'entity'
+        ? `${periodLabel} — ${picked.length} entit${picked.length === 1 ? 'y' : 'ies'} in scope.`
+        : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
     });
     onClose();
   };
@@ -216,7 +281,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
             <label className={labelCls}>Audit period</label>
             <FormSelect
               value={String(year)}
-              options={YEARS.map(y => ({ value: String(y), label: yearBasis === 'fy' ? fyLabel(y) : cyLabel(y) }))}
+              options={cycleYears(yearBasis).map(y => ({ value: String(y), label: yearBasis === 'fy' ? fyLabel(y) : cyLabel(y) }))}
               onChange={v => setYear(Number(v))}
               className={selectCls}
               ariaLabel="Audit period"
@@ -250,6 +315,30 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
+            {/* Key controls only — the switch that does the picking, not a
+                filter on the eye: SOX scopes to key controls far more often
+                than not, and turning it on prunes anything non-key already
+                selected rather than hiding it and quietly keeping it. */}
+            {scopeKind === 'racm' && (
+              <button
+                role="switch"
+                aria-checked={keyOnly}
+                onClick={() => setKeyOnly(v => !v)}
+                className="w-full mb-2 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-canvas-border bg-white hover:border-brand-300 transition-colors cursor-pointer text-left"
+              >
+                <span className={cn('w-8 h-[18px] rounded-full relative shrink-0 transition-colors', keyOnly ? 'bg-brand-600' : 'bg-ink-200')}>
+                  <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', keyOnly ? 'left-[16px]' : 'left-[2px]')} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[12.5px] font-semibold text-ink-900">Key controls only</span>
+                  <span className="block text-[11px] text-ink-500">
+                    {keyOnly ? 'Only key controls can be selected.' : 'Every control is available to select.'}
+                  </span>
+                </span>
+                <Star size={14} className={cn('ml-auto shrink-0', keyOnly ? 'text-mitigated-600 fill-mitigated-200' : 'text-ink-300')} />
+              </button>
+            )}
+
             <div className="border border-canvas-border rounded-xl overflow-hidden">
               {options.length === 0 ? (
                 <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
@@ -259,31 +348,98 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 </p>
               ) : options.map(o => {
                 const on = picked.includes(o.id);
-                return (
-                  <button
-                    key={o.id}
-                    onClick={() => togglePick(o.id)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
-                  >
-                    <span className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
-                      on ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
-                    )}>
-                      {on && <Check size={11} strokeWidth={3} />}
-                    </span>
-                    {scopeKind === 'entity'
-                      ? (o.secondary === 'Holding'
+                if (scopeKind === 'entity') {
+                  return (
+                    <button
+                      key={o.id}
+                      onClick={() => togglePick(o.id)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
+                    >
+                      <span className={cn(
+                        'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                        on ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
+                      )}>
+                        {on && <Check size={11} strokeWidth={3} />}
+                      </span>
+                      {o.secondary === 'Holding'
                         ? <Landmark size={14} className="text-brand-600 shrink-0" />
-                        : <Building2 size={14} className="text-ink-400 shrink-0" />)
-                      : <Grid3x3 size={14} className="text-ink-400 shrink-0" />}
-                    <span className="text-[13px] text-ink-900 flex-1 min-w-0 truncate">{o.primary}</span>
-                    <span className="text-[11px] text-ink-400 shrink-0">{o.secondary}</span>
-                  </button>
+                        : <Building2 size={14} className="text-ink-400 shrink-0" />}
+                      <span className="text-[13px] text-ink-900 flex-1 min-w-0 truncate">{o.primary}</span>
+                      <span className="text-[11px] text-ink-400 shrink-0">{o.secondary}</span>
+                    </button>
+                  );
+                }
+
+                // ── RACM row: tick the whole matrix, or open it and pick rows ──
+                const rows = rowsOf(o.id);
+                const chosen = rows.filter(c => pickedControls.includes(c.id)).length;
+                const expanded = openRacm === o.id;
+                return (
+                  <div key={o.id} className="border-b border-canvas-border last:border-b-0">
+                    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-50/40 transition-colors">
+                      <button
+                        onClick={() => togglePick(o.id)}
+                        aria-label={`Select every control in ${o.primary}`}
+                        className={cn(
+                          'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                          on ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
+                        )}
+                      >
+                        {on && <Check size={11} strokeWidth={3} />}
+                      </button>
+                      <Grid3x3 size={14} className="text-ink-400 shrink-0" />
+                      <button
+                        onClick={() => setOpenRacm(expanded ? null : o.id)}
+                        className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer"
+                      >
+                        <span className="text-[13px] text-ink-900 truncate">{o.primary}</span>
+                        <span className="text-[11px] text-ink-400 shrink-0 ml-auto tabular-nums">
+                          {chosen > 0 ? `${chosen}/${rows.length} selected` : `${rows.length} control${rows.length === 1 ? '' : 's'}`}
+                        </span>
+                        <ChevronDown size={14} className={cn('text-ink-400 shrink-0 transition-transform', expanded && 'rotate-180')} />
+                      </button>
+                    </div>
+
+                    {expanded && (
+                      <div className="bg-canvas/60 border-t border-canvas-border">
+                        {rows.length === 0 ? (
+                          <p className="text-[11.5px] text-ink-400 px-4 py-4 text-center">
+                            No key controls in this RACM — turn the switch off to see the rest.
+                          </p>
+                        ) : rows.map(c => {
+                          const ticked = pickedControls.includes(c.id);
+                          return (
+                            <button
+                              key={c.id}
+                              onClick={() => toggleControl(o.id, c.id)}
+                              className="w-full flex items-start gap-3 pl-9 pr-4 py-2 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
+                            >
+                              <span className={cn(
+                                'w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors',
+                                ticked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
+                              )}>
+                                {ticked && <Check size={11} strokeWidth={3} />}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  {c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
+                                  <span className="text-[12px] text-ink-800 truncate">{c.description}</span>
+                                </span>
+                                <span className="block text-[10.5px] text-ink-400 font-mono mt-0.5">{c.id} · {c.subProcess}</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
             <p className="text-[11.5px] text-ink-400 mt-2">
-              {picked.length} {scopeKind === 'entity' ? 'entit' : 'RACM'}{scopeKind === 'entity' ? (picked.length === 1 ? 'y' : 'ies') : (picked.length === 1 ? '' : 's')} selected
+              {scopeKind === 'entity'
+                ? `${picked.length} entit${picked.length === 1 ? 'y' : 'ies'} selected`
+                : `${picked.length} RACM${picked.length === 1 ? '' : 's'} · ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} selected`}
             </p>
 
             {/* Files — the optional half of this step. Divided off rather than
@@ -378,8 +534,14 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               <ReviewRow label="Period" value={<>{periodLabel} <span className="font-normal text-ink-400">· {periodSpan}</span></>} />
               <ReviewRow
                 label={scopeKind === 'entity' ? 'Entities' : 'RACMs'}
-                value={picked.join(', ')}
+                value={pickedNames.join(', ')}
               />
+              {scopeKind === 'racm' && (
+                <ReviewRow
+                  label="Controls"
+                  value={<>{pickedControls.length} selected{keyOnly && <span className="font-normal text-ink-400"> · key controls only</span>}</>}
+                />
+              )}
               <ReviewRow
                 label="TB / GL"
                 value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}

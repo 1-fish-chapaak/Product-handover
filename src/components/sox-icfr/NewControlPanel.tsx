@@ -42,6 +42,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   }, [eng.controls]);
 
   const [description, setDescription] = useState('');
+  const [controlActivity, setControlActivity] = useState('');
   const [process, setProcess] = useState(processes[0] ?? 'Procure to Pay');
   const [subProcess, setSubProcess] = useState('');
   const [riskChoice, setRiskChoice] = useState<string>(riskOptions[0]?.id ?? NEW_RISK);
@@ -57,7 +58,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
   // Any field moved away from its opening state means unsaved work — leaving then guards.
   const isDirty =
-    description.trim().length > 0 || subProcess.trim().length > 0 ||
+    description.trim().length > 0 || controlActivity.trim().length > 0 || subProcess.trim().length > 0 ||
     newRiskDesc.trim().length > 0 || newProcess.trim().length > 0 || newOwner.trim().length > 0 ||
     process !== (processes[0] ?? 'Procure to Pay') || owner !== (owners[0] ?? 'Risk Owner') ||
     riskChoice !== (riskOptions[0]?.id ?? NEW_RISK) ||
@@ -99,6 +100,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       : { riskId: riskChoice, riskDescription: riskOptions.find(r => r.id === riskChoice)?.description ?? '' };
     const id = addControl({
       description: description.trim(),
+      controlActivity: controlActivity.trim(),
       process: process === NEW_PROCESS ? newProcess.trim() : process, subProcess,
       nature, frequency, owner: owner === NEW_OWNER ? newOwner.trim() : owner,
       isKey, assertions, ...risk,
@@ -124,6 +126,16 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             <input value={description} onChange={e => setDescription(e.target.value)} autoFocus aria-required="true"
               placeholder="e.g. Vendor bank-detail changes are independently verified before payment"
               className={inputCls} />
+          </Field>
+
+          {/* Optional on purpose — a control is often raised from the one-line
+              statement in a scoping session and written up afterwards. The
+              header and the working paper both fall back gracefully when it's
+              blank, so requiring it here would only block the quick raise. */}
+          <Field label="Control activity">
+            <textarea value={controlActivity} onChange={e => setControlActivity(e.target.value)} rows={3}
+              placeholder="Who performs it, over which records, when, how it's evidenced, and where exceptions go"
+              className={`${inputCls} resize-none leading-relaxed`} />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

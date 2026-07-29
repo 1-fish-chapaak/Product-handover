@@ -67,6 +67,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Control owner', c.owner],
       ['Control number', c.id],
       ['Control description', c.description],
+      ['Control activity', c.controlActivity ?? '—'],
       ['Control frequency', c.frequency],
       ['Nature / type', `${c.nature} · ${c.type}${c.isKey ? ' · Key control' : ''}`],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],

@@ -283,6 +283,23 @@ export interface MaterialityRule {
 export const ruleOverall = (r: MaterialityRule): number =>
   r.basis === 'custom' ? r.benchmark : Math.round(r.benchmark * r.pct * 100) / 10000;
 
+/** End-year of the financial year in progress — 2027 means FY 2026-27.
+ *
+ *  The Indian financial year runs Apr–Mar, so from April onward the group is
+ *  reporting on a year that ends in the NEXT calendar year. Creation flows call
+ *  this instead of hard-coding a year: the audit-period field is parked on the
+ *  scoping wizard, so a frozen default would have silently kept creating
+ *  FY 2026-27 programmes forever. */
+export const currentFyEnd = (now: Date = new Date()): number =>
+  (now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear());
+
+/** The three cycles a creation flow offers: the current one, with one either
+ *  side. Calendar years sit one behind, matching the fy ⇄ cy toggle. */
+export const cycleYears = (basis: 'fy' | 'cy', now: Date = new Date()): number[] => {
+  const mid = basis === 'fy' ? currentFyEnd(now) : currentFyEnd(now) - 1;
+  return [mid - 1, mid, mid + 1];
+};
+
 export interface SoxProgramme {
   id: string;
   /** Display name — typed on the classic "Type & basics" first step. */

@@ -187,6 +187,11 @@ export interface Control {
   type: ControlType;
   frequency: Frequency;
   isKey: boolean;
+  /** The RACM's Control Activity column — who does what, to which record, when,
+   *  and how, spelled out in full. `description` is the one-line control
+   *  statement the matrix and the register show; this is the narrative the
+   *  auditor tests against, and it is what the header carries. */
+  controlActivity?: string;
   precision: string;
   // Management review control — precision must be structured: the rupee threshold
   // at which the reviewer investigates, checked against performance materiality.
@@ -393,6 +398,14 @@ export interface AuditRecord {
   scopeKind: AuditScopeKind;
   /** Names of the entities or RACM processes selected — display-ready. */
   scopeNames: string[];
+  /** Entity ids behind those names (empty when scoped by RACM). Kept alongside
+   *  the names because filtering the workspace needs ids, not display text. */
+  scopeIds: string[];
+  /** The exact controls the audit tests, when they were picked one by one on the
+   *  RACM side of the scope step (including "key controls only"). Absent or
+   *  empty means the whole of every picked RACM — an audit scoped by entity
+   *  never sets it, because there the processes decide. */
+  controlIds?: string[];
   /** Simulated TB / GL uploads; empty when the step was skipped. */
   files: { name: string; kind: 'tb' | 'gl' }[];
   /** The rule as set on the materiality step. Shape is inlined rather than

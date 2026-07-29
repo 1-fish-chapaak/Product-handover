@@ -5,7 +5,7 @@ import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -13,6 +13,7 @@ import {
   controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
   sampleSizeGuide, trackResult, pointResult, stepResult,
 } from './helpers';
+import { programmeFor } from './auditScope';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -761,24 +762,31 @@ const REQUIRED_SAMPLE_FILES: { id: 'pop' | 'txn'; name: string; formats: string;
 ];
 
 /**
- * Add a required file — one entry point for both slots. Either bring a new
- * file, or reuse one the engagement already has: the trial balances, general
- * ledger and RACM / SOP uploaded when the engagement was scoped are usually
- * exactly the transaction data being asked for here.
+ * Add a required file — one entry point for both slots.
+ *
+ * Opens on the upload dropzone, because that is what the step is asking for.
+ * Under it sits "Choose existing", which opens the engagement's files in place:
+ * the trial balances, general ledger and RACM / SOP uploaded during scoping are
+ * often exactly the transaction data being asked for, so reusing one should cost
+ * a click, not a detour. Several can be ticked at once, capped at the number of
+ * requirements still open so the list can never promise an attachment it has
+ * nowhere to put.
  */
-function FilePickerModal({ existing, onUpload, onChoose, onClose }: {
+function FilePickerModal({ existing, onUpload, onChoose, slots, onClose }: {
   existing: { name: string; kind: string; rows: number; from: string }[];
   onUpload: () => void;
-  onChoose: (f: { name: string; rows: number }) => void;
+  onChoose: (files: { name: string; rows: number }[]) => void;
+  /** How many requirements are still open — caps what can be ticked. */
+  slots: number;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<'pick' | 'existing'>('pick');
+  const [picked, setPicked] = useState<string[]>([]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40';
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add a file">
@@ -791,35 +799,85 @@ function FilePickerModal({ existing, onUpload, onChoose, onClose }: {
         </div>
         <div className="p-5">
           {mode === 'pick' ? (
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={onUpload} className={cardCls}>
-                <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
-                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload</span>
-                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Bring a file from your device (.xlsx / .csv).</span>
+            /* Uploading is the job, so the modal opens straight onto it. Reusing
+               a file the engagement already holds is the shortcut beneath, not a
+               fork of equal weight — a two-card chooser made the common path an
+               extra decision. */
+            <>
+              <button
+                onClick={onUpload}
+                className="w-full rounded-xl border-2 border-dashed border-ink-300/70 hover:border-brand-400 hover:bg-brand-50/60 transition-colors px-4 py-7 flex flex-col items-center gap-1.5 cursor-pointer group"
+              >
+                <span className="size-9 rounded-lg bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center transition-colors">
+                  <FileUp size={15} className="text-brand-600" />
+                </span>
+                <span className="block text-[13px] font-semibold text-ink-800">Upload a file</span>
+                <span className="block text-[11.5px] text-ink-400">.xlsx or .csv, from your device</span>
               </button>
-              <button onClick={() => setMode('existing')} className={cardCls}>
-                <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Paperclip size={15} className="text-brand-600" /></span>
-                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Choose existing</span>
-                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Reuse a file uploaded when the engagement was created.</span>
-              </button>
-            </div>
-          ) : existing.length === 0 ? (
-            <p className="text-[12.5px] text-ink-600 leading-relaxed">
-              This engagement has no files on record yet — the trial balances, general ledger and RACM are uploaded during scoping. Upload one here instead.
-            </p>
-          ) : (
-            <div className="rounded-lg border border-canvas-border overflow-hidden">
-              {existing.map(f => (
-                <button key={f.name} onClick={() => onChoose({ name: f.name, rows: f.rows })}
-                  className="w-full text-left px-3 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer flex items-center gap-2.5">
-                  <Paperclip size={12} className="text-ink-400 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-mono text-[12px] text-ink-800 truncate">{f.name}</span>
-                    <span className="block text-[11px] text-ink-400">{f.kind} · {f.rows.toLocaleString()} rows · {f.from}</span>
-                  </span>
+
+              <div className="mt-4 pt-4 border-t border-canvas-border flex items-center justify-between gap-3">
+                <p className="text-[11.5px] text-ink-500">
+                  {existing.length > 0
+                    ? `${existing.length} file${existing.length === 1 ? '' : 's'} already on this engagement`
+                    : 'No files on this engagement yet — upload one above.'}
+                </p>
+                <button
+                  disabled={existing.length === 0}
+                  onClick={() => setMode('existing')}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 disabled:opacity-40 disabled:hover:border-canvas-border disabled:hover:text-ink-700 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                >
+                  <Paperclip size={12} /> Choose existing
                 </button>
-              ))}
-            </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => { setMode('pick'); setPicked([]); }}
+                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors mb-2.5"
+              >
+                <ArrowLeft size={12} /> Back
+              </button>
+              <div className="rounded-lg border border-canvas-border overflow-hidden">
+                {existing.map(f => {
+                  const on = picked.includes(f.name);
+                  // Only as many as there are open requirements — the list must not
+                  // let someone tick a third file it has nowhere to put.
+                  const full = !on && picked.length >= slots;
+                  return (
+                    <button
+                      key={f.name}
+                      disabled={full}
+                      onClick={() => setPicked(p => (on ? p.filter(x => x !== f.name) : [...p, f.name]))}
+                      className="w-full text-left px-3 py-2.5 border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-2.5"
+                    >
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${on ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white'}`}>
+                        {on && <Check size={11} strokeWidth={3} />}
+                      </span>
+                      <Paperclip size={12} className="text-ink-400 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-mono text-[12px] text-ink-800 truncate">{f.name}</span>
+                        <span className="block text-[11px] text-ink-400">{f.kind} · {f.rows.toLocaleString()} rows · {f.from}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-[11.5px] text-ink-400">
+                  {picked.length} of {slots} open requirement{slots === 1 ? '' : 's'} selected
+                </p>
+                <button
+                  onClick={() => onChoose(
+                    picked.map(n => existing.find(x => x.name === n)).filter(Boolean) as { name: string; rows: number }[],
+                  )}
+                  disabled={picked.length === 0}
+                  className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer"
+                >
+                  Attach {picked.length || ''}
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -829,7 +887,7 @@ function FilePickerModal({ existing, onUpload, onChoose, onClose }: {
 }
 
 function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, racmDocs, setPopulation, setSampling, me } = useIcfr();
+  const { eng, racmDocs, openAuditId, setPopulation, setSampling, me } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating;
@@ -865,15 +923,28 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // What the engagement already holds — the scoping uploads are usually the
   // very transaction data being asked for here, so they're offered for reuse.
   const existingFiles = useMemo(() => {
-    const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
+    // programmeFor, not PROGRAMMES: the Altura group's record lives in the V2
+    // store, and reading only the classic one left this list empty — "Choose
+    // existing" then claimed the engagement had no files at all.
+    const prog = programmeFor(eng.id);
     const out: { name: string; kind: string; rows: number; from: string }[] = [];
-    prog?.entities.forEach(en => {
+    // The open audit's own TB / GL come first — they are this cycle's files,
+    // so they are the ones most likely being asked for.
+    const audit = eng.audits.find(a => a.id === openAuditId);
+    audit?.files.forEach(f => out.push({
+      name: f.name,
+      kind: f.kind === 'tb' ? 'Trial balance' : 'General ledger',
+      rows: f.kind === 'tb' ? 1240 : 18432,
+      from: `${audit.period} audit`,
+    }));
+    prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) out.push({ name: en.tbFile, kind: 'Trial balance', rows: en.tbLines ?? 1240, from: `${en.name} · engagement scoping` });
     });
     if (prog) out.push({ name: `general_ledger_${prog.fy}.csv`, kind: 'General ledger', rows: 18432, from: 'Engagement scoping' });
     racmDocs.forEach(d => out.push({ name: d.name, kind: 'RACM / SOP', rows: 480, from: d.process ? `${d.process} RACM` : 'RACM page' }));
-    return out;
-  }, [eng.id, racmDocs]);
+    // A file can reach the list twice (an audit TB that is also the scoping TB).
+    return out.filter((f, i) => out.findIndex(x => x.name === f.name) === i);
+  }, [eng.id, eng.audits, openAuditId, racmDocs]);
 
   // The file is matched to the requirement it satisfies — by what it's called,
   // falling back to whichever slot is still open. The auditor never picks.
@@ -900,10 +971,26 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
       logEvent({ action: 'Upload', description: `Added "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
     }, 1400);
   };
-  const chooseFile = (f: { name: string; rows: number }) => {
+  /** Attach several chosen files at once.
+   *
+   *  Slots are walked in local variables rather than by calling attach() per
+   *  file: classify() falls back to "whichever slot is still open", and in one
+   *  tick every call would still see the old state and land on the same slot. */
+  const chooseFiles = (files: { name: string; rows: number }[]) => {
     setPicking(false);
-    const which = attach({ name: f.name, count: f.rows });
-    logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
+    let pop = popFile;
+    let txn = txnFile;
+    for (const f of files) {
+      const file = { name: f.name, count: f.rows };
+      const n = f.name.toLowerCase();
+      const which: 'pop' | 'txn' = /popul|master/.test(n) ? 'pop'
+        : /transact|txn|ledger|\bgl\b|journal|invoice|payment/.test(n) ? 'txn'
+        : pop ? 'txn' : 'pop';
+      if (which === 'pop') pop = file; else txn = file;
+      logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
+    }
+    setPopFile(pop);
+    setTxnFile(txn);
   };
   const sendLogic = () => {
     if (!logic.trim()) { setAskedForLogic(true); return; }
@@ -1127,7 +1214,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         <FilePickerModal
           existing={existingFiles}
           onUpload={uploadFile}
-          onChoose={chooseFile}
+          onChoose={chooseFiles}
+          slots={(popFile ? 0 : 1) + (txnFile ? 0 : 1)}
           onClose={() => setPicking(false)}
         />
       )}
@@ -1432,8 +1520,17 @@ export default function ControlDossier() {
                 <NatureChip nature={control.nature} /><Pill tone="draft">{control.type}</Pill><Pill tone="draft">{control.frequency}</Pill>
                 <span className="text-[0.6875rem] text-ink-400 font-mono">{control.id}</span>
               </div>
+              {/* Heading = the one-line control statement, same text the RACM
+                  and register show. Under it the RACM's Control Activity — who
+                  performs it, on what, when and how. Precision used to sit here
+                  and was a restatement of the heading, so it read as the title
+                  printed twice; it still carries into the working paper. */}
               <h1 className="leadsheet-title text-[1.25rem] text-ink-900 leading-snug max-w-[640px]">{control.description}</h1>
-              <p className="text-[0.78125rem] text-ink-500 mt-1.5 max-w-[680px]"><b className="text-ink-700 font-semibold">Precision —</b> {control.precision}</p>
+              {control.controlActivity && (
+                <p className="text-[0.78125rem] text-ink-500 mt-1.5 max-w-[680px] leading-relaxed">
+                  <b className="text-ink-700 font-semibold">Control activity —</b> {control.controlActivity}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[0.71875rem] text-ink-500">
                 <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
@@ -1462,8 +1559,10 @@ export default function ControlDossier() {
       </motion.div>
 
       {/* control health — the design-step RAG trio, above the stepper (the
-          engagement-wide trio lives on the Overview tab) */}
-      <motion.div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 mb-5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+          engagement-wide trio lives on the Overview tab). No wrapper card: the
+          three meters are already cards, and a box around cards drew a group
+          boundary the page didn't need. */}
+      <motion.div className="mb-5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
         <RagStrip meters={designRagMeters(control)} />
       </motion.div>
 
