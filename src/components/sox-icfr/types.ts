@@ -377,6 +377,36 @@ export interface RunRecord {
   at: string;
 }
 
+// ─── Audits (the Audit logs tab) ─────────────────────────────────────────────
+// One record per audit created from the "New audit" wizard: a period, what it
+// covers (entities OR RACMs — the wizard makes you pick a side), the TB / GL
+// files attached, and the materiality rule in force. Distinct from RunRecord
+// above: a run is one execution, an audit is the scoped piece of work.
+export type AuditScopeKind = 'entity' | 'racm';
+export interface AuditRecord {
+  id: string;
+  /** Cycle label the period step produced, e.g. 'FY 2026-27' or 'CY 2027'. */
+  period: string;
+  /** 'fy' | 'cy' — kept so the review step and the list can re-state the span. */
+  yearBasis: 'fy' | 'cy';
+  periodSpan: string;               // 'Apr 2026 – Mar 2027'
+  scopeKind: AuditScopeKind;
+  /** Names of the entities or RACM processes selected — display-ready. */
+  scopeNames: string[];
+  /** Simulated TB / GL uploads; empty when the step was skipped. */
+  files: { name: string; kind: 'tb' | 'gl' }[];
+  /** The rule as set on the materiality step. Shape is inlined rather than
+   *  imported from soxTestingData — this module deliberately has no imports,
+   *  and the audit freezes its own copy anyway, so later edits to the
+   *  programme's rules don't rewrite history. */
+  materiality: { basisLabel: string; benchmark: number; pct: number };
+  /** ₹ Cr threshold the rule computes, frozen at creation. */
+  overall: number;
+  by: string;
+  role: Role;
+  at: string;
+}
+
 // ─── Ground-rules change log — materiality is set before testing; a mid-engagement
 // change is warned, previewed (which exceptions re-grade), and recorded here. ──────
 export interface RulesChangeEntry {
@@ -410,6 +440,7 @@ export interface IcfrEngagement {
   reviewNotes: ReviewNote[];
   executions: ExecutionEvent[];
   runs: RunRecord[];
+  audits: AuditRecord[];
   signoff: EngagementSignoff;
   rulesLog: RulesChangeEntry[];
 }

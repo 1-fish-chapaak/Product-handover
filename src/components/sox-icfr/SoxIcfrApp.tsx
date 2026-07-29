@@ -16,16 +16,48 @@ import ControlDossier from './ControlDossier';
 import RunsView from './RunsView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
-import ConfigurationView from './ConfigurationView';
-import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
+/* Configuration is PARKED behind the Audit logs tab (user ask) — see the
+   'config' entry in SOX_TABS. ConfigurationView.tsx is untouched and still
+   compiles; restore by uncommenting this import and swapping the render
+   branch below back from <AuditLogsView /> to <ConfigurationView />.
+// import ConfigurationView from './ConfigurationView';
+*/
+import AuditLogsView from './AuditLogsView';
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
-  { id: 'risks', label: 'Risk Register' },
+  /* Risk Register — PARKED from the engagement tabs (user ask). Only this one
+     line is commented out: the 'risks' SoxTab/View types, TAB_ROOT, RETURNABLE,
+     the `tab === 'risks' ? <RiskLibrary />` branch below and the dossier
+     breadcrumb's 'Risk Register' label all stay wired and compiling, so
+     restoring the tab is uncommenting this line.
+     Known consequence while it's off — RiskLibrary was the only surface
+     carrying the inherent / residual heatmaps, so risk exposure isn't visible
+     anywhere in a SOX engagement; the RACM lists risk rows but doesn't score
+     them. Nothing navigates into the tab, so no link is left dangling. */
+  // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'Test runs' },
-  { id: 'config', label: 'Configuration' },
+  /* Test runs — PARKED from the engagement tabs (user ask). As with the Risk
+     Register above, only this line is commented out: the 'runs' SoxTab/View
+     types, TAB_ROOT, RETURNABLE, the `tab === 'runs' ? <RunsView />` branch
+     below and the dossier breadcrumb's 'Test runs' label all stay wired, so
+     restoring the tab is uncommenting this line. The registry itself keeps
+     recording (store.tsx addRun / bulkTestControls) and mockData keeps seeding
+     it, so a restored tab shows full history rather than an empty list.
+     Known consequence while it's off — RunsView was the only engagement-wide
+     run log (every run across all controls, filterable by kind and date), so
+     that roll-up isn't visible anywhere. Per-control history survives on the
+     control page (ControlDossier reads eng.executions), so testing evidence
+     isn't lost — only the cross-control view, and the run → control drill-in.
+     The one inbound link, BulkTestModal's "View run" button, was removed with
+     this park; restoring the tab means restoring that button too. */
+  // { id: 'runs', label: 'Test runs' },
+  /* Was 'Configuration' — renamed to Audit logs and ungated so it shows on
+     every SOX engagement (user ask). The id stays 'config' on purpose: it is
+     internal only, and renaming it would ripple through SoxTab, View, TAB_ROOT
+     and RETURNABLE in store.tsx for no user-visible gain. */
+  { id: 'config', label: 'Audit logs' },
 ];
 
 function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
@@ -35,11 +67,10 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Register and Runs are audit-side surfaces.
-  // Configuration only exists for scoping-backed engagements — it edits the
-  // programme record the SOX Testing wizard created.
-  const hasProgramme = PROGRAMMES.some(p => p.engagementId === eng.id);
-  const tabs = (role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS)
-    .filter(t => t.id !== 'config' || hasProgramme);
+  // Audit logs carries no scoping gate: it's on every SOX engagement (user ask),
+  // unlike the Configuration tab it replaced, which only rendered for
+  // engagements the SOX Testing wizard had created a programme record for.
+  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
@@ -109,7 +140,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     );
   }
 
-  // The five tabs are the primary nav; everything else is a drill-in reached from them.
+  // The tabs are the primary nav; everything else is a drill-in reached from them.
   // A drilled-in RACM matrix stands alone like the control page — no engagement
   // header, no tabs; its breadcrumb carries the context and every step back up.
   const isRacmMatrix = view === 'racm-list';
@@ -127,7 +158,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <RunsView />
-    : tab === 'config' ? <ConfigurationView />
+    : tab === 'config' ? <AuditLogsView />
     : <ControlRegister />;
 
   return (

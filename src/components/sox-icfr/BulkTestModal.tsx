@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Database, FileSpreadsheet, FlaskConical,
+  Check, CheckCircle2, ChevronLeft, ChevronRight, Database, FileSpreadsheet, FlaskConical,
   Loader2, Paperclip, Square, Star, UploadCloud, X, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
@@ -46,7 +46,7 @@ const FORMAT_TONE: Record<RequiredDataset['format'], string> = {
 };
 
 export default function BulkTestModal({ controlIds, onClose }: { controlIds: string[]; onClose: () => void }) {
-  const { eng, bulkTestControls, setTab } = useIcfr();
+  const { eng, bulkTestControls } = useIcfr();
   const { addToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
@@ -395,15 +395,16 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               <FlaskConical size={14} /> Test {active.length} control{active.length === 1 ? '' : 's'}
             </button>
           )}
+          {/* Done is the only way out of a finished run — its companion "View run"
+              button went with the parked Test runs tab (see SOX_TABS in
+              SoxIcfrApp). Closing lands back on the Control Library or the RACM
+              matrix the run was launched from, both of which already show the
+              new results, so there's nowhere else to send the user. Done takes
+              the primary style now that it stands alone. */}
           {finished && (
-            <>
-              <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer">
-                Done
-              </button>
-              <button onClick={() => { onClose(); setTab('runs'); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-                View run <ArrowRight size={14} />
-              </button>
-            </>
+            <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              Done
+            </button>
           )}
         </div>
       </div>

@@ -553,6 +553,9 @@ const ENGAGEMENT: IcfrEngagement = {
   reviewNotes: REVIEW_NOTES,
   executions: EXECUTIONS,
   runs: RUNS,
+  // The Audit logs tab starts empty on purpose — audits only exist once someone
+  // runs the New audit wizard, so the empty state is the honest first view.
+  audits: [],
   signoff: {},
   rulesLog: [],
 };
