@@ -564,6 +564,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             widthCls="w-full max-w-[560px]"
             variant="sheet"
             enterInstant
+            hideClose
             onClose={() => setSoxWizardOpen(false)}
           >
             <ScopingWizard
@@ -586,7 +587,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 addToast({
                   type: 'success',
                   message: p.scopingSkipped
-                    ? `${p.fy} programme created — scoping skipped; add the RACM and GL / trial balances from the workspace`
+                    ? `${p.fy} programme created — add the GL / trial balances from the Configuration tab`
                     : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
                 });
               }}

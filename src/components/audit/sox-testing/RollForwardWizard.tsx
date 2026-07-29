@@ -191,7 +191,10 @@ export default function RollForwardWizard({ prior, onCancel, onCreated }: Props)
     <div className="flex flex-col min-h-full">
       {/* Pinned header — eyebrow + stepper stay put while the step content
           scrolls beneath (same treatment as the scoping wizard). */}
-      <div className="sticky top-0 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-6 pb-1">
+      {/* -top-6 + pt-12 — see ScopingWizard for the full reasoning: with plain
+          `top-0` the -mt-6 made sticky push the header 24px past the space
+          layout reserved for it, so it painted over the top of every step. */}
+      <div className="sticky -top-6 z-10 bg-canvas -mx-6 px-6 -mt-6 pt-12 pb-1">
         <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">Roll forward</div>
         <StepRail steps={STEPS} step={step} onStepClick={setStep} />
       </div>

@@ -217,7 +217,7 @@ export default function Overview() {
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <h2 className="text-[13px] font-bold text-ink-900">
-              Scoping was skipped — {racmMissing && tbMissing ? 'the RACM and the GL / trial balances are' : racmMissing ? 'the RACM is' : 'the GL / trial balances are'} missing
+              {racmMissing && tbMissing ? 'The RACM and the GL / trial balances are' : racmMissing ? 'The RACM is' : 'The GL / trial balances are'} missing
             </h2>
             <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
               {racmMissing && (<>
