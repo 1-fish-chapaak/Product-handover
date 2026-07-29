@@ -32,6 +32,7 @@ export type View =
   | 'programs'
   // Engagements
   | 'engagements'
+  | 'sox-testing'
   | 'sox-icfr'
   | 'compliance-engagement'
   | 'engagement-overview'

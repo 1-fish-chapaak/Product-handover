@@ -63,6 +63,15 @@ export interface AutomationConfig {
   alertRecipients: string[];
 }
 
+/** One legal entity inside the group the engagement covers. Mirrors the SOX
+ *  scoping flow's GroupEntity, minus the ownership % and trial-balance fields
+ *  that only the SOX derivation needs. */
+export interface EngagementEntity {
+  id: string;
+  name: string;
+  type: 'Holding' | 'Subsidiary';
+}
+
 export interface Engagement {
   id: string;
   code: string;
@@ -73,6 +82,14 @@ export interface Engagement {
   subtype?: AutomationSubtype;
   /** Present only for SOX / ICFR engagements. */
   soxConfig?: SoxConfig;
+  /** Scoping-derived process list (SOX Testing flow) — the ICFR workspace
+   *  seeds one RACM per entry instead of the single-process template. */
+  soxProcesses?: string[];
+  /** How the scoping-derived workspace seeds its testing state (SOX Testing
+   *  flow only). 'live' = testing in flight (all but one control per RACM
+   *  concluded), 'carried' = design carried from the prior cycle with the
+   *  operating retest pending, 'fresh' (default) = nothing tested yet. */
+  soxSeedMode?: 'fresh' | 'live' | 'carried';
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */
@@ -94,8 +111,13 @@ export interface Engagement {
   lastActivity: string;
   /** Human-readable next milestone — sign-off due / report due / next run. */
   nextScheduled: string;
-  /** Legal entity / business unit in scope. */
+  /** Group (listed / holding) company the engagement runs under — shown on the
+   *  engagement card as the entity in scope. */
   entity?: string;
+  /** Legal entities inside that group covered by the engagement, captured on
+   *  the creation wizard's Basics step. SOX engagements derive theirs from the
+   *  scoping uploads instead (see SoxProgramme.entities). */
+  groupEntities?: EngagementEntity[];
   /** ISO period bounds (yyyy-mm-dd) — the machine-readable twin of periodStart/periodEnd. */
   startDate?: string;
   endDate?: string;
@@ -296,4 +318,12 @@ export function registerEngagement(e: Engagement): void {
 export function findEngagement(id: string): Engagement | undefined {
   // Runtime first so session edits win over the static seed.
   return RUNTIME_ENGAGEMENTS.find(e => e.id === id) ?? ENGAGEMENTS.find(e => e.id === id);
+}
+/** The library's boot list — session-created engagements first (newest on top),
+ *  then the seeds, with any session-edited seed replaced by its runtime copy.
+ *  Without this a created engagement vanishes from the list when the library
+ *  remounts (e.g. Back to Engagements from its workspace). */
+export function libraryEngagements(): Engagement[] {
+  const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id));
+  return [...fresh, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
 }

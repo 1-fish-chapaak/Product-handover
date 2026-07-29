@@ -1,6 +1,6 @@
 import type {
   Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, Role, Severity, TrackConclusion,
+  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -18,6 +18,93 @@ export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): bo
 }
 export function severityOf(d: Deficiency, materiality: number, rules?: MaterialityRules): Severity {
   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
+}
+
+// ─── Assessed severity — the raw grade plus the compensating-control cap ─────────
+// The cap only rescues the magnitude-driven MW line (MW → SD). It applies only
+// when the chosen compensating control is itself concluded effective in this
+// engagement, never when an MW indicator is present, and it never clears the
+// exception — capBlocked says why a chosen control had no effect.
+export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
+export interface SeverityAssessment {
+  raw: Severity;
+  final: Severity;
+  capped: boolean;
+  capBlocked?: 'not-effective' | 'mw-indicator';
+  bumped?: boolean;   // prudent-official judgment raised the grade above the math
+}
+export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
+  const raw = severityOf(d, eng.materiality, eng.rules);
+  let out: SeverityAssessment;
+  if (!d.compensatingControlId) out = { raw, final: raw, capped: false };
+  else if (d.mwIndicators.length > 0) out = { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
+  else {
+    const cc = eng.controls.find(c => c.id === d.compensatingControlId);
+    if (!cc || controlConclusion(cc) !== 'Effective') out = { raw, final: raw, capped: false, capBlocked: 'not-effective' };
+    else if (raw === 'Material Weakness') out = { raw, final: 'Significant Deficiency', capped: true };
+    else out = { raw, final: raw, capped: false };
+  }
+  // prudent-official: judgment argues UP only — applied after the cap, never below it
+  if (d.prudentOverride && SEVERITY_RANK[d.prudentOverride.to] > SEVERITY_RANK[out.final]) {
+    out = { ...out, final: d.prudentOverride.to, bumped: true };
+  }
+  return out;
+}
+
+// ─── Ground-rules change preview ──────────────────────────────────────────────────
+// What would re-grade if the materiality rule set changed? Used by the review
+// modal before applying, and by the store to record the actual re-grades.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
+  const next: IcfrEngagement = {
+    ...eng,
+    materiality: patch.materiality ?? eng.materiality,
+    performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+  };
+  return eng.deficiencies
+    .filter(d => d.status !== 'Closed')
+    .map(d => ({ defId: d.id, from: assessSeverity(d, eng).final, to: assessSeverity(d, next).final }))
+    .filter(x => x.from !== x.to);
+}
+
+// ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
+// An open material weakness at period end forces "not effective" — sign-off stays
+// possible, but the conclusion recorded is adverse (handbook: open MW ⇒ disclosure).
+// Uses the assessed (capped) severity: a validly-capped MW is an SD, not an MW.
+export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
+  return eng.deficiencies.filter(d => d.status !== 'Closed' && assessSeverity(d, eng).final === 'Material Weakness');
+}
+export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
+  return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
+}
+
+// ─── ITGC cascade — a failed ITGC invalidates "test of one" downstream ───────────
+// Any IT General Controls control concluded ineffective puts every automated /
+// IT-dependent control in the other processes on notice: one instance no longer
+// proves the rule, and benchmarking is off the table.
+export function failedItgcs(eng: IcfrEngagement): Control[] {
+  return eng.controls.filter(c => c.process === 'IT General Controls' && controlConclusion(c) === 'Ineffective');
+}
+export function isItgcDependent(c: Control): boolean {
+  return c.nature !== 'Manual' && c.process !== 'IT General Controls';
+}
+
+// ─── Frequency-based sample sizing (handbook table) ───────────────────────────────
+// Annual 1 · Quarterly 2 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
+// (per-transaction) 25–60 · Automated nature = test of one, valid only while ITGCs hold.
+export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
+  if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
+  if (c.nature === 'Automated' && !itgcHolds) return { suggested: 25, range: '25–60', note: 'ITGC failure in force — test of one is invalid; size like a manual control.' };
+  switch (c.frequency) {
+    case 'Annual': return { suggested: 1, range: '1', note: 'Runs once a year — test the occurrence.' };
+    case 'Quarterly': return { suggested: 2, range: '2', note: 'Test two quarters.' };
+    case 'Monthly': return { suggested: 4, range: '2–5', note: 'A handful of months.' };
+    case 'Weekly': return { suggested: 10, range: '5–15', note: 'Spread across the period.' };
+    case 'Daily': return { suggested: 25, range: '15–40', note: 'A meaningful spread of days.' };
+    case 'Recurring': return { suggested: 40, range: '25–60', note: 'Runs many times a day — the deepest samples.' };
+    case 'Ad-hoc': return { suggested: 10, range: 'judgment', note: 'Size by how often it actually ran.' };
+  }
 }
 
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
@@ -39,6 +126,35 @@ export function controlConclusion(c: Control): Conclusion {
   if (d === 'Ineffective' || o === 'Ineffective') return 'Ineffective';
   if (d === 'Effective' && o === 'Effective') return 'Effective';
   return designStarted(c) || operatingStarted(c) ? 'In progress' : 'Not started';
+}
+
+// ─── Locks — a concluded control is frozen until reopened with a reason ──────────
+export function isControlLocked(c: Control): boolean {
+  const concl = controlConclusion(c);
+  return concl === 'Effective' || concl === 'Ineffective';
+}
+// A countersigned engagement is locked for good — no edits, no reopen.
+export function isEngagementLocked(eng: IcfrEngagement): boolean {
+  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+}
+
+// ─── Review gate — concluded is not final until the reviewer countersigns ────────
+// The paper travels: conclude → preparer signs (auditor) → reviewer countersigns.
+export function isControlFinal(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.reviewer;
+}
+/** Concluded and preparer-signed — sitting in the reviewer's court. */
+export function isAwaitingReview(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
+}
+
+// ─── Review notes — the formal raise → resolve → verify channel ──────────────────
+export function reviewNotesFor(eng: IcfrEngagement, controlId: string): ReviewNote[] {
+  return eng.reviewNotes.filter(n => n.controlId === controlId);
+}
+/** Notes that still block this paper's countersign (anything not Closed). */
+export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): number {
+  return eng.reviewNotes.filter(n => n.controlId === controlId && n.status !== 'Closed').length;
 }
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
@@ -77,9 +193,11 @@ export function wfRunRef(key: string, fail: boolean): string {
 }
 
 /** Plain-language summary the AI returns after checking the uploaded file. */
-export function validationSummary(text: string, fail: boolean, key = text): string {
+export function validationSummary(text: string, fail: boolean, key = text, sampleCount?: number): string {
   const h = hnum(key);
-  const n = [15, 25, 25, 40][h % 4]!;
+  // the real drawn-sample count when there is one — the summary sits directly
+  // above the per-sample table, so an invented number would contradict it
+  const n = sampleCount || [15, 25, 25, 40][h % 4]!;
   const ex = 1 + ((h >>> 5) % 3);
   const po = `45000${12840 + (h % 25) * 7}`;
   const vendor = SAMPLE_VENDORS[h % SAMPLE_VENDORS.length]!;
@@ -148,11 +266,19 @@ export function operatingProgress(c: Control) {
 
 // ─── Baton — whose court ─────────────────────────────────────────────────────────
 
-export function courtFor(c: Control, tasks: HandoffTask[]): Court {
+export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] = []): Court {
   if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
+  // Review notes move the baton with them: an open note waits on the auditor's
+  // resolution; a resolved one waits on the reviewer's verification.
+  if (notes.some(n => n.controlId === c.id && n.status === 'Open')) return 'auditor';
+  if (notes.some(n => n.controlId === c.id && n.status === 'Resolved')) return 'reviewer';
   const concl = controlConclusion(c);
-  // A concluded control is closed out (no separate reviewer court on this platform).
-  if (concl === 'Effective' || concl === 'Ineffective') return 'none';
+  // Concluded isn't closed: the paper still travels auditor (sign) → reviewer
+  // (countersign). Only a countersigned paper leaves every court.
+  if (concl === 'Effective' || concl === 'Ineffective') {
+    if (c.wpSignoff?.reviewer) return 'none';
+    return c.wpSignoff?.preparer ? 'reviewer' : 'auditor';
+  }
   return 'auditor';
 }
 
@@ -216,12 +342,19 @@ export function engagementProgress(eng: IcfrEngagement) {
     effective: concl.filter(x => x === 'Effective').length,
     ineffective: concl.filter(x => x === 'Ineffective').length,
     inProgress: concl.filter(x => x === 'In progress').length,
-    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks) === 'risk-owner').length,
+    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
+    awaitingReview: cs.filter(isAwaitingReview).length,
+    reviewed: cs.filter(isControlFinal).length,
   };
 }
 
 export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
+}
+/** Person-lane match: a task is this owner's if it names them, or rides a control they own. */
+export function isOwnerTask(eng: IcfrEngagement, t: HandoffTask, owner: string): boolean {
+  return t.assigneeRole === 'risk-owner'
+    && (t.assignee === owner || eng.controls.find(c => c.id === t.controlId)?.owner === owner);
 }
 export function discussionsFor(eng: IcfrEngagement, controlId: string) {
   return eng.discussions.filter(d => d.controlId === controlId);
@@ -230,9 +363,27 @@ export function openDiscussionCount(eng: IcfrEngagement, controlId: string): num
   return discussionsFor(eng, controlId).filter(d => !d.resolved).length;
 }
 
+// Parse a period-end label like 'Mar 2026' to the last moment of that month.
+export function periodEndDate(label: string): Date | null {
+  const parsed = Date.parse(`1 ${label}`);
+  if (Number.isNaN(parsed)) return null;
+  const d = new Date(parsed);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+}
+
 export function formatINR(n: number): string {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)}Cr`;
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
   if (n >= 1e3) return `₹${(n / 1e3).toFixed(0)}K`;
   return `₹${n}`;
+}
+
+// A remediation due date is stored as a string — ISO 'YYYY-MM-DD' (the date picker) or a
+// legacy '30 Jun' seed label. Format both to a human '30 Jun 2026' ('—' when unset) so the
+// working-paper preview and the .xlsx export read the same as the on-screen view.
+export function formatDueDate(date: string | null | undefined): string {
+  if (!date) return '—';
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return s;
 }
