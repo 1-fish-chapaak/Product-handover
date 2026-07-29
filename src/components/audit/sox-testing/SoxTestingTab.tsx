@@ -60,8 +60,11 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
     addToast({
       message: p.rolledFromFy
         ? `${p.fy} programme rolled forward from ${p.rolledFromFy} — ${p.racms.length} RACMs carried`
+        // Same correction as the EngagementsView toast: the Configuration tab
+        // this named is now Audit logs and carries no upload, so skipped
+        // scoping points at the RACM instead.
         : p.scopingSkipped
-          ? `${p.fy} programme created — add the GL / trial balances from the Configuration tab`
+          ? `${p.fy} programme created — add the RACM from the RACM tab`
           : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
       type: 'success',
     });
