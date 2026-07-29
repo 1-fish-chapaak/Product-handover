@@ -21,11 +21,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
-  Info, Crosshair, X, MessageSquare, ArrowUpRight,
+  Crosshair, MessageSquare, ArrowUpRight,
 } from 'lucide-react';
-import {
-  displayConfidencePct, CONFIDENCE_FACTOR_META, MEMORY_CANDIDATE_THRESHOLD,
-} from '../../data/insightMemory';
 import {
   LAYER_META,
   type LayeredInsight, type VerdictTone, type CheckMoreOption,
@@ -64,73 +61,15 @@ function FreshnessTag({ insight }: { insight: LayeredInsight }) {
   );
 }
 
-function confDot(pct: number): string {
-  if (pct >= 70) return 'rgb(21 128 61)';       // compliant
-  if (pct >= MEMORY_CANDIDATE_THRESHOLD * 100) return 'rgb(180 83 9)'; // mitigated
-  return 'rgb(154 143 174)';                     // ink-400
-}
-
-// ─── Confidence pill (three axes, popover breakdown) ───────────────────────
-
-function ConfidencePill({ insight }: { insight: LayeredInsight }) {
-  const [open, setOpen] = useState(false);
-  const pct = displayConfidencePct(insight);
-  const engineScored = insight.confidenceOverride != null;
-  const candidate = pct >= MEMORY_CANDIDATE_THRESHOLD * 100;
-  return (
-    <div className="relative">
-      <button
-        type="button" onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[11px] font-semibold text-ink-800 hover:border-brand-300 transition-colors cursor-pointer"
-        title="How this confidence was scored"
-      >
-        <span className="size-1.5 rounded-full" style={{ background: confDot(pct) }} />
-        {pct}% confidence
-        <Info size={11} className="text-ink-400" aria-hidden="true" />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 z-30 mt-2 w-[300px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-3.5"
-          >
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[12px] font-bold text-ink-800">Confidence — three axes</span>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="text-ink-400 hover:text-ink-700 cursor-pointer"><X size={13} /></button>
-            </div>
-            {engineScored ? (
-              <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                Engine-scored composite of evidence strength, materiality and novelty. The three axes gate independently — a thin-evidence finding is capped on “real”, never floated by dollars. See the evidence note on the card.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {CONFIDENCE_FACTOR_META.map(m => {
-                  const v = Math.round(insight.factors[m.key] * 100);
-                  return (
-                    <div key={m.key}>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-semibold text-ink-800">{m.label}</span>
-                        <span className="font-bold tabular-nums text-ink-800">{v}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
-                        <div className={`h-full rounded-full ${v >= 70 ? 'bg-compliant' : v >= 45 ? 'bg-mitigated-500' : 'bg-ink-300'}`} style={{ width: `${v}%` }} />
-                      </div>
-                      <p className="text-[10px] text-ink-400 mt-0.5">{m.hint}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="mt-3 pt-2.5 border-t border-canvas-border flex items-center justify-between">
-              <span className="text-[10px] text-ink-400 font-mono">real · materiality · novelty</span>
-              <span className={`text-[11px] font-bold ${candidate ? 'text-compliant-700' : 'text-ink-400'}`}>{pct}% {candidate ? '· candidate' : '· below gate'}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+// Relative time for the header — ambient meta only (the audit trail keeps
+// absolute timestamps). Insights without a stamp were generated this render.
+function timeAgo(ts?: number): string {
+  if (!ts) return 'just now';
+  const m = Math.floor((Date.now() - ts) / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} hr ago` : `${Math.floor(h / 24)} d ago`;
 }
 
 // ─── Evidence label per altitude ───────────────────────────────────────────
@@ -138,7 +77,12 @@ function ConfidencePill({ insight }: { insight: LayeredInsight }) {
 const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
   control: 'Evidence · runs and rows',
   risk: 'Evidence · controls under this risk',
+  sop: 'Evidence · risks and controls under this SOP',
   engagement: 'Evidence · risks and controls',
+};
+
+const LAYER_WORD: Record<LayeredInsight['layer'], string> = {
+  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement',
 };
 
 // A plain-string "what to do next" step. Same compaction as RecTile: clamped to
@@ -196,8 +140,10 @@ export default function LayeredInsightCard({
   onRec?: (title: string) => void;
 }) {
   const meta = LAYER_META[insight.layer];
-  const vTone = TONE[insight.verdict.tone];
   const sevTone = TONE[SEV_TONE[insight.severity]];
+  // Header scope, sentence-cased: "This control" / "Across workflows" / …
+  const scope = headerLabel ?? meta.label;
+  const scopeText = scope.charAt(0).toUpperCase() + scope.slice(1);
   // Typed recommendations, most-urgent first.
   const recs = [...(insight.recommendations ?? [])].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
 
@@ -211,14 +157,11 @@ export default function LayeredInsightCard({
   // Recommended actions honour the caller's handler (e.g. seed a follow-up composer).
   const openRec = (title: string) => (onRec ? onRec(title) : openInChat(title));
 
-  const doNowCount = recs.filter(r => r.priority === 'do-now').length;
-
   // ── Collapsed — a sleek single-row summary, so a stack of ten reads like a
   //    scannable list and doesn't push the engagement detail off-screen. Brand
   //    chrome and the full anatomy are reserved for the expanded card. ──
   if (collapsible && !open) {
-    const pct = displayConfidencePct(insight);
-    const layerWord = insight.layer === 'control' ? 'Control' : insight.layer === 'risk' ? 'Risk' : 'Engagement';
+    const layerWord = LAYER_WORD[insight.layer];
     return (
       <motion.section
         initial={false}
@@ -233,27 +176,22 @@ export default function LayeredInsightCard({
           <span className={`size-2 rounded-full shrink-0 ${sevTone.dot}`} title={`Severity: ${SEV_LABEL[insight.severity]}`} />
           <span className="hidden sm:inline shrink-0 text-[9px] font-bold uppercase tracking-wider text-ink-400">{layerWord}</span>
           <FreshnessTag insight={insight} />
+          {(insight.spans?.length ?? 0) > 0 && (
+            <span
+              className="hidden lg:inline-flex shrink-0 items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[9.5px] font-bold"
+              title={insight.spans!.map(s => s.label).join(' · ')}
+            >
+              Spans {insight.spans!.length} {insight.spans![0].kind}{insight.spans!.length === 1 ? '' : 's'}
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-800 group-hover:text-brand-700 transition-colors">
             {insight.takeaway}
           </span>
-          {doNowCount > 0 && (
-            <span className="hidden md:inline-flex items-center rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[9.5px] font-bold border border-risk/20 shrink-0">
-              {doNowCount} do now
-            </span>
-          )}
-          {recs.length > 0 && (
-            <span className="hidden xl:inline shrink-0 text-[10px] font-semibold text-brand-600/70 tabular-nums">{recs.length} rec{recs.length === 1 ? '' : 's'}</span>
-          )}
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-bold shrink-0 ${vTone.pill}`}>
-            <span className={`size-1.5 rounded-full ${vTone.dot}`} /> {insight.verdict.label}
+          {/* Right side carries ONE tag: severity. Verdict, rec counts and
+              confidence live inside the expanded card, not on the row. */}
+          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold shrink-0 ${sevTone.wrap}`} title={insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}>
+            {SEV_LABEL[insight.severity]}
           </span>
-          {insight.verdict.tone === 'positive' ? (
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[9.5px] font-semibold text-compliant-700 shrink-0"><ShieldCheck size={9} aria-hidden="true" /> Signed pass</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[10px] font-semibold text-ink-700 shrink-0 tabular-nums">
-              <span className="size-1.5 rounded-full" style={{ background: confDot(pct) }} /> {pct}%
-            </span>
-          )}
         </button>
       </motion.section>
     );
@@ -271,25 +209,24 @@ export default function LayeredInsightCard({
       className={`rounded-2xl border overflow-hidden transition-colors ${container}`}
     >
       <div className="p-4">
-        {/* Header */}
+        {/* Header — [IRA INSIGHT] pill · scope · time ago ··· severity · confidence · caret */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`size-6 rounded-lg flex items-center justify-center shrink-0 ${bodyShown ? 'bg-brand-100 text-brand-700' : 'bg-canvas text-ink-400'}`}>
-            <Sparkles size={13} aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand-100/70 text-brand-700 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+            <Sparkles size={9} aria-hidden="true" /> IRA Insight
           </span>
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${bodyShown ? 'text-brand-700' : 'text-ink-500'}`}>AI insight · {headerLabel ?? meta.label}</span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${sevTone.pill}`}>
-            {insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}
-          </span>
-          <span className="font-mono text-[10px] text-ink-400 hidden sm:inline">Insight Memory Engine</span>
-          <div className="ml-auto flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${vTone.pill}`}>
-              <span className={`size-1.5 rounded-full ${vTone.dot}`} /> {insight.verdict.label}
+          <span className="text-[12.5px] font-bold text-ink-600">{scopeText}</span>
+          <span className="text-[11.5px] text-ink-400">· {timeAgo(insight.generatedAt)}</span>
+          <div className="ml-auto flex items-center gap-2.5">
+            {/* Severity, spelled out plain — label overrides like "Readiness: At
+                risk" stay on the hover title so the header reads one word. */}
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${sevTone.wrap}`} title={insight.severityLabel}>
+              {SEV_LABEL[insight.severity]}
             </span>
-            {/* A signed pass has no "finding confidence" to report — the confidence
-                axes describe the strength of a finding, so hide them on positive verdicts. */}
-            {insight.verdict.tone === 'positive'
-              ? <span className="inline-flex items-center gap-1 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[10px] font-semibold text-compliant-700"><ShieldCheck size={10} /> Signed pass</span>
-              : <ConfidencePill insight={insight} />}
+            {/* Confidence is deliberately not shown — severity leads; a signed
+                pass keeps its assurance chip. */}
+            {insight.verdict.tone === 'positive' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-compliant-50 px-2 py-0.5 text-[10px] font-semibold text-compliant-700"><ShieldCheck size={10} /> Signed pass</span>
+            )}
             {collapsible && (
               <button
                 type="button" onClick={onToggleOpen} aria-expanded={open}
@@ -325,10 +262,10 @@ export default function LayeredInsightCard({
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              {/* What we found · Root cause · What's at stake — three canvas
-                  panels at equal height, echoing the recommended-actions band. */}
-              <div className="grid gap-2.5 mt-3.5 lg:grid-cols-3 items-stretch">
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+              {/* What we found · Root cause · What's at stake — three open
+                  columns, no boxes; the gutters do the separating. */}
+              <div className="grid gap-x-8 gap-y-4 mt-3.5 lg:grid-cols-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <Layers size={12} className="text-brand-600" aria-hidden="true" /> What we found
                   </div>
@@ -341,7 +278,7 @@ export default function LayeredInsightCard({
                     ))}
                   </ul>
                 </div>
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
                   </div>
@@ -353,7 +290,7 @@ export default function LayeredInsightCard({
                     </p>
                   </div>
                 </div>
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <DollarSign size={12} className="text-ink-500" aria-hidden="true" /> What&rsquo;s at stake
                   </div>
@@ -367,6 +304,26 @@ export default function LayeredInsightCard({
                   </ul>
                 </div>
               </div>
+
+              {/* Spans — the entities below this anchor the finding draws from.
+                  This card is their single record; each spanned row shows a
+                  one-line reflection pointing back here, never a copy. */}
+              {(insight.spans?.length ?? 0) > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mr-0.5">Spans</span>
+                  {insight.spans!.map(s => (
+                    <span
+                      key={`${s.kind}:${s.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-evidence-100 bg-evidence-50 px-2 py-0.5 text-[10.5px] font-semibold text-evidence-700"
+                      title={s.note ?? s.label}
+                    >
+                      <span className="font-mono text-[9.5px]">{s.id}</span>
+                      <span className="max-w-[180px] truncate">{s.label}</span>
+                    </span>
+                  ))}
+                  <span className="text-[10px] text-ink-400">· counted once — anchored on this card</span>
+                </div>
+              )}
 
               {/* Evidence disclosure — collapsed-by-default toggle + check-more
                   chips + calm Source/Item/Detail table (shared surface). */}

@@ -20,17 +20,18 @@
 // numbers always tie back to the run. Every recommendation / "what to do next"
 // can seed the follow-up composer via `onAction`, threading insights into chat.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   GitCompareArrows, TrendingUp, TrendingDown, Minus,
   Plus, Check, Sparkles, Brain, Layers,
-  ChevronDown, ScrollText,
+  ChevronDown, ChevronLeft, ChevronRight, ScrollText,
 } from 'lucide-react';
 import {
   RUN_OUTPUT_COMPARE, STAGE3_CURRENT, ENTITY_MEMORY, ENTERPRISE_CONTEXT,
-  PROCESS_INSIGHTS, correlatedRecords,
-  type OutputCompare, type RunSnapshot, type Stage3Record, type Stage3EvidenceRow,
+  PROCESS_INSIGHTS, correlatedRecords, compareForWorkflow,
+  type OutputCompare, type RunSnapshot, type KpiDef, type KpiFormat,
+  type Stage3Record, type Stage3EvidenceRow,
 } from '../../data/insightMemory';
 import type { LayeredInsight, VerdictTone, CheckMoreOption } from '../../data/layeredInsights';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
@@ -45,31 +46,32 @@ const usd0 = (n: number) => n.toLocaleString('en-US', { style: 'currency', curre
 const usd2 = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int0 = (n: number) => Math.round(n).toLocaleString('en-US');
 
-// The KPIs the compare card trends across — one source of truth, so the
-// sparklines, delta chips, headline copy and verdict all read the same raw
-// numbers off the run history. A KPI is "lower is better" unless it's a pure
-// volume metric (rows processed), which is neither good nor bad on its own.
-type KpiKey = keyof RunSnapshot['kpis'];
-const KPI_DEFS: { key: KpiKey; label: string; headline?: boolean; fmt: (n: number) => string }[] = [
-  { key: 'exceptions', label: 'Exceptions', headline: true, fmt: int0 },
-  { key: 'rowsProcessed', label: 'Rows processed', fmt: int0 },
-  { key: 'underRecovered', label: '$ under-recovered (sampled)', fmt: usd2 },
+const FMT: Record<KpiFormat, (n: number) => string> = { int: int0, usd2 };
+
+// The compare card's default KPI set. A workflow can expose more (or different)
+// metrics via OutputCompare.kpiDefs; the card renders whatever it's given and
+// the trend row scrolls once the set overflows three-up. One source of truth so
+// the sparklines, delta chips, headline copy and verdict read the same numbers.
+const DEFAULT_KPI_DEFS: KpiDef[] = [
+  { key: 'exceptions', label: 'Exceptions', headline: true, format: 'int', polarity: 'lowerBetter' },
+  { key: 'rowsProcessed', label: 'Rows processed', format: 'int', polarity: 'neutral' },
+  { key: 'underRecovered', label: '$ under-recovered (sampled)', format: 'usd2', polarity: 'lowerBetter' },
 ];
 
-// Tone of a single KPI move — exceptions / dollars are lower-is-better, rows
-// processed is a neutral volume metric.
-function kpiTone(key: KpiKey, dir: 'up' | 'down' | 'flat'): 'bad' | 'good' | 'neutral' {
-  if (key === 'rowsProcessed' || dir === 'flat') return 'neutral';
+// Tone of a single KPI move — 'lowerBetter' metrics warn when they rise; a
+// 'neutral' volume metric (rows processed) never colours good/bad.
+function kpiTone(polarity: KpiDef['polarity'], dir: 'up' | 'down' | 'flat'): 'bad' | 'good' | 'neutral' {
+  if (polarity === 'neutral' || dir === 'flat') return 'neutral';
   return dir === 'up' ? 'bad' : 'good';
 }
 const TONE_TEXT = { bad: 'text-risk-400', good: 'text-compliant-500', neutral: 'text-brand-400' } as const;
 const CHIP_CLS = { bad: 'text-risk bg-risk-50', good: 'text-compliant-700 bg-compliant-50', neutral: 'text-ink-500 bg-canvas' } as const;
 const BAR_CLS = { bad: 'bg-risk-400', good: 'bg-compliant-500', neutral: 'bg-brand-300' } as const;
 
-function moveOf(key: KpiKey, cur: number, prev: number) {
+function moveOf(def: KpiDef, cur: number, prev: number) {
   const pct = prev ? Math.round(((cur - prev) / prev) * 100) : 0;
   const dir = cur > prev ? 'up' : cur < prev ? 'down' : 'flat';
-  return { pct, dir, tone: kpiTone(key, dir as 'up' | 'down' | 'flat') };
+  return { pct, dir, tone: kpiTone(def.polarity, dir as 'up' | 'down' | 'flat') };
 }
 
 // ─── 1. Compare with previous output ──────────────────────────────────────
@@ -111,9 +113,10 @@ function Sparkline({ values, tone }: { values: number[]; tone: 'bad' | 'good' | 
 // "from X", and a magnitude bar scaled to the biggest mover across the three
 // KPIs (`maxAbsPct`) so the largest change reads longest, not pinned at 100%.
 function KpiDeltaTile({ def, prev, cur, maxAbsPct }: {
-  def: typeof KPI_DEFS[number]; prev: number; cur: number; maxAbsPct: number;
+  def: KpiDef; prev: number; cur: number; maxAbsPct: number;
 }) {
-  const { pct, dir, tone } = moveOf(def.key, cur, prev);
+  const { pct, dir, tone } = moveOf(def, cur, prev);
+  const fmt = FMT[def.format];
   const Arrow = dir === 'up' ? TrendingUp : dir === 'down' ? TrendingDown : Minus;
   const barW = maxAbsPct ? Math.max(6, (Math.abs(pct) / maxAbsPct) * 100) : 0;
   return (
@@ -126,8 +129,8 @@ function KpiDeltaTile({ def, prev, cur, maxAbsPct }: {
           </span>
         )}
       </div>
-      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{def.fmt(cur)}</span>
-      <div className="text-[11px] font-mono text-ink-400">from {def.fmt(prev)}</div>
+      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{fmt(cur)}</span>
+      <div className="text-[11px] font-mono text-ink-400">from {fmt(prev)}</div>
       <div className="mt-0.5 h-1.5 rounded-full bg-canvas overflow-hidden" title={`${Math.abs(pct)}% change`}>
         <div className={`h-full rounded-full ${BAR_CLS[tone]}`} style={{ width: `${barW}%` }} />
       </div>
@@ -139,15 +142,14 @@ function KpiDeltaTile({ def, prev, cur, maxAbsPct }: {
 // magnitude bar becomes a sparkline over the whole selected window, with the
 // run-by-run series underneath and the latest point emphasized. The headline
 // KPI (exceptions) gets a subtle accent so the eye lands there first.
-function KpiTrendTile({ def, series, headline }: {
-  def: typeof KPI_DEFS[number]; series: number[]; headline?: boolean;
-}) {
+function KpiTrendTile({ def, series }: { def: KpiDef; series: number[] }) {
   const cur = series[series.length - 1];
   const prev = series[series.length - 2] ?? cur;
-  const { pct, dir, tone } = moveOf(def.key, cur, prev);
+  const { pct, dir, tone } = moveOf(def, cur, prev);
+  const fmt = FMT[def.format];
   const Arrow = dir === 'up' ? TrendingUp : dir === 'down' ? TrendingDown : Minus;
   return (
-    <div className={`flex h-full flex-col gap-2 rounded-xl border p-3 snap-start ${headline ? 'border-brand-200 bg-brand-50/25' : 'border-canvas-border bg-canvas-elevated'}`}>
+    <div className={`flex h-full flex-col gap-2 rounded-xl border p-3 snap-start ${def.headline ? 'border-brand-200 bg-brand-50/25' : 'border-canvas-border bg-canvas-elevated'}`}>
       <div className="flex items-start justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-wide text-ink-400 leading-tight">{def.label}</span>
         {dir !== 'flat' && (
@@ -156,14 +158,81 @@ function KpiTrendTile({ def, series, headline }: {
           </span>
         )}
       </div>
-      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{def.fmt(cur)}</span>
+      <span className="text-[22px] font-bold font-mono text-ink-900 leading-none tracking-tight">{fmt(cur)}</span>
       <Sparkline values={series} tone={tone} />
       <div className="text-[10.5px] font-mono leading-tight text-ink-400">
         {series.map((val, i) => (
           <span key={i}>
             {i > 0 && <span className="text-ink-300"> · </span>}
-            <span className={i === series.length - 1 ? `font-bold ${TONE_TEXT[tone]}` : ''}>{def.fmt(val)}</span>
+            <span className={i === series.length - 1 ? `font-bold ${TONE_TEXT[tone]}` : ''}>{fmt(val)}</span>
           </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Horizontal KPI carousel. Tiles flex to fill and read 3-up when they fit — no
+// chrome at all in that case. Once the set overflows (more KPIs than fit, or a
+// narrowed column), edge-fade masks + floating ‹ › buttons appear only on the
+// side that has more to reveal, while native trackpad / touch / drag and
+// scroll-snap keep working. The affordance is the point: a hidden macOS
+// scrollbar leaves off-screen KPIs undiscoverable.
+function TrendKpiRow({ tiles }: { tiles: { def: KpiDef; series: number[] }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setEdges(prev => (prev.left === left && prev.right === right ? prev : { left, right }));
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    el.addEventListener('scroll', measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', measure); ro.disconnect(); };
+  }, [measure]);
+
+  // Page by most of the viewport, keeping one tile of context; snap settles it.
+  const page = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.85, behavior: 'smooth' });
+
+  const arrowBase = 'absolute top-1/2 z-20 grid size-7 -translate-y-1/2 place-items-center rounded-full border border-canvas-border bg-canvas-elevated text-ink-600 shadow-sm transition-all duration-200 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 cursor-pointer';
+
+  return (
+    <div className="relative">
+      {/* Left edge fade + control */}
+      <div className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-gradient-to-r from-canvas-elevated to-transparent transition-opacity duration-200 ${edges.left ? 'opacity-100' : 'opacity-0'}`} />
+      <button
+        type="button" onClick={() => page(-1)} aria-label="Show previous KPIs"
+        className={`${arrowBase} left-1 ${edges.left ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+      >
+        <ChevronLeft size={15} />
+      </button>
+
+      {/* Right edge fade + control */}
+      <div className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-gradient-to-l from-canvas-elevated to-transparent transition-opacity duration-200 ${edges.right ? 'opacity-100' : 'opacity-0'}`} />
+      <button
+        type="button" onClick={() => page(1)} aria-label="Show more KPIs"
+        className={`${arrowBase} right-1 ${edges.right ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+      >
+        <ChevronRight size={15} />
+      </button>
+
+      <div
+        ref={ref}
+        className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory pb-1 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {tiles.map(({ def, series }) => (
+          <div key={def.key} className="min-w-[168px] flex-1 snap-start">
+            <KpiTrendTile def={def} series={series} />
+          </div>
         ))}
       </div>
     </div>
@@ -341,7 +410,8 @@ export function OutputComparePanel({
   const selectedPriors = priors.filter(p => selectedIds.has(p.id));
   const runs: RunSnapshot[] = current ? [...selectedPriors, current] : selectedPriors;
   const trend = selectedPriors.length >= 2;
-  const seriesOf = (key: KpiKey) => runs.map(r => r.kpis[key]);
+  const kpiDefs = compare.kpiDefs ?? DEFAULT_KPI_DEFS;
+  const seriesOf = (key: string) => runs.map(r => r.kpis[key] ?? 0);
 
   const workflowName = compare.previousRunLabel.split('—')[0].trim();
   const year = current?.date.match(/\d{4}/)?.[0] ?? '';
@@ -372,8 +442,8 @@ export function OutputComparePanel({
   const fallingRuns = streakLen((a, b) => a < b);
 
   // Verdict — weigh how the "lower is better" KPIs made their latest move.
-  const moves = KPI_DEFS.filter(d => d.key !== 'rowsProcessed').map(d => {
-    const s = seriesOf(d.key); return moveOf(d.key, s[s.length - 1], s[s.length - 2] ?? s[s.length - 1]).tone;
+  const moves = kpiDefs.filter(d => d.polarity !== 'neutral').map(d => {
+    const s = seriesOf(d.key); return moveOf(d, s[s.length - 1], s[s.length - 2] ?? s[s.length - 1]).tone;
   });
   const verdict: Verdict = moves.filter(m => m === 'bad').length > moves.filter(m => m === 'good').length
     ? 'worse'
@@ -496,22 +566,16 @@ export function OutputComparePanel({
               transition={{ duration: 0.18 }}
             >
               {trend ? (
-                <div className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory pb-1 -mb-1 [scrollbar-width:thin]">
-                  {KPI_DEFS.map(def => (
-                    <div key={def.key} className="min-w-[168px] flex-1">
-                      <KpiTrendTile def={def} series={seriesOf(def.key)} headline={def.headline} />
-                    </div>
-                  ))}
-                </div>
+                <TrendKpiRow tiles={kpiDefs.map(def => ({ def, series: seriesOf(def.key) }))} />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                   {(() => {
                     const prevRun = selectedPriors[0] ?? current;
-                    const maxAbsPct = Math.max(1, ...KPI_DEFS.map(def => {
+                    const maxAbsPct = Math.max(1, ...kpiDefs.map(def => {
                       const p = prevRun?.kpis[def.key] ?? 0, c = current?.kpis[def.key] ?? 0;
                       return p ? Math.abs(Math.round(((c - p) / p) * 100)) : 0;
                     }));
-                    return KPI_DEFS.map(def => (
+                    return kpiDefs.map(def => (
                       <KpiDeltaTile key={def.key} def={def} prev={prevRun?.kpis[def.key] ?? 0} cur={current?.kpis[def.key] ?? 0} maxAbsPct={maxAbsPct} />
                     ));
                   })()}
@@ -828,9 +892,14 @@ export function CrossWorkflowCorrelationPanel({
 
 export default function WorkflowFollowUpInsights({
   onAction,
+  workflowId,
 }: {
   onAction?: (query: string) => void;
+  /** Drives which KPI set the output-compare card trends (wider set for the
+   *  sandbox test workflows). */
+  workflowId?: string;
 }) {
+  const compare = compareForWorkflow(workflowId);
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
@@ -846,7 +915,7 @@ export default function WorkflowFollowUpInsights({
       </div>
 
       <div className="flex flex-col gap-3">
-        <OutputComparePanel onAction={onAction} />
+        <OutputComparePanel compare={compare} onAction={onAction} />
         <CrossWorkflowCorrelationPanel onAction={onAction} />
       </div>
     </motion.section>

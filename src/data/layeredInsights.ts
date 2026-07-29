@@ -19,9 +19,46 @@
 
 import type { ConfidenceFactors, InsightSeverity, DetectionMethod } from './insightMemory';
 
-// ─── The three altitudes ──────────────────────────────────────────────────
+// ─── The altitudes ─────────────────────────────────────────────────────────
 
-export type InsightLayer = 'control' | 'risk' | 'engagement';
+export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement';
+
+// ─── Anchors, spans and targets — the B+C surfacing model ──────────────────
+// Two rules govern where AI content appears across SOP → risk → control:
+//
+//   1. ANCHORING (one home per insight): an insight lives at the lowest level
+//      of the hierarchy that contains everything it spans. `layer` + `subjectId`
+//      are the anchor; `spans` lists the entities below the anchor that
+//      contribute to the finding. A spanned row renders a one-line REFLECTION
+//      (its slice + a link up to the anchor), never a copy — so a finding is
+//      counted once, annotated once, signed off once.
+//
+//   2. TARGETED ACTIONS (analysis stays, actions travel): a recommendation may
+//      name the ONE entity it lands on (`target`). Explicitly-targeted actions
+//      surface as chips on the target's row everywhere, carrying the parent
+//      insight for context. A rec without a target belongs to its own card's
+//      surface and never travels.
+
+export type EntityKind = 'control' | 'risk' | 'sop' | 'engagement' | 'workflow';
+
+export interface EntityRef {
+  kind: EntityKind;
+  id: string;
+  label: string;
+  /** This entity's slice of the finding — drives its reflection strip. */
+  note?: string;
+}
+
+/** What applying an action does — drives the verb icon + the Apply CTA. */
+export type RecIntent = 'retest' | 'edit' | 'create' | 'aggregate' | 'monitor';
+
+export const REC_INTENT_META: Record<RecIntent, { label: string; applyLabel: string }> = {
+  retest:    { label: 'Re-test',   applyLabel: 'Add test step' },
+  edit:      { label: 'Change',    applyLabel: 'Apply change' },
+  create:    { label: 'Create',    applyLabel: 'Draft the control' },
+  aggregate: { label: 'Aggregate', applyLabel: 'Aggregate findings' },
+  monitor:   { label: 'Monitor',   applyLabel: 'Add to monitoring' },
+};
 
 /** Tone drives the verdict pill colour. `positive` = negative-assurance (a
  *  monitored baseline held), `caution` = partial/at-risk, `negative` = broken. */
@@ -103,6 +140,11 @@ export interface AuditRecommendation {
   basis?: string;
   /** The human-judgment guardrail, when the call must stay the auditor's. */
   guardrail?: string;
+  /** The ONE entity this action lands on. Only explicitly-targeted actions
+   *  travel to other rows; omitted = belongs to its own card's surface. */
+  target?: EntityRef;
+  /** The verb behind the action — icon + Apply wording. */
+  intent?: RecIntent;
 }
 
 export const REC_CATEGORY_META: Record<RecCategory, { label: string; icon: string }> = {
@@ -124,6 +166,8 @@ export const REC_PRIORITY_META: Record<RecPriority, { label: string; tone: Verdi
   'this-period': { label: 'This period',  tone: 'caution' },
   advisory:      { label: 'Advisory',     tone: 'positive' },
 };
+
+export const REC_PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
 
 export interface LayeredInsight {
   id: string;
@@ -147,6 +191,9 @@ export interface LayeredInsight {
   reasoning: string;
   /** Money / resource at stake, priced honestly (or an explicit "not yet sized"). */
   atStake: string;
+  /** Session timestamp (ms epoch) — when this insight was generated. Stamped
+   *  by the generator at build time; drives the header's relative time. */
+  generatedAt?: number;
   /** What changed since the previous run — drives the lifecycle tag + the
    *  stack's delta strip. Absent = unchanged since last run (no tag). */
   freshness?: InsightFreshness;
@@ -173,6 +220,9 @@ export interface LayeredInsight {
   detectedBy: DetectionMethod;
   /** What this synthesises from the layer below — "3 controls", "2 risks". */
   rollupOf?: { label: string; count: number };
+  /** The entities below the anchor this insight draws from (Rule 1). Spanned
+   *  rows show a one-line reflection pointing back here — never a copy. */
+  spans?: EntityRef[];
 
   // ── Forward-looking ──
   checkMore: CheckMoreOption[];
@@ -283,6 +333,14 @@ const RISK_PRICING: LayeredInsight = {
   detectedOn: '07 Jul 2026',
   detectedBy: 'traceable',
   rollupOf: { label: 'controls', count: 3 },
+  // The anchor rule: this finding spans three controls, so it lives here (their
+  // lowest common ancestor) and each spanned control row reflects its slice.
+  // Callers with real row ids (the engagement stack) override via input.spans.
+  spans: [
+    { kind: 'control', id: 'C-CHARGEBACK-PRICING', label: 'Chargeback Pricing Validation', note: '70 of the 90 exception lines this run — both sample rows trace to the feed.' },
+    { kind: 'control', id: 'C-CONTRACT-COMPLIANCE', label: 'Contract Compliance Review', note: 'HPG12 WAC lagging the price master.' },
+    { kind: 'control', id: 'C-VENDOR-MASTER', label: 'Vendor Master Audit', note: 'Stale WAC ageing across contracts.' },
+  ],
   checkMore: [
     { kind: 'split', label: 'See which controls touch the feed' },
     { kind: 'trace', label: 'Where the gap sits' },
@@ -501,6 +559,9 @@ export interface BuildInsightInput {
    *  for a subject the caller KNOWS carries the chargeback-pricing thread
    *  (e.g. the engagement rollup for the engagement that runs it). */
   flagship?: boolean;
+  /** Override the insight's spans with the caller's REAL row entities, so
+   *  reflections land on rows that actually exist on the caller's surface. */
+  spans?: EntityRef[];
 }
 
 // ─── AI recommendation library ──────────────────────────────────────────────
@@ -511,77 +572,108 @@ export interface BuildInsightInput {
 const rec = (
   id: string, category: RecCategory, priority: RecPriority,
   title: string, rationale: string, basis?: string, guardrail?: string,
-): AuditRecommendation => ({ id, category, priority, title, rationale, basis, guardrail });
+  extra?: Pick<AuditRecommendation, 'target' | 'intent'>,
+): AuditRecommendation => ({ id, category, priority, title, rationale, basis, guardrail, ...extra });
 
 // Flagship control — Chargeback Pricing Validation, Ineffective this period.
+// Targeted actions (Rule 2): cr-cf-2 lands on the risk (aggregation is a
+// risk-level judgment) and cr-cf-5 lands on the SOP (a missing control has no
+// row of its own) — both travel to those rows. The rest stay on this card.
 const CONTROL_FLAGSHIP_RECS: AuditRecommendation[] = [
   rec('cr-cf-1', 'root-cause', 'do-now',
     'Confirm the MCKESSON price-feed failure before grading a deficiency.',
     'The 70-row concentration points to one feed, but the mechanism is still a candidate. The severity call is your judgment on likelihood and magnitude.',
-    'Deficiency evaluation', 'AI proposes the cause; you conclude and sign.'),
+    'Deficiency evaluation', 'AI proposes the cause; you conclude and sign.',
+    { intent: 'retest' }),
   rec('cr-cf-2', 'deficiency', 'do-now',
     'Aggregate with the other two MCKESSON-driven controls by assertion.',
     'Three controls hit the same pricing-accuracy assertion. Evaluate the combined magnitude, not three isolated items — only the engagement sees all three workpapers.',
-    'Deficiency aggregation by assertion', 'Never auto-labelled significant deficiency or material weakness.'),
+    'Deficiency aggregation by assertion', 'Never auto-labelled significant deficiency or material weakness.',
+    { intent: 'aggregate', target: { kind: 'risk', id: 'R-PRICING', label: 'Pricing accuracy risk' } }),
   rec('cr-cf-3', 'evidence', 'this-period',
     'Re-perform the WAC and contract-price IPE for the 70 held lines.',
     'The system verdict is information produced by the entity — validate its completeness and accuracy before relying on it for the recovery position.',
-    'IPE completeness & accuracy'),
+    'IPE completeness & accuracy', undefined,
+    { intent: 'retest' }),
   rec('cr-cf-4', 'sampling', 'this-period',
     'Size the recovery testing to the 70 exceptions, not the default 25.',
     'The deviation set is already identified, so a flat 25 is indefensible. Test the known population and quantify the recovery.',
-    'ISA 530 / AS 2315 attribute sampling'),
+    'ISA 530 / AS 2315 attribute sampling', undefined,
+    { intent: 'edit' }),
   rec('cr-cf-5', 'automation', 'advisory',
     'Add a preventive edit that blocks a null-contract-price chargeback at intake.',
     'Stops the exception at source next period rather than detecting it after settlement.',
-    'Preventive control design'),
+    'Preventive control design', undefined,
+    { intent: 'create', target: { kind: 'sop', id: 'sop-001', label: 'Vendor Payment SOP' } }),
 ];
 
 function controlRecs(status: string, isKey: boolean): AuditRecommendation[] {
   if (status === 'Fail') {
     return [
       rec('cr-f-1', 'root-cause', 'do-now', 'Confirm the root cause before grading a deficiency.',
-        'A failing attribute is known; the mechanism is not. Confirm it before concluding — the severity is your judgment.', 'Deficiency evaluation', 'Human grades severity.'),
+        'A failing attribute is known; the mechanism is not. Confirm it before concluding — the severity is your judgment.', 'Deficiency evaluation', 'Human grades severity.',
+        { intent: 'retest' }),
       rec('cr-f-2', 'deficiency', 'this-period', 'Evaluate a compensating control over the same assertion.',
-        'Before grading this control ineffective, check whether another control covers the same assertion, precisely enough, and operated all period.', 'Compensating controls'),
+        'Before grading this control ineffective, check whether another control covers the same assertion, precisely enough, and operated all period.', 'Compensating controls', undefined,
+        { intent: 'aggregate' }),
       rec('cr-f-3', 'evidence', 'this-period', 'Validate the IPE behind the exceptions.',
-        'Confirm the completeness and accuracy of any system-produced report used to identify the failures before relying on it.', 'IPE completeness & accuracy'),
+        'Confirm the completeness and accuracy of any system-produced report used to identify the failures before relying on it.', 'IPE completeness & accuracy', undefined,
+        { intent: 'retest' }),
       rec('cr-f-4', 'scoping', 'advisory', 'Carry this conclusion into next period’s scope.',
-        'A control that failed this period must not be quietly dropped or down-sampled next year — the worst look in an inspection.', 'Prior-year carryover'),
+        'A control that failed this period must not be quietly dropped or down-sampled next year — the worst look in an inspection.', 'Prior-year carryover', undefined,
+        { intent: 'monitor' }),
     ];
   }
   if (status === 'Pass') {
     return [
       rec('cr-p-1', 'timeliness', 'advisory', 'Re-test on the next cycle to keep the assurance current.',
-        'A clean pass ages. Confirm the test cadence matches the control frequency so reliance stays supported.', 'Reliance currency'),
+        'A clean pass ages. Confirm the test cadence matches the control frequency so reliance stays supported.', 'Reliance currency', undefined,
+        { intent: 'retest' }),
       rec('cr-p-2', 'sampling', 'advisory', 'Sanity-check the sample against control frequency.',
-        'Confirm the sample size was driven by frequency and required assurance, not a default 25 — over- and under-auditing both show at EQR.', 'ISA 530 attribute sampling'),
+        'Confirm the sample size was driven by frequency and required assurance, not a default 25 — over- and under-auditing both show at EQR.', 'ISA 530 attribute sampling', undefined,
+        { intent: 'monitor' }),
       rec('cr-p-3', 'automation', 'advisory', 'If this is a manual control with recurring low exceptions, consider automating it.',
-        'A manual control that clears the same exception every period is an automation-advisory candidate that also tightens assurance.', 'Efficiency'),
+        'A manual control that clears the same exception every period is an automation-advisory candidate that also tightens assurance.', 'Efficiency', undefined,
+        { intent: 'create' }),
     ];
   }
   // Not tested / in test — the highest-value proactive set.
   return [
     rec('cr-n-1', 'timeliness', isKey ? 'do-now' : 'this-period', `Schedule this ${isKey ? 'key ' : ''}control’s test this period.`,
-      isKey ? 'A key control not concluded this period is the first question an inspector asks. Schedule it before freeze.' : 'This control has no conclusion this period — schedule its test so the assertion is covered.', 'Key-control coverage'),
+      isKey ? 'A key control not concluded this period is the first question an inspector asks. Schedule it before freeze.' : 'This control has no conclusion this period — schedule its test so the assertion is covered.', 'Key-control coverage', undefined,
+      { intent: 'retest' }),
     rec('cr-n-2', 'sampling', 'this-period', 'Set the sample from frequency and prior-year result, not the default 25.',
-      'Sample size is driven by control frequency and required assurance, uplifted for any prior-year deviation. Population growth is a separate reassessment signal, not a sample-count input.', 'ISA 530 attribute sampling'),
+      'Sample size is driven by control frequency and required assurance, uplifted for any prior-year deviation. Population growth is a separate reassessment signal, not a sample-count input.', 'ISA 530 attribute sampling', undefined,
+      { intent: 'edit' }),
     rec('cr-n-3', 'evidence', 'this-period', 'Request the required evidence up front and validate it at intake.',
-      'Check the evidence is in-period, signed, and the right document type before accepting — a wrong-period reconciliation caught at attribute testing restarts the PBC clock.', 'Evidence fitness gate'),
+      'Check the evidence is in-period, signed, and the right document type before accepting — a wrong-period reconciliation caught at attribute testing restarts the PBC clock.', 'Evidence fitness gate', undefined,
+      { intent: 'monitor' }),
     ...(isKey ? [rec('cr-n-4', 'scoping', 'advisory', 'Confirm this is not the sole mitigation before any descoping.',
-      'A key control that is the only mitigation of a critical risk must not be reclassified non-key in a RACM tidy-up.', 'Key-control mislabelling')] : []),
+      'A key control that is the only mitigation of a critical risk must not be reclassified non-key in a RACM tidy-up.', 'Key-control mislabelling', undefined,
+      { intent: 'monitor' })] : []),
   ];
 }
 
 const RISK_FLAGSHIP_RECS: AuditRecommendation[] = [
   rec('rr-cf-1', 'coverage', 'do-now', 'Add and test a control that guards the price feed at its source.',
-    'Every control under this risk tests the feed’s output; none tests the feed itself. The gap sits upstream of all of them.', 'Coverage gap', 'Risk stays Exposed until the source control tests effective.'),
+    'Every control under this risk tests the feed’s output; none tests the feed itself. The gap sits upstream of all of them.', 'Coverage gap', 'Risk stays Exposed until the source control tests effective.',
+    { intent: 'create', target: { kind: 'sop', id: 'sop-001', label: 'Vendor Payment SOP' } }),
   rec('rr-cf-2', 'rating', 'this-period', 'Keep residual severity High until the source control is effective.',
-    'Don’t lower residual on downstream passes — the mitigating controls all inherit the same untested weakness.', 'Residual risk assessment'),
+    'Don’t lower residual on downstream passes — the mitigating controls all inherit the same untested weakness.', 'Residual risk assessment', undefined,
+    { intent: 'edit' }),
   rec('rr-cf-3', 'scoping', 'this-period', 'Confirm this risk wasn’t downgraded in the last RACM tidy-up.',
-    'A risk that raised findings last period and is quietly reclassified this year is a coverage hole an EQR will find.', 'Prior-year carryover'),
+    'A risk that raised findings last period and is quietly reclassified this year is a coverage hole an EQR will find.', 'Prior-year carryover', undefined,
+    { intent: 'monitor' }),
   rec('rr-cf-4', 'deficiency', 'advisory', 'Evaluate the three controls’ findings as one exposure.',
-    'They flag one feed, not three problems — aggregate by assertion so the magnitude is judged once, not diluted across three items.', 'Deficiency aggregation'),
+    'They flag one feed, not three problems — aggregate by assertion so the magnitude is judged once, not diluted across three items.', 'Deficiency aggregation', undefined,
+    { intent: 'aggregate' }),
+  // Decomposed to the spanned controls (Rule 2) — each lands on its row.
+  rec('rr-cf-5', 'sampling', 'this-period', 'Size the three-way-match re-test to the failing MCKESSON population.',
+    'The deviation set is already identified upstream — a default sample under-tests the known exposure at the match control.', 'ISA 530 attribute sampling', undefined,
+    { intent: 'edit', target: { kind: 'control', id: 'P2P-C-06', label: 'Three-way match (PO · GRN · Invoice)' } }),
+  rec('rr-cf-6', 'monitoring', 'this-period', 'Extend duplicate-invoice detection to catch re-billed lines from the stale feed.',
+    'Re-billed MCKESSON lines surface as near-duplicates the current match key misses when amounts shift with the price master.', 'Preventive control design', undefined,
+    { intent: 'edit', target: { kind: 'control', id: 'P2P-C-07', label: 'Duplicate-invoice detection' } }),
 ];
 
 function riskRecs(priority: string): AuditRecommendation[] {
@@ -589,20 +681,26 @@ function riskRecs(priority: string): AuditRecommendation[] {
   if (hot) {
     return [
       rec('rr-h-1', 'coverage', 'do-now', 'Confirm every assertion under this risk has a control concluded effective.',
-        'An unmapped or ineffective assertion leaves the risk uncovered. Map a control or record a signed descoping rationale before freeze.', 'RACM completeness'),
+        'An unmapped or ineffective assertion leaves the risk uncovered. Map a control or record a signed descoping rationale before freeze.', 'RACM completeness', undefined,
+        { intent: 'monitor' }),
       rec('rr-h-2', 'rating', 'this-period', 'Reconcile the rating with prior-year results and sibling-file materiality.',
-        'A risk score set by rote — high but never deficient, or low but failed twice — is indefensible. Separate inherent-risk drivers from control-risk drivers.', 'Risk-of-material-misstatement', 'The engagement leader accepts the basis; never auto-set.'),
+        'A risk score set by rote — high but never deficient, or low but failed twice — is indefensible. Separate inherent-risk drivers from control-risk drivers.', 'Risk-of-material-misstatement', 'The engagement leader accepts the basis; never auto-set.',
+        { intent: 'edit' }),
       rec('rr-h-3', 'monitoring', 'advisory', 'If this covers a high-value channel, confirm it has a monitoring workflow.',
-        'Silence on the highest-value channel doesn’t mean fine — it means nothing was looking. Add continuous monitoring where the exposure warrants it.', 'Continuous monitoring'),
+        'Silence on the highest-value channel doesn’t mean fine — it means nothing was looking. Add continuous monitoring where the exposure warrants it.', 'Continuous monitoring', undefined,
+        { intent: 'create' }),
       rec('rr-h-4', 'segregation', 'advisory', 'Check for SoD or fraud-shaped patterns under this risk.',
-        'Surface observable facts — same preparer and approver, sequential just-under-limit items — for you to characterise. The platform never asserts intent.', 'SoD / fraud indicators', 'You characterise; the platform states facts.'),
+        'Surface observable facts — same preparer and approver, sequential just-under-limit items — for you to characterise. The platform never asserts intent.', 'SoD / fraud indicators', 'You characterise; the platform states facts.',
+        { intent: 'monitor' }),
     ];
   }
   return [
     rec('rr-l-1', 'rating', 'advisory', 'Reassess if the population grows materially or a new deviation lands.',
-      'Mitigated today, but population growth is a risk-reassessment signal. Re-confirm the risk still rates the same before relying on it.', 'Risk reassessment'),
+      'Mitigated today, but population growth is a risk-reassessment signal. Re-confirm the risk still rates the same before relying on it.', 'Risk reassessment', undefined,
+      { intent: 'monitor' }),
     rec('rr-l-2', 'coverage', 'advisory', 'Confirm attribute coverage stays complete across the mapped controls.',
-      'A partial attribute coverage on a mitigated risk is a quiet gap. Keep the mapping whole through the period.', 'RACM completeness'),
+      'A partial attribute coverage on a mitigated risk is a quiet gap. Keep the mapping whole through the period.', 'RACM completeness', undefined,
+      { intent: 'monitor' }),
   ];
 }
 
@@ -610,25 +708,31 @@ function engagementRecs(status: string, flagship: boolean): AuditRecommendation[
   if (flagship) {
     return [
       rec('er-cf-1', 'root-cause', 'do-now', 'Raise the broken price feed with the client as ONE fix owning all three workflows.',
-        'The chargeback, contract-compliance and vendor-master findings resolve to one client-side price master. One remediation, not three separate notes.', 'Root-cause remediation', 'Confirm the single driver with the client first.'),
+        'The chargeback, contract-compliance and vendor-master findings resolve to one client-side price master. One remediation, not three separate notes.', 'Root-cause remediation', 'Confirm the single driver with the client first.',
+        { intent: 'aggregate' }),
       rec('er-cf-2', 'deficiency', 'this-period', 'Weigh the combined underpayment against materiality before sign-off.',
-        'Aggregate the exposure across the three workflows and weigh it — including qualitative factors — against the engagement materiality.', 'Materiality incl. qualitative factors', 'The sign-off judgment is yours.'),
+        'Aggregate the exposure across the three workflows and weigh it — including qualitative factors — against the engagement materiality.', 'Materiality incl. qualitative factors', 'The sign-off judgment is yours.',
+        { intent: 'aggregate' }),
       rec('er-cf-3', 'scoping', 'advisory', 'Confirm the feed is remediated and re-tested before concluding sign-off.',
-        'Sign-off can’t rely on a control set that still inherits the broken feed. The risk clears only once the source control tests effective.', 'Sign-off readiness'),
+        'Sign-off can’t rely on a control set that still inherits the broken feed. The risk clears only once the source control tests effective.', 'Sign-off readiness', undefined,
+        { intent: 'retest' }),
     ];
   }
   const atRisk = status === 'At risk' || status === 'Behind' || status === 'In fieldwork';
   if (atRisk) {
     return [
       rec('er-r-1', 'timeliness', 'this-period', 'Re-sequence the remaining controls against the sign-off date.',
-        'At the current pace the milestone slips. Pull the dependency-blocking items forward before they cascade into the report date.', 'Milestone management'),
+        'At the current pace the milestone slips. Pull the dependency-blocking items forward before they cascade into the report date.', 'Milestone management', undefined,
+        { intent: 'edit' }),
       rec('er-r-2', 'coverage', 'advisory', 'Confirm no key control or risky area silently dropped from this year’s scope.',
-        'Diff this year’s scope against last year and against where issues actually arose — a risky area that quietly leaves the plan is an audit-committee question.', 'Coverage gap vs prior year'),
+        'Diff this year’s scope against last year and against where issues actually arose — a risky area that quietly leaves the plan is an audit-committee question.', 'Coverage gap vs prior year', undefined,
+        { intent: 'monitor' }),
     ];
   }
   return [
     rec('er-o-1', 'timeliness', 'advisory', 'Keep the controls concluding on schedule.',
-      'On track this period — hold the cadence so the file is complete and archived within the ISQM window.', 'Archival timeliness'),
+      'On track this period — hold the cadence so the file is complete and archived within the ISQM window.', 'Archival timeliness', undefined,
+      { intent: 'monitor' }),
   ];
 }
 
@@ -639,6 +743,9 @@ export function buildRecommendations(input: {
   const { layer, flagship, status, priority, isKey } = input;
   if (layer === 'control') return flagship ? CONTROL_FLAGSHIP_RECS : controlRecs(status, isKey);
   if (layer === 'risk') return flagship ? RISK_FLAGSHIP_RECS : riskRecs(priority);
+  // SOP-anchored insights are rare by construction (they need a cross-risk
+  // pattern); the SOP surface receives targeted actions instead.
+  if (layer === 'sop') return [];
   return engagementRecs(status, flagship);
 }
 
@@ -657,10 +764,14 @@ export function buildLayeredInsight(input: BuildInsightInput): LayeredInsight {
     base = pricing ? pin(CONTROL_PRICING, subjectId, subjectLabel) : controlFallback(subjectId, subjectLabel, status);
   } else if (layer === 'risk') {
     base = pricing ? pin(RISK_PRICING, subjectId, subjectLabel) : riskFallback(subjectId, subjectLabel, priority);
+  } else if (layer === 'sop') {
+    // No SOP-anchored seed story yet — derive an honest rollup-style card.
+    base = { ...riskFallback(subjectId, subjectLabel, priority), id: `li-sop-${subjectId}`, layer: 'sop' };
   } else {
     // engagement — the flagship escalation fires when this engagement carries the pricing thread.
     base = pricing ? pin(ENGAGEMENT_PRICING, subjectId, subjectLabel) : engagementFallback(subjectId, subjectLabel, status);
   }
+  if (input.spans) base = { ...base, spans: input.spans };
 
   return { ...base, recommendations: buildRecommendations({ layer, flagship: pricing, status, priority, isKey }) };
 }
@@ -691,36 +802,130 @@ export function buildWorkflowRecommendations(input: WorkflowRecInput): AuditReco
     recs.push(rec('wf-paused', 'monitoring', 'do-now',
       'Resume this workflow — the control it supports has no coverage while it is paused.',
       'A paused monitoring control leaves a live gap. Resume it or document why the exposure is accepted for the period.',
-      'Continuous monitoring'));
+      'Continuous monitoring', undefined, { intent: 'edit' }));
   }
   if (effectivePct != null && effectivePct < 60) {
     recs.push(rec('wf-loweff', 'automation', 'do-now',
       `Review the workflow logic — effectiveness at ${effectivePct}%.`,
       'A low true-positive rate means it is flagging noise or missing real exceptions. The automated verdict cannot support reliance until the logic is validated.',
-      'AI-verdict reliability', 'Validate the verdict logic before relying on it elsewhere.'));
+      'AI-verdict reliability', 'Validate the verdict logic before relying on it elsewhere.', { intent: 'retest' }));
   } else if (effectivePct != null && effectivePct < 78) {
     recs.push(rec('wf-modeff', 'automation', 'this-period',
       `Tune the thresholds — effectiveness at ${effectivePct}%.`,
       'Effectiveness in the 60–78% band suggests the rule needs calibration before its output is relied on for a conclusion.',
-      'Threshold calibration'));
+      'Threshold calibration', undefined, { intent: 'edit' }));
   }
   if (openExceptions > 0) {
     recs.push(rec('wf-open', 'evidence', 'this-period',
       `Clear the ${openExceptions} open exception${openExceptions === 1 ? '' : 's'} before they age.`,
       'Exceptions found the afternoon before fieldwork closes cannot be re-chased in time. Work them now against the deadline.',
-      'Exception aging'));
+      'Exception aging', undefined, { intent: 'monitor' }));
   }
   if (/monitor|detect|complian/i.test(category) && cadence.toLowerCase().includes('ad-hoc')) {
     recs.push(rec('wf-cadence', 'monitoring', 'advisory',
       'Move this monitoring control off an ad-hoc cadence to a scheduled run.',
       'Ad-hoc cadence means coverage is discontinuous — a high-value channel can go unwatched between runs. Silence is not the same as fine.',
-      'Continuous monitoring'));
+      'Continuous monitoring', undefined, { intent: 'edit' }));
   }
   recs.push(rec('wf-actedon', 'evidence', 'advisory',
     'Confirm the output is reviewed and acted on.',
     'A distributed output that nobody acts on is a report, not a control. Confirm the recipient closes the loop each period.',
-    'Control operation'));
+    'Control operation', undefined, { intent: 'monitor' }));
   return recs;
+}
+
+// ─── Workflow insight — the row-level card behind the "AI recommends" CTA ───
+// Workflows have no altitude of their own in the layer model (they ARE the
+// continuous-control unit), so this derives an honest card straight from the
+// row's recorded metrics — effectiveness, open exceptions, cadence, status —
+// and attaches the workflow rec set as its typed recommendations. Deterministic,
+// no LLM; the caller stamps generatedAt from the engagement-level generation.
+
+export interface WorkflowInsightInput extends WorkflowRecInput {
+  subjectId: string;
+}
+
+export function buildWorkflowInsight(input: WorkflowInsightInput): LayeredInsight {
+  const { subjectId, subjectLabel, effectivePct, openExceptions = 0, cadence = '', status = '', category = '' } = input;
+  const recs = buildWorkflowRecommendations(input);
+  const paused = status.toLowerCase() === 'paused';
+  const lowEff = effectivePct != null && effectivePct < 60;
+  const modEff = effectivePct != null && effectivePct >= 60 && effectivePct < 78;
+  const adHocMonitor = /monitor|detect|complian/i.test(category) && cadence.toLowerCase().includes('ad-hoc');
+  const troubled = paused || lowEff;
+  const watch = modEff || openExceptions > 0 || adHocMonitor;
+
+  const verdict: LayerVerdict = troubled
+    ? { label: 'Needs attention this period', tone: 'negative' }
+    : watch
+      ? { label: 'Operating with findings', tone: 'caution' }
+      : { label: 'Operating effectively', tone: 'positive' };
+
+  const observations: string[] = [];
+  if (effectivePct != null) {
+    observations.push(`True-positive effectiveness is ${effectivePct}% over the last 90 days${
+      lowEff ? ' — most fires are noise, or real exceptions are being missed' : modEff ? ' — below the band where its verdicts support reliance' : ''}.`);
+  }
+  if (paused) observations.push('The workflow is paused — the control it supports has no coverage while it sleeps.');
+  if (openExceptions > 0) observations.push(`${openExceptions} exception${openExceptions === 1 ? ' is' : 's are'} still open from this workflow's runs.`);
+  if (adHocMonitor) observations.push('It runs ad-hoc, so coverage between runs is discontinuous for a monitoring-shaped control.');
+  if (observations.length === 0) observations.push('Recent runs completed with no open exceptions and a reliable true-positive rate.');
+
+  const likelyCause = paused
+    ? { label: 'Coverage stopped when the workflow was paused.', detail: 'Nothing has watched this control since the pause. Resume it or document why the exposure is accepted — confirm before relying on the period.' }
+    : lowEff
+      ? { label: 'The rule logic looks miscalibrated.', detail: `A ${effectivePct}% true-positive rate means the workflow is flagging noise or missing real exceptions. Validate the verdict logic before relying on its output — confirm first.` }
+      : openExceptions > 0
+        ? { label: 'Exceptions are being found faster than they are cleared.', detail: 'The detection side is working; the review loop behind it is lagging. Confirm ownership of the queue before concluding on the control.' }
+        : modEff
+          ? { label: 'Thresholds likely need tuning.', detail: 'Effectiveness in the 60–78% band usually traces to rule calibration, not the process being tested. Confirm before relying on the verdicts.' }
+          : adHocMonitor
+            ? { label: 'Ad-hoc cadence leaves gaps between runs.', detail: 'A monitoring control that only runs on request can go unwatched for weeks. Confirm the intended cadence with the owner.' }
+            : { label: 'No violated baseline detected.', detail: 'The monitored baseline held across the recent runs. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.' };
+
+  const stakes: string[] = [];
+  if (troubled) stakes.push('Reliance on this workflow’s verdicts is not supportable until the logic is validated.');
+  if (paused) stakes.push('The control has a live coverage gap for every day the workflow stays paused.');
+  if (openExceptions > 0) stakes.push(`${openExceptions} open exception${openExceptions === 1 ? '' : 's'} could age past fieldwork close and become unchaseable.`);
+  if (stakes.length === 0) stakes.push('Nothing at stake this period — hold the cadence and the assurance stays current.');
+
+  const effTone: VerdictTone = lowEff ? 'negative' : modEff ? 'caution' : 'positive';
+  const evidence: LayerEvidenceItem[] = [];
+  if (effectivePct != null) evidence.push({ ref: subjectId, label: '90-day effectiveness', detail: `${effectivePct}% true-positive`, tone: effTone });
+  if (openExceptions > 0) evidence.push({ ref: 'Exceptions', label: 'Open exception queue', detail: `${openExceptions} unresolved`, tone: 'caution' });
+  evidence.push({ ref: 'Cadence', label: cadence || 'Not scheduled', detail: paused ? 'Paused' : status || 'Scheduled', tone: paused ? 'negative' : undefined });
+
+  return {
+    id: `li-wf-${subjectId}`,
+    layer: 'control',
+    subjectId,
+    subjectLabel,
+    takeaway: troubled
+      ? `${subjectLabel} can’t be relied on as-is — ${paused ? 'it is paused with no coverage in place' : `only ${effectivePct}% of its fires are true positives`}.`
+      : watch
+        ? `${subjectLabel} is running, with findings worth clearing${openExceptions > 0 ? ` — ${openExceptions} exception${openExceptions === 1 ? '' : 's'} still open` : ''}.`
+        : `${subjectLabel} is operating effectively — no open findings on its recent runs.`,
+    verdict,
+    severity: troubled ? 'med' : openExceptions > 0 ? 'med' : 'low',
+    likelyCause,
+    reasoning: 'One workflow, read from its own recorded metrics — no cross-run claim beyond the 90-day window.',
+    atStake: stakes[0],
+    observations,
+    stakes,
+    factors: { frequency: 0.5, sourceDiversity: 0.4, recency: 0.95, businessImpact: troubled ? 0.7 : watch ? 0.5 : 0.35 },
+    confidenceOverride: troubled ? 0.72 : watch ? 0.62 : undefined,
+    evidence,
+    evidenceNote: 'Derived from this workflow’s recorded run metrics — deterministic, no model call.',
+    detectedOn: '07 Jul 2026',
+    detectedBy: 'formula',
+    checkMore: [
+      { kind: 'split', label: 'Split fires by true vs false positive' },
+      { kind: 'compare', label: 'Compare with the previous run' },
+      { kind: 'ask', label: 'Ask what would raise effectiveness' },
+    ],
+    recommendedActions: recs.map(r => r.title),
+    recommendations: recs,
+  };
 }
 
 /** Actionable (do-now / this-period) workflow recs, for a panel + row badge. */
@@ -754,26 +959,26 @@ export function buildRacmEntryRecommendations(input: RacmRecInput): AuditRecomme
     recs.push(rec('rac-sop', 'coverage', 'do-now',
       'Link an SOP so the controls can be validated against the documented procedure.',
       'A RACM with no SOP tests a control set nobody has tied back to how the process actually runs.',
-      'RACM completeness'));
+      'RACM completeness', undefined, { intent: 'edit' }));
   }
   if (controls < risks) {
     const gap = risks - controls;
     recs.push(rec('rac-unmapped', 'coverage', 'do-now',
       `${gap} risk${gap === 1 ? '' : 's'} here may have no mapped control — map one or record a signed descoping rationale.`,
       'A revenue or payment risk with zero controls is the coverage hole an EQR finds first. Promote it to a blocking finding before freeze.',
-      'RACM completeness'));
+      'RACM completeness', undefined, { intent: 'create' }));
   }
   if (controls > 0 && keyControls === 0) {
     recs.push(rec('rac-nokey', 'scoping', 'this-period',
       'Designate a key control — none is marked key in this RACM.',
       'A control that is the sole mitigation of a critical risk must be flagged key, or a "key-controls only" scope silently drops it.',
-      'Key-control mislabelling'));
+      'Key-control mislabelling', undefined, { intent: 'edit' }));
   }
   if (controls > 0 && attributes / controls < 2) {
     recs.push(rec('rac-thinattr', 'sampling', 'advisory',
       'Confirm each control’s assertions are fully covered by test attributes.',
       'Thin attribute coverage leaves part of the assertion untested — check the coverage before relying on the control.',
-      'Attribute coverage'));
+      'Attribute coverage', undefined, { intent: 'monitor' }));
   }
   return recs;
 }
@@ -824,6 +1029,11 @@ export const LAYER_META: Record<InsightLayer, { label: string; scan: string; den
   risk: {
     label: 'this risk',
     scan: 'Rolls up the controls mapped to this risk',
+    density: 'light',
+  },
+  sop: {
+    label: 'this SOP',
+    scan: 'Rolls up the risks and controls extracted from this SOP',
     density: 'light',
   },
   engagement: {

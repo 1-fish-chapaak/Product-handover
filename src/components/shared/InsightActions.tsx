@@ -3,10 +3,10 @@
 // The two reusable blocks that sit at the bottom of an AI-insight card:
 //
 //   1. EvidenceDisclosure — the collapsible "Evidence · N" toggle (collapsed by
-//      default), inline "check more" chips, and the calm Source/Item/Detail
-//      table, with an optional deeper drill-down (`evidenceExtra`).
+//      default) opening the calm Source/Item/Detail table, with an optional
+//      deeper drill-down (`evidenceExtra`).
 //   2. RecommendedActions — the two-per-row grid of recommendation tiles under a
-//      "Recommended actions · N · Open one to work it in chat" header.
+//      "Recommended actions · N" header.
 //
 // Extracted from LayeredInsightCard so every surface (the layered control/risk/
 // engagement cards AND the workflow output-compare card) renders them
@@ -14,36 +14,49 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  Sparkles, ChevronDown, ScrollText, MessageSquare, ArrowUpRight,
-  Crosshair, Split, GitCompareArrows, MessageCircleQuestion,
-} from 'lucide-react';
-import type { CheckMoreOption } from '../../data/layeredInsights';
-import { openInChat as openChatTab } from './insightChat';
+import { Sparkles, ChevronDown, ScrollText, MessageSquare } from 'lucide-react';
+import type { CheckMoreOption, EntityKind, EntityRef, RecIntent } from '../../data/layeredInsights';
 
 export const REC_CAP = 6;
 
-const CHECK_ICON: Record<CheckMoreOption['kind'], typeof Crosshair> = {
-  compare: GitCompareArrows, split: Split, trace: Crosshair, ask: MessageCircleQuestion,
+// Target-entity chip tone, by kind — the small "→ lands on X" marker a
+// targeted action carries so the reader knows where the work goes (Rule 2).
+const TARGET_TONE: Record<EntityKind, string> = {
+  control:    'bg-evidence-50 text-evidence-700',
+  risk:       'bg-high-50 text-high-700',
+  sop:        'bg-brand-50 text-brand-700',
+  engagement: 'bg-paper-100 text-ink-600',
+  workflow:   'bg-evidence-50 text-evidence-700',
 };
 
 // ─── Recommended-action tile (grid cell) ────────────────────────────────────
-// Pared to the essential: the imperative, and nothing else. The whole tile
-// opens the step in Ask IRA — where the full rationale and methodology live.
-export function RecTile({ title, onOpen }: { title: string; onOpen: () => void }) {
+// Pared to the essential: the imperative, plus (when the action lands on a
+// different entity) its target chip. The whole tile opens the step in Ask IRA —
+// where the full rationale and methodology live.
+export function RecTile({ title, onOpen, target, intent }: { title: string; onOpen: () => void; target?: EntityRef; intent?: RecIntent }) {
   return (
     <button
       type="button" onClick={onOpen}
       title="Open this recommendation in Ask IRA (new tab)"
       className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
     >
-      <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">{title}</span>
+      <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug group-hover:text-brand-700 transition-colors">
+        <span className="line-clamp-2">{title}</span>
+        {target && (
+          <span
+            className={`mt-1 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-bold ${TARGET_TONE[target.kind]}`}
+            title={`This action lands on ${target.label} — it also appears on that row`}
+          >
+            {intent === 'create' ? '＋' : '→'} <span className="truncate">{target.label}</span>
+          </span>
+        )}
+      </span>
       <MessageSquare size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-300 group-hover:text-brand-600 transition-colors" />
     </button>
   );
 }
 
-export interface RecItem { id: string; title: string }
+export interface RecItem { id: string; title: string; target?: EntityRef; intent?: RecIntent }
 
 // The fix, foregrounded. Tiles two-per-row so a 4–6 item set reads in a couple
 // of rows, not a tall wall. Each tile opens in Ask IRA with the step pre-filled.
@@ -62,14 +75,11 @@ export function RecommendedActions({
         <Sparkles size={12} className="text-brand-600" aria-hidden="true" />
         Recommended actions
         <span className="text-ink-400">· {recs.length}</span>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-brand-100/70 px-2 py-0.5 text-[9px] font-semibold text-brand-700 normal-case tracking-normal">
-          <MessageSquare size={10} aria-hidden="true" /> Open one to work it in chat
-        </span>
       </div>
       <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
         {recs.slice(0, cap).map((r) => (
           <li key={r.id} className="min-w-0">
-            <RecTile title={r.title} onOpen={() => onOpen(r.title)} />
+            <RecTile title={r.title} onOpen={() => onOpen(r.title)} target={r.target} intent={r.intent} />
           </li>
         ))}
       </ul>
@@ -82,15 +92,16 @@ export function RecommendedActions({
 
 export interface EvidenceRow { ref: string; label: string; detail: string }
 
-// A collapsed-by-default evidence toggle + inline check-more chips on one line,
-// opening a calm Source/Item/Detail table (no severity paint — the tone story is
-// already told above the fold), with an optional deeper drill-down beneath it.
+// A collapsed-by-default evidence toggle opening a calm Source/Item/Detail
+// table (no severity paint — the tone story is already told above the fold),
+// with an optional deeper drill-down beneath it.
 export function EvidenceDisclosure({
-  evidence, label, checkMore = [], onCheckMore, evidenceExtra,
-  subjectLabel, defaultOpen = false, className = 'mt-3',
+  evidence, label, evidenceExtra, defaultOpen = false, className = 'mt-3',
 }: {
   evidence: EvidenceRow[];
   label: string;
+  /** Accepted for API compatibility — the inline check-more chips were removed
+   *  by design, so these are no longer rendered. */
   checkMore?: CheckMoreOption[];
   onCheckMore?: (opt: CheckMoreOption) => void;
   evidenceExtra?: React.ReactNode;
@@ -99,42 +110,20 @@ export function EvidenceDisclosure({
   className?: string;
 }) {
   const [show, setShow] = useState(defaultOpen);
-  if (evidence.length === 0 && checkMore.length === 0) return null;
-  const runCheck = (opt: CheckMoreOption) =>
-    onCheckMore ? onCheckMore(opt) : openChatTab(opt.detail ? `${opt.label} — ${opt.detail}` : opt.label, subjectLabel);
+  if (evidence.length === 0) return null;
 
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        {evidence.length > 0 && (
-          <button
-            type="button" onClick={() => setShow(v => !v)} aria-expanded={show}
-            className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-          >
-            <motion.span animate={{ rotate: show ? 0 : -90 }} transition={{ type: 'spring', stiffness: 360, damping: 26 }} className="inline-flex">
-              <ChevronDown size={14} aria-hidden="true" />
-            </motion.span>
-            <ScrollText size={12} aria-hidden="true" /> {label} · {evidence.length}
-          </button>
-        )}
-        {evidence.length > 0 && checkMore.length > 0 && (
-          <span className="h-3.5 w-px bg-canvas-border mx-1 hidden sm:block" aria-hidden="true" />
-        )}
-        {checkMore.map((opt, i) => {
-          const Icon = CHECK_ICON[opt.kind];
-          return (
-            <button
-              key={i} type="button" onClick={() => runCheck(opt)}
-              title="Ask this in Ask IRA (new tab)"
-              className="group inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors"
-            >
-              <Icon size={12} className="text-ink-400 group-hover:text-brand-600" aria-hidden="true" />
-              {opt.label}
-              {opt.detail && <span className="text-ink-400">· {opt.detail}</span>}
-              <ArrowUpRight size={11} className="text-ink-300 group-hover:text-brand-600" aria-hidden="true" />
-            </button>
-          );
-        })}
+        <button
+          type="button" onClick={() => setShow(v => !v)} aria-expanded={show}
+          className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+        >
+          <motion.span animate={{ rotate: show ? 0 : -90 }} transition={{ type: 'spring', stiffness: 360, damping: 26 }} className="inline-flex">
+            <ChevronDown size={14} aria-hidden="true" />
+          </motion.span>
+          <ScrollText size={12} aria-hidden="true" /> {label} · {evidence.length}
+        </button>
       </div>
       <AnimatePresence initial={false}>
         {evidence.length > 0 && show && (

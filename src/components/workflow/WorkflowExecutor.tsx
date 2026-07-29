@@ -2950,7 +2950,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       correlation), after the follow-up composer. Each card's
                       "what to do next" seeds that composer. */}
                   <div className="mt-5">
-                    <WorkflowFollowUpInsights onAction={submitFollowUp} />
+                    <WorkflowFollowUpInsights onAction={submitFollowUp} workflowId={workflowId} />
                   </div>
 
                 </motion.section>
