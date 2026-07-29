@@ -3,9 +3,13 @@
 // The one rule: extraction keeps the SKELETON, never the CONTENT. Section
 // order, headings, tables, ratings, branding stay; their findings and figures
 // are thrown away. The tab walks the five steps from the client's chair:
-// upload one past report (PDF) → the six passes read its shape → they review
-// what we found side by side with their own document → save → every future
-// report generates in their shape.
+// upload one past report → the six passes read its shape → they review what we
+// found side by side with their own document → save → every future report
+// generates in their shape.
+//
+// Two file shapes come in: a PowerPoint, which is what most clients present to
+// a committee, and a PDF, which is what they keep on file. The deck is the
+// easier read of the two, because the file labels its own parts.
 //
 // Being 80% right and letting the user fix the rest in two minutes is the
 // design choice here, which is why review is a real step and not a formality.
@@ -18,14 +22,20 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../shared/Toast';
 import SectionReviewCanvas from '../SectionReviewCanvas';
-import { SHAKY_CONFIDENCE, type CanvasSection, type CanvasBlock } from '../sectionReviewShared';
-import { readTemplateFromReport, type ReadResult, type ReadOutcome } from './byotEngine';
-import type { EditableTemplate, TemplateBlock } from '../reportShared';
+import { SHAKY_CONFIDENCE, reviewChrome, type CanvasSection, type CanvasBlock } from '../sectionReviewShared';
+import { readTemplateFromReport, classifyUpload } from './byotRead';
+import type { ReadResult, ReadOutcome } from './byotRead';
+import { type EditableTemplate, type TemplateBlock } from '../reportShared';
 
 // ─── The six passes ─────────────────────────────────────────────────────────
 // One read, one question. Six separate reads means that when the result is
 // wrong we can point at exactly which read failed instead of debugging magic.
-const PASSES = [
+//
+// A deck runs the same six, but the first five have almost nothing to do: the
+// file says outright which box is the title, which shape is a table and which
+// layout repeats. Only the reading changes. The template that comes out is
+// identical either way, so the list says so rather than pretending otherwise.
+const PDF_PASSES = [
   { title: 'Pull the text out', question: 'Every bit of text with its page, its spot, its size and its weight.' },
   { title: 'Take off tops and bottoms', question: 'Page numbers and “Confidential” stamps come off, and are saved as settings you check.' },
   { title: 'Find the headings', question: 'Big, rare and numbered means a heading. That gives the sections, in order.' },
@@ -34,8 +44,17 @@ const PASSES = [
   { title: 'The AI names things', question: 'What each section is for, and which words you use for how bad a problem is.' },
 ] as const;
 
+const DECK_PASSES = [
+  { title: 'Open the slides', question: 'Every box with what PowerPoint calls it, where it sits and what it says.' },
+  { title: 'Take off the running header', question: 'A box saying the same thing on every slide is a running header, even if it is the title box. It is saved as a setting.' },
+  { title: 'Read the headings', question: 'The title box names the slide, and a divider slide names the run that follows it. Nothing to guess.' },
+  { title: 'Work out each block', question: 'A table object is a table, with its real columns. Same for the rest of the boxes.' },
+  { title: 'Look for repeats', question: 'One slide per finding, or a run of slides repeating together. Saved once, marked “as many as needed”.' },
+  { title: 'The AI names things', question: 'What each part is for, and which words you use for how bad a problem is.' },
+] as const;
+
 const PASS_MS = 900;
-const READ_MS = PASSES.length * PASS_MS;
+const READ_MS = PDF_PASSES.length * PASS_MS;
 const EXTRACT_TIMEOUT_MS = 60_000;
 
 const TEMPLATE_NAME_MAX = 60;
@@ -50,22 +69,17 @@ type Saved = {
 };
 
 // ─── Upload rules ───────────────────────────────────────────────────────────
-// V1 accepts one format done well. Everything else converts to PDF in one
-// click, nothing converts the other way, so PDF is the funnel.
+// A PowerPoint first, a PDF second. Those are the two shapes client reports
+// actually arrive in: decks for committees, PDFs for the file. Everything else
+// turns into one of those in a click, so the picker offers those two and says
+// plainly what it does with the rest.
 const FORMATS = [
+  { format: 'A PowerPoint (.pptx)', note: 'the deck you present to the committee', verdict: 'Works today, and it is the easier read', tone: 'ok' },
   { format: 'A normal PDF', note: 'saved out of Word or any writing tool', verdict: 'Works today', tone: 'ok' },
   { format: 'A Word file', note: 'the file most teams write in', verdict: 'Later. For now, save it as a PDF and upload that.', tone: 'soon' },
   { format: 'A scanned PDF', note: 'a photo of a printed report', verdict: 'Later. No text inside, only a picture. We spot it and say so.', tone: 'soon' },
-  { format: 'PowerPoint, Excel, images, links', note: '', verdict: 'No. Taken out of the picker, so it stops offering what we cannot do.', tone: 'no' },
+  { format: 'Excel, images, links, older .ppt', note: '', verdict: 'No. Taken out of the picker, so it stops offering what we cannot do.', tone: 'no' },
 ] as const;
-
-function classifyUpload(name: string): 'pdf' | 'word' | 'ppt' | null {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
-  if (ext === 'pdf') return 'pdf';
-  if (ext === 'doc' || ext === 'docx') return 'word';
-  if (ext === 'ppt' || ext === 'pptx') return 'ppt';
-  return null;
-}
 
 // The engine's hierarchical output becomes review rows: a section with its
 // typed blocks, its pre-filled description and its guessed fill case intact.
@@ -80,6 +94,7 @@ function toCanvas(result: ReadResult): CanvasSection[] {
     binding: s.binding,
     blocks: s.blocks.map((b, bi) => ({ ...b, id: `byot-${i}-b${bi}` })),
     confidence: s.confidence,
+    flag: s.flag,
     page: s.page,
     appendix: s.appendix,
     wrapper: s.wrapper,
@@ -115,6 +130,11 @@ function buildTemplate(
   if (result.findingScale) captured.push('finding rating scale');
   if (result.opinionScale) captured.push('opinion scale');
   if (signRoles) captured.push(`signature block with ${signRoles.length} role${signRoles.length === 1 ? '' : 's'}`);
+  // A closing page is the same kind of thing as the signature block: shape,
+  // not writing. There is nothing to generate in it, so it is a setting that
+  // prints their exact closing line at the end of every report.
+  if (result.closing?.lines.length) captured.push('closing page');
+  if (result.logo) captured.push('logo');
 
   // Sections that are only a sign off block become the template's signature
   // block instead of a duplicate prose section. Wrapper paperwork the user did
@@ -138,6 +158,10 @@ function buildTemplate(
       ...(s.binding ? { binding: s.binding } : {}),
       ...(s.blocks?.length ? { blocks: s.blocks.map(toTemplateBlock) } : {}),
     })),
+    // The organisation the review screen showed on the letterhead is the one
+    // the saved template has to carry, or the result contradicts the preview
+    // the user just approved.
+    ...(hf?.fields.auditEntity ? { brand: hf.fields.auditEntity } : {}),
     ...(hf?.confidentiality || hf?.header.length ? { headerText: hf.confidentiality || hf.header.join('  ·  ') } : {}),
     ...(hf?.footer.length ? { footerText: hf.footer.join('  ·  ') } : {}),
     ...(result.coverColor ? { brandColor: result.coverColor } : {}),
@@ -147,6 +171,11 @@ function buildTemplate(
       signoffEnabled: true,
       signatories: signRoles.map((role, i) => ({ id: `sig-byot-${i}`, role })),
     } : {}),
+    ...(result.closing?.lines.length ? {
+      closingEnabled: true,
+      closingText: result.closing.lines,
+    } : {}),
+    ...(result.logo ? { logoDataUrl: result.logo } : {}),
     tags: ['Imported'],
   };
 
@@ -170,25 +199,26 @@ function Rule() {
   );
 }
 
+// Two kinds of part make it in. Everything else is left out, and we say so on
+// screen. Word for word the same lists the Create template screen shows, so
+// the promise does not change depending on which door you came through.
 function KeepDiscard() {
   const rows = [
     {
       head: 'What we keep',
       tone: 'keep',
       items: [
-        'Sections we can fill from your audit results: findings, counts, the summary, recommendations, action tables',
-        'Wording that never changes: rating definitions, how to read the report, the professional standards line',
-        'Your headings, your layout, your order',
-        'Your look: logo colour, the style of the top and bottom of every page, and your words for how bad a problem is',
+        ['Parts we can fill from your audit results', 'the findings, the counts, the summary, recommendations, action tables, the cover details'],
+        ['Parts whose wording never changes', 'rating definitions, how to read this report, the professional standards line, confidentiality notes'],
+        ['Your look', 'headings, layout and order, your logo and colour, your letterhead, and your words for how bad a problem is'],
       ],
     },
     {
       head: 'What we leave out',
       tone: 'drop',
       items: [
-        'Every finding, figure, name and date from the report you upload',
-        'Sections we cannot fill: what was checked, management replies, financial tables, admin pages',
-        'You see that list before you save, and anything else goes in one report at a time through Add Observation',
+        ['Every word and number in the file', 'the findings, figures, names and dates from the report you upload'],
+        ['Parts we cannot fill', 'what was checked, replies from management, financial tables, admin pages, the aim of the audit'],
       ],
     },
   ] as const;
@@ -200,15 +230,51 @@ function KeepDiscard() {
             {r.head}
           </p>
           <ul className="mt-2.5 space-y-1.5">
-            {r.items.map(i => (
-              <li key={i} className="flex gap-2 text-[0.8125rem] text-ink-500 leading-relaxed">
+            {r.items.map(([head, body]) => (
+              <li key={head} className="flex gap-2 text-[0.8125rem] text-ink-500 leading-relaxed">
                 <span className={`mt-[0.4rem] h-1 w-1 shrink-0 rounded-full ${r.tone === 'keep' ? 'bg-compliant-500' : 'bg-high-500'}`} />
-                {i}
+                <span><span className="font-medium text-ink-800">{head}</span>, {body}</span>
               </li>
             ))}
           </ul>
+          {r.tone === 'drop' && (
+            <p className="mt-2.5 text-[0.75rem] leading-relaxed text-ink-400">
+              You see that list once, before you save, each with its reason. Anything else goes in one report at a time
+              through Add Observation. The signature page is the exception, and comes back as a setting.
+            </p>
+          )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// The whole journey in one picture. You do one step of it: everything before
+// the check screen happens with nothing on screen, and our own standard format
+// is never touched.
+function WhatHappens() {
+  const steps = [
+    { n: 1, head: 'You upload', sub: 'one past report' },
+    { n: 2, head: 'We read it', sub: 'six reads' },
+    { n: 3, head: 'You check it', sub: 'rename, untick' },
+    { n: 4, head: 'Saved', sub: 'your file deleted' },
+    { n: 5, head: 'Every report', sub: 'comes out your way' },
+  ];
+  return (
+    <div className="rounded-lg border border-canvas-border bg-white px-4 py-3">
+      <p className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-400">
+        What happens <span className="font-normal normal-case tracking-normal">· you do one step of it</span>
+      </p>
+      <ol className="mt-2.5 grid gap-1.5 sm:grid-cols-5">
+        {steps.map(s => (
+          <li key={s.n} className={`rounded-md border px-2.5 py-1.5 ${s.n === 3 ? 'border-brand-300 bg-brand-50/60' : 'border-canvas-border bg-canvas/50'}`}>
+            <span className={`block text-[0.8125rem] font-semibold leading-snug ${s.n === 3 ? 'text-brand-700' : 'text-ink-800'}`}>
+              <span className="tabular-nums text-ink-400">{s.n}.</span> {s.head}
+            </span>
+            <span className="block text-[0.75rem] leading-snug text-ink-400">{s.sub}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -218,27 +284,35 @@ function KeepDiscard() {
 export default function BringYourOwnTemplateTab({
   onSaveTemplate,
   onDone,
+  existingTemplateNames = [],
 }: {
   /** Saves the finished skeleton into the custom template library. */
   onSaveTemplate: (t: EditableTemplate) => void;
   /** Jump to the Templates tab once a template is saved. */
   onDone?: () => void;
+  /** Every template name already taken, so the name we seed is one the save
+   *  can actually keep. Renaming it behind their back at save would mean the
+   *  letterhead they approved is not the one they get. */
+  existingTemplateNames?: string[];
 }) {
   const { addToast } = useToast();
   const [stage, setStage] = useState<Stage>('upload');
   const [fileName, setFileName] = useState('');
   const [pass, setPass] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState<'deck' | 'pdf'>('pdf');
   const [result, setResult] = useState<ReadResult | null>(null);
   const [sections, setSections] = useState<CanvasSection[]>([]);
   const [name, setName] = useState('');
   const [saved, setSaved] = useState<Saved | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const passes = reading === 'deck' ? DECK_PASSES : PDF_PASSES;
+
   // The pass list ticks in step with the read. The parse resolves behind it.
   useEffect(() => {
     if (stage !== 'reading') return;
-    const id = window.setInterval(() => setPass(p => Math.min(p + 1, PASSES.length - 1)), PASS_MS);
+    const id = window.setInterval(() => setPass(p => Math.min(p + 1, PDF_PASSES.length - 1)), PASS_MS);
     return () => window.clearInterval(id);
   }, [stage]);
 
@@ -253,21 +327,26 @@ export default function BringYourOwnTemplateTab({
 
   const handleFile = async (file: File) => {
     const kind = classifyUpload(file.name);
-    // Every decline is said out loud, and Word gets its one click path.
+    // Every decline is said out loud, and each one names the way out of it.
     if (kind === 'word') {
       addToast({ type: 'info', message: 'Word files come later. Save it as a PDF (File → Save as PDF) and upload that.' });
       return;
     }
-    if (kind === 'ppt') {
-      addToast({ type: 'info', message: 'We cannot read PowerPoint. Save the report as a PDF and upload that.' });
+    if (kind === 'legacy-ppt') {
+      addToast({ type: 'info', message: 'That is an older .ppt, which is a different file format. Open it in PowerPoint and save it as .pptx, then upload that.' });
+      return;
+    }
+    if (kind === 'spreadsheet') {
+      addToast({ type: 'info', message: 'A spreadsheet has no report format in it. Upload the PowerPoint or the PDF you send out.' });
       return;
     }
     if (!kind) {
-      addToast({ type: 'error', message: 'Upload one old report as a PDF. That is the one format we can read today.' });
+      addToast({ type: 'error', message: 'Upload one old report as a PowerPoint (.pptx) or a PDF. Those are the two we can read.' });
       return;
     }
 
     setFileName(file.name);
+    setReading(kind);
     setPass(0);
     setStage('reading');
     let outcome: ReadOutcome;
@@ -292,9 +371,11 @@ export default function BringYourOwnTemplateTab({
         message:
           outcome.reason === 'password' ? `“${file.name}” is password protected. Remove the password and upload it again.`
           : outcome.reason === 'scanned' ? 'This looks like a scan, so there is no text inside, only a picture. Please upload the original PDF.'
-          : outcome.reason === 'too-long' ? `This report is ${outcome.pageCount} pages. Upload one of about 50 pages or fewer, typical of your work.`
+          : outcome.reason === 'empty-deck' ? 'Every slide in this deck is a picture, so there is no text to read. Upload the deck you actually edit in PowerPoint.'
+          : outcome.reason === 'legacy-ppt' ? 'That is an older .ppt. Open it in PowerPoint and save it as .pptx, then upload that.'
+          : outcome.reason === 'too-long' ? `This report is ${outcome.pageCount} ${kind === 'deck' ? 'slides' : 'pages'}. Upload one of about 50 or fewer, typical of your work.`
           : outcome.reason === 'too-large' ? `“${file.name}” is too big to read here. Keep it under 30 MB.`
-          : `We could not read “${file.name}”. Try saving it as a PDF again and uploading that.`,
+          : `We could not read “${file.name}”. Try saving it again from ${kind === 'deck' ? 'PowerPoint' : 'the tool you wrote it in'} and uploading that.`,
       });
       return;
     }
@@ -302,11 +383,13 @@ export default function BringYourOwnTemplateTab({
     const detected = toCanvas(outcome.result);
     setResult(outcome.result);
     setSections(detected);
-    setName(
-      (outcome.result.furniture?.fields.auditTitle
-        || file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-      ).slice(0, TEMPLATE_NAME_MAX),
-    );
+    // Their document's title, else the filename — and never one already taken.
+    const wanted = outcome.result.furniture?.fields.auditTitle
+      || file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const taken = new Set(existingTemplateNames.map(n => n.toLowerCase()));
+    let unique = wanted;
+    for (let i = 2; taken.has(unique.toLowerCase()) && i < 100; i++) unique = `${wanted} (${i})`;
+    setName(unique.slice(0, TEMPLATE_NAME_MAX));
     setStage('review');
 
     // Headings with nothing beneath them are not turned into sections, but they
@@ -329,7 +412,15 @@ export default function BringYourOwnTemplateTab({
 
     const { template, captured } = buildTemplate(sections, result, fileName, clean);
     onSaveTemplate(template);
-    setSaved({ name: clean, sections: template.sections.length, dropped: result.dropped.length, captured });
+    // Only what was really left out counts as left out. A section that came
+    // back as a setting is listed as kept just above, so counting it here too
+    // would tell the user we dropped something we did not.
+    setSaved({
+      name: clean,
+      sections: template.sections.length,
+      dropped: result.dropped.filter(d => !d.captured).length,
+      captured,
+    });
     // The uploaded file is only needed for the side by side review, so it goes
     // the moment the template is saved. Said in the UI, and true.
     setResult(null);
@@ -337,7 +428,21 @@ export default function BringYourOwnTemplateTab({
     setStage('saved');
   };
 
-  const shaky = sections.filter(s => s.evidence !== 'added' && s.confidence !== undefined && s.confidence <= SHAKY_CONFIDENCE).length;
+  // The check queue: one of the four named situations, or a detector that could
+  // not call it cleanly. Both put the section first on the review list.
+  const shaky = sections.filter(s =>
+    s.evidence !== 'added'
+    && (!!s.flag || (s.confidence !== undefined && s.confidence <= SHAKY_CONFIDENCE))).length;
+  // Some decks are built free-hand: text boxes drawn anywhere, layouts ignored,
+  // titles typed into plain boxes. Those lose their labels and get read by
+  // position and size instead, the way a PDF is. The giveaway is how few
+  // headings PowerPoint itself named, so the caveat is shown on the evidence
+  // rather than on every deck.
+  // No floor on the section count: a hand built deck reads badly, so it
+  // produces FEW sections, which is exactly when the caveat is worth saying.
+  const freehandDeck = result?.unit === 'slide'
+    && sections.length > 0
+    && sections.filter(s => s.evidence === 'inferred').length > sections.length * 0.4;
 
   return (
     <div className="pb-4">
@@ -351,6 +456,11 @@ export default function BringYourOwnTemplateTab({
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-4xl space-y-5"
           >
+            {/* What we are promising, in the words the memo closes on. */}
+            <p className="text-[1.125rem] font-semibold leading-snug text-ink-900">
+              Give us one old report, and every report we make for you will look like you made it yourself.
+            </p>
+
             <Rule />
 
             <div
@@ -370,22 +480,24 @@ export default function BringYourOwnTemplateTab({
               <input
                 ref={inputRef}
                 type="file"
-                accept=".pdf"
+                accept=".pptx,.pdf"
                 className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }}
               />
               <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-brand-50 text-brand-700">
                 <UploadCloud size={20} />
               </div>
-              <p className="mt-3 text-[1rem] font-semibold text-ink-900">Upload one old report as a PDF</p>
+              <p className="mt-3 text-[1rem] font-semibold text-ink-900">Upload one old report, as a PowerPoint or a PDF</p>
               <p className="mt-1 text-[0.875rem] text-ink-500">
                 One old report is enough. Every report we make for you after that looks the same way. Nothing to set up:
                 no settings, no questions to answer.
               </p>
               <p className="mt-3 text-[0.75rem] text-ink-400">
-                One file · up to about 50 pages · pick a report typical of your work · we delete it once the template is saved
+                One file · .pptx or .pdf · up to about 50 slides or pages · pick a report typical of your work · we keep it only while you set this up and delete it when you save
               </p>
             </div>
+
+            <WhatHappens />
 
             <KeepDiscard />
 
@@ -425,12 +537,16 @@ export default function BringYourOwnTemplateTab({
                 </div>
                 <div className="min-w-0">
                   <p className="text-[0.875rem] font-semibold text-ink-900 truncate">Reading {fileName}</p>
-                  <p className="text-[0.75rem] text-ink-500">Six reads. Five are just measuring; the AI runs last, only to name what the measuring found.</p>
+                  <p className="text-[0.75rem] text-ink-500">
+                    {reading === 'deck'
+                      ? 'Six reads. A deck labels its own parts, so the first five have little to work out. The AI runs last, only to name what was found.'
+                      : 'Six reads. Five are just measuring; the AI runs last, only to name what the measuring found.'}
+                  </p>
                 </div>
               </div>
 
               <ol className="mt-5 space-y-1">
-                {PASSES.map((p, i) => {
+                {passes.map((p, i) => {
                   const done = i < pass;
                   const active = i === pass;
                   return (
@@ -460,15 +576,18 @@ export default function BringYourOwnTemplateTab({
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             className="flex h-[calc(100vh-16rem)] min-h-[560px] flex-col rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden"
           >
-            {/* Layer 1 of the "how do I know what to pick" answer: do not make
-                them choose. Every dropdown is already set. */}
+            {/* Do not make them choose. Every tag is already set, so the job
+                here is verify, not decide. */}
             <header className="shrink-0 flex items-center justify-between gap-4 border-b border-canvas-border px-5 py-3">
               <div className="min-w-0">
                 <h3 className="text-[0.875rem] font-semibold text-ink-900">What we found in {fileName}</h3>
-                <p className="text-[0.75rem] text-ink-500 truncate">
+                <p className="text-[0.75rem] text-ink-500">
                   We kept {sections.length} section{sections.length === 1 ? '' : 's'} we can fill from your audit results. Confirm, rename, reorder or untick them.
-                  {(result.dropped.length > 0) && <> The other sections from your report are listed at the end.</>}
+                  {(result.dropped.length > 0) && <> The other sections from your report are not included, and they are listed at the end with the reason.</>}
                   {shaky > 0 && <span className="text-mitigated-700 font-medium"> {shaky} we are unsure about, listed first.</span>}
+                  {freehandDeck && (
+                    <span className="text-mitigated-700"> This deck looks hand built, with the text typed into plain boxes rather than the title and layout slots, so we read it by position and size instead. Worth a closer look than usual.</span>
+                  )}
                 </p>
               </div>
               <button
@@ -486,15 +605,13 @@ export default function BringYourOwnTemplateTab({
                 pages={result.pages}
                 pageCount={result.pageCount}
                 toc={result.toc}
-                lockFill
+                unit={result.unit ?? 'page'}
                 notIncluded={result.dropped}
-                reportChrome={{
-                  title: name || 'Untitled template',
-                  brand: result.furniture?.fields.auditEntity ?? 'Your organisation',
-                  headerText: result.furniture?.confidentiality || result.furniture?.header.join('  ·  '),
-                  footerText: result.furniture?.footer.join('  ·  '),
-                  accent: result.coverColor,
-                }}
+                // Their captured letterhead where the read found one, and the
+                // defaults the saved template will print everywhere else. Built
+                // in one place with the editor's review, so the cover approved
+                // here is the cover the save produces either way.
+                reportChrome={reviewChrome(result, { title: name })}
               />
             </div>
 
@@ -509,9 +626,16 @@ export default function BringYourOwnTemplateTab({
                 />
               </label>
               <div className="flex items-center gap-3">
-                <span className="text-[0.75rem] text-ink-400">
-                  {sections.filter(s => s.name.trim() && !s.wrapper).length} sections kept · none of their words
-                </span>
+                {/* The trade-off, said on the check screen rather than after
+                    they export something and find the gap. */}
+                <div className="min-w-0 max-w-[52ch] text-right">
+                  <span className="block text-[0.75rem] text-ink-500">
+                    {sections.filter(s => s.name.trim() && !s.wrapper).length} sections kept · none of their words
+                  </span>
+                  <span className="block text-[0.75rem] leading-snug text-ink-400">
+                    We make the findings and the summary in your format. What was checked, replies from management and admin pages come in one report at a time.
+                  </span>
+                </div>
                 <button
                   onClick={save}
                   className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
@@ -542,7 +666,7 @@ export default function BringYourOwnTemplateTab({
                 {' '}It sits next to the standard templates, and every report you make with it looks this way.
               </p>
               <p className="mt-2 text-[0.75rem] text-ink-400">
-                {saved.dropped > 0 && <>{saved.dropped} section{saved.dropped === 1 ? '' : 's'} from your report are not in the template. Anything else goes in one report at a time through Add Observation. </>}
+                {saved.dropped > 0 && <>{saved.dropped} section{saved.dropped === 1 ? ' from your report is' : 's from your report are'} not in the template. Anything else goes in one report at a time through Add Observation. </>}
                 The report you uploaded has been deleted. We only needed it while you checked what we found.
               </p>
 

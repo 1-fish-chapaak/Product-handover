@@ -41,12 +41,14 @@ import { useToast } from '../shared/Toast';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { KpiCountUp } from '../shared/KpiTile';
-import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock, ReportClosingBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
 import { buildReportFacts } from './byot/templateBinding';
 import TemplateBlockBody, { type CardFinding } from './TemplateBlockBody';
+import AtrReviewDrawer from './AtrReviewDrawer';
+import { loadBaselineVersions, appendVersion, saveVersions, nowStamp, type AtrVersion } from './atrReview';
 import type { TemplateSection } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
@@ -1533,6 +1535,77 @@ function ObservationCard({
   );
 }
 
+// Section prose, controlled by the section's Edit toggle. Not editing → plain
+// body copy. Editing → a textarea (⌘/Ctrl+Enter saves, Esc cancels) with
+// Save/Cancel. The visible Edit affordance lives in the section header, so every
+// template-generated section is edited the same way.
+function EditableProse({
+  value,
+  editing,
+  onSave,
+  onCancel,
+  textClassName,
+}: {
+  value: string;
+  editing: boolean;
+  onSave: (next: string) => void;
+  onCancel: () => void;
+  textClassName: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  // Esc discards the in-flight change; suppress the unmount blur that would
+  // otherwise re-save it.
+  const cancelledRef = useRef(false);
+
+  // Seed the draft from the live value each time editing opens (so a Regenerate
+  // that rewrote the summary underneath us is what the user starts from).
+  useEffect(() => {
+    if (editing) { setDraft(value); cancelledRef.current = false; }
+  }, [editing, value]);
+
+  if (!editing) return <p className={textClassName}>{value}</p>;
+
+  const commit = () => {
+    if (cancelledRef.current) return;
+    const trimmed = draft.trim();
+    onSave(trimmed.length ? trimmed : value);
+  };
+
+  return (
+    <div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        autoFocus
+        rows={Math.max(3, Math.ceil(draft.length / 88))}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); cancelledRef.current = true; onCancel(); }
+        }}
+        className="w-full max-w-[80ch] resize-y rounded-md border border-brand-600/40 bg-white px-3 py-2.5 text-[1.0625rem] text-ink-800 leading-[1.8] focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+      />
+      <p className="mt-1.5 text-[0.6875rem] text-ink-400">Edits save as you go. Press Done when finished, or Esc to discard this change.</p>
+    </div>
+  );
+}
+
+// The visible per-section Edit / Done toggle shown in every section header.
+function SectionEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-pressed={editing}
+      className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-md border transition-colors cursor-pointer ${
+        editing
+          ? 'text-white bg-brand-600 border-brand-600 hover:bg-brand-700'
+          : 'text-brand-600 bg-brand-50 border-brand-600/20 hover:bg-brand-50/70 hover:border-brand-600/35'
+      }`}
+    >
+      {editing ? <><Check size={14} /> Done</> : <><Edit3 size={13} /> Edit</>}
+    </button>
+  );
+}
+
 // Bulk-audit counterpart of QueryCard. Same chrome (continuous-sheet block,
 // motion stagger, meta row with primary id, generate-cases gate) but the body
 // is workflow-shaped: severity, optional risk owner, findings, observations,
@@ -1921,12 +1994,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     const signedAt = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
     onUpdateSignoffs?.(report.id, { ...(report.signoffs ?? {}), [slot.id]: { signedBy: signer, signedAt } });
     addToast({ type: 'success', message: `Signed as ${signer}.` });
+    recordActivity(`Signed “${slot.role}”`, [`${slot.role} signed by ${signer}`]);
   };
   const handleSignOff = (slot: SignatorySlot) => {
     const next = { ...(report.signoffs ?? {}) };
     delete next[slot.id];
     onUpdateSignoffs?.(report.id, next);
     addToast({ type: 'info', message: 'Sign-off removed.' });
+    recordActivity(`Removed sign-off “${slot.role}”`);
   };
   const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
@@ -1969,6 +2044,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       setAppliedTemplate(template);
       setApplyingTemplate(false);
       addToast({ type: 'success', message: `Template "${template.name}" applied.` });
+      recordActivity(`Applied template “${template.name}”`, [`Report reformatted to the “${template.name}” template`]);
     }, 800);
   };
 
@@ -2009,6 +2085,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     const next = descDraft.trim();
     if (next !== displayDescription && onUpdateDescription) {
       onUpdateDescription(report.id, next);
+      recordActivity('Edited report description');
     }
     setIsEditingDesc(false);
   };
@@ -2439,6 +2516,179 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       });
     }
   };
+  // ── Applied-template body is the user's to rewrite: the composed section
+  // prose is a starting draft, not fixed copy. Edits are keyed per section and
+  // persisted per report so a reopen keeps the rewritten copy.
+  const SECTION_EDITS_KEY = 'irame.reports.sectionEdits.v1';
+  const [sectionEdits, setSectionEdits] = useState<Record<string, string>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(SECTION_EDITS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  // Prose autosaves on blur, so persist quietly and log the edit once per
+  // section rather than toasting on every keystroke-blur.
+  const sectionLoggedRef = useRef<Set<string>>(new Set());
+  const saveSectionEdit = (key: string, text: string, title: string) => {
+    markSectionDirty(title);
+    setSectionEdits(prev => (prev[key] === text ? prev : { ...prev, [key]: text }));
+    try {
+      const all = JSON.parse(localStorage.getItem(SECTION_EDITS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [key]: text };
+      localStorage.setItem(SECTION_EDITS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if (!sectionLoggedRef.current.has(key)) {
+      sectionLoggedRef.current.add(key);
+      logEvent({
+        action: 'Update',
+        description: `Edited "${title}" content in "${report.name}"`,
+        module: 'Reports',
+        entity: 'Report section',
+      });
+    }
+  };
+
+  // Empty template tables are the user's to fill: rows typed straight into the
+  // section's own columns, keyed per block and persisted per report like the
+  // prose edits above. A logged usage signal fires once per table.
+  const TABLE_EDITS_KEY = 'irame.reports.tableEdits.v1';
+  const [tableEdits, setTableEdits] = useState<Record<string, string[][]>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(TABLE_EDITS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  const tableLoggedRef = useRef<Set<string>>(new Set());
+  const saveTableEdit = (key: string, rows: string[][], title: string) => {
+    markSectionDirty(title);
+    setTableEdits(prev => ({ ...prev, [key]: rows }));
+    try {
+      const all = JSON.parse(localStorage.getItem(TABLE_EDITS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [key]: rows };
+      localStorage.setItem(TABLE_EDITS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if (rows.length && !tableLoggedRef.current.has(key)) {
+      tableLoggedRef.current.add(key);
+      logEvent({
+        action: 'Update',
+        description: `Filled the "${title}" table manually in "${report.name}"`,
+        module: 'Reports',
+        entity: 'Report table',
+      });
+    }
+  };
+  // A table-fill controller scoped to one section, shared by both render paths.
+  const makeTableFill = (sectionKey: string, title: string) => ({
+    rowsFor: (blockIndex: number) => tableEdits[`${sectionKey}:tbl:${blockIndex}`],
+    onSave: (blockIndex: number, _cols: string[], rows: string[][]) =>
+      saveTableEdit(`${sectionKey}:tbl:${blockIndex}`, rows, title),
+    readOnly: isReadOnly,
+  });
+
+  // Which sections are in edit mode. The visible Edit toggle in each section
+  // header adds/removes its key, and every block kind reads this one flag, so
+  // one control edits prose, tables, and finding cards alike.
+  const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
+  const toggleSectionEditing = (key: string) => setEditingSections(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const stopEditingSection = (key: string) => setEditingSections(prev => {
+    if (!prev.has(key)) return prev;
+    const next = new Set(prev);
+    next.delete(key);
+    return next;
+  });
+
+  // Finding-card overrides — the user rewrites a card's title, severity word, or
+  // any of its fields. Keyed per card + field, persisted per report like the
+  // prose and table edits.
+  const CARD_EDITS_KEY = 'irame.reports.cardEdits.v1';
+  const [cardEdits, setCardEdits] = useState<Record<string, string>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(CARD_EDITS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  const cardLoggedRef = useRef<Set<string>>(new Set());
+  const saveCardEdit = (key: string, value: string, title: string) => {
+    markSectionDirty(title);
+    setCardEdits(prev => ({ ...prev, [key]: value }));
+    try {
+      const all = JSON.parse(localStorage.getItem(CARD_EDITS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [key]: value };
+      localStorage.setItem(CARD_EDITS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if (!cardLoggedRef.current.has(title)) {
+      cardLoggedRef.current.add(title);
+      logEvent({
+        action: 'Update',
+        description: `Edited findings in "${title}" of "${report.name}"`,
+        module: 'Reports',
+        entity: 'Report finding',
+      });
+    }
+  };
+  const makeCardFill = (sectionKey: string, title: string) => ({
+    get: (blockIndex: number, cardIndex: number, field: string) =>
+      cardEdits[`${sectionKey}:c${blockIndex}:${cardIndex}:${field}`],
+    onSave: (blockIndex: number, cardIndex: number, field: string, value: string) =>
+      saveCardEdit(`${sectionKey}:c${blockIndex}:${cardIndex}:${field}`, value, title),
+  });
+  // A prose-fill controller for narrative blocks INSIDE a typed section (BYOT).
+  // Reuses the sectionEdits store, keyed per block so a section with several
+  // narrative blocks edits each independently.
+  const makeProseFill = (sectionKey: string, title: string) => ({
+    get: (blockIndex: number) => sectionEdits[`${sectionKey}:prose:${blockIndex}`],
+    onSave: (blockIndex: number, text: string) =>
+      saveSectionEdit(`${sectionKey}:prose:${blockIndex}`, text, title),
+  });
+
+  // ── Version history — the same comments + versions trail the ATR carries.
+  // The report starts at a single real baseline (v1 = generated); every real
+  // change the user makes then appends a version, so the Activity log is a true
+  // record, not a fabricated trail.
+  const [versions, setVersions] = useState<AtrVersion[]>(() => loadBaselineVersions(report.id, {
+    by: report.generatedBy ?? 'You',
+    at: report.generatedAt ?? nowStamp(),
+  }));
+  const versionAuthor = () => currentUser?.name ?? report.generatedBy ?? 'You';
+  // Append one version for a real change. `changes` is the optional bullet log.
+  const recordActivity = (label: string, changes?: string[]) => {
+    setVersions(prev => appendVersion(report.id, prev, label, 'draft', versionAuthor(), changes));
+  };
+  // Coalesced variant for rapid-fire changes (drag reorder): if the newest
+  // version already carries this label, refresh it in place instead of stacking
+  // a dozen "Reordered sections" entries.
+  const recordActivityCoalesced = (label: string, changes?: string[]) => {
+    setVersions(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.label === label) {
+        const updated = [...prev.slice(0, -1), { ...last, at: nowStamp(), by: versionAuthor(), changes }];
+        saveVersions(report.id, updated);
+        return updated;
+      }
+      return appendVersion(report.id, prev, label, 'draft', versionAuthor(), changes);
+    });
+  };
+  // Sections edited in the current edit session — a version is captured once,
+  // when the section's Edit toggle is switched back off (Done).
+  const editDirtyRef = useRef<Set<string>>(new Set());
+  const markSectionDirty = (title: string) => editDirtyRef.current.add(title);
+  const captureSectionVersion = (title: string) => {
+    if (!editDirtyRef.current.has(title)) return;
+    editDirtyRef.current.delete(title);
+    recordActivity(`Edited “${title}”`, [`Edited “${title}” content`]);
+  };
+  // The section Edit toggle: entering edit mode opens the section; leaving it
+  // (Done) captures a version if anything in that section changed.
+  const handleSectionEditToggle = (key: string, title: string) => {
+    const wasEditing = editingSections.has(key);
+    toggleSectionEditing(key);
+    if (wasEditing) captureSectionVersion(title);
+  };
+
   // Door 2: setup that never changes gets remembered on the template itself —
   // every future report from this template pre-fills it. Only custom templates
   // can learn (standard ones are shared and read-only).
@@ -2548,14 +2798,17 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   const toggleObservationAttachment = (id: string) => {
-    setSections(prev => prev.map(s =>
-      s.id === id && s.kind === 'observation'
-        ? { ...s, attachmentHidden: !s.attachmentHidden }
-        : s
-    ));
-    setAppliedObservations(prev => prev.map(o =>
-      o.id === id ? { ...o, attachmentHidden: !o.attachmentHidden } : o
-    ));
+    let obsLabel = 'observation';
+    let nowHidden = false;
+    setSections(prev => prev.map(s => {
+      if (s.id === id && s.kind === 'observation') { obsLabel = s.obsId ?? s.title; nowHidden = !s.attachmentHidden; return { ...s, attachmentHidden: !s.attachmentHidden }; }
+      return s;
+    }));
+    setAppliedObservations(prev => prev.map(o => {
+      if (o.id === id) { obsLabel = o.obsId ?? o.title; nowHidden = !o.attachmentHidden; return { ...o, attachmentHidden: !o.attachmentHidden }; }
+      return o;
+    }));
+    recordActivity(`${nowHidden ? 'Hid' : 'Showed'} attachment on ${obsLabel}`);
   };
 
   const handleObservationSave = ({ name, description, attachments }: { name: string; description: string; attachments?: ObservationAttachment[] }) => {
@@ -2571,6 +2824,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           : o
       ));
       addToast({ type: 'success', message: `${editingObservation.obsId} updated.` });
+      recordActivity(`Edited ${editingObservation.obsId}`, [`Updated observation “${name}”`]);
     } else {
       const obsId = nextObservationId();
       const newItem: ObservationItem = {
@@ -2587,6 +2841,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         setSections(prev => [...prev, newItem]);
       }
       addToast({ type: 'success', message: `${obsId} added.` });
+      recordActivity(`Added ${obsId}`, [`Added observation “${name}”`]);
     }
     closeAddObservation();
   };
@@ -2610,7 +2865,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const handleSaveContentsRename = () => {
     if (!contentsEditingId) return;
     const trimmed = contentsDraft.trim();
-    if (trimmed) renameSection(contentsEditingId, trimmed);
+    if (trimmed) {
+      const before = sections.find(s => s.id === contentsEditingId)?.title;
+      if (before !== trimmed) {
+        renameSection(contentsEditingId, trimmed);
+        recordActivity(`Renamed section to “${trimmed}”`, before ? [`“${before}” → “${trimmed}”`] : undefined);
+      }
+    }
     setContentsEditingId(null);
   };
   const handleCancelContentsRename = () => {
@@ -2619,9 +2880,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const confirmDeleteSection = () => {
     if (sectionPendingDelete) {
       const id = sectionPendingDelete.id;
+      const title = sectionPendingDelete.title;
       setSections(prev => prev.filter(s => s.id !== id));
       setAppliedObservations(prev => prev.filter(o => o.id !== id));
-      addToast({ type: 'success', message: `"${sectionPendingDelete.title}" removed.` });
+      addToast({ type: 'success', message: `"${title}" removed.` });
+      recordActivity(`Removed “${title}”`);
     }
     setSectionPendingDelete(null);
   };
@@ -2646,6 +2909,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           values={nonCoverSections}
           onReorder={(newOrder) => {
             setSections(coverSection ? [coverSection, ...newOrder] : newOrder);
+            recordActivityCoalesced('Reordered sections');
           }}
           as="ol"
           className="list-none p-0 m-0 space-y-0.5"
@@ -2713,7 +2977,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       return (
         <div className={railCls}>
           <RailHeader count={tmplSections.length + appliedObservations.length} />
-          <Reorder.Group axis="y" values={appliedObservations} onReorder={setAppliedObservations} as="ol" className="list-none p-0 m-0 space-y-0.5">
+          <Reorder.Group axis="y" values={appliedObservations} onReorder={(o) => { setAppliedObservations(o); recordActivityCoalesced('Reordered observations'); }} as="ol" className="list-none p-0 m-0 space-y-0.5">
             {tmplSections.map((s, i) => (
               <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md hover:bg-brand-50/30 transition-colors">
                 <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
@@ -2763,8 +3027,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     );
   };
 
-  // Report-level activity log drawer (consolidates activity across all query cards).
+  // Report-level activity log drawer (comments + version history).
   const [activityLogOpen, setActivityLogOpen] = useState(false);
+  const [reviewTab, setReviewTab] = useState<'comments' | 'versions'>('comments');
 
   // Sync activity drawer state to the URL so a link can deep-link back to it.
   // No react-router in this app — use history.replaceState directly.
@@ -3011,6 +3276,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             <div className="rounded-lg overflow-hidden mb-5 border border-canvas-border bg-white">
               <ReportBrandBanner
                 title={reportDisplayName(report.name)}
+                logo={report.logoDataUrl}
                 gradient={reportGradient(report.theme, report.brandColor)}
                 actions={
                   <>
@@ -3094,6 +3360,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         const content = isExec
                           ? composeExecSummary(appliedTemplate.name, activeQueries)
                           : composeSectionContent(s.name, activeQueries);
+                        // The composed prose is a starting draft — a per-section
+                        // edit (keyed by the applied template + position) wins over
+                        // it and is remembered on the report.
+                        const sectionKey = `${appliedTemplate.id}:${i}`;
+                        const editedContent = sectionEdits[sectionKey];
+                        const sectionEditing = editingSections.has(sectionKey);
                         // The summary is the report's opening statement, so it
                         // gets the same treatment under a custom template as it
                         // does under ours: the numbers first, the rollup below
@@ -3117,26 +3389,30 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                   title={s.name}
                                   subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
                                   right={
-                                    <button
-                                      onClick={() => {
-                                        if (isRegeneratingSummary) return;
-                                        setIsRegeneratingSummary(true);
-                                        setTimeout(() => {
-                                          setSummaryOverride(ALT_SUMMARY);
-                                          setIsRegeneratingSummary(false);
-                                          addToast({ type: 'success', message: 'Executive summary regenerated.' });
-                                        }, 1200);
-                                      }}
-                                      disabled={isRegeneratingSummary}
-                                      aria-busy={isRegeneratingSummary || undefined}
-                                      title="Regenerate this summary with the latest queries"
-                                      className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                      {isRegeneratingSummary
-                                        ? <Loader2 size={14} className="animate-spin" />
-                                        : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
-                                      {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          if (isRegeneratingSummary) return;
+                                          setIsRegeneratingSummary(true);
+                                          setTimeout(() => {
+                                            setSummaryOverride(ALT_SUMMARY);
+                                            setIsRegeneratingSummary(false);
+                                            addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                            recordActivity('Regenerated executive summary');
+                                          }, 1200);
+                                        }}
+                                        disabled={isRegeneratingSummary}
+                                        aria-busy={isRegeneratingSummary || undefined}
+                                        title="Regenerate this summary with the latest queries"
+                                        className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                      >
+                                        {isRegeneratingSummary
+                                          ? <Loader2 size={14} className="animate-spin" />
+                                          : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
+                                        {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
+                                      </button>
+                                      {!isReadOnly && <SectionEditToggle editing={sectionEditing} onToggle={() => handleSectionEditToggle(sectionKey, s.name)} />}
+                                    </div>
                                   }
                                 />
                                 <div className="pb-6 border-b border-canvas-border mb-6">
@@ -3149,7 +3425,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                     <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
                                   </div>
                                 ) : (
-                                  <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? content}</p>
+                                  <EditableProse
+                                    value={summaryOverride ?? editedContent ?? content}
+                                    editing={sectionEditing}
+                                    onSave={(next) => { setSummaryOverride(next); saveSectionEdit(sectionKey, next, s.name); }}
+                                    onCancel={() => stopEditingSection(sectionKey)}
+                                    textClassName="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]"
+                                  />
                                 )}
                               </motion.div>
                               {(i === anchorIdx || (anchorIdx === -1 && i === tmplTyped.length - 1)) && queryBlocks}
@@ -3166,9 +3448,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
                               className="bg-white rounded-lg border border-canvas-border p-5"
                             >
-                              <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
-                                <Icon size={14} className="text-brand-600" /> {s.name}
-                              </h3>
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <h3 className="text-[0.8125rem] font-bold text-ink-800 flex items-center gap-2 min-w-0">
+                                  <Icon size={14} className="text-brand-600 shrink-0" /> <span className="truncate">{s.name}</span>
+                                </h3>
+                                {!isReadOnly && <SectionEditToggle editing={sectionEditing} onToggle={() => handleSectionEditToggle(sectionKey, s.name)} />}
+                              </div>
                               {(s.blocks?.length ?? 0) > 0 || (s.kind && s.kind !== 'text') || s.fixed ? (
                                 <TemplateBlockBody
                                   tsec={s}
@@ -3177,9 +3462,19 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                   composed={content}
                                   blockLibrary={appliedLibrary}
                                   facts={appliedFacts}
+                                  editing={sectionEditing}
+                                  tableFill={makeTableFill(sectionKey, s.name)}
+                                  cardFill={makeCardFill(sectionKey, s.name)}
+                                  proseFill={makeProseFill(sectionKey, s.name)}
                                 />
                               ) : (
-                                <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                                <EditableProse
+                                  value={editedContent ?? content}
+                                  editing={sectionEditing}
+                                  onSave={(next) => saveSectionEdit(sectionKey, next, s.name)}
+                                  onCancel={() => stopEditingSection(sectionKey)}
+                                  textClassName="text-[0.875rem] text-ink-700 leading-relaxed"
+                                />
                               )}
                             </motion.div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
@@ -3215,7 +3510,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-lg [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
+              <Reorder.Group axis="y" values={sections} onReorder={(o) => { setSections(o); recordActivityCoalesced('Reordered sections'); }} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-lg [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
                 {sections.map((section, i) => {
                   // `key` is intentionally NOT in here — React requires keys to
                   // be passed directly on each element, never via a spread prop.
@@ -3254,6 +3549,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
+                          logo={report.logoDataUrl}
                                     className="rounded-t-lg"
                           gradient={reportGradient(report.theme, report.brandColor)}
                           eyebrow={report.id && (
@@ -3276,7 +3572,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           footer={(() => {
                             // Inline byline: who/when/scope plus the Audit Period. The
                             // meta strip below carries the Report ID + Report Type.
-                            const parts = [report.generatedBy, report.generatedAt, scopeLabel, reportAuditPeriod(report.reportPeriod)].filter(Boolean);
+                            const latestVersion = versions[versions.length - 1]?.version;
+                            const parts = [report.generatedBy, report.generatedAt, latestVersion ? `v${latestVersion}` : null, scopeLabel, reportAuditPeriod(report.reportPeriod)].filter(Boolean);
                             if (parts.length === 0) return null;
                             return (
                               <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
@@ -3314,6 +3611,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                     setSummaryOverride(ALT_SUMMARY);
                                     setIsRegeneratingSummary(false);
                                     addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                    recordActivity('Regenerated executive summary');
                                   }, 1200);
                                 }}
                                 disabled={isRegeneratingSummary}
@@ -3440,10 +3738,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       ? t.blocks.some(b => b.fill === 'manual')
                       : t.fill === 'manual' || (t.kind === 'table' && !t.linkedTo);
                     const manualText = manualFills[section.id] ?? t.savedContent ?? '';
+                    const secEditing = editingSections.has(section.id);
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
                         <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
-                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
+                          <ReportNumberedHeading
+                            n={sectionNumber(section.id)}
+                            title={section.title}
+                            right={!isReadOnly ? <SectionEditToggle editing={secEditing} onToggle={() => handleSectionEditToggle(section.id, section.title)} /> : undefined}
+                          />
                           <TemplateBlockBody
                             tsec={t}
                             blockLibrary={templateBlockLibrary}
@@ -3451,6 +3754,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                             cards={section.cards}
                             findingScale={report.findingScale}
                             composed={section.composed}
+                            editing={secEditing}
+                            tableFill={makeTableFill(section.id, section.title)}
+                            cardFill={makeCardFill(section.id, section.title)}
+                            proseFill={makeProseFill(section.id, section.title)}
                             manual={isManualSection ? {
                               text: manualText,
                               onChange: text => setManualFill(section.id, text),
@@ -3502,17 +3809,30 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             />
           </div>
         )}
+
+        {/* The closing page — their own last page, printed exactly as written.
+            Nothing in it is generated, which is why it is a setting and not a
+            section. */}
+        {report.closingEnabled && (report.closingText?.length ?? 0) > 0 && (
+          <div className="mt-6 bg-white rounded-lg border border-canvas-border">
+            <ReportClosingBlock lines={report.closingText!} />
+          </div>
+        )}
         </div>
       </div>
 
-      {/* Report-level activity log drawer */}
+      {/* Report-level activity log drawer — comments + version history, the same
+          trail the ATR carries, so every saved section edit grows a version. */}
       <AnimatePresence>
         {activityLogOpen && (
-          <ReportActivityLogDrawer
+          <AtrReviewDrawer
+            reportId={report.id}
             reportName={report.name}
-            comments={comments}
-            onAddComment={addComment}
+            tab={reviewTab}
+            onTab={setReviewTab}
             onClose={() => setActivityLogOpen(false)}
+            initialVersions={versions}
+            me={currentUser?.name ?? 'You'}
           />
         )}
       </AnimatePresence>
@@ -3530,6 +3850,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             pageNumbers={report.pageNumbers}
             brandColor={report.brandColor}
             signatories={report.signoffEnabled ? report.signatories : undefined}
+            closingText={report.closingEnabled ? report.closingText : undefined}
+            logoDataUrl={report.logoDataUrl}
             signoffs={report.signoffs}
             // The export checklist — sections still awaiting content (manual
             // fill or a person's input) are named before download, so nothing

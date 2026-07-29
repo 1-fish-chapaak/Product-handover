@@ -1,39 +1,53 @@
 // Shared "AI proposes, the human curates" review canvas — the BYOT review step.
 // The uploaded document on the left, the detected skeleton on the right as a
 // HIERARCHY: sections collapsed, blocks expandable beneath them. Every section
-// carries a pre-filled one-line description and a fill-type dropdown (the five
-// cases — the engine guesses, the user confirms). Being 80% right + a 2-minute
-// fix beats chasing 100% automation; "Check this" flags jump the queue so the
-// user fixes the doubtful 20%, not proof-reads everything.
+// carries a pre-filled one-line description and its TAG — the instruction the
+// filling step reads, stated rather than offered, because a tag is not a
+// preference. Being 80% right + a 2-minute fix beats chasing 100% automation;
+// "Check this" flags jump the queue so the user fixes the doubtful 20%, not
+// proof-reads everything.
 
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Reorder, useDragControls } from 'motion/react';
 import {
-  Plus, CornerDownRight, ChevronRight,
+  CornerDownRight, ChevronRight,
   GripVertical, ArrowUpToLine, ArrowDownToLine, Pencil, Lock, AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { RowDeleteButton } from './RowDeleteButton';
 import { ReportBrandBanner } from './ReportDocumentChrome';
-import { sectionBlurb, type SectionFill } from './reportShared';
-import type { TocCheck } from './byotExtraction';
+import { sectionBlurb } from './reportShared';
 import {
-  FILL_META,
+  TAG_GLOSSARY,
+  fillTag,
   BLOCK_KIND_LABEL,
   SHAKY_CONFIDENCE,
+  CHECK_REASON,
   type CanvasSection,
   type CanvasBlock,
+  type TocCheck,
 } from './sectionReviewShared';
+
+/** A row is in the check queue when one of the four situations named it, or
+ *  when the detector's own confidence was low. The flag is the better signal of
+ *  the two, because it says WHAT to look at. */
+const isShaky = (s: CanvasSection) =>
+  s.evidence !== 'added'
+  && (!!s.flag || (s.confidence !== undefined && s.confidence <= SHAKY_CONFIDENCE));
 
 // ─── One block row inside an expanded section ───────────────────────────────
 // A compact sample of the shape that was kept: type chip, label, and the
 // structure that survives (columns, card fields, slot labels) — never values.
-function BlockRow({ block, refSource }: {
+function BlockRow({ block, refSource, onOwnWording }: {
   block: CanvasBlock;
   /** When this block is a second placement, the section that holds the shape. */
   refSource?: string;
+  /** The client makes authored wording theirs. Saving locks it like any other
+   *  fixed text: the flag is gone and it prints as written from then on. */
+  onOwnWording?: (lines: string[]) => void;
 }) {
-  const fillMeta = FILL_META[block.fill];
+  const fillMeta = fillTag(block.fill, block.frame);
+  const [draft, setDraft] = useState<string | null>(null);
   return (
     <div className="flex items-start gap-2 rounded-md border border-canvas-border/70 bg-white px-2.5 py-2">
       <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide mt-px">
@@ -70,8 +84,62 @@ function BlockRow({ block, refSource }: {
           <p className="text-[0.6875rem] text-ink-500">{block.signRoles?.length ? `Roles: ${block.signRoles.join(', ')}` : 'Signature slots'} — real people only</p>
         )}
         {block.kind === 'chart' && <p className="text-[0.6875rem] text-ink-500">A graph renders here — its numbers come from data, never the PDF.</p>}
-        {(block.kind === 'narrative' || block.kind === 'callout') && block.fill === 'fixed' && (block.fixedBody?.length ?? 0) > 0 && (
-          <p className="text-[0.6875rem] text-ink-500 line-clamp-2"><Lock size={9} className="inline mr-1" />{block.fixedBody!.join(' ')}</p>
+        {(block.kind === 'narrative' || block.kind === 'callout') && block.fill === 'fixed' && (block.fixedBody?.length ?? 0) > 0 && draft === null && (
+          <p className={`text-[0.6875rem] text-ink-500 ${block.authored ? '' : 'line-clamp-2'}`}><Lock size={9} className="inline mr-1" />{block.fixedBody!.join(' ')}</p>
+        )}
+        {/* WHOSE WORDS ARE THESE? Boilerplate in their old report was written by
+            whoever ran that engagement, and printing another firm's voice on
+            their own reports would certify an engagement that never happened.
+            So it arrives as a draft, in their author's words, until the client
+            says it speaks for them. Then it locks like any other fixed text. */}
+        {block.fill === 'fixed' && block.authored && onOwnWording && (
+          draft === null ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="flex-1 min-w-[14rem] text-[0.6875rem] text-mitigated-700 leading-relaxed">
+                This wording came from the report's author, so check it still speaks for you.
+              </p>
+              <button
+                onClick={() => setDraft((block.fixedBody ?? []).join('\n'))}
+                className="shrink-0 px-2 py-0.5 rounded-full bg-mitigated-100 text-[0.625rem] font-semibold text-mitigated-800 hover:bg-mitigated-200 transition-colors cursor-pointer"
+              >
+                Make it ours
+              </button>
+              <button
+                onClick={() => onOwnWording(block.fixedBody ?? [])}
+                className="shrink-0 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-ink-500 hover:bg-canvas transition-colors cursor-pointer"
+              >
+                It already does
+              </button>
+            </div>
+          ) : (
+            <div className="mt-1">
+              <textarea
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                rows={Math.min(10, Math.max(3, draft.split('\n').length))}
+                aria-label="Fixed wording"
+                className="w-full resize-y rounded-md border border-canvas-border bg-white px-2 py-1.5 text-[0.6875rem] text-ink-700 leading-relaxed focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+              />
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    onOwnWording(draft.split('\n').map(l => l.trim()).filter(Boolean));
+                    setDraft(null);
+                  }}
+                  className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.625rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
+                >
+                  Save wording
+                </button>
+                <button
+                  onClick={() => setDraft(null)}
+                  className="px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-ink-500 hover:bg-canvas transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <span className="text-[0.625rem] text-ink-400">Saved once, it prints exactly like this in every report.</span>
+              </div>
+            </div>
+          )
         )}
         {(block.kind === 'narrative' || block.kind === 'callout') && block.fill !== 'fixed' && (block.preview?.length ?? 0) > 0 && (
           <p className="text-[0.6875rem] text-ink-400 line-clamp-1 italic">was: “{block.preview![0]}” — thrown away</p>
@@ -85,7 +153,7 @@ function BlockRow({ block, refSource }: {
 }
 
 // ─── One draggable section row ──────────────────────────────────────────────
-function SectionRow({ section, index, total, flashed, registerRef, onRename, onDescribe, onFill, onDelete, onJump, onMerge, onWrapper, refSources, lockFill }: {
+function SectionRow({ section, index, total, flashed, registerRef, onRename, onDescribe, onDelete, onJump, onMerge, onWrapper, onOwnWording, refSources }: {
   section: CanvasSection;
   index: number;
   total: number;
@@ -93,15 +161,14 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
   registerRef: (el: HTMLElement | null) => void;
   onRename: (name: string) => void;
   onDescribe: (description: string) => void;
-  onFill: (fill: SectionFill) => void;
   onDelete: () => void;
   onJump: () => void;
   onMerge: (direction: 'up' | 'down') => void;
   onWrapper: (keep: boolean) => void;
+  /** The client took ownership of one block's authored wording. */
+  onOwnWording: (blockId: string, lines: string[]) => void;
   /** Block id → the section that stores its shape, for placements. */
   refSources?: Record<string, string>;
-  /** No fill-type question: the badge reports what the section is. */
-  lockFill?: boolean;
 }) {
   const controls = useDragControls();
   const [expanded, setExpanded] = useState(false);
@@ -110,8 +177,11 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
   const isFragment = section.evidence === 'fragment';
   const canMerge = isFragment && (index > 0 || index < total - 1);
   const blocks = section.blocks ?? [];
-  const shaky = section.evidence !== 'added' && section.confidence !== undefined && section.confidence <= SHAKY_CONFIDENCE;
+  const shaky = isShaky(section);
   const fill = section.fill ?? 'query';
+  // Fixed wording whose only changing values are report details carries its
+  // own tag, because what it makes happen at generation is different.
+  const sectionTag = fillTag(fill, blocks.length > 0 && blocks.every(b => b.fill !== 'fixed' || b.frame));
   const bg = flashed
     ? 'bg-brand-600/[0.07]'
     : empty
@@ -172,34 +242,29 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           </button>
         )}
         {shaky && !empty && (
-          <span data-shaky className="shrink-0 inline-flex items-center rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 text-[0.625rem] font-semibold">
+          <span
+            data-shaky
+            title={section.flag ? CHECK_REASON[section.flag] : undefined}
+            className="shrink-0 inline-flex items-center rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 text-[0.625rem] font-semibold"
+          >
             Check this
           </span>
         )}
-        {/* BYOT keeps only what it can fill, so there is nothing to choose:
-            the badge states which of the two kinds this section is, and the
-            reason line below says why we claimed it. */}
-        {!empty && lockFill && (
+        {/* The tag, stated rather than offered. It is not a preference: it is
+            the instruction the filling step reads, and only ever one of the
+            tags a read can produce. A dropdown here offered options the reader
+            never assigns ("no data connected", "a person fills this") and left
+            out one it does ("fixed frame with blanks"), so it asked the client
+            to choose from a list that was not the model. Getting it wrong is
+            handled where wrongness lives: the reason line underneath, the
+            "check this" queue, and untick. */}
+        {!empty && (
           <span
-            title={FILL_META[fill].hint}
-            className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[0.625rem] font-semibold ${FILL_META[fill].tint}`}
+            title={sectionTag.hint}
+            className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[0.625rem] font-semibold ${sectionTag.tint}`}
           >
-            {FILL_META[fill].label}
+            {sectionTag.label}
           </span>
-        )}
-        {/* The fill-case dropdown — where does this section's content come
-            from? The engine guessed; the user confirms. Never silently skipped. */}
-        {!empty && !lockFill && (
-          <select
-            value={fill}
-            onChange={e => onFill(e.target.value as SectionFill)}
-            title={FILL_META[fill].hint}
-            className={`shrink-0 rounded-full border-0 px-2 py-0.5 text-[0.625rem] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-600/20 ${FILL_META[fill].tint}`}
-          >
-            {(Object.keys(FILL_META) as SectionFill[]).map(f => (
-              <option key={f} value={f} title={FILL_META[f].hint}>{FILL_META[f].label}</option>
-            ))}
-          </select>
         )}
         <RowDeleteButton
           onConfirm={onDelete}
@@ -225,7 +290,8 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
         // Pass 6 annotates every section, including ones it has never seen. If
         // it could not write the line, say so and ask for it — the raw
         // "Describe what this section will cover" placeholder reads as broken.
-        const unsummarised = !section.description && blurb.startsWith('Describe what this section will cover');
+        const unsummarised = !section.description
+          && (section.flag === 'no-line' || blurb.startsWith('Describe what this section will cover'));
         return (
         <div className="mt-0.5 pl-[2.25rem] pr-1">
           <input
@@ -240,8 +306,20 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
               override, the reason no longer applies and the chosen option's
               consequence stands alone. */}
           <p className="px-0.5 text-[0.6875rem] text-ink-300 leading-relaxed">
-            {section.fillReason ?? `${FILL_META[fill].label} — ${FILL_META[fill].hint}`}
+            {section.fillReason ?? `${sectionTag.label}. ${sectionTag.hint}`}
           </p>
+          {/* The flag names the tension rather than reporting a doubt: "check
+              this" on its own tells the user to look without telling them what
+              at, which is the same as asking them to proof-read everything.
+              A half yes is the exception: the detector already wrote the exact
+              tension into the line above ("some of these captions are money"),
+              so a second, vaguer sentence saying the same thing would only
+              argue with it. */}
+          {section.flag && section.flag !== 'half-yes' && !empty && (
+            <p className="px-0.5 text-[0.6875rem] text-mitigated-700 leading-relaxed">
+              {CHECK_REASON[section.flag]}
+            </p>
+          )}
         </div>
         );
       })()}
@@ -260,7 +338,14 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           </button>
           {expanded && (
             <div className="mt-1.5 space-y-1.5">
-              {blocks.map(b => <BlockRow key={b.id} block={b} refSource={b.ref ? refSources?.[b.ref] : undefined} />)}
+              {blocks.map(b => (
+                <BlockRow
+                  key={b.id}
+                  block={b}
+                  refSource={b.ref ? refSources?.[b.ref] : undefined}
+                  onOwnWording={lines => onOwnWording(b.id, lines)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -301,8 +386,8 @@ export default function SectionReviewCanvas({
   pages,
   pageCount,
   toc,
-  lockFill,
   notIncluded,
+  unit = 'page',
 }: {
   sections: CanvasSection[];
   onSectionsChange: (next: CanvasSection[] | ((prev: CanvasSection[]) => CanvasSection[])) => void;
@@ -316,15 +401,17 @@ export default function SectionReviewCanvas({
     footerText?: string;
     gradient?: [string, string];
     accent?: string;
+    /** Their brand mark, read from the report they uploaded. */
+    logo?: string;
   };
-  /** Rendered pages of the uploaded PDF (data URLs) — the real document. */
+  /** Rendered pages of the uploaded document (data URLs) — the real thing. */
   pages?: string[];
   pageCount?: number;
+  /** What the source counts in. A deck has slides, not pages, and calling a
+   *  slide a page is exactly the kind of label that reads as broken. */
+  unit?: 'page' | 'slide';
   /** The only valid sanity check — our list vs the report's own contents page. */
   toc?: TocCheck;
-  /** Hide the fill-type dropdown: BYOT keeps only sections it can fill, so
-   *  there is no "who fills this?" question left to answer. */
-  lockFill?: boolean;
   /** Sections the template does not keep, said once and never silently. */
   notIncluded?: { name: string; why: string; captured?: boolean }[];
 }) {
@@ -349,10 +436,13 @@ export default function SectionReviewCanvas({
     return map;
   }, [sections]);
   const hasPages = !!pages && pages.length > 0;
-  const shaky = useMemo(
-    () => sections.filter(s => s.evidence !== 'added' && s.confidence !== undefined && s.confidence <= SHAKY_CONFIDENCE),
-    [sections],
-  );
+  const unitLabel = unit === 'slide' ? 'Slide' : 'Page';
+  const shaky = useMemo(() => sections.filter(isShaky), [sections]);
+  // A contents page was found and consumed: it is routed to the contents
+  // builder rather than kept, and routing happens a stage before any check
+  // runs. Counted entries are the proof it was there, so the client can see
+  // what became of it instead of finding it simply gone.
+  const routedContents = (toc?.docEntries ?? 0) > 0;
 
   const jumpToSource = (id: string) => {
     const sec = sections.find(s => s.id === id);
@@ -383,16 +473,15 @@ export default function SectionReviewCanvas({
     set(prev => prev.map(s => (s.id === id ? { ...s, name } : s)));
   const describeSection = (id: string, description: string) =>
     set(prev => prev.map(s => (s.id === id ? { ...s, description } : s)));
-  // Confirming a uniform fill case pushes it down to the blocks; 'mixed' keeps
-  // each block's own answer — granularity only appears when needed. A user
-  // override retires the engine's reasoning line (it no longer applies).
-  const fillSection = (id: string, fill: SectionFill) =>
-    set(prev => prev.map(s => (s.id === id
+  // Authored wording, made theirs: the words they settled on are saved and the
+  // flag clears, so from the next report on it prints as ordinary fixed text.
+  const ownWording = (sectionId: string, blockId: string, lines: string[]) =>
+    set(prev => prev.map(s => (s.id === sectionId
       ? {
           ...s,
-          fill,
-          fillReason: undefined,
-          blocks: fill === 'mixed' ? s.blocks : s.blocks?.map(b => ({ ...b, fill })),
+          blocks: s.blocks?.map(b => (b.id === blockId
+            ? { ...b, fixedBody: lines.length ? lines : b.fixedBody, authored: undefined }
+            : b)),
         }
       : s)));
   // Wrapper confirm: keep clears the flag; exclude deletes (with undo).
@@ -440,31 +529,52 @@ export default function SectionReviewCanvas({
       }) },
     });
   };
-  // Add a section the detector missed — plain, or seeded with one typed block
-  // (charts/stats are images in a PDF, so un-captioned ones can't be pulled).
-  const addSection = (blockKind?: 'stat' | 'chart' | 'table' | 'cards') =>
-    set(prev => [...prev, {
-      id: `new-${Date.now()}`,
-      name: '',
-      evidence: 'added',
-      fill: blockKind ? 'query' : undefined,
-      blocks: blockKind ? [{ id: `new-b-${Date.now()}`, kind: blockKind, fill: 'query' as const }] : undefined,
-    }]);
+  // Nothing is added here. This screen judges what the read found: confirm,
+  // rename, reorder, untick. A part invented at review has no evidence behind
+  // it and nothing bound to fill it, so it would print empty in every report
+  // for ever — and a part left out here can never be filled later either, which
+  // is what makes both directions the read's business rather than this screen's.
+  // Anything the client still wants goes into one report at a time through Add
+  // Observation, and gets promoted to the template deliberately from there.
 
   const jumpToFirstShaky = () => { if (shaky.length) jumpToSection(shaky[0].id); };
 
   const outlineBody = (
     <>
-      {/* The relative sanity check — our list vs the report's own contents.
-          A 40-section report with a 40-entry TOC is correct, not a failure. */}
+      {/* What the tags mean. Every part carries exactly one, and the tag is not
+          decoration: it is the instruction the filling step reads. Here the
+          client verifies it, at generation the engine obeys it, and when a
+          capability grows only the tag changes. Folded shut so the list stays
+          the screen, open for anyone asking what a badge does. */}
+      <details className="mb-2 rounded-md border border-canvas-border bg-white px-3 py-2 group/tags">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[0.6875rem] font-semibold text-ink-600 hover:text-ink-900">
+          <ChevronRight size={12} className="shrink-0 transition-transform group-open/tags:rotate-90" />
+          What the tags mean
+          <span className="font-normal text-ink-400">· every part carries exactly one, and it decides what happens at generation</span>
+        </summary>
+        <dl className="mt-2 space-y-1.5">
+          {TAG_GLOSSARY.map(t => (
+            <div key={t.label} className="flex items-start gap-2">
+              <dt className={`mt-px shrink-0 inline-flex items-center rounded-full px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide ${t.tint}`}>{t.label}</dt>
+              <dd className="min-w-0 text-[0.6875rem] leading-relaxed text-ink-500">{t.does}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+
+      {/* The only valid sanity check, and it is relative: our list against the
+          report's own contents page. A 40 section report with a 40 entry
+          contents page is correct, not a failure. Much longer means we split
+          too much; much shorter means we read it badly — and reading it badly
+          is ours to fix, not the client's to patch by hand. */}
       {toc && (
         <div className={`mb-2 flex items-start gap-2 rounded-md border px-3 py-2 ${toc.verdict === 'match' ? 'border-compliant-200 bg-compliant-50/50' : 'border-mitigated-200 bg-mitigated-50/60'}`}>
           <p className={`text-[0.6875rem] leading-relaxed ${toc.verdict === 'match' ? 'text-compliant-800' : 'text-mitigated-800'}`}>
             {toc.verdict === 'match'
-              ? <>Matches the report’s own contents page ({toc.detected} detected, {toc.docEntries} listed).</>
+              ? <>Matches the report’s own contents page ({toc.detected} found, {toc.docEntries} listed).</>
               : toc.verdict === 'over-split'
-                ? <>We detected {toc.detected} sections but the report’s own contents lists {toc.docEntries} — some rows below are probably blocks inside a section. Merge or delete the extras.</>
-                : <>The report’s own contents lists {toc.docEntries} sections but we only detected {toc.detected} — some may be missing. Add them below.</>}
+                ? <>We found {toc.detected} sections and your own contents page lists {toc.docEntries}, so we have split some of them too far. The extra rows below are pieces inside another section: merge them into it, or untick them.</>
+                : <>Your own contents page lists {toc.docEntries} sections and we only found {toc.detected}, so we did not read this one well. Save what we did find and add the rest one report at a time, or start over with a report more typical of your work.</>}
           </p>
         </div>
       )}
@@ -491,59 +601,55 @@ export default function SectionReviewCanvas({
             registerRef={el => { rightRefs.current[s.id] = el; }}
             onRename={name => renameSection(s.id, name)}
             onDescribe={description => describeSection(s.id, description)}
-            onFill={fill => fillSection(s.id, fill)}
             onDelete={() => deleteSection(s.id)}
             onJump={() => jumpToSource(s.id)}
             onMerge={dir => mergeSection(s.id, dir)}
             onWrapper={keep => resolveWrapper(s.id, keep)}
+            onOwnWording={(blockId, lines) => ownWording(s.id, blockId, lines)}
             refSources={refSources}
-            lockFill={lockFill}
           />
         ))}
       </Reorder.Group>
       {/* Everything the template does not keep, said once, here, rather than
           discovered at export. The client covers these per report through Add
           Observation, which already carries name, description and evidence. */}
-      {(notIncluded?.length ?? 0) > 0 && (
+      {(notIncluded?.length ?? 0) + (routedContents ? 1 : 0) > 0 && (
         <div className="mt-3 rounded-lg border border-canvas-border bg-canvas px-3 py-2.5">
           <p className="text-[0.6875rem] font-semibold text-ink-700">
-            Not included ({notIncluded!.length})
+            The rest of your report ({(notIncluded?.length ?? 0) + (routedContents ? 1 : 0)})
           </p>
           <p className="mt-0.5 text-[0.6875rem] text-ink-500 leading-relaxed">
-            We kept the sections we can fill from your audit results. These ones stay out of the template. Anything else goes in one report at a time through Add Observation.
+            Everything that did not become a section, and what happened to it instead. Anything you still want goes in one report at a time through Add Observation.
           </p>
-          <ul className="mt-1.5 space-y-1">
-            {notIncluded!.map(n => (
-              <li key={n.name} className={`text-[0.6875rem] leading-relaxed ${n.captured ? 'text-compliant-700' : 'text-ink-400'}`}>
-                <span className={`font-medium ${n.captured ? 'text-compliant-700' : 'text-ink-500'}`}>{n.name}</span>
-                {' · '}{n.why.replace(/^(Not included|Captured as a setting):\s*/, '')}
-                {n.captured && ' ✓'}
+          {/* Each row carries its tag, because the tag is what decides its fate:
+              a setting still prints, a routed part feeds the engine, and only a
+              left-out part is really gone. */}
+          <ul className="mt-2 space-y-1.5">
+            {routedContents && (
+              <li className="flex items-start gap-2">
+                <span className="mt-px shrink-0 inline-flex items-center rounded-full bg-canvas text-ink-600 border border-canvas-border px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide">Routed</span>
+                <span className="min-w-0 text-[0.6875rem] leading-relaxed text-ink-400">
+                  <span className="font-medium text-ink-500">Your contents page</span>
+                  {' · '}Never copied. It feeds the contents page we build from your own sections.
+                </span>
+              </li>
+            )}
+            {(notIncluded ?? []).map((n, i) => (
+              // A report can carry the same heading twice (one part running on
+              // under its own title), so the name alone is not a key.
+              <li key={`${n.name}-${i}`} className="flex items-start gap-2">
+                <span className={`mt-px shrink-0 inline-flex items-center rounded-full px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide ${n.captured ? 'bg-evidence-50 text-evidence-700' : 'bg-high-50 text-high-700'}`}>
+                  {n.captured ? 'Setting' : 'Left out'}
+                </span>
+                <span className={`min-w-0 text-[0.6875rem] leading-relaxed ${n.captured ? 'text-ink-500' : 'text-ink-400'}`}>
+                  <span className={`font-medium ${n.captured ? 'text-evidence-700' : 'text-ink-500'}`}>{n.name}</span>
+                  {' · '}{n.why.replace(/^(Not included|Captured as a setting|Saved as a setting):\s*/, '')}
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
-
-      <div className="mt-1.5 space-y-1.5">
-        <button
-          onClick={() => addSection()}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
-        >
-          <Plus size={13} /> Add a section the detector missed
-        </button>
-        <div className="flex items-center justify-center gap-1.5">
-          <span className="text-[0.625rem] text-ink-400">or add one with a block:</span>
-          {([['stat', 'Stats'], ['chart', 'Chart'], ['table', 'Table'], ['cards', 'Finding cards']] as const).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => addSection(k)}
-              className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full border border-canvas-border bg-white text-[0.625rem] font-semibold text-ink-600 hover:border-brand-600/40 hover:text-brand-700 transition-colors cursor-pointer"
-            >
-              <Plus size={10} className="opacity-60" /> {label}
-            </button>
-          ))}
-        </div>
-      </div>
     </>
   );
 
@@ -554,7 +660,7 @@ export default function SectionReviewCanvas({
         <section className="flex flex-col min-h-0">
           <div className="shrink-0 pb-2.5 flex items-baseline gap-1.5">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
-            <span className="text-[0.6875rem] text-ink-400">the report you uploaded</span>
+            <span className="text-[0.6875rem] text-ink-400">the {unit === 'slide' ? 'deck' : 'report'} you uploaded</span>
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {hasPages ? (
@@ -567,21 +673,21 @@ export default function SectionReviewCanvas({
                       key={pageNo}
                       ref={el => { pageRefs.current[pageNo] = el; }}
                       onClick={() => { if (first) jumpToSection(first.id); }}
-                      title={first ? 'Show this page’s first section in the detected list' : undefined}
+                      title={first ? `Show this ${unit}’s first section in the detected list` : undefined}
                       className={`rounded-lg p-1 transition-colors duration-300 ${first ? 'cursor-pointer hover:bg-canvas/70' : ''} ${flashPage === pageNo ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/25' : ''}`}
                     >
                       <img
                         src={src}
-                        alt={`Page ${pageNo} of the uploaded report`}
+                        alt={`${unitLabel} ${pageNo} of the uploaded ${unit === 'slide' ? 'deck' : 'report'}`}
                         className="w-full rounded-md border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]"
                       />
-                      <figcaption className="mt-1 text-center text-[0.625rem] text-ink-400 tabular-nums">Page {pageNo}{pageCount ? ` of ${pageCount}` : ''}</figcaption>
+                      <figcaption className="mt-1 text-center text-[0.625rem] text-ink-400 tabular-nums">{unitLabel} {pageNo}{pageCount ? ` of ${pageCount}` : ''}</figcaption>
                     </figure>
                   );
                 })}
                 {pageCount !== undefined && pageCount > pages!.length && (
                   <p className="px-2 pb-1 text-center text-[0.625rem] text-ink-400 leading-relaxed">
-                    Showing the first {pages!.length} pages. All {pageCount} were read for structure.
+                    Showing the first {pages!.length} {unit === 'slide' ? 'slides' : 'pages'}. All {pageCount} were read for structure.
                   </p>
                 )}
               </div>
@@ -629,6 +735,7 @@ export default function SectionReviewCanvas({
                   titleClassName="text-[1.375rem]"
                   className="rounded-t-lg"
                   gradient={reportChrome.gradient}
+                  logo={reportChrome.logo}
                   footer={
                     <div className="grid grid-cols-2 gap-4">
                       {[

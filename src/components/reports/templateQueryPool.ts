@@ -26,6 +26,9 @@ export type GeneratedQueryDef = {
   addedBy: string;
   kpis: { label: string; value: string; color: string }[];
   chartData: number[];
+  /** A bulk run's own output rows — the exception records behind the finding,
+   *  which is what an evidence annexure in a custom template prints. */
+  outputTable?: { columns: string[]; rows: (string | number)[][] };
 };
 
 export type PickableQuery = {
@@ -176,6 +179,9 @@ export function workflowToQueryDef(w: WorkflowResult): GeneratedQueryDef {
     addedBy: 'Workflow',
     kpis: [],
     chartData: [],
+    // The run's own output rows travel with it: they are the exception records
+    // an evidence annexure prints, so they must not be dropped in translation.
+    outputTable: w.outputTable,
   };
 }
 

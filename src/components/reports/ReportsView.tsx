@@ -855,6 +855,9 @@ export default function ReportsView({
       pageNumbers: (rt as EditableTemplate).pageNumbers,
       signoffEnabled: (rt as EditableTemplate).signoffEnabled,
       signatories: (rt as EditableTemplate).signatories,
+      closingEnabled: (rt as EditableTemplate).closingEnabled,
+      closingText: (rt as EditableTemplate).closingText,
+      logoDataUrl: (rt as EditableTemplate).logoDataUrl,
       findingScale: (rt as EditableTemplate).findingScale,
       opinionScale: (rt as EditableTemplate).opinionScale,
     };
@@ -1083,7 +1086,7 @@ export default function ReportsView({
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
                 : activeTab === 'byot'
-                ? <>Upload one old report as a PDF. We copy how it looks, not what it says, and every report we make for you after that looks the same way.</>
+                ? <>Upload one old report, as a PowerPoint or a PDF. We copy how it looks, not what it says, and every report we make for you after that looks the same way.</>
                 : activeTab === 'templates'
                 ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
                 : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, grouped by type across ATR, SOX, IA, and evidence.</>}
@@ -1468,6 +1471,7 @@ export default function ReportsView({
           <BringYourOwnTemplateTab
             onSaveTemplate={addCustomTemplateUnique}
             onDone={() => setActiveTab('templates')}
+            existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
           />
         )}
 

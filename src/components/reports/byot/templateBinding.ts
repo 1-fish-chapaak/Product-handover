@@ -15,14 +15,32 @@
 import type { TemplateBlock, DataBinding } from '../reportShared';
 import type { CardFinding } from '../TemplateBlockBody';
 
-/** Everything this report can offer a template block. */
+/** Everything this report can offer a template block.
+ *
+ *  THE TREE: query → finding → exceptions. One client "finding" or
+ *  "observation" is one query card — its rating, its written finding, its
+ *  recommendation. The exceptions are the flagged rows underneath that finding,
+ *  not the other way round. Each level fills its own parts of the report:
+ *
+ *    the finding itself      the query card, one stamp per query
+ *    report count boxes      exception counts added up across the queries
+ *    a finding's own counts  that query's exception counts
+ *    evidence annexures      that query's exception rows, in their layout
+ */
 export interface ReportFacts {
-  /** The findings pool, already flattened from the report's queries. */
+  /** The findings pool: one entry per query card, in report order. */
   findings: CardFinding[];
   /** Report-level numbers a stat strip can carry, by canonical concept. */
   metrics: Partial<Record<MetricKey, string>>;
   /** The report's own details, for fill-in slots on a letterhead. */
   details: Partial<Record<DetailKey, string>>;
+  /** The category tags this report's queries carry, which is where a draft
+   *  in-scope list comes from. What was EXCLUDED is never in here: that was
+   *  decided before the queries ran. */
+  categories: string[];
+  /** The exception rows behind the findings — the query output itself, which
+   *  is what an evidence annexure prints. */
+  evidence: { title: string; columns: string[]; rows: string[][] }[];
 }
 
 export type MetricKey =
@@ -61,8 +79,11 @@ const DETAIL_WORDS: { key: DetailKey; re: RegExp }[] = [
 /** What a block resolved to, and whether the report had anything for it. */
 export type BoundRows = { kind: 'rows'; rows: CardFinding[] };
 export type BoundCells = { kind: 'cells'; cells: { label: string; value?: string }[] };
+/** A grid straight out of the query: an evidence annexure's own records, or the
+ *  in-scope list. Their columns, our rows. */
+export type BoundGrid = { kind: 'grid'; columns: string[]; rows: string[][] };
 export type BoundNone = { kind: 'none' };
-export type Bound = (BoundRows | BoundCells | BoundNone) & {
+export type Bound = (BoundRows | BoundCells | BoundGrid | BoundNone) & {
   /** True when the source produced nothing for this block's filter. */
   empty: boolean;
   /** Said plainly, naming the filter that came up empty. */
@@ -82,9 +103,17 @@ function sourceOf(block: TemplateBlock): DataBinding | 'details' {
 
 /**
  * Read one block against this report: source, then filter, then shape.
+ *
+ * THE FILLING STEP CAN ONLY FILL WHAT EXTRACTION KEPT AND BOUND. A part left
+ * out at the check screen can never be filled here, however much data exists
+ * for it, and neither can a part the client settled as fixed wording, as a
+ * person's to write, or as one with nothing connected. So the answer to "why is
+ * this not filled by the query?" is always the same: look at what was kept and
+ * bound, never at the data.
  */
 export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
   if (!facts) return { kind: 'none', empty: true, emptyMessage: '' };
+  if (block.fill !== 'query') return { kind: 'none', empty: true, emptyMessage: '' };
   const source = sourceOf(block);
   const severity = block.severity?.toLowerCase();
 
@@ -117,6 +146,37 @@ export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
     };
   }
 
+  // The in-scope list: a draft, built from the category tags the report's
+  // queries carry. Never a claim about what was left out — that decision was
+  // taken before the queries ran, so the client writes it.
+  if (source === 'scope') {
+    const rows = facts.categories.map(c => [c]);
+    return {
+      kind: 'grid',
+      columns: block.columns?.length ? block.columns : ['In scope'],
+      rows,
+      empty: rows.length === 0,
+      emptyMessage: 'This fills with the areas your queries cover once the report has some. Anything deliberately left out is yours to add.',
+    };
+  }
+
+  // An evidence annexure: the exception rows behind ONE finding, printed in
+  // their annexure layout. Amounts in here are our own query output.
+  //
+  // Which finding's rows? The annexure's own place in the report. Annexure 1
+  // belongs to the first finding, annexure 2 to the second — printing the first
+  // finding's records under every annexure is the same document three times.
+  if (source === 'evidence') {
+    const mine = facts.evidence[block.evidenceIndex ?? 0];
+    return {
+      kind: 'grid',
+      columns: mine?.columns ?? block.columns ?? [],
+      rows: mine?.rows ?? [],
+      empty: !mine || mine.rows.length === 0,
+      emptyMessage: 'This fills with the records behind the finding it belongs to, straight from the query that raised it.',
+    };
+  }
+
   if (source === 'details') {
     const labels = block.slotLabels ?? [];
     const cells = labels.map(label => {
@@ -135,19 +195,69 @@ export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
   return { kind: 'none', empty: false, emptyMessage: '' };
 }
 
-/** Flatten the report's queries into the pool every bound block reads. */
+/** The finding's headline: the query's own title, cut at its first break. A
+ *  card carries a headline and a narrative, and the whole descriptor sentence
+ *  in the headline slot reads as a paragraph in bold. */
+function headline(title: string | undefined, fallback: string): string {
+  const raw = (title ?? '').trim();
+  if (!raw) return fallback;
+  const cut = raw.split(/(?<=[.?!])\s|\s[—–]\s|,\s(?=[a-z])/)[0].trim().replace(/[.:;,]$/, '');
+  return cut.length >= 12 ? cut.slice(0, 110) : raw.slice(0, 110);
+}
+
+/**
+ * Read the report's queries into the pool every bound block draws from.
+ *
+ * ONE QUERY CARD IS ONE FINDING. Its rating, its written finding and its
+ * recommendation are the finding; the flagged rows under it are its exceptions,
+ * which give it its own counts and its evidence annexure. Where an auditor cuts
+ * finer than that — promoting a group of exceptions into its own observation
+ * through Manage Exceptions — the split arrives here as another query card, so
+ * the stamp fires once per observation however they cut them.
+ */
 export function buildReportFacts(
-  queries: { severity: string; findings: string[]; observations: string[] }[],
+  queries: {
+    severity: string; findings: string[]; observations: string[];
+    /** The query's category tag, which is what a draft in-scope list is made of. */
+    risk?: string;
+    title?: string;
+    /** The query's own KPI tiles: this finding's exception counts. */
+    kpis?: { label: string; value: string }[];
+    /** A bulk run's own output table: the exception rows themselves. */
+    outputTable?: { columns: string[]; rows: (string | number)[][] };
+  }[],
   report: { name?: string; generatedAt?: string; reportPeriod?: string; id?: string | number; generatedBy?: string },
   stats?: { label: string; value: string }[],
 ): ReportFacts {
-  const findings: CardFinding[] = queries.flatMap(q =>
-    (q.findings ?? []).map((title, i) => ({
-      title,
-      severity: q.severity,
-      recommendation: q.observations?.[i] ?? q.observations?.[0],
-    })),
-  );
+  /** One query's own exception counts, read off its tiles by meaning. */
+  const countsOf = (kpis?: { label: string; value: string }[]) => {
+    if (!kpis?.length) return undefined;
+    const pick = (re: RegExp) => kpis.find(k => re.test(k.label))?.value;
+    const counts = {
+      total: pick(/\b(total|flagged|found|changes|records?|exceptions?|rows?)\b/i),
+      // A state, never a category: "unauthorised" says what kind of exception
+      // it is, not whether anyone has dealt with it.
+      open: pick(/\b(open|pending|outstanding|unresolved)\b/i),
+      closed: pick(/\b(closed|resolved|verified|reviewed|remediated)\b/i),
+    };
+    return counts.total || counts.open || counts.closed ? counts : undefined;
+  };
+
+  const findings: CardFinding[] = queries.map((q, i) => ({
+    title: headline(q.title, q.findings?.[0] ?? `Finding ${i + 1}`),
+    severity: q.severity,
+    // The written finding, as the query card states it.
+    narrative: (q.findings ?? []).join(' '),
+    recommendation: (q.observations ?? []).join(' ') || undefined,
+    counts: countsOf(q.kpis),
+    evidence: q.outputTable
+      ? {
+        title: q.title ?? '',
+        columns: q.outputTable.columns,
+        rows: q.outputTable.rows.map(r => r.map(cell => String(cell))),
+      }
+      : undefined,
+  }));
 
   const countOf = (word: string) =>
     String(findings.filter(f => (f.severity ?? '').toLowerCase() === word).length);
@@ -167,10 +277,30 @@ export function buildReportFacts(
     const key = METRIC_WORDS.find(m => m.re.test(tile.label))?.key;
     if (key && metrics[key] === undefined) metrics[key] = tile.value;
   }
+  // A report-level count box counts exceptions across every finding. The tiles
+  // above answer first when the report shows one; otherwise the findings' own
+  // counts add up to the same number.
+  const sum = (pick: (c: NonNullable<CardFinding['counts']>) => string | undefined) => {
+    const values = findings.flatMap(f => {
+      const raw = f.counts ? pick(f.counts) : undefined;
+      const n = raw ? Number(raw.replace(/[^\d.-]/g, '')) : NaN;
+      return Number.isFinite(n) ? [n] : [];
+    });
+    return values.length ? String(values.reduce((a, b) => a + b, 0)) : undefined;
+  };
+  metrics.exceptions ??= sum(c => c.total);
+  metrics.open ??= sum(c => c.open);
+  metrics.closed ??= sum(c => c.closed);
 
   return {
     findings,
     metrics,
+    // The categories the queries carry, deduped and in the order they appear —
+    // the draft in-scope list.
+    categories: [...new Set(queries.map(q => q.risk).filter((r): r is string => !!r && r.trim().length > 0))],
+    // Query output, kept as it came, IN FINDING ORDER: annexure n prints the
+    // nth finding's rows, so the two lists have to be the same list.
+    evidence: findings.flatMap(f => (f.evidence ? [f.evidence] : [])),
     details: {
       title: report.name,
       date: report.generatedAt,

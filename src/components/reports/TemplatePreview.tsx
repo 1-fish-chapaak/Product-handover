@@ -10,7 +10,7 @@
 import type { CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Edit3, Trash2, FileText } from 'lucide-react';
-import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportSignoffBlock, ReportClosingBlock } from './ReportDocumentChrome';
 import { renderSectionShape, sectionTypeLabel } from './templateSectionShape';
 import {
   ICON_MAP, CATEGORY_COLORS, sectionBlurb, reportGradient, reportAccent,
@@ -110,6 +110,7 @@ export default function TemplatePreview({
             <ReportBrandBanner
               title={template.name}
               titleClassName="text-[1.5rem]"
+              logo={template.logoDataUrl}
               className="rounded-t-lg"
               gradient={gradient}
               headerText={template.headerText}
@@ -166,6 +167,13 @@ export default function TemplatePreview({
             {template.signoffEnabled && signatories.length > 0 && (
               <div className="border-x border-canvas-border bg-white px-9 pt-3 pb-8">
                 <ReportSignoffBlock signatories={signatories} />
+              </div>
+            )}
+
+            {/* Closing page — printed word for word at the end of every report. */}
+            {template.closingEnabled && (template.closingText?.length ?? 0) > 0 && (
+              <div className="border-x border-canvas-border bg-white px-9">
+                <ReportClosingBlock lines={template.closingText!} />
               </div>
             )}
 
