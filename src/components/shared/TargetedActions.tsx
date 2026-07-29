@@ -17,7 +17,7 @@
 
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, ShieldCheck,
+  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, ShieldCheck, Zap,
 } from 'lucide-react';
 import {
   LAYER_META, REC_INTENT_META, REC_PRIORITY_META, REC_PRIORITY_RANK,
@@ -275,10 +275,14 @@ export function InsightSummaryStrip({
 // the reader never loses their place in the list.
 
 export function InsightDrawer({
-  insight, onClose,
+  insight, onClose, onCreateControl, onCreateWorkflow,
 }: {
   insight: LayeredInsight | null;
   onClose: () => void;
+  /** Follow through on the insight: open the host surface's Add-control flow. */
+  onCreateControl?: () => void;
+  /** Follow through on the insight: open the workflow builder. */
+  onCreateWorkflow?: () => void;
 }) {
   return (
     <AnimatePresence>
@@ -309,6 +313,28 @@ export function InsightDrawer({
             <div className="flex-1 overflow-y-auto p-4">
               <LayeredInsightCard insight={insight} />
             </div>
+            {(onCreateControl || onCreateWorkflow) && (
+              <div className="shrink-0 flex items-center gap-2 px-5 py-3.5 border-t border-canvas-border bg-canvas-elevated">
+                {onCreateControl && (
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); onCreateControl(); }}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                  >
+                    <Plus size={13} aria-hidden="true" /> Create control
+                  </button>
+                )}
+                {onCreateWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); onCreateWorkflow(); }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-3 h-9 text-[12px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                  >
+                    <Zap size={13} aria-hidden="true" /> Create workflow
+                  </button>
+                )}
+              </div>
+            )}
           </motion.aside>
         </div>
       )}

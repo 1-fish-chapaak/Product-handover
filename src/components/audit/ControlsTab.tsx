@@ -898,7 +898,12 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       />
 
       {/* Full-card slide-over behind every "View full insight". */}
-      <InsightDrawer insight={insightDetail} onClose={() => setInsightDetail(null)} />
+      <InsightDrawer
+        insight={insightDetail}
+        onClose={() => setInsightDetail(null)}
+        onCreateControl={can('ctrl_create') ? () => setAddControlOpen(true) : undefined}
+        onCreateWorkflow={createWorkflow}
+      />
     </div>
   );
 }
