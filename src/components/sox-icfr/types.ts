@@ -425,7 +425,9 @@ export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: Signoff
 
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
-  periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
+  // No Interim / Year-end round here — the period comes from the newest record
+  // in `audits` below, set when an audit is created on the Audit logs tab.
+  periodStart: string; periodEnd: string;
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
   live?: boolean;
   wentLiveAt?: string;

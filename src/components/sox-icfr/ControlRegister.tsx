@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
+  Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, StickyNote,
 } from 'lucide-react';
 import { HeaderFilter } from '../shared/FilterSelect';
 import { useIcfr } from './store';
@@ -102,14 +102,13 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, meOwner, openControl, requestDesignDocs, rollForward, registerPreset, clearRegisterPreset } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
   const { addToast } = useToast();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   // preview-before-download for the consolidated working paper
   const [wpPreview, setWpPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
-  const [rollConfirm, setRollConfirm] = useState(false);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -219,9 +218,6 @@ export default function ControlRegister() {
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
-          {/* Roll forward to year-end — parked. The confirm modal and rollForward()
-              wiring below stay intact; restore this trigger to bring it back. */}
-          {/* {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setRollConfirm(true)} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>} */}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -358,26 +354,6 @@ export default function ControlRegister() {
       {/* the paper follows the filters — only the visible controls' data goes in */}
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
 
-      {/* roll-forward confirm — the move is one-way, so it never fires on a bare click */}
-      {rollConfirm && (
-        <div className="modal-backdrop" onClick={() => setRollConfirm(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Roll forward to year-end?</h2>
-                <button onClick={() => setRollConfirm(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
-              </div>
-            </div>
-            <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">This moves the engagement to the Year-end round. Design conclusions carry forward; every manual and IT-dependent control's operating tests reset to Not tested (automated controls keep their results). This is one-way — there is no way back to the Interim round.</p>
-              <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setRollConfirm(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={() => { rollForward(); setRollConfirm(false); addToast({ type: 'success', title: 'Rolled forward', message: 'Year-end round — operating tests reset for manual controls.' }); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Roll forward</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

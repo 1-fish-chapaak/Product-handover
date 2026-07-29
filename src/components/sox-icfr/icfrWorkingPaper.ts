@@ -21,6 +21,23 @@ const tick = (r: TestResult | 'Effective' | 'Ineffective' | undefined): string =
   r === 'Pass' || r === 'Effective' ? 'P' : r === 'Fail' || r === 'Ineffective' ? 'r' : '—';
 const letter = (i: number): string => String.fromCharCode(65 + i);
 
+/** The Period line both papers print.
+ *
+ *  The engagement no longer carries an Interim / Year-end round of its own —
+ *  that field and the togglePeriod / rollForward actions that moved it were
+ *  removed. The period now comes from the newest audit created on the Audit
+ *  logs tab, which is where a period is actually chosen.
+ *
+ *  Until an audit exists there is nothing to read, so this falls back to the
+ *  engagement's own start/end dates: a paper exported early still states the
+ *  span it covers instead of going blank. */
+function periodLine(eng: IcfrEngagement): string {
+  const latest = eng.audits[0];   // createAudit prepends, so [0] is newest
+  return latest
+    ? `${latest.periodSpan} · ${latest.period}`
+    : `${eng.periodStart} – ${eng.periodEnd}`;
+}
+
 /** Per-paper sign-off lines — this control's own preparer / countersign, not the engagement's. */
 export function controlSignoffRows(eng: IcfrEngagement, c: Control): [string, string][] {
   const so = c.wpSignoff;
@@ -55,7 +72,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
       ['Assertions', c.assertions.join(', ')],
       ['Precision', c.precision],
-      ['Period', `${eng.periodStart} – ${eng.periodEnd} · ${eng.period} round`],
+      ['Period', periodLine(eng)],
     ],
   });
 
@@ -219,7 +236,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
           ['Entity', eng.entity],
           ['Engagement', `${eng.name} (${eng.code})`],
           ['Framework', eng.framework],
-          ['Period', `${eng.periodStart} – ${eng.periodEnd} · ${eng.period} round`],
+          ['Period', periodLine(eng)],
           ['Overall materiality', formatINR(eng.materiality)],
           ['Performance materiality', formatINR(eng.performanceMateriality)],
           ['Prepared by', eng.signoff.preparer ? `${eng.signoff.preparer.by} — signed off ${eng.signoff.preparer.at}` : eng.preparer],
