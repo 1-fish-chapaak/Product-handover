@@ -4,6 +4,8 @@ import { ArrowRight, Upload, FileText, FileSpreadsheet, X, Plus } from 'lucide-r
 import { Button } from '../../../shared/Button';
 import DatePicker from '../../../shared/DatePicker';
 import { WizardFooter } from '../footerSlot';
+import EscalationMatrixCard from '../components/EscalationMatrixCard';
+import { type EscalationMatrixConfig, cloneDefaultMatrix } from '../escalationMatrix';
 import type { ReportMeta } from '../types';
 
 // Match Step 2a's entrance + tokens so the two upload screens read as one family.
@@ -102,7 +104,7 @@ function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, file
  *  the mandatory report details that flow into the ATR's top section. Single
  *  compact column (no scroll), sharing Screen 2A's card + CTA language. */
 export default function Step2bReportUpload({ onExtract }: {
-  onExtract: (report: File, annexures: File[], meta: Partial<ReportMeta>) => void;
+  onExtract: (report: File, annexures: File[], meta: Partial<ReportMeta>, escalation: EscalationMatrixConfig) => void;
 }) {
   const [report, setReport] = useState<File[]>([]);
   const [annexures, setAnnexures] = useState<File[]>([]);
@@ -119,6 +121,11 @@ export default function Step2bReportUpload({ onExtract }: {
   const [preparedBy, setPreparedBy] = useState('');
   const [generatedOn] = useState(() => new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
 
+  // Escalation matrix for this report — seeded from the standard preset, fully
+  // editable via the card's Configure modal, and passed into the session so it
+  // governs every open exception's mailer cadence downstream.
+  const [escalation, setEscalation] = useState<EscalationMatrixConfig>(cloneDefaultMatrix);
+
   const detailsComplete = !!(auditTitle.trim() && auditEntity.trim() && periodStart && periodEnd && preparedBy.trim());
   const ready = report.length > 0 && detailsComplete;
 
@@ -130,7 +137,7 @@ export default function Step2bReportUpload({ onExtract }: {
       auditPeriod: `${fmtDate(periodStart)} – ${fmtDate(periodEnd)}`,
       preparedBy: preparedBy.trim(),
       generatedOn,
-    });
+    }, escalation);
   };
 
   return (
@@ -204,6 +211,17 @@ export default function Step2bReportUpload({ onExtract }: {
           delay={0.2}
         />
       </div>
+
+      {/* Escalation matrix — the report's follow-up cadence, set up here at the
+          initial state alongside the required details. Preset + fully editable. */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: EASE, delay: 0.24 }}
+        className="mt-4"
+      >
+        <EscalationMatrixCard config={escalation} onChange={setEscalation} />
+      </motion.div>
 
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
