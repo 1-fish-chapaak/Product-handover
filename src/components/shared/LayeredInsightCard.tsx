@@ -346,6 +346,7 @@ export default function LayeredInsightCard({
               <EvidenceDisclosure
                 evidence={insight.evidence}
                 label={evidenceLabel ?? EVIDENCE_LABEL[insight.layer]}
+                note={insight.evidenceNote}
                 checkMore={insight.checkMore}
                 onCheckMore={onCheckMore}
                 evidenceExtra={evidenceExtra}

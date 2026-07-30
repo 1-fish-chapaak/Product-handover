@@ -96,10 +96,14 @@ export interface EvidenceRow { ref: string; label: string; detail: string }
 // table (no severity paint — the tone story is already told above the fold),
 // with an optional deeper drill-down beneath it.
 export function EvidenceDisclosure({
-  evidence, label, evidenceExtra, defaultOpen = false, className = 'mt-3',
+  evidence, label, note, evidenceExtra, defaultOpen = false, className = 'mt-3',
 }: {
   evidence: EvidenceRow[];
   label: string;
+  /** The scope caveat behind the evidence — how many runs it rests on and what
+   *  it therefore may NOT claim. Rendered outside the disclosure, always
+   *  visible: a caveat the reader has to expand to find isn't a caveat. */
+  note?: string;
   /** Accepted for API compatibility — the inline check-more chips were removed
    *  by design, so these are no longer rendered. */
   checkMore?: CheckMoreOption[];
@@ -125,6 +129,7 @@ export function EvidenceDisclosure({
           <ScrollText size={12} aria-hidden="true" /> {label} · {evidence.length}
         </button>
       </div>
+      {note && <p className="mt-1 text-[0.65625rem] text-ink-400 leading-snug">{note}</p>}
       <AnimatePresence initial={false}>
         {evidence.length > 0 && show && (
           <motion.div

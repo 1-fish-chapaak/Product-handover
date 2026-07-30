@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  Trash2, Zap,
+  Trash2, Zap, RefreshCw,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -29,8 +29,10 @@ import PlanFlowDiagram from '../shared/PlanFlowDiagram';
 import {
   DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
   buildChatPlanSteps, buildChatPlanRiskItems, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
-  CHAT_RISK_TABLE_COLUMNS, buildChatPlanRiskRows, CHAT_RISK_SUMMARY,
+  CHAT_RISK_TABLE_COLUMNS, buildChatPlanRiskRows, CHAT_RISK_SUMMARY, buildChatOutputInsight,
 } from '../../data/chatPlan';
+import InsightGenerator from '../shared/InsightGenerator';
+import LayeredInsightCard from '../shared/LayeredInsightCard';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -6563,6 +6565,68 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             />
                           )}
                         />
+
+                        {/* What these exceptions mean — ONE insight, scoped to
+                            this answer's exception table. Same gate, pipeline
+                            and card as the workflow-output insight, so the
+                            insight language is identical across surfaces; what
+                            differs is reach. A chat answer has no stored run
+                            history and is not a workflow, so this card carries
+                            no trajectory band and no cross-workflow
+                            correlation — its evidence note says so outright
+                            rather than letting the absence read as "flat", and
+                            the advisory recommendation points at Save as
+                            workflow, which is how a second run is earned.
+                            Hidden while the answer is still streaming, like
+                            the action bar below it. */}
+                        <div className={streamingActive && msg.id === auditRunMsgIdRef.current ? 'hidden' : ''}>
+                          <InsightGenerator
+                            layer="control"
+                            // The materiality rule is part of the subject: the
+                            // card quotes how many findings clear it, so a run
+                            // rated by a different rule must generate its own
+                            // insight rather than restore a cached one that
+                            // contradicts the table's Risk column.
+                            subjectId={`chat-output-risky-payments:${severityThreshold}`}
+                            subjectLabel="Risky payments — this answer"
+                            labelOverride={`these ${CHAT_RISK_SUMMARY.count} exceptions`}
+                            compact
+                            scanOverride={`Reads the ${CHAT_RISK_SUMMARY.count} flagged payments in this answer`}
+                            stepsOverride={[
+                              'Reading the flagged rows in this answer',
+                              'Correlating them by control and vendor',
+                              'Pricing the exposure against your High rule',
+                              'Writing the explanation',
+                            ]}
+                            buildInsight={() => buildChatOutputInsight(severityThreshold)}
+                            generatedView={(insight, regenerate) => (
+                              <div className="space-y-2">
+                                <LayeredInsightCard
+                                  insight={insight}
+                                  headerLabel="this answer"
+                                  evidenceLabel="Evidence · flagged payments"
+                                  // Actions stay in this thread: a recommendation
+                                  // loads into the composer to edit and send,
+                                  // matching the depth follow-up track. Opening a
+                                  // new tab from inside a chat would be a step back.
+                                  onRec={loadFollowUpIntoComposer}
+                                />
+                                <div className="flex items-center gap-2 px-1">
+                                  <span className="text-[0.65625rem] text-ink-400 flex items-center gap-1">
+                                    <Check size={11} className="text-compliant" /> Generated just now · cached for this session
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={regenerate}
+                                    className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                                  >
+                                    <RefreshCw size={11} /> Regenerate
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          />
+                        </div>
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
                             All buttons share the same outline-default / pressed-linked
