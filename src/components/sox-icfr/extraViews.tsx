@@ -500,44 +500,16 @@ const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remedia
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, role, me, meOwner, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence } = useIcfr();
-  const { addToast } = useToast();
+  const { eng, role, meOwner } = useIcfr();
   // Classic engagements still call these exceptions; the rework renamed them.
   const W = defWord(eng.id);
   const M = eng.materiality; const rules = eng.rules;
-  // closing an exception is the terminal four-eyes act — it commits behind an attest confirm
-  const [closingId, setClosingId] = useState<string | null>(null);
-  // …and a mistaken close comes back only with a recorded reason — same weight, same modal
-  const [reopeningId, setReopeningId] = useState<string | null>(null);
-  const [reopenReason, setReopenReason] = useState('');
-  /* Every exception starts COLLAPSED (user ask). Expanded, one of these cards is
-     most of a screen — severity inputs, priced impact, MW indicators, the
-     remediation plan and the lifecycle actions — so a list of them buried the
-     one you came to find. Collapsed, the header still carries everything needed
-     to triage: which finding, on which control, how bad, and where it has got to.
-     A Set rather than a single id: this is not an accordion, because comparing
-     two findings side by side is a real thing an auditor does, and snapping one
-     shut to open another would take that away. */
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    if (!next.delete(id)) next.add(id);
-    return next;
-  });
-  // three lines, three lanes: the owner remediates, the auditor evaluates &
-  // retests, the reviewer closes — each hat only sees its own actions.
-  const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
   // a countersigned engagement is a sealed record — the store already drops
   // every write, so the page must say so and put its pens away
   const locked = isEngagementLocked(eng);
   // person-lane: the owner sees only exceptions riding their own controls
   const defs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
-  // aggregation groups on offer: every group already in use plus each process name
-  const groupOptions = Array.from(new Set([
-    ...eng.deficiencies.map(d => d.aggregationGroup).filter((g): g is string => !!g),
-    ...eng.controls.map(c => c.process),
-  ])).sort();
 
   return (
     <div className="space-y-4">
@@ -601,278 +573,330 @@ export function DeficienciesView() {
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? `No ${W.many} on your controls.` : `No ${W.many} — all tested controls effective.`}</div>
       ) : (
         <div className="space-y-3">
-          {defs.map(d => {
-            const ct = isClearlyTrivial(d.magnitude, rules);
-            const assess = assessSeverity(d, eng);
-            const sev = assess.final;
-            const material = d.magnitude >= M;
-            const stageIdx = STAGES.indexOf(d.status);
-            const open = expanded.has(d.id);
-            return (
-              <div key={d.id} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-                {/* The whole header strip is the toggle — a card this tall needs a
-                    target bigger than a chevron. A div rather than a button because
-                    the control link inside it is itself a button, and a button
-                    inside a button is invalid; same role/tabIndex/onKeyDown pattern
-                    the audit register rows use. */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={open}
-                  aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
-                  onClick={() => toggle(d.id)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(d.id); } }}
-                  className="cursor-pointer"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
-                      {/* Down to open, up to close. Deliberately NOT a rotating
-                          right-chevron: '›' is the app's drill-in mark (the handoff
-                          rows above use it to leave the page), and this opens in
-                          place. The pair also states which way the card is about to
-                          move, which one rotating glyph only implies. */}
-                      {open
-                        ? <ChevronUp size={15} className="shrink-0 text-brand-700" />
-                        : <ChevronDown size={15} className="shrink-0 text-ink-400" />}
-                      <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
-                      {/* stopPropagation: opening the control is a different journey
-                          from opening the card, and the two must not fire together */}
-                      <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-                      <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
-                      {/* the gap taxonomy — a design gap needs a redesign, a testing
-                          gap needs discipline, so the label is what the fix follows */}
-                      {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
-                      {ct && <Pill tone="draft">Clearly trivial</Pill>}
-                      {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
-                    </div>
-                    <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
-                  </div>
-                  {/* The finding itself stays on the collapsed row — clamped to one
-                      line. Without it the row reads as an id and some pills, and you
-                      would have to open every card to find the one you wanted. */}
-                  <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
-                </div>
-
-                {open && (<>
-                <p className="text-[12px] text-ink-500 mt-1"><span className="font-semibold">Root cause:</span> {d.rootCause}</p>
-
-                {/* lifecycle stepper */}
-                <div className="flex items-center gap-1.5 my-3">
-                  {STAGES.map((s, i) => (
-                    <div key={s} className="flex items-center gap-1.5 flex-1 last:flex-none">
-                      <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold whitespace-nowrap', i < stageIdx ? 'bg-compliant-50 text-compliant-700' : i === stageIdx ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
-                        {i < stageIdx ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{i + 1}</span>}{s}
-                      </span>
-                      {i < STAGES.length - 1 && <span className={cn('h-px flex-1', i < stageIdx ? 'bg-compliant-300' : 'bg-paper-200')} />}
-                    </div>
-                  ))}
-                </div>
-
-                {/* severity + remediation — the owner's card leads with THEIR work (visual reverse) */}
-                <div className={cn('mt-3 flex flex-col gap-3', isOwner && 'flex-col-reverse')}>
-                {/* severity — the auditor evaluates; owner and reviewer read the
-                    grade. A sealed engagement retires the auditor's pens too. */}
-                {isAuditor && !locked ? (
-                  <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
-                    <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
-                    {/* what kind of gap it is — defaulted when the exception was
-                        raised, re-typed here when the walkthrough says otherwise */}
-                    <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                      <span className="text-ink-500 w-[120px]">Gap type</span>
-                      {GAP_TYPES.map(g => (
-                        <button key={g} title={GAP_HINT[g]} onClick={() => updateDeficiency(d.id, { gapType: g })}
-                          className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapType === g ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_LABEL[g]}</button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                      <span className="text-ink-500 w-[120px]">Likelihood</span>
-                      {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
-                        <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2 text-[12px]">
-                      <span className="text-ink-500 w-[120px]">Exposure ₹</span>
-                      <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-                      <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
-                    </div>
-                    <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
-                    {/* …and what the gap is actually worth, split three ways. This
-                        is money already on the table, not the exposure above: it is
-                        what makes a finding something the CFO acts on. */}
-                    <div className="rounded-md border border-canvas-border bg-paper-50/40 p-2.5 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Priced impact — what the gap is worth</span>
-                        {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-700 tabular-nums">total {fmt(exposureTotal(d.exposure))}</span>}
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).map(k => (
-                          <label key={k} className="block min-w-0">
-                            <span className="block text-[10.5px] text-ink-500 mb-1">{EXPOSURE_LABEL[k]}</span>
-                            <input type="number" value={d.exposure?.[k] ?? 0}
-                              onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, [k]: Number(e.target.value) || 0 } })}
-                              className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-                          </label>
-                        ))}
-                      </div>
-                      <input value={d.exposure?.basis ?? ''}
-                        onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, basis: e.target.value } })}
-                        placeholder="How the numbers were arrived at — the arithmetic behind the claim"
-                        className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-                    </div>
-                    <div className="flex items-start gap-2 text-[12px] flex-wrap">
-                      <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
-                      {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} title={ind} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
-                    </div>
-                    <div className="flex items-center gap-2 text-[12px] flex-wrap">
-                      <span className="text-ink-500 w-[120px]">Compensating control</span>
-                      <FormSelect value={d.compensatingControlId ?? ''} onChange={v => updateDeficiency(d.id, { compensatingControlId: v || undefined })}
-                        options={[{ value: '', label: 'None' }, ...eng.controls.filter(c => c.id !== d.controlId).map(c => { const short = c.description.length > 42 ? c.description.slice(0, 40).trimEnd() + '…' : c.description; return { value: c.id, label: `${c.id} — ${short}` }; })]}
-                        className="h-8 max-w-[300px] px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
-                        menuCls="w-[340px]" ariaLabel="Compensating control" />
-                      {d.compensatingControlId && (
-                        assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
-                        : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
-                        : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
-                        : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-[12px] flex-wrap">
-                      <span className="text-ink-500 w-[120px]">Aggregation group</span>
-                      <FormSelect value={d.aggregationGroup ?? ''} onChange={v => updateDeficiency(d.id, { aggregationGroup: v || undefined })}
-                        options={[{ value: '', label: 'Ungrouped' }, ...groupOptions]}
-                        className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
-                        ariaLabel="Aggregation group" />
-                      <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
-                    </div>
-                    <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
-                      onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
-                      onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
-                    <SeverityConclusion d={d} assess={assess} M={M} showMateriality />
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
-                    <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the remediation below' : ''}</div>
-                    <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
-                      <span className="text-ink-700"><span className="text-ink-400">Likelihood</span> · {d.likelihood}</span>
-                      <span className="text-ink-700"><span className="text-ink-400">Exposure</span> · {fmt(d.magnitude)}{ct ? ' (clearly trivial)' : ''}</span>
-                      <span className="text-ink-700"><span className="text-ink-400">MW indicators</span> · {d.mwIndicators.length ? `${d.mwIndicators.length} in force` : 'None'}</span>
-                      <span className="text-ink-700"><span className="text-ink-400">Compensating control</span> · {d.compensatingControlId ?? 'None'}</span>
-                      <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
-                      <span className="text-ink-700"><span className="text-ink-400">Gap type</span> · {d.gapType ? GAP_LABEL[d.gapType] : 'Not typed'}</span>
-                      {exposureTotal(d.exposure) > 0 && (
-                        <span className="text-ink-700 sm:col-span-2">
-                          <span className="text-ink-400">Priced impact</span> · {fmt(exposureTotal(d.exposure))}
-                          <span className="text-ink-400"> ({(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).filter(k => (d.exposure as Exposure)[k] > 0).map(k => `${EXPOSURE_LABEL[k].toLowerCase()} ${fmt((d.exposure as Exposure)[k])}`).join(' · ')})</span>
-                        </span>
-                      )}
-                      {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
-                    </div>
-                    {/* the owner sees their classification, never the engagement's thresholds */}
-                    <SeverityConclusion d={d} assess={assess} M={M} showMateriality={!isOwner} />
-                  </div>
-                )}
-
-                {/* remediation — the owner's plan; editable in their hat until submitted */}
-                <RemediationPlan d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
-                </div>
-
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest.
-                      A sealed engagement shows the standing stage, never a pen. */}
-                  {!locked && d.status === 'Identified' && (
-                    role !== 'reviewer'
-                      ? <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>
-                      : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> Awaiting remediation — {d.remediation.owner}</span>
-                  )}
-                  {!locked && d.status === 'Remediation' && (
-                    isOwner
-                      ? (() => {
-                          const hasEvidence = (d.remediation.evidence?.length ?? 0) > 0;
-                          return (
-                            <button onClick={() => setExceptionStatus(d.id, 'Retest')} disabled={!hasEvidence}
-                              title={hasEvidence ? 'Marks your fix as done and hands it to the auditor' : 'Attach evidence of the fix first — "done" needs proof'}
-                              className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
-                          );
-                        })()
-                      : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
-                  )}
-                  {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
-                  {!locked && d.status === 'Retest' && (
-                    isAuditor ? <>
-                      <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
-                      <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
-                    </> : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><CheckCircle2 size={14} className="text-ink-400" /> With the auditor for retest{isOwner ? ' — you never test your own fix' : ''}</span>
-                  )}
-                  {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
-                  {!locked && d.status === 'Awaiting reviewer' && (
-                    role !== 'reviewer' ? (
-                      <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
-                    ) : d.retest && d.retest.by === me ? (
-                      <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>
-                    ) : (
-                      <button onClick={() => setClosingId(d.id)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
-                    )
-                  )}
-                  {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
-                  {/* the way back in: audit-side only, never one-click — the reason is the record */}
-                  {!locked && !isOwner && d.status === 'Closed' && (
-                    <button onClick={() => { setReopeningId(d.id); setReopenReason(''); }}
-                      className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
-                  )}
-                </div>
-                </>)}
-              </div>
-            );
-          })}
+          {defs.map(d => <DeficiencyCard key={d.id} d={d} />)}
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* attest confirm — closing is the terminal four-eyes act, so it never commits on a bare click */}
-      {closingId && (
-        <div className="modal-backdrop" onClick={() => setClosingId(null)}>
+/** ONE deficiency, as a card that opens in place.
+ *
+ *  Lives here rather than inside DeficienciesView because the control's own paper
+ *  shows it too: a control that concluded ineffective raises a deficiency, and the
+ *  auditor standing on that paper should be able to grade it and plan the fix
+ *  without leaving for another tab and finding their place again. Same card, same
+ *  writes, same four-eyes rules, wherever it is opened from.
+ *
+ *  In a LIST it starts collapsed (user ask). Expanded, one of these is most of a
+ *  screen — severity inputs, priced impact, MW indicators, the remediation plan
+ *  and the lifecycle actions — so a stack of them buried the one you came to find.
+ *  Collapsed, the header still carries everything needed to triage: which finding,
+ *  on which control, how bad, and where it has got to. Opened from a control's own
+ *  paper there is only ever one, and you asked for it, so it comes up open.
+ *
+ *  Each card owns its open state and both confirm modals — deliberately not an
+ *  accordion, because comparing two findings side by side is a real thing an
+ *  auditor does, and snapping one shut to open another would take that away. */
+export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean }) {
+  const { eng, role, me, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence } = useIcfr();
+  const { addToast } = useToast();
+  const W = defWord(eng.id);
+  const M = eng.materiality; const rules = eng.rules;
+  const [open, setOpen] = useState(defaultOpen);
+  // closing an exception is the terminal four-eyes act — it commits behind an attest
+  // confirm; a mistaken close comes back only with a recorded reason, same weight.
+  const [closing, setClosing] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
+  const isAuditor = role === 'auditor';
+  const isOwner = role === 'risk-owner';
+  // a countersigned engagement is a sealed record — the store already drops
+  // every write, so the card must say so and put its pens away
+  const locked = isEngagementLocked(eng);
+  // aggregation groups on offer: every group already in use plus each process name
+  const groupOptions = useMemo(() => Array.from(new Set([
+    ...eng.deficiencies.map(x => x.aggregationGroup).filter((g): g is string => !!g),
+    ...eng.controls.map(c => c.process),
+  ])).sort(), [eng.deficiencies, eng.controls]);
+
+  const ct = isClearlyTrivial(d.magnitude, rules);
+  const assess = assessSeverity(d, eng);
+  const sev = assess.final;
+  const material = d.magnitude >= M;
+  const stageIdx = STAGES.indexOf(d.status);
+
+  return (
+    <>
+      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+        {/* The whole header strip is the toggle — a card this tall needs a
+            target bigger than a chevron. A div rather than a button because
+            the control link inside it is itself a button, and a button
+            inside a button is invalid; same role/tabIndex/onKeyDown pattern
+            the audit register rows use. */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
+          onClick={() => setOpen(o => !o)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } }}
+          className="cursor-pointer"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
+              {/* Down to open, up to close. Deliberately NOT a rotating
+                  right-chevron: '›' is the app's drill-in mark (the handoff
+                  rows above use it to leave the page), and this opens in
+                  place. The pair also states which way the card is about to
+                  move, which one rotating glyph only implies. */}
+              {open
+                ? <ChevronUp size={15} className="shrink-0 text-brand-700" />
+                : <ChevronDown size={15} className="shrink-0 text-ink-400" />}
+              <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
+              {/* stopPropagation: opening the control is a different journey
+                  from opening the card, and the two must not fire together */}
+              {/* …and on the control's own paper that journey is a circle, so the
+                  id stays as a label there rather than a link back to here */}
+              {showControlLink
+                ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
+                : <span className="font-mono text-[12px] text-ink-500">{d.controlId}</span>}
+              <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
+              {/* the gap taxonomy — a design gap needs a redesign, a testing
+                  gap needs discipline, so the label is what the fix follows */}
+              {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
+              {ct && <Pill tone="draft">Clearly trivial</Pill>}
+              {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
+            </div>
+            <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
+          </div>
+          {/* The finding itself stays on the collapsed row — clamped to one
+              line. Without it the row reads as an id and some pills, and you
+              would have to open every card to find the one you wanted. */}
+          <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
+        </div>
+
+        {open && (<>
+        <p className="text-[12px] text-ink-500 mt-1"><span className="font-semibold">Root cause:</span> {d.rootCause}</p>
+
+        {/* lifecycle stepper */}
+        <div className="flex items-center gap-1.5 my-3">
+          {STAGES.map((s, i) => (
+            <div key={s} className="flex items-center gap-1.5 flex-1 last:flex-none">
+              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold whitespace-nowrap', i < stageIdx ? 'bg-compliant-50 text-compliant-700' : i === stageIdx ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
+                {i < stageIdx ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{i + 1}</span>}{s}
+              </span>
+              {i < STAGES.length - 1 && <span className={cn('h-px flex-1', i < stageIdx ? 'bg-compliant-300' : 'bg-paper-200')} />}
+            </div>
+          ))}
+        </div>
+
+        {/* severity + remediation — the owner's card leads with THEIR work (visual reverse) */}
+        <div className={cn('mt-3 flex flex-col gap-3', isOwner && 'flex-col-reverse')}>
+        {/* severity — the auditor evaluates; owner and reviewer read the
+            grade. A sealed engagement retires the auditor's pens too. */}
+        {isAuditor && !locked ? (
+          <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
+            <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
+            {/* what kind of gap it is — defaulted when the exception was
+                raised, re-typed here when the walkthrough says otherwise */}
+            <div className="flex items-center gap-2 flex-wrap text-[12px]">
+              <span className="text-ink-500 w-[120px]">Gap type</span>
+              {GAP_TYPES.map(g => (
+                <button key={g} title={GAP_HINT[g]} onClick={() => updateDeficiency(d.id, { gapType: g })}
+                  className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapType === g ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_LABEL[g]}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap text-[12px]">
+              <span className="text-ink-500 w-[120px]">Likelihood</span>
+              {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
+                <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-[12px]">
+              <span className="text-ink-500 w-[120px]">Exposure ₹</span>
+              <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+              <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
+            </div>
+            <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
+            {/* …and what the gap is actually worth, split three ways. This
+                is money already on the table, not the exposure above: it is
+                what makes a finding something the CFO acts on. */}
+            <div className="rounded-md border border-canvas-border bg-paper-50/40 p-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Priced impact — what the gap is worth</span>
+                {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-700 tabular-nums">total {fmt(exposureTotal(d.exposure))}</span>}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).map(k => (
+                  <label key={k} className="block min-w-0">
+                    <span className="block text-[10.5px] text-ink-500 mb-1">{EXPOSURE_LABEL[k]}</span>
+                    <input type="number" value={d.exposure?.[k] ?? 0}
+                      onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, [k]: Number(e.target.value) || 0 } })}
+                      className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                  </label>
+                ))}
+              </div>
+              <input value={d.exposure?.basis ?? ''}
+                onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, basis: e.target.value } })}
+                placeholder="How the numbers were arrived at — the arithmetic behind the claim"
+                className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+            </div>
+            <div className="flex items-start gap-2 text-[12px] flex-wrap">
+              <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
+              {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} title={ind} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
+            </div>
+            <div className="flex items-center gap-2 text-[12px] flex-wrap">
+              <span className="text-ink-500 w-[120px]">Compensating control</span>
+              <FormSelect value={d.compensatingControlId ?? ''} onChange={v => updateDeficiency(d.id, { compensatingControlId: v || undefined })}
+                options={[{ value: '', label: 'None' }, ...eng.controls.filter(c => c.id !== d.controlId).map(c => { const short = c.description.length > 42 ? c.description.slice(0, 40).trimEnd() + '…' : c.description; return { value: c.id, label: `${c.id} — ${short}` }; })]}
+                className="h-8 max-w-[300px] px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
+                menuCls="w-[340px]" ariaLabel="Compensating control" />
+              {d.compensatingControlId && (
+                assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
+                : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
+                : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
+                : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-[12px] flex-wrap">
+              <span className="text-ink-500 w-[120px]">Aggregation group</span>
+              <FormSelect value={d.aggregationGroup ?? ''} onChange={v => updateDeficiency(d.id, { aggregationGroup: v || undefined })}
+                options={[{ value: '', label: 'Ungrouped' }, ...groupOptions]}
+                className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
+                ariaLabel="Aggregation group" />
+              <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
+            </div>
+            <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
+              onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
+              onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
+            <SeverityConclusion d={d} assess={assess} M={M} showMateriality />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
+            <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the remediation below' : ''}</div>
+            <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+              <span className="text-ink-700"><span className="text-ink-400">Likelihood</span> · {d.likelihood}</span>
+              <span className="text-ink-700"><span className="text-ink-400">Exposure</span> · {fmt(d.magnitude)}{ct ? ' (clearly trivial)' : ''}</span>
+              <span className="text-ink-700"><span className="text-ink-400">MW indicators</span> · {d.mwIndicators.length ? `${d.mwIndicators.length} in force` : 'None'}</span>
+              <span className="text-ink-700"><span className="text-ink-400">Compensating control</span> · {d.compensatingControlId ?? 'None'}</span>
+              <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
+              <span className="text-ink-700"><span className="text-ink-400">Gap type</span> · {d.gapType ? GAP_LABEL[d.gapType] : 'Not typed'}</span>
+              {exposureTotal(d.exposure) > 0 && (
+                <span className="text-ink-700 sm:col-span-2">
+                  <span className="text-ink-400">Priced impact</span> · {fmt(exposureTotal(d.exposure))}
+                  <span className="text-ink-400"> ({(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).filter(k => (d.exposure as Exposure)[k] > 0).map(k => `${EXPOSURE_LABEL[k].toLowerCase()} ${fmt((d.exposure as Exposure)[k])}`).join(' · ')})</span>
+                </span>
+              )}
+              {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
+            </div>
+            {/* the owner sees their classification, never the engagement's thresholds */}
+            <SeverityConclusion d={d} assess={assess} M={M} showMateriality={!isOwner} />
+          </div>
+        )}
+
+        {/* remediation — the owner's plan; editable in their hat until submitted */}
+        <RemediationPlan d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest.
+              A sealed engagement shows the standing stage, never a pen. */}
+          {!locked && d.status === 'Identified' && (
+            role !== 'reviewer'
+              ? <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>
+              : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> Awaiting remediation — {d.remediation.owner}</span>
+          )}
+          {!locked && d.status === 'Remediation' && (
+            isOwner
+              ? (() => {
+                  const hasEvidence = (d.remediation.evidence?.length ?? 0) > 0;
+                  return (
+                    <button onClick={() => setExceptionStatus(d.id, 'Retest')} disabled={!hasEvidence}
+                      title={hasEvidence ? 'Marks your fix as done and hands it to the auditor' : 'Attach evidence of the fix first — "done" needs proof'}
+                      className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                  );
+                })()
+              : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
+          )}
+          {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
+          {!locked && d.status === 'Retest' && (
+            isAuditor ? <>
+              <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
+              <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
+            </> : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><CheckCircle2 size={14} className="text-ink-400" /> With the auditor for retest{isOwner ? ' — you never test your own fix' : ''}</span>
+          )}
+          {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
+          {!locked && d.status === 'Awaiting reviewer' && (
+            role !== 'reviewer' ? (
+              <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
+            ) : d.retest && d.retest.by === me ? (
+              <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>
+            ) : (
+              <button onClick={() => setClosing(true)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+            )
+          )}
+          {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
+          {/* the way back in: audit-side only, never one-click — the reason is the record */}
+          {!locked && !isOwner && d.status === 'Closed' && (
+            <button onClick={() => { setReopening(true); setReopenReason(''); }}
+              className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
+          )}
+        </div>
+        </>)}
+      </div>
+
+      {/* Attest confirm — closing is the terminal four-eyes act, so it never
+          commits on a bare click. Portalled: this card also renders inside the
+          control's paper, under animated ancestors that would otherwise become
+          the containing block for a fixed backdrop. */}
+      {closing && createPortal(
+        <div className="modal-backdrop" onClick={() => setClosing(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[15px] font-semibold text-ink-900">Close this {W.one}?</h2>
-                <button onClick={() => setClosingId(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+                <button onClick={() => setClosing(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{closingId}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review — it comes back only through a reopen with a recorded reason.</p>
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{d.id}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review — it comes back only through a reopen with a recorded reason.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setClosingId(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={() => { signOffException(closingId); setClosingId(null); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+                <button onClick={() => setClosing(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { signOffException(d.id); setClosing(false); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {/* reopen — the mirror of the close: same weight, and the reason IS the record */}
-      {reopeningId && (
-        <div className="modal-backdrop" onClick={() => setReopeningId(null)}>
+      {/* reopen — the mirror of the close: same weight, same portal, and the reason IS the record */}
+      {reopening && createPortal(
+        <div className="modal-backdrop" onClick={() => setReopening(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><RotateCcw size={15} className="text-high-700" /> Reopen this exception?</h2>
-                <button onClick={() => setReopeningId(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+                <button onClick={() => setReopening(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{reopeningId}</span> returns to Remediation — the reviewer sign-off and retest clear, and your reason goes on the trail with your name.</p>
+              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{d.id}</span> returns to Remediation — the reviewer sign-off and retest clear, and your reason goes on the trail with your name.</p>
               <textarea autoFocus value={reopenReason} onChange={e => setReopenReason(e.target.value)} rows={2}
                 placeholder="Why it comes back — e.g. the fix regressed, or new occurrences surfaced"
                 className="mt-3 w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setReopeningId(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setReopening(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button disabled={!reopenReason.trim()}
-                  onClick={() => { reopenException(reopeningId, reopenReason.trim()); setReopeningId(null); addToast({ type: 'warning', title: 'Reopened', message: `${reopeningId} is back in remediation — the trail records why.` }); }}
+                  onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false); addToast({ type: 'warning', title: 'Reopened', message: `${d.id} is back in remediation — the trail records why.` }); }}
                   className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12.5px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }

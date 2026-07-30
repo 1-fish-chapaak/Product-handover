@@ -6,14 +6,14 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Dices, Circle, PenLine, Eye,
+  Database, Dices, Circle, PenLine, Eye, ChevronUp,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, type PopVerdict,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, UNDER_BAND, type PopVerdict,
 } from './helpers';
 import { programmeFor } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, Toggle, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
@@ -21,6 +21,8 @@ import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
+import { DeficiencyCard } from './extraViews';
+import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeSuggestion, ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
@@ -1389,11 +1391,23 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
     if (!chosen || !Number(expected)) return;
     setExtracting(true);
     window.setTimeout(() => {
-      // The filter narrows the file to this control's instances. Deterministic so
-      // the number is stable across runs, and never below one.
-      const narrowed = criteria.trim().length === 0
-        ? chosen.rows
-        : Math.max(1, Math.round(chosen.rows / (7 + (control.id.length % 40))));
+      // The filter narrows the file to this control's instances, and it lands on
+      // the figure written down before the run. A number invented from the file
+      // size would disagree with any expectation typed above it, so every extract
+      // would open on a variance nobody asked to see.
+      //
+      // It is not made to agree exactly — a filter that returns the estimate to
+      // the row is its own kind of unreal. The wobble is held inside the 2% band
+      // kept for shortfalls (the tighter of the two), so the count check reads as
+      // a pass either way, and on a population small enough that two per cent is
+      // less than a row it collapses to an exact hit. Deterministic from the
+      // control id: the same extract twice running to a different number is not
+      // something a working paper can carry.
+      const want = Number(expected);
+      const slack = Math.floor(want * UNDER_BAND);
+      const seed = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+      const wobble = slack === 0 ? 0 : (seed % (slack * 2 + 1)) - slack;
+      const narrowed = Math.max(1, Math.min(chosen.rows, want + wobble));
       setPopulation(control.id, {
         version,
         source: `${chosen.name} · ${chosen.from}`,
@@ -1402,6 +1416,10 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
         filterFrom: from || undefined, filterTo: to || undefined,
         expectedCount: Number(expected),
         count: narrowed,
+        // The person signed in is the person who just ran the extract, so that
+        // one fact is filled in rather than asked for. The other two can't be
+        // known from here. It stays editable — IT often pulls the file instead.
+        provenance: { system: '', extractedBy: me, extractedOn: '' },
         tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
         evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
       });
@@ -1435,7 +1453,7 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   const gv = coverageVerdict(control, winFrom, winTo);
   const needsExpected = pop?.expectedCount == null && derivedRunCount(control, pop?.filterFrom, pop?.filterTo) == null;
   const [expectedDraft, setExpectedDraft] = useState('');
-  const prov = pop?.provenance ?? { system: '', extractedBy: '', extractedOn: '' };
+  const prov = pop?.provenance ?? { system: '', extractedBy: me, extractedOn: '' };
   const ready = populationReady(control, winFrom, winTo);
   const missing = !prov.system.trim() || !prov.extractedBy.trim() || !prov.extractedOn.trim()
     ? 'Record where the data came from before locking.'
@@ -1482,16 +1500,18 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                 <input value={account} onChange={e => setAccount(e.target.value)} placeholder="e.g. 2100 — Trade payables"
                   className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
               </label>
-              <label className="block min-w-0">
+              <div className="block min-w-0">
                 <span className="block text-[0.65625rem] text-ink-400 mb-1">Date from</span>
-                <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              </label>
-              <label className="block min-w-0">
+                <DatePicker value={from} max={to || undefined} onChange={e => setFrom(e.target.value)}
+                  placeholder="Pick a date" aria-label="Filter date from"
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </div>
+              <div className="block min-w-0">
                 <span className="block text-[0.65625rem] text-ink-400 mb-1">Date to</span>
-                <input type="date" value={to} onChange={e => setTo(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              </label>
+                <DatePicker value={to} min={from || undefined} onChange={e => setTo(e.target.value)}
+                  placeholder="Pick a date" aria-label="Filter date to"
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </div>
             </div>
 
             {/* ── the expectation, before the answer ──────────────────────────
@@ -1613,12 +1633,18 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               <input value={prov.extractedBy} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, extractedBy: e.target.value } })}
                 placeholder="e.g. R. Nair · IT"
                 className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
+              {prov.extractedBy === me && !locked && (
+                <span className="block text-[0.625rem] text-ink-400 mt-1 leading-snug">Filled in from your account — change it if someone else pulled the file.</span>
+              )}
             </label>
-            <label className="block min-w-0">
+            {/* A div rather than a label: the picker's trigger is a button, and a
+                wrapping label would forward its own clicks back into it. */}
+            <div className="block min-w-0">
               <span className="block text-[0.65625rem] text-ink-400 mb-1">Extracted on</span>
-              <input type="date" value={prov.extractedOn} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, extractedOn: e.target.value } })}
-                className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
-            </label>
+              <DatePicker value={prov.extractedOn} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, extractedOn: e.target.value } })}
+                placeholder="Pick a date" aria-label="Extracted on"
+                className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
+            </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
@@ -2347,6 +2373,8 @@ export default function ControlDossier() {
   // the way back into a concluded control — reason required, trail recorded
   const [reopening, setReopening] = useState(false);
   const [reopenWhy, setReopenWhy] = useState('');
+  // The deficiency this paper raised, graded here rather than somewhere else.
+  const [defOpen, setDefOpen] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // Both personas can now execute TOD and TOE; the shared trail records who did what.
@@ -2520,15 +2548,48 @@ export default function ControlDossier() {
           </VStep>
           {concl === 'Ineffective' && (
             <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <AlertTriangle size={15} className="text-risk-700" /><h3 className="text-[0.8125rem] font-bold text-risk-700">Deficiency raised</h3>
-                {/* what kind of gap this is — a design gap needs a redesign, a
-                    testing gap needs discipline, and the fix follows the label */}
-                {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>}
+              {/* ── graded here, and only here ───────────────────────────────
+                  This used to send the auditor to the Deficiency management tab
+                  to grade the finding their own testing had just raised, which
+                  meant leaving the paper, finding the row again, and coming back
+                  to a page scrolled somewhere else. The finding belongs to this
+                  control, so the whole banner is the toggle and the card opens
+                  underneath it — the same card the tab renders, with the same
+                  writes and the same four-eyes rules. No link off this page:
+                  every route out of here was a route away from the work. */}
+              <div
+                role={def ? 'button' : undefined}
+                tabIndex={def ? 0 : undefined}
+                aria-expanded={def ? defOpen : undefined}
+                aria-label={def ? `${defOpen ? 'Collapse' : 'Expand'} ${def.id}` : undefined}
+                onClick={def ? () => setDefOpen(o => !o) : undefined}
+                onKeyDown={def ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDefOpen(o => !o); } } : undefined}
+                className={cn('flex items-start justify-between gap-3', def && 'cursor-pointer')}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <AlertTriangle size={15} className="text-risk-700" /><h3 className="text-[0.8125rem] font-bold text-risk-700">Deficiency raised</h3>
+                    {def && <span className="font-mono text-[0.6875rem] font-semibold text-risk-700/80">{def.id}</span>}
+                    {/* what kind of gap this is — a design gap needs a redesign, a
+                        testing gap needs discipline, and the fix follows the label */}
+                    {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>}
+                  </div>
+                  <p className="text-[0.75rem] text-ink-600">
+                    This control concluded ineffective. {def
+                      ? <>Assess severity (likelihood × magnitude) and remediation {defOpen ? 'below' : 'here'} — it opens on this paper.</>
+                      : <>Severity and remediation are assessed once the deficiency is raised.</>}
+                  </p>
+                </div>
+                {def && (
+                  <span className="shrink-0 mt-0.5 text-risk-700">
+                    {defOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </span>
+                )}
               </div>
-              <p className="text-[0.75rem] text-ink-600">This control concluded ineffective. Assess severity (likelihood × magnitude) and remediation in <button onClick={() => setView('deficiencies')} className="font-semibold text-risk-700 hover:underline inline-flex items-center gap-0.5">Deficiencies <ChevronRight size={12} /></button>.</p>
-              {/* priced, if the auditor has priced it — the number is what moves a CFO */}
-              {def && exposureTotal(def.exposure) > 0 && (
+              {/* priced, if the auditor has priced it — the number is what moves a
+                  CFO. Only while the card is shut: open, the card prices it in full
+                  and the same figures twice on one screen is one figure too many. */}
+              {def && !defOpen && exposureTotal(def.exposure) > 0 && (
                 <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.71875rem]">
                   <span className="font-semibold text-risk-700">Exposure {formatINR(exposureTotal(def.exposure))}</span>
                   {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[])
@@ -2536,6 +2597,18 @@ export default function ControlDossier() {
                     .map(k => <span key={k} className="text-ink-600"><span className="text-ink-400">{EXPOSURE_LABEL[k]}</span> · {formatINR((def.exposure as Exposure)[k])}</span>)}
                 </div>
               )}
+              {/* Fade-and-lift rather than a height animation: the card is most of
+                  a screen, and no overflow-hidden wrapper means nothing inside it
+                  gets clipped while it settles. */}
+              <AnimatePresence initial={false}>
+                {def && defOpen && (
+                  <motion.div key="def-card" className="mt-3"
+                    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}>
+                    <DeficiencyCard d={def} defaultOpen showControlLink={false} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </motion.div>

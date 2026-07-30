@@ -210,8 +210,11 @@ const dayGap = (a?: string, b?: string) => {
  *  expected figure is a judgement made before the data was seen, and holding it
  *  to the row is false precision. */
 const OVER_BAND = 0.05;
-/** A shortfall is held tighter, and deliberately so. See `countVerdict`. */
-const UNDER_BAND = 0.02;
+/** A shortfall is held tighter, and deliberately so. See `countVerdict`.
+ *  Exported because the demo extract sizes its own wobble against it — the
+ *  filter is allowed to miss the expectation, but never by enough to trip the
+ *  check it is being measured by. */
+export const UNDER_BAND = 0.02;
 
 /** Where the surplus rows sit, as a hypothesis worth checking.
  *
