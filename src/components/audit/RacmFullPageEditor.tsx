@@ -59,8 +59,10 @@ const CHIP_COLUMNS = new Set<keyof ProcurementRacmRow>([
   'riskRating', 'likelihood', 'impact', 'controlType', 'controlNature', 'frequency', 'confidence',
 ]);
 
-// Columns that the user can pin / freeze to the left
-const PINNABLE_KEYS: (keyof ProcurementRacmRow)[] = ['riskId', 'controlId', 'subProcess'];
+// Columns that the user can pin / freeze to the left. Key Control rides with the
+// identity block: it qualifies the control id, so scrolling it out of view would
+// leave the grid unable to say which of the visible rows are the key ones.
+const PINNABLE_KEYS: (keyof ProcurementRacmRow)[] = ['riskId', 'controlId', 'isKey', 'subProcess'];
 // Columns frozen (sticky) while scrolling sideways — fixed set, not user-toggleable.
 const PINNED_KEYS = new Set<keyof ProcurementRacmRow>(PINNABLE_KEYS);
 // Identity columns that can never be hidden — shown as "locked" in the column picker.
@@ -74,8 +76,9 @@ const DEFAULT_VISIBLE_COLS = new Set<keyof ProcurementRacmRow>(
 // Curated set of columns that expose a per-column filter in the header.
 //   'text'  → free-text search box (substring match)
 //   'multi' → checkbox list of the distinct values present in the data
-const COLUMN_FILTER_MODE: Record<string, 'multi' | 'text'> = {
-  riskId: 'text', controlId: 'text',
+//   'flag'  → no value list; the column's own on/off filter (Key controls only)
+const COLUMN_FILTER_MODE: Record<string, 'multi' | 'text' | 'flag'> = {
+  riskId: 'text', controlId: 'text', isKey: 'flag',
   processArea: 'multi', subProcess: 'multi', riskCategory: 'multi',
   riskRating: 'multi', likelihood: 'multi', impact: 'multi',
   controlType: 'multi', controlNature: 'multi', frequency: 'multi',
@@ -108,6 +111,7 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
 
 export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
   const showRef = (sourceFiles?.length ?? 0) > 1;
@@ -277,6 +281,26 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     setSaveStatus('saving');
     setRows(prev => prev.map(r => (`${r.riskId}-${r.controlId}`) === rowKey ? { ...r, [colKey]: value } : r));
     window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
+  };
+
+  // Key control is a boolean, so it can't ride updateCell (which writes strings —
+  // 'false' would read as truthy). Its own handler keeps the flag a flag.
+  const toggleKey = (rowKey: string) => {
+    setSaveStatus('saving');
+    let marked = false;
+    let controlId = '';
+    setRows(prev => prev.map(r => {
+      if (`${r.riskId}-${r.controlId}` !== rowKey) return r;
+      marked = !r.isKey;
+      controlId = r.controlId;
+      return { ...r, isKey: marked };
+    }));
+    window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
+    logEvent({
+      action: 'Update',
+      description: `${marked ? 'Marked' : 'Unmarked'} ${controlId} as a key control in ${racmName ?? 'the RACM'}`,
+      module: 'Audit', entity: 'Control',
+    });
   };
 
   const addRow = () => {
@@ -552,6 +576,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             onToggleRowSelected={toggleRowSelected}
             onOpenDetail={setDetailRowId}
             onUpdateCell={updateCell}
+            onToggleKey={toggleKey}
             showGroupHeaders={groupBy !== 'none'}
             columnFilters={columnFilters}
             columnFilterOptions={columnFilterOptions}
@@ -642,7 +667,7 @@ function StatPill({ label, value, accent }: { label: string; value: number; acce
 // overflow-auto container with a backdrop-blur sticky header — a normally
 // positioned dropdown would be clipped / mispositioned.
 function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onChange, keyToggle }: {
-  colKey: string; label: string; mode: 'multi' | 'text';
+  colKey: string; label: string; mode: 'multi' | 'text' | 'flag';
   options: string[]; value: string[]; onChange: (vals: string[]) => void;
   keyToggle?: { checked: boolean; onChange: (v: boolean) => void };
 }) {
@@ -679,7 +704,7 @@ function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onC
               Key controls only
             </label>
           )}
-          {mode === 'text' ? (
+          {mode === 'flag' ? null : mode === 'text' ? (
             <div className="p-2">
               <input autoFocus value={value[0] ?? ''} onChange={(e) => onChange(e.target.value ? [e.target.value] : [])}
                 placeholder={`Search ${label.toLowerCase()}…`}
@@ -776,7 +801,7 @@ function ColumnVisibilityPanel({
 // ─── Grid ─────────────────────────────────────────────────────────────────
 function RacmGrid({
   grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, pinnedKeys, stickyOffsets,
-  selectedRowIds, onToggleRowSelected, onOpenDetail, onUpdateCell, showGroupHeaders,
+  selectedRowIds, onToggleRowSelected, onOpenDetail, onUpdateCell, onToggleKey, showGroupHeaders,
   columnFilters, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
 }: {
   grouped: { label: string; rows: ProcurementRacmRow[]; count: number }[];
@@ -790,6 +815,7 @@ function RacmGrid({
   onToggleRowSelected: (id: string) => void;
   onOpenDetail: (id: string) => void;
   onUpdateCell: (rowKey: string, col: keyof ProcurementRacmRow, value: string) => void;
+  onToggleKey: (rowKey: string) => void;
   showGroupHeaders: boolean;
   columnFilters: Record<string, string[]>;
   columnFilterOptions: Record<string, string[]>;
@@ -823,7 +849,7 @@ function RacmGrid({
                   options={columnFilterOptions[c.key as string] ?? []}
                   value={columnFilters[c.key as string] ?? []}
                   onChange={(vals) => onColumnFilterChange(c.key as string, vals)}
-                  keyToggle={c.key === 'controlId' ? { checked: keyOnly, onChange: onKeyOnlyChange } : undefined} />
+                  keyToggle={c.key === 'isKey' ? { checked: keyOnly, onChange: onKeyOnlyChange } : undefined} />
               )}
               {/* Drag-to-resize handle */}
               <div
@@ -865,6 +891,7 @@ function RacmGrid({
                   onToggleSelected={() => onToggleRowSelected(rowKey)}
                   onOpenDetail={() => onOpenDetail(rowKey)}
                   onUpdateCell={onUpdateCell}
+                  onToggleKey={onToggleKey}
                 />
               );
             })}
@@ -878,7 +905,7 @@ function RacmGrid({
 // ─── Grid row ─────────────────────────────────────────────────────────────
 function RacmGridRow({
   rowKey, row, rowIdx, isSelected, visibleColumns, pinnedKeys, stickyOffsets,
-  onToggleSelected, onOpenDetail, onUpdateCell,
+  onToggleSelected, onOpenDetail, onUpdateCell, onToggleKey,
 }: {
   rowKey: string;
   row: ProcurementRacmRow;
@@ -890,6 +917,7 @@ function RacmGridRow({
   onToggleSelected: () => void;
   onOpenDetail: () => void;
   onUpdateCell: (rowKey: string, col: keyof ProcurementRacmRow, value: string) => void;
+  onToggleKey: (rowKey: string) => void;
 }) {
   const [editingKey, setEditingKey] = useState<keyof ProcurementRacmRow | null>(null);
   const bg = isSelected ? 'bg-primary/8' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2/30');
@@ -907,7 +935,7 @@ function RacmGridRow({
         const pinned = pinnedKeys.has(c.key);
         const left = stickyOffsets.offsets.get(c.key);
         const isLastPinned = pinned && [...pinnedKeys].slice(-1)[0] === c.key;
-        const isEditing = editingKey === c.key;
+        const isEditing = editingKey === c.key && c.key !== 'isKey';
         const isAttrEditing = isEditing && c.key === 'attributes';
         return (
           <div key={c.key}
@@ -915,7 +943,7 @@ function RacmGridRow({
             className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
             {isAttrEditing ? (
               <>
-                <CellContent row={row} col={c} onEdit={() => {}} onOpenDetail={onOpenDetail} />
+                <CellContent row={row} col={c} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
                 <AttributeEditModal
                   value={String(row[c.key] ?? '')}
                   onSave={(v) => { onUpdateCell(rowKey, c.key, v); setEditingKey(null); }}
@@ -936,6 +964,7 @@ function RacmGridRow({
                 col={c}
                 onEdit={() => setEditingKey(c.key)}
                 onOpenDetail={onOpenDetail}
+                onToggleKey={() => onToggleKey(rowKey)}
               />
             )}
           </div>
@@ -1033,25 +1062,46 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
 
 // ─── Cell rendering (chip styles, truncation) ─────────────────────────────
 function CellContent({
-  row, col, onEdit, onOpenDetail,
+  row, col, onEdit, onOpenDetail, onToggleKey,
 }: {
   row: ProcurementRacmRow;
   col: RacmColumnDef;
   onEdit: () => void;
   onOpenDetail: () => void;
+  onToggleKey: () => void;
 }) {
   const val = String(row[col.key] ?? '');
   const isId = col.key === 'riskId' || col.key === 'controlId';
+
+  // Key control — the designation IS the affordance. Both states name themselves
+  // ("Key" / "Non key") so the column always reads as an answer rather than an
+  // empty cell, and hovering only shifts colour: the label never swaps to a verb,
+  // which would move the text under the cursor mid-click.
+  if (col.key === 'isKey') {
+    const on = !!row.isKey;
+    return (
+      <button
+        type="button"
+        onClick={onToggleKey}
+        role="switch"
+        aria-checked={on}
+        aria-label={`Key control — ${row.controlId}`}
+        title={on ? 'Key control — click to unmark' : 'Not a key control — click to mark'}
+        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.5625rem] font-bold uppercase tracking-wider cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
+          on
+            ? 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15 hover:bg-mitigated-100'
+            : 'border-transparent text-ink-400 hover:text-mitigated-700 hover:bg-mitigated-50/60'
+        }`}>
+        <Star size={11} className={`shrink-0 transition-colors ${on ? 'text-mitigated fill-mitigated' : 'text-ink-300 group-hover/key:text-mitigated'}`} />
+        {on ? 'Key' : 'Non key'}
+      </button>
+    );
+  }
 
   if (isId) {
     return (
       <button onClick={onOpenDetail}
         className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
-        {col.key === 'controlId' && row.isKey && (
-          <span title="Key control" className="inline-flex shrink-0">
-            <Star size={10} className="text-mitigated fill-mitigated" aria-label="Key control" />
-          </span>
-        )}
         {val || '—'}
       </button>
     );
