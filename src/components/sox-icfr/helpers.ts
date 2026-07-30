@@ -1,5 +1,5 @@
 import type {
-  Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
+  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
   Likelihood, MaterialityRules, OperatingTrack, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
@@ -241,8 +241,22 @@ export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
  *  Concluding design effective is gated on this reaching 100%. */
 export function designCompleteness(c: Control): { done: number; total: number; pct: number } {
   const req = c.design.documents.filter(d => d.required !== false);
-  const done = req.filter(d => d.status === 'Received').length;
+  // A waived element is accounted for, not outstanding — the audit team wrote it,
+  // the client holds it, or there is nothing to hold. Either way the auditor has
+  // recorded why, and a recorded judgement shouldn't read as a missing file.
+  const done = req.filter(d => d.status === 'Received' || d.waiver).length;
   return { done, total: req.length, pct: req.length ? Math.round((done / req.length) * 100) : 0 };
+}
+/** Elements still genuinely outstanding — neither evidenced nor waived. */
+export function designOutstanding(c: Control): DesignDoc[] {
+  return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+}
+/** Attributes the walkthrough hasn't settled yet. Empty when it hasn't started —
+ *  the gate is soft until the auditor commits to walking a transaction. */
+export function walkthroughUntested(c: Control): OperatingStep[] {
+  const w = c.design.walkthrough;
+  if (!w) return [];
+  return c.operating.steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') === 'Not tested');
 }
 
 // ─── Materiality worksheet math ──────────────────────────────────────────────────

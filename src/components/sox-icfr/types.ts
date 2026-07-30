@@ -52,6 +52,23 @@ export type DesignDocKind =
   // an element the auditor named themselves — its title is `name`, not the kind
   | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+
+/** Why a required design element will never arrive. Three things actually happen
+ *  in the field: the audit team writes the narrative and flowchart itself off the
+ *  walkthrough call, the client holds the document and it was read on their screen,
+ *  or there is no document at all and the design is tested off the control
+ *  description. None of those is a gap, so none of them should hold the conclusion
+ *  hostage — but each is a judgement, so each is recorded with a reason. */
+export type DesignWaiverReason =
+  | 'Prepared by the audit team'
+  | 'Held by the client — inspected in situ'
+  | 'Not applicable — design tested off the control description';
+export const DESIGN_WAIVER_REASONS: DesignWaiverReason[] = [
+  'Prepared by the audit team',
+  'Held by the client — inspected in situ',
+  'Not applicable — design tested off the control description',
+];
+
 /** One design element — a completeness requirement evidenced by attached files. */
 export interface DesignDoc {
   id: string;
@@ -62,6 +79,10 @@ export interface DesignDoc {
   status: DocStatus;
   /** Required elements gate the design conclusion; optional ones don't. Default true. */
   required?: boolean;
+  /** Waived rather than received: the element is accounted for without a file, so
+   *  it stops gating the conclusion. The working paper prints the reason beside
+   *  the element — a waiver the paper doesn't show is an unexplained hole. */
+  waiver?: { reason: DesignWaiverReason; note: string; by: string; at: string };
   files?: EvidenceFile[];
   uploadedBy?: string;
   at?: string;
@@ -90,9 +111,41 @@ export interface DesignPoint {
   result: TestResult;
   override?: Override;
 }
+/** The walkthrough — the design tested against ONE live transaction.
+ *
+ *  Design and operating effectiveness test the SAME attributes; what differs is
+ *  the sample behind them. Design walks one transaction with the client and asks
+ *  whether the control, as built, did what it claims. Operating asks the same
+ *  questions across a frequency-driven sample. So the attributes are defined once
+ *  (`OperatingTrack.steps`) and proven twice — here against `sampleRef`, there
+ *  against the drawn sample. Without attributes there is no SOX test of design,
+ *  only an opinion about paperwork.
+ *
+ *  Who sat in the walkthrough and who performed it are captured here because this
+ *  is where they are known, and the working paper prints them from here. */
+export interface Walkthrough {
+  /** The transaction walked — drawn from the same generator the real sample uses. */
+  sampleRef: string;
+  date: string;
+  /** Who from the audit team performed the walkthrough. */
+  tester: string;
+  /** Who from the client attended — the paper names them. */
+  attendees: string[];
+  /** Result per attribute, keyed by `OperatingStep.id`. */
+  attributeResults: Record<string, TestResult>;
+  notes?: string;
+  evidence?: EvidenceFile[];
+  startedBy: string;
+  startedAt: string;
+}
+
 export interface DesignTrack {
   documents: DesignDoc[];
   points: DesignPoint[];
+  /** The one-transaction walkthrough behind the design conclusion. Absent until
+   *  the auditor starts it; once started, an untested attribute holds the
+   *  conclusion, because a half-walked transaction proves nothing. */
+  walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
   override?: Override;
   testedBy: string | null;
@@ -461,7 +514,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
 export interface ExecutionEvent {
   id: string;
   controlId: string;

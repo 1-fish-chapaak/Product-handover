@@ -1,7 +1,7 @@
 import { validationQA } from './helpers';
 import { ipeChecklist } from './types';
 import type {
-  Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
+  Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
   RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
@@ -10,6 +10,12 @@ import type {
 let _d = 0;
 // Flowchart & Policy/SOP strengthen the file but don't gate the design conclusion.
 const OPTIONAL_KINDS: DesignDoc['kind'][] = ['Flowchart', 'Policy / SOP'];
+/** A required element accounted for without a file: the audit team prepared it,
+ *  the client holds it, or there is nothing to hold. It stops gating the design
+ *  conclusion, and the reason is what the working paper prints. */
+const waivedDoc = (kind: DesignDoc['kind'], reason: DesignWaiverReason, note: string, by = 'A. Mehta · Auditor'): DesignDoc =>
+  ({ id: `dd${++_d}`, kind, name: `${kind} — not provided`, status: 'Missing', required: true, waiver: { reason, note, by, at: '11 Apr' } });
+
 const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: string): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name, status, required: !OPTIONAL_KINDS.includes(kind),
      files: status === 'Received' ? [{ id: `ddf${_d}`, name, kind: name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: by ?? 'Risk Owner', uploadedAt: '12 Apr' }] : undefined,
@@ -278,6 +284,11 @@ const DETAILED: Control[] = [
       doc('Flowchart', 'PO approval flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 10 Apr.pdf', 'Received'),
       doc('Policy / SOP', 'Delegation-of-authority matrix FY26.xlsx', 'Received'),
+      // The client has no segregation matrix for the release strategy, so there is
+      // no file to chase — the audit team derived it on the walkthrough call and
+      // agreed it with the process owner. A judgement, recorded, not a gap.
+      waivedDoc('Segregation of duties', 'Prepared by the audit team',
+        'Procurement holds no segregation matrix for the release strategy. Drawn from the 10 Apr walkthrough against the SAP role assignments and agreed with S. Iyer; retained at /FY26/ICFR/P2P/P-02 purchasing/SoD-derived.xlsx.'),
     ], [
       point('DoA tiers map to current org and signing limits.'),
       point('System enforces tier by PO value (not advisory).'),
@@ -446,6 +457,38 @@ const DETAILED: Control[] = [
     operating: manualTrack('Not tested', [], undefined, 0),
   },
 ];
+
+// ── walkthroughs — the design proved on one transaction ──────────────────────────
+// Attached after the rows are built, not inside them: the results are keyed by
+// attribute id, and the ids are generated as the rows are read. Mapping over each
+// control's own steps here means the seed can never drift from the attributes it
+// claims to have tested. Only rows whose design has actually been concluded carry
+// one — an untested row shows the "not started" state, which is the first thing a
+// new audit should see.
+const WALKED: Record<string, { attendees: string[]; notes: string; failCode?: string }> = {
+  'P2P-C-01': { attendees: ['R. Khanna · Vendor Master Lead', 'P. Nair · IT Applications'], notes: 'Walked a live bank-detail change end to end. SAP held the change in a pending state until a second user with a distinct role released it, and the change log kept both user ids.' },
+  'P2P-C-02': { attendees: ['S. Iyer · Procurement', 'M. Desai · Buyer'], notes: 'Walked a ₹42L purchase order. It routed to the tier the value demands and could not be released until that tier approved; the buyer had no override.' },
+  'P2P-C-03': { attendees: ['R. Subramanian · AP Lead'], notes: 'Walked an invoice through the three-way match. Quantity and price were matched against the PO and the goods receipt, and the block held until the difference was cleared.' },
+  'P2P-C-04': { attendees: ['R. Subramanian · AP Lead', 'P. Nair · IT Applications'], notes: 'Walked a deliberate re-key of a paid invoice. The duplicate block caught the exact reference, but a re-key with a leading zero passed — recorded as the design concern the sample then quantified.' },
+  // Design concluded ineffective: the walkthrough is where that was found. The
+  // review happens after the journal has already posted, so the attribute that
+  // asks whether it prevents the misstatement fails on a real transaction.
+  'P2P-C-05': { attendees: ['D. Rao · Controller', 'A. Fernandes · Financial Reporting'], notes: 'Walked a month-end manual journal. The reviewer signed the reporting pack after the journal had already hit the ledger, so the control detects rather than prevents — and on this transaction it detected nothing.', failCode: 'E1' },
+};
+for (const c of DETAILED) {
+  const w = WALKED[c.id];
+  if (!w || c.design.conclusion === 'Not tested' || c.operating.steps.length === 0) continue;
+  c.design.walkthrough = {
+    sampleRef: sampleRefs(c.process, 1)[0] ?? '#1000',
+    date: '11 Apr',
+    tester: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+    attendees: w.attendees,
+    attributeResults: Object.fromEntries(c.operating.steps.map(s => [s.id, (w.failCode === s.code ? 'Fail' : 'Pass') as TestResult])),
+    notes: w.notes,
+    startedBy: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+    startedAt: '11 Apr',
+  };
+}
 
 // ── generator — fills the register to scale ──────────────────────────────────────
 // Each spread carries its process's real risk register: a few risk-phrased

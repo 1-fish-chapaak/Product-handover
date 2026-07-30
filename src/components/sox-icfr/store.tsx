@@ -3,8 +3,8 @@ import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEnga
 import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
-  EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
-  IpeConclusion, IpeTest, MaterialityRules, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
+  DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
+  IpeConclusion, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, SignificantAccount, TestResult, TrackConclusion,
 } from './types';
 
@@ -52,6 +52,9 @@ function untested(c: Control): Control {
       testedAt: null,
       documents: [],
       points: [],
+      // The walkthrough walked one transaction from last cycle's period, with the
+      // people who were in that room. It cannot speak for this cycle.
+      walkthrough: undefined,
     },
     operating: {
       ...c.operating,
@@ -153,6 +156,16 @@ interface IcfrCtx {
   addDesignDoc: (controlId: string, kind: DesignDocKind, custom?: { name: string; description?: string }) => void;
   attachDesignEvidence: (controlId: string, docId: string, fileName: string) => void;
   removeDesignDoc: (controlId: string, docId: string) => void;
+  /** Account for a required element that will never arrive — audit-team prepared,
+   *  inspected at the client, or not applicable. Recorded with a reason, and it
+   *  stops gating the conclusion. */
+  waiveDesignDoc: (controlId: string, docId: string, reason: DesignWaiverReason, note: string) => void;
+  clearDesignWaiver: (controlId: string, docId: string) => void;
+  /** The walkthrough — design tested against one transaction, on the same
+   *  attributes the sample will test. */
+  startWalkthrough: (controlId: string) => void;
+  setWalkthroughAttribute: (controlId: string, stepId: string, result: TestResult) => void;
+  setWalkthroughMeta: (controlId: string, patch: Partial<Pick<Walkthrough, 'date' | 'tester' | 'attendees' | 'notes'>>) => void;
   addDesignPoint: (controlId: string, text: string) => void;
   removeDesignPoint: (controlId: string, pointId: string) => void;
   validateDesignPoint: (controlId: string, pointId: string) => void;
@@ -448,6 +461,63 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const removeDesignDoc = useCallback<IcfrCtx['removeDesignDoc']>((controlId, docId) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.filter(d => d.id !== docId) } }));
+  }, [patchControl, role]);
+
+  // Waive a required element instead of chasing a file that doesn't exist. The
+  // reason is the record — three real situations, none of them a gap — so this is
+  // a judgement the paper prints, not a status quietly flipped to Received.
+  const waiveDesignDoc = useCallback<IcfrCtx['waiveDesignDoc']>((controlId, docId, reason, note) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId
+      ? { ...d, waiver: { reason, note, by: me, at: 'just now' } }
+      : d) } }));
+    pushExec(prev => { const d = prev.controls.find(c => c.id === controlId)?.design.documents.find(dd => dd.id === docId); return d ? { controlId, track: 'design', kind: 'waive-doc', verb: `waived — ${reason.toLowerCase()}`, target: d.kind } : null; });
+  }, [patchControl, me, pushExec, role]);
+  const clearDesignWaiver = useCallback<IcfrCtx['clearDesignWaiver']>((controlId, docId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId ? { ...d, waiver: undefined } : d) } }));
+  }, [patchControl, role]);
+
+  // ── Walkthrough — the design tested on one transaction ────────────────────────
+  // The transaction comes from the same generator the real sample uses, so the
+  // reference the auditor walks is one they could actually pull. The attributes
+  // are NOT copied here: the walkthrough records results against the operating
+  // track's attribute ids, so adding an attribute later leaves the walkthrough
+  // honestly incomplete rather than silently short.
+  const startWalkthrough = useCallback<IcfrCtx['startWalkthrough']>((controlId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => c.design.walkthrough ? c : ({
+      ...c,
+      design: {
+        ...c.design,
+        walkthrough: {
+          sampleRef: sampleRefs(c.process, 1)[0] ?? '#1000',
+          date: 'just now',
+          tester: me,
+          attendees: [],
+          attributeResults: {},
+          startedBy: me,
+          startedAt: 'just now',
+        },
+      },
+    }));
+    pushExec(() => ({ controlId, track: 'design', kind: 'walkthrough', verb: 'started the walkthrough — design tested on one transaction' }));
+  }, [patchControl, me, pushExec, role]);
+  const setWalkthroughAttribute = useCallback<IcfrCtx['setWalkthroughAttribute']>((controlId, stepId, result) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => c.design.walkthrough
+      ? { ...c, design: { ...c.design, walkthrough: { ...c.design.walkthrough, attributeResults: { ...c.design.walkthrough.attributeResults, [stepId]: result } } } }
+      : c);
+    pushExec(prev => {
+      const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(x => x.id === stepId);
+      return s ? { controlId, track: 'design', kind: 'walkthrough', verb: 'recorded the walkthrough result', target: s.code, result } : null;
+    });
+  }, [patchControl, pushExec, role]);
+  const setWalkthroughMeta = useCallback<IcfrCtx['setWalkthroughMeta']>((controlId, patch) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => c.design.walkthrough
+      ? { ...c, design: { ...c.design, walkthrough: { ...c.design.walkthrough, ...patch } } }
+      : c);
   }, [patchControl, role]);
   const addDesignPoint = useCallback<IcfrCtx['addDesignPoint']>((controlId, text) => {
     if (role !== 'auditor') return;
@@ -991,12 +1061,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const newExecs: ExecutionEvent[] = [];
       const controls = prev.controls.map(c => {
         if (!ids.has(c.id)) return c;
-        const missing = c.design.documents.filter(d => d.status === 'Missing');
+        // A waived element is not chased: the audit team wrote it, the client
+        // holds it, or there is nothing to hold. Asking for it anyway is noise.
+        const missing = c.design.documents.filter(d => d.status === 'Missing' && !d.waiver);
         if (missing.length) {
           newTasks.push({ id: `PBC-${prev.tasks.length + newTasks.length + 1}`, type: 'pbc', controlId: c.id, title: `Provide design documents (${missing.length})`, detail: `Needed for TOD: ${missing.map(d => d.kind).join(', ')}.`, assignee: c.owner, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' });
           newExecs.push({ id: uid('ex'), controlId: c.id, track: 'design', kind: 'request-docs', verb: `requested ${missing.length} design document${missing.length === 1 ? '' : 's'}`, by: me, role, at: 'just now' });
         }
-        return { ...c, design: { ...c.design, documents: c.design.documents.map(d => d.status === 'Missing' ? { ...d, status: 'Requested' as DocStatus } : d) } };
+        return { ...c, design: { ...c.design, documents: c.design.documents.map(d => d.status === 'Missing' && !d.waiver ? { ...d, status: 'Requested' as DocStatus } : d) } };
       });
       return { ...prev, controls, tasks: [...prev.tasks, ...newTasks], executions: [...newExecs, ...prev.executions] };
     });
@@ -1345,7 +1417,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
@@ -1355,7 +1427,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

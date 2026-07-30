@@ -5,13 +5,13 @@ import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designCompleteness, discussionsFor, formatINR, isControlLocked, operatingProgress,
-  sampleSizeGuide, trackResult, pointResult, stepResult,
+  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR, isControlLocked, operatingProgress,
+  sampleSizeGuide, trackResult, pointResult, stepResult, walkthroughUntested,
 } from './helpers';
 import { programmeFor } from './auditScope';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
@@ -21,12 +21,20 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS, EXPOSURE_LABEL, exposureTotal, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
+import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
+  Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
+
+// Short button labels for the waiver reasons — the stored reason is the full
+// sentence in types.ts; these are what fits on a button.
+const WAIVER_BTN: Record<DesignWaiverReason, string> = {
+  'Prepared by the audit team': 'Audit team prepared it',
+  'Held by the client — inspected in situ': 'Inspected at the client',
+  'Not applicable — design tested off the control description': 'Not applicable',
+};
 
 const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Requested: 'text-mitigated-700', Missing: 'text-ink-400' };
 const WORKFLOW_LIBRARY = ['Three-way match check', 'Approval-tier check', 'Duplicate-invoice detection', 'Segregation-of-duties scan', 'Timeliness / cut-off check', 'Reconciliation completeness', 'Access review', 'Tolerance-breach monitor'];
@@ -115,7 +123,8 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
   const { requestDataByEmail } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
-  const [sel, setSel] = useState<Set<string>>(() => new Set(control.design.documents.filter(d => d.status !== 'Received').map(d => d.id)));
+  // pre-select what's genuinely outstanding — a waived element isn't chased
+  const [sel, setSel] = useState<Set<string>>(() => new Set(control.design.documents.filter(d => d.status !== 'Received' && !d.waiver).map(d => d.id)));
   const [emails, setEmails] = useState<string[]>(['controls.owner@airindiaexpress.in']);
   const [draft, setDraft] = useState('');
   const addEmail = () => { const e = draft.trim().replace(/,$/, ''); if (e && !emails.includes(e)) setEmails([...emails, e]); setDraft(''); };
@@ -138,7 +147,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
                 return (
                   <button key={d.id} onClick={() => toggle(d.id)} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-ink-300')}>
                     <span className={cn('w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0', on ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300')}>{on && <Check size={12} strokeWidth={3} />}</span>
-                    <span className="min-w-0 flex-1"><span className="text-[0.78125rem] font-semibold text-ink-800">{d.kind}</span><span className="text-[0.6875rem] text-ink-400 ml-2">{d.status}</span></span>
+                    <span className="min-w-0 flex-1"><span className="text-[0.78125rem] font-semibold text-ink-800">{d.kind}</span><span className="text-[0.6875rem] text-ink-400 ml-2">{d.waiver ? 'Waived' : d.status}</span></span>
                   </button>
                 );
               })}
@@ -407,6 +416,151 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
   );
 }
 
+// ── walkthrough — the design tested against ONE transaction ───────────────────────
+// The reviewer's model: design and operating test the SAME attributes, and only
+// the sample behind them differs. So this card reads the operating track's
+// attributes and records a result per attribute against one walked transaction.
+// Attributes can be added from here, because a walkthrough with nothing to prove
+// is the state the tool used to leave people in.
+function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: boolean }) {
+  const { startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addAttribute } = useIcfr();
+  const logEvent = useAuditLog();
+  const w = control.design.walkthrough;
+  const steps = control.operating.steps;
+  const [attendee, setAttendee] = useState('');
+  const [newAttr, setNewAttr] = useState('');
+  const [addingAttr, setAddingAttr] = useState(false);
+
+  if (!w) {
+    return (
+      <div className="subcard px-3.5 py-3 mb-5">
+        <div className="flex items-start gap-3">
+          <Footprints size={15} className="text-ink-400 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.78125rem] font-semibold text-ink-800">Walkthrough not started</div>
+            <p className="text-[0.6875rem] text-ink-500 mt-0.5 leading-relaxed">
+              Walk one transaction with the control owner and prove the same attributes the sample will test.
+              The transaction, who attended and what each attribute showed are what the working paper prints.
+            </p>
+          </div>
+          {canEdit && (
+            <button onClick={() => { startWalkthrough(control.id); logEvent({ action: 'Create', description: `Started the walkthrough for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+              className="h-8 px-3 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <Footprints size={13} /> Start walkthrough
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const tested = steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') !== 'Not tested').length;
+  const failed = steps.filter(s => w.attributeResults[s.id] === 'Fail').length;
+
+  return (
+    <div className="subcard px-3.5 py-3 mb-5">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5">
+        <h5 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5">
+          <Footprints size={14} /> Walkthrough
+          <span className="font-normal text-ink-400">· one transaction, the same attributes the sample tests</span>
+        </h5>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="text-[0.65625rem] font-semibold text-ink-500 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] inline-flex items-center">{w.sampleRef}</span>
+          {steps.length > 0 && <Pill tone={failed > 0 ? 'risk' : tested === steps.length ? 'compliant' : 'draft'}>{tested}/{steps.length} attributes</Pill>}
+        </span>
+      </div>
+
+      {/* who walked it, when, and who was in the room — captured once, printed once */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <label className="block">
+          <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Performed by</span>
+          <input value={w.tester} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { tester: e.target.value })}
+            className="mt-0.5 w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        </label>
+        <label className="block">
+          <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Date walked</span>
+          <input value={w.date} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { date: e.target.value })}
+            className="mt-0.5 w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        </label>
+      </div>
+      <div className="mb-3">
+        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Attended by (client)</span>
+        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+          {w.attendees.map(a => (
+            <span key={a} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-700 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[20px]">
+              <UserCheck size={9} className="shrink-0" />{a}
+              {canEdit && <button onClick={() => setWalkthroughMeta(control.id, { attendees: w.attendees.filter(x => x !== a) })} aria-label={`Remove ${a}`} className="text-ink-400 hover:text-risk-600 cursor-pointer"><X size={9} /></button>}
+            </span>
+          ))}
+          {canEdit && (
+            <input value={attendee} onChange={e => setAttendee(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && attendee.trim()) { setWalkthroughMeta(control.id, { attendees: [...w.attendees, attendee.trim()] }); setAttendee(''); } }}
+              placeholder={w.attendees.length ? 'Add another…' : 'Name, then Enter'} aria-label="Add an attendee"
+              className="h-[22px] px-2 w-[150px] rounded border border-canvas-border bg-canvas-elevated text-[0.65625rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          )}
+          {!canEdit && w.attendees.length === 0 && <span className="text-[0.65625rem] text-ink-400">Not recorded</span>}
+        </div>
+      </div>
+
+      {/* the attributes — the same list the sample will test */}
+      {steps.length === 0 ? (
+        <div className="text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>No test attributes defined yet — without attributes there is nothing for the walkthrough to prove, and nothing for the sample to test either. Add them below; they serve both tracks.</span>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {steps.map(s => {
+            const r = w.attributeResults[s.id] ?? 'Not tested';
+            return (
+              <div key={s.id} className="flex items-start gap-2.5 py-1.5 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
+                <Tickmark result={r} size={17} />
+                <div className="min-w-0 flex-1">
+                  <span className="text-[0.75rem] text-ink-800">{s.description}</span>
+                  <span className="text-[0.65625rem] text-ink-400 ml-1.5">({s.code} · {s.assertion})</span>
+                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => setWalkthroughAttribute(control.id, s.id, 'Pass')}
+                      className={cn('h-7 px-2 inline-flex items-center gap-1 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer', r === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-compliant-300 hover:text-compliant-700')}><CheckCircle2 size={12} /> Pass</button>
+                    <button onClick={() => setWalkthroughAttribute(control.id, s.id, 'Fail')}
+                      className={cn('h-7 px-2 inline-flex items-center gap-1 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer', r === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-risk-300 hover:text-risk-700')}><XCircle size={12} /> Fail</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* attributes are defined once and used by both tracks, so they can be
+          added from here as well as from step 3 */}
+      {canEdit && (addingAttr ? (
+        <div className="flex items-center gap-2 mt-2">
+          <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { setAddingAttr(false); setNewAttr(''); }
+              if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }
+            }}
+            placeholder="e.g. Approval evidenced before the transaction posts"
+            className="flex-1 h-8 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <button disabled={!newAttr.trim()} onClick={() => { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }}
+            className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+        </div>
+      ) : (
+        <button onClick={() => setAddingAttr(true)} className="mt-2 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add attribute</button>
+      ))}
+
+      <label className="block mt-3">
+        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">What the walkthrough showed</span>
+        <textarea rows={2} value={w.notes ?? ''} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { notes: e.target.value })}
+          placeholder="How the transaction actually moved, and anything the narrative doesn't say."
+          className="mt-0.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      </label>
+    </div>
+  );
+}
+
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
   const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
@@ -591,10 +745,12 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { addDesignDoc, attachDesignEvidence, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
+  const { addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, validateDesignPoint } = useIcfr();
   const logEvent = useAuditLog();
   const d = control.design;
   const [modal, setModal] = useState(false);
+  // which element is being waived — one at a time, same shape as the override form
+  const [waiving, setWaiving] = useState<string | null>(null);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
   const [validatingAll, setValidatingAll] = useState(false);
@@ -644,9 +800,17 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const completeness = designCompleteness(control);
   const complete = completeness.total > 0 && completeness.pct === 100;
   const unvalidated = d.points.filter(p => pointResult(p) === 'Not tested').length;
-  const missing = d.documents.filter(x => x.status !== 'Received');
+  // outstanding = neither evidenced nor waived. A waived element is accounted for,
+  // so it must not read as missing or push the suggestion to Ineffective.
+  const missing = designOutstanding(control);
+  // Soft gate: once the auditor commits to walking a transaction, every attribute
+  // has to be settled. Before that the walkthrough doesn't hold anything up.
+  const walkPending = walkthroughUntested(control);
+  // A failed walkthrough attribute is a design failure in the reviewer's model —
+  // the control as built didn't do what it claims on a real transaction.
+  const walkFailed = d.walkthrough ? control.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
   const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
-    : missing.length > 0 || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
+    : missing.length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
   const empty = d.documents.length === 0 && d.points.length === 0;
 
@@ -676,8 +840,11 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                 const files = doc.files ?? (doc.status === 'Received' ? [{ id: doc.id + '-f', name: doc.name, kind: 'PDF' as const, uploadedBy: doc.uploadedBy ?? 'Risk Owner', uploadedAt: doc.at ?? '' }] : []);
                 const busy = attaching === doc.id;
                 return (
-                  <div key={doc.id} className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200')}>
-                    {busy ? <Loader2 size={15} className="animate-spin text-brand-600 shrink-0" /> : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
+                  <div key={doc.id}>
+                  <div className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200', doc.waiver && doc.status !== 'Received' && '!border-evidence-200')}>
+                    {busy ? <Loader2 size={15} className="animate-spin text-brand-600 shrink-0" />
+                      : doc.waiver && doc.status !== 'Received' ? <BadgeCheck size={15} className="shrink-0 text-evidence-600" />
+                      : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
@@ -689,16 +856,37 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                           {files.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-600 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] max-w-[240px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.name}</span></span>)}
                           <span className="text-[0.65625rem] text-ink-400">{doc.uploadedBy ? `· ${doc.uploadedBy}, ${doc.at}` : ''}</span>
                         </div>
+                      ) : doc.waiver ? (
+                        <div className="text-[0.6875rem] text-evidence-700 mt-0.5 flex items-start gap-1">
+                          <CornerDownRight size={11} className="mt-0.5 shrink-0" />
+                          <span><span className="font-semibold">{doc.waiver.reason}</span> — {doc.waiver.note} <span className="text-ink-400">· {doc.waiver.by}, {doc.waiver.at}</span></span>
+                        </div>
                       ) : (
                         <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{busy ? 'Uploading evidence…' : doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
                       )}
                     </div>
-                    <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.status}</Pill>
+                    <Pill tone={doc.status === 'Received' ? 'compliant' : doc.waiver ? 'evidence' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.waiver ? 'Waived' : doc.status}</Pill>
                     {canEdit && <div className="flex items-center gap-1">
+                      {doc.status !== 'Received' && !doc.waiver && <button disabled={busy} onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
+                      {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
                       {doc.status !== 'Received' && <button disabled={busy} onClick={() => attach(doc)} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
                       {doc.status === 'Received' && <button disabled={busy} onClick={() => attach(doc)} title="Attach another file" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
                       <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
                     </div>}
+                  </div>
+                  {/* the waiver is a judgement, so it takes a rationale — the reason
+                      picked is the button pressed */}
+                  {waiving === doc.id && (
+                    <RationaleForm title={`Why won’t ${docLabel(doc)} be provided? The working paper prints this.`} onCancel={() => setWaiving(null)}
+                      buttons={DESIGN_WAIVER_REASONS.map(r => ({
+                        label: WAIVER_BTN[r],
+                        onClick: (n: string) => {
+                          waiveDesignDoc(control.id, doc.id, r, n);
+                          logEvent({ action: 'Update', description: `Waived design element (${r}) on ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+                          setWaiving(null);
+                        },
+                      }))} />
+                  )}
                   </div>
                 );
               })}
@@ -719,20 +907,26 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               <button disabled={!newPoint.trim()} onClick={() => { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
             </div>
           )}
-          {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-2">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
-            <div className="space-y-2 mb-2">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
+          {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
+            <div className="space-y-2 mb-5">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
           )}
 
-          {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence or request it from the control owner.</div>}
-          {/* effective needs BOTH gates: evidence complete AND every design
-              check validated — an unvalidated check is an untested opinion */}
+          {/* the walkthrough — the design proved on one live transaction */}
+          <WalkthroughCard control={control} canEdit={canEdit} />
+
+          {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence, request it from the control owner, or mark it not applicable.</div>}
+          {/* effective needs every gate: evidence accounted for, every design check
+              validated — an unvalidated check is an untested opinion — and, once a
+              walkthrough is under way, every attribute settled on the transaction */}
           <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit}
-            disableEffective={!complete || unvalidated > 0}
+            disableEffective={!complete || unvalidated > 0 || walkPending.length > 0}
             disableEffectiveNote={!complete
               ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
               : unvalidated > 0
                 ? `Locked — ${unvalidated} design check${unvalidated === 1 ? '' : 's'} not validated yet`
-                : undefined} />
+                : walkPending.length > 0
+                  ? `Locked — ${walkPending.length} walkthrough attribute${walkPending.length === 1 ? '' : 's'} not tested on ${d.walkthrough?.sampleRef}`
+                  : undefined} />
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>
