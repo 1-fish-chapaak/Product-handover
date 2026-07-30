@@ -8,6 +8,8 @@ import { Button } from '../../../shared/Button';
 import { WizardFooter } from '../footerSlot';
 import { downloadExcelTemplate, downloadWordTemplate, REQUIRED_FIELDS } from '../../atrTemplate';
 import { useToast } from '../../../shared/Toast';
+import EscalationMatrixCard from '../components/EscalationMatrixCard';
+import { type EscalationMatrixConfig, cloneDefaultMatrix } from '../escalationMatrix';
 
 // Smooth, gentle entrance for the picker cards.
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -118,12 +120,14 @@ function TemplateGuide() {
 /** Screen 2A — download the IRAME template, fill offline, upload it back
  *  (+ optional annexures, mirroring the existing-report path). */
 export default function Step2aTemplateDownload({ onUpload }: {
-  onUpload: (file: File, annexures: File[]) => void;
+  onUpload: (file: File, annexures: File[], escalation: EscalationMatrixConfig) => void;
 }) {
   const { addToast } = useToast();
   const [downloaded, setDownloaded] = useState<'excel' | 'word' | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [annexures, setAnnexures] = useState<File[]>([]);
+  // Escalation matrix for this report — same preset + editor as the upload path.
+  const [escalation, setEscalation] = useState<EscalationMatrixConfig>(cloneDefaultMatrix);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const annexInputRef = useRef<HTMLInputElement>(null);
 
@@ -232,6 +236,16 @@ export default function Step2aTemplateDownload({ onUpload }: {
             </Button>
           </div>
         </motion.div>
+
+        {/* Escalation matrix — configured up front, same as the upload path. */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: EASE, delay: 0.22 }}
+          className="mt-4"
+        >
+          <EscalationMatrixCard config={escalation} onChange={setEscalation} />
+        </motion.div>
       </div>
 
       <WizardFooter>
@@ -245,7 +259,7 @@ export default function Step2aTemplateDownload({ onUpload }: {
             variant="primary"
             rightIcon={<ArrowRight size={15} />}
             disabled={!templateFile}
-            onClick={() => templateFile && onUpload(templateFile, annexures)}
+            onClick={() => templateFile && onUpload(templateFile, annexures, escalation)}
             title={templateFile ? undefined : 'Upload your filled template to continue.'}
           >
             Extract from template

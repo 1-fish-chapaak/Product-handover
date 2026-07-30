@@ -13,6 +13,7 @@ import type {
   ExtractedObservation, ExtractedAnnexure, ExceptionRow, ExtractionSession,
   MissingField, ReportMeta, UploadedFile, CompletenessStatus,
 } from './types';
+import { type EscalationMatrixConfig, cloneDefaultMatrix } from './escalationMatrix';
 
 // Status stages shown on Screen 3's in-modal waiting screen. Paced across the
 // full mock duration (~15s) so each stage is visible for a couple of seconds
@@ -219,7 +220,7 @@ export const SEED_INSIGHTS = SAMPLE_INSIGHTS;
 /** Build a fresh extraction session for a just-uploaded file. The user-entered
  *  report details (audit title, entity, period, prepared-by, generated-on) come
  *  in as `metaOverrides` and replace the seed values; Report ID stays seeded. */
-export function seedSession(file: UploadedFile | null, method: ExtractionSession['method'], annexureFiles: UploadedFile[] = [], metaOverrides?: Partial<ReportMeta>): ExtractionSession {
+export function seedSession(file: UploadedFile | null, method: ExtractionSession['method'], annexureFiles: UploadedFile[] = [], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixConfig): ExtractionSession {
   return {
     id: `xs-${Date.now()}`,
     method,
@@ -231,11 +232,12 @@ export function seedSession(file: UploadedFile | null, method: ExtractionSession
     observations: buildObservations(),
     annexures: buildAnnexures(),
     meta: { ...SEED_META, ...metaOverrides },
+    escalationMatrix: escalationMatrix ?? cloneDefaultMatrix(),
   };
 }
 
 /** The zero-observations edge case (Screen 4 empty state). */
-export function seedEmptySession(file: UploadedFile | null, method: ExtractionSession['method'], metaOverrides?: Partial<ReportMeta>): ExtractionSession {
+export function seedEmptySession(file: UploadedFile | null, method: ExtractionSession['method'], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixConfig): ExtractionSession {
   return {
     id: `xs-${Date.now()}`,
     method,
@@ -247,5 +249,6 @@ export function seedEmptySession(file: UploadedFile | null, method: ExtractionSe
     observations: [],
     annexures: [],
     meta: { ...SEED_META, ...metaOverrides },
+    escalationMatrix: escalationMatrix ?? cloneDefaultMatrix(),
   };
 }
