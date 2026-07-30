@@ -40,6 +40,27 @@ export function getGeneratedInsight(layer: InsightLayer, subjectId: string): Lay
   return CACHE.get(cacheKey(layer, subjectId)) ?? null;
 }
 
+/** The session's generated multi-insight stack for a subject, whatever the
+ *  stack size was — for header chips that summarize a Generate result without
+ *  knowing how it was built (the dashboard band). */
+export function getGeneratedStack(layer: InsightLayer, subjectId: string): LayeredInsight[] | null {
+  const prefix = `${cacheKey(layer, subjectId)}:stack:`;
+  for (const [k, v] of MULTI_CACHE) {
+    if (k.startsWith(prefix)) return v;
+  }
+  return null;
+}
+
+/** Whether the subject's last scan (single or stack) finished clean. */
+export function hasCleanScan(layer: InsightLayer, subjectId: string): boolean {
+  const single = cacheKey(layer, subjectId);
+  const prefix = `${single}:stack:`;
+  for (const k of EMPTY_CACHE) {
+    if (k === single || k.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 /** Re-renders the caller whenever a generation completes anywhere, so row CTAs
  *  gated on getGeneratedInsight show up without a remount. */
 export function useInsightCacheVersion(): number {

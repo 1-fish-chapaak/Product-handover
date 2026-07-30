@@ -17,7 +17,7 @@
 
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, ShieldCheck, Zap,
+  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, Bell, ShieldCheck, Zap,
 } from 'lucide-react';
 import {
   LAYER_META, REC_INTENT_META, REC_PRIORITY_META, REC_PRIORITY_RANK,
@@ -275,7 +275,7 @@ export function InsightSummaryStrip({
 // the reader never loses their place in the list.
 
 export function InsightDrawer({
-  insight, onClose, onCreateControl, onCreateWorkflow,
+  insight, onClose, onCreateControl, onCreateWorkflow, onSetAlert, cardHeaderLabel, cardEvidenceLabel,
 }: {
   insight: LayeredInsight | null;
   onClose: () => void;
@@ -283,6 +283,13 @@ export function InsightDrawer({
   onCreateControl?: () => void;
   /** Follow through on the insight: open the workflow builder. */
   onCreateWorkflow?: () => void;
+  /** Follow through on the insight: set a threshold alert on the widget that
+   *  would have caught it earlier (the dashboard's native durable action). */
+  onSetAlert?: () => void;
+  /** Card header-scope override, e.g. "this dashboard" (default: layer label). */
+  cardHeaderLabel?: string;
+  /** Card evidence-toggle override when the per-layer wording doesn't fit. */
+  cardEvidenceLabel?: string;
 }) {
   return (
     <AnimatePresence>
@@ -311,9 +318,9 @@ export function InsightDrawer({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <LayeredInsightCard insight={insight} />
+              <LayeredInsightCard insight={insight} headerLabel={cardHeaderLabel} evidenceLabel={cardEvidenceLabel} />
             </div>
-            {(onCreateControl || onCreateWorkflow) && (
+            {(onCreateControl || onCreateWorkflow || onSetAlert) && (
               <div className="shrink-0 flex items-center gap-2 px-5 py-3.5 border-t border-canvas-border bg-canvas-elevated">
                 {onCreateControl && (
                   <button
@@ -322,6 +329,19 @@ export function InsightDrawer({
                     className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
                   >
                     <Plus size={13} aria-hidden="true" /> Create control
+                  </button>
+                )}
+                {onSetAlert && (
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); onSetAlert(); }}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3.5 h-9 font-semibold transition-colors cursor-pointer ${
+                      onCreateControl
+                        ? 'border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-700 hover:border-brand-300 hover:text-brand-700'
+                        : 'bg-brand-600 text-white text-[0.78125rem] hover:bg-brand-500'
+                    }`}
+                  >
+                    <Bell size={13} aria-hidden="true" /> Set threshold alert
                   </button>
                 )}
                 {onCreateWorkflow && (

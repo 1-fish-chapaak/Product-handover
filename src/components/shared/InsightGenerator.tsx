@@ -62,11 +62,11 @@ const PIPELINE: Record<InsightLayer, string[]> = {
   engagement: ['Reading every risk and control', 'Collapsing findings that share a driver', 'Weighing the total against readiness', 'Writing the escalation'],
 };
 
-const stackSteps = (n: number): string[] => [
+const stackSteps = (n: number | null): string[] => [
   'Reading every risk and control in scope',
   'Correlating findings across the scope',
   'Collapsing findings that share a driver',
-  `Writing ${n} insight${n === 1 ? '' : 's'}`,
+  n == null ? 'Writing the insights' : `Writing ${n} insight${n === 1 ? '' : 's'}`,
 ];
 
 const STEP_MS = 520;
@@ -118,6 +118,19 @@ interface Props {
    *  executor's run card). Gate, pipeline and cache mechanics are untouched.
    *  Single-subject mode only. */
   buildInsight?: () => LayeredInsight;
+  /** Multi-insight counterpart of `buildInsight`: one Generate produces the
+   *  returned set (implies multi mode, no `subjects` needed) — for surfaces
+   *  whose insights are authored rather than status-derived (the dashboard).
+   *  Return [] and the gate still runs; pair with simulateOutcome="empty" to
+   *  reach the clean-scan state organically. */
+  buildStack?: () => LayeredInsight[];
+  /** Replace the generated InsightStack rendering with a caller-supplied view
+   *  (e.g. the dashboard band's one-line strips). Multi mode counterpart of
+   *  `generatedView`; cache and pipeline mechanics are untouched. */
+  generatedStackView?: (insights: LayeredInsight[], regenerate: () => void) => ReactNode;
+  /** External trigger: increment to start generation from outside the panel
+   *  (a header-level CTA). Ignored mid-generation; 0/undefined never fires. */
+  runSignal?: number;
   /** Force the generation outcome — for demos and for states the mock engine
    *  can't reach organically. The ?insightDemo= URL param overrides this. */
   simulateOutcome?: Outcome;
@@ -127,10 +140,10 @@ export default function InsightGenerator({
   layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false,
   labelOverride, scanOverride, stepsOverride, onCheckMore,
   subjects, stackScopeLabel, initialOpen = 1,
-  previewCount, onSeeAll, stackFoldLedger, stackGroupByAnchor, generatedView, buildInsight, simulateOutcome,
+  previewCount, onSeeAll, stackFoldLedger, stackGroupByAnchor, generatedView, buildInsight, buildStack, generatedStackView, runSignal, simulateOutcome,
 }: Props) {
-  const multi = (subjects?.length ?? 0) > 0;
-  const key = multi ? `${cacheKey(layer, subjectId)}:stack:${subjects!.length}` : cacheKey(layer, subjectId);
+  const multi = (subjects?.length ?? 0) > 0 || !!buildStack;
+  const key = multi ? `${cacheKey(layer, subjectId)}:stack:${subjects?.length ?? 'custom'}` : cacheKey(layer, subjectId);
   const cachedSingle = !multi ? (CACHE.get(key) ?? null) : null;
   const cachedMulti = multi ? (MULTI_CACHE.get(key) ?? null) : null;
 
@@ -147,9 +160,18 @@ export default function InsightGenerator({
   const meta = LAYER_META[layer];
   const label = labelOverride ?? meta.label;
   const scan = scanOverride ?? meta.scan;
-  const steps = stepsOverride ?? (multi ? stackSteps(subjects!.length) : PIPELINE[layer]);
+  const steps = stepsOverride ?? (multi ? stackSteps(subjects?.length ?? null) : PIPELINE[layer]);
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+
+  // External trigger (a header-level Generate CTA). Fires only from idle, so a
+  // remount that restores a cached result never silently regenerates.
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const runRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (runSignal && phaseRef.current === 'idle') runRef.current();
+  }, [runSignal]);
 
   const run = () => {
     timers.current.forEach(clearTimeout);
@@ -162,7 +184,9 @@ export default function InsightGenerator({
     if (demo === 'error-once') next = attempts.current === 1 ? 'error' : 'insight';
     else if (demo === 'empty' || demo === 'error') next = demo;
     else if (simulateOutcome) next = simulateOutcome;
-    else next = subjects != null && subjects.length === 0 ? 'empty' : 'insight';
+    else if (subjects != null && subjects.length === 0) next = 'empty';
+    else if (buildStack && buildStack().length === 0) next = 'empty';
+    else next = 'insight';
 
     setOutcome(next);
     setPhase('generating');
@@ -193,7 +217,7 @@ export default function InsightGenerator({
       EMPTY_CACHE.delete(key);
       const stamp = Date.now(); // drives the card header's "N min ago"
       if (multi) {
-        const built = subjects!.map(s => ({ ...buildLayeredInsight(s), generatedAt: stamp }));
+        const built = (buildStack ? buildStack() : subjects!.map(s => buildLayeredInsight(s))).map(b => ({ ...b, generatedAt: stamp }));
         MULTI_CACHE.set(key, built);
         // Seed each subject's single-card cache too, so row-level surfaces
         // (control rows, workflow rows) reveal their insight without a second
@@ -213,10 +237,15 @@ export default function InsightGenerator({
     }, STEP_MS * (steps.length + 1)));
   };
 
+  runRef.current = run;
+
   // ── Generated ──
   if (phase === 'generated' && (insight || stack)) {
     if (!multi && insight && generatedView) {
       return <>{generatedView(insight, run)}</>;
+    }
+    if (multi && stack && generatedStackView) {
+      return <>{generatedStackView(stack, run)}</>;
     }
     return (
       <div className="space-y-2">

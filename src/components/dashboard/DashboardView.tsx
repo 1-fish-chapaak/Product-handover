@@ -11,7 +11,7 @@ import {
   MoreVertical, Edit, Trash2, ChevronUp, Eye, EyeOff,
   Search, LineChart, AreaChart, ListChecks,
   Database, Link2, ArrowRight, Unlink,
-  Bell, Columns,
+  Bell, Columns, ArrowUpRight,
   MessageSquare, Star, Upload, Layers, CloudUpload, Check,
   Hash, GripVertical, PieChart as PieChartIcon, LayoutGrid,
   Bold, Italic, Underline, MoveVertical, Palette, Type
@@ -39,6 +39,15 @@ import ConditionalFormattingSection from './add-widget/imports/ConditionalFormat
 import DataSeriesFormattingSection from './add-widget/imports/DataSeriesFormattingSection';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
 import { INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
+// ─── AI insights (trigger-gated, same engine as controls/runs) ───
+import InsightGenerator from '../shared/InsightGenerator';
+import { InsightDrawer } from '../shared/TargetedActions';
+import { getGeneratedStack, hasCleanScan, useInsightCacheVersion } from '../shared/insightCache';
+import type { LayeredInsight } from '../../data/layeredInsights';
+import {
+  buildDashboardInsights, insightAlertWidget,
+  DASHBOARD_INSIGHT_PIPELINE, DASHBOARD_INSIGHT_SCAN,
+} from '../../data/dashboardInsights';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -466,16 +475,68 @@ const DAILY_DIGESTS: Record<DashboardId, Array<{ type: 'change' | 'alert' | 'imp
   ],
 };
 
-// ─── AI Summaries for each dashboard ────────────────────────────────────────
+// ─── AI insights strip — the generated one-liners in the digest band ────────
+// The band never renders full insight cards (the drawer is the reading
+// surface, same as control rows): each generated insight gets one line —
+// severity · takeaway · View insight — and the whole row opens the drawer.
 
-const DASHBOARD_SUMMARIES: Record<DashboardId, string> = {
-  p2p: "P2P saw 3 new duplicate flags overnight (Acme Corp & Global Supplies), but compliance rate improved to 94.2% after vendor master cleanup. Processing time is trending down to 1.8 days. One new vendor (Atlas Manufacturing) is pending KYC — recommend expediting before next payment batch.",
-  o2c: "2 high-value invoices ($180K+) exceeded SLA for approval — escalation needed. DSO improved to 38 days after collection drive. Revenue recognition check flagged a Q4 timing discrepancy that needs review before close. Disputed orders down 15% — positive trend continuing.",
-  s2c: "4 contracts expiring within 30 days, 2 are high-value (>$500K) — renegotiation must start this week. Cost savings are tracking ahead at $2.8M vs $2.4M target. 3 vendors downgraded to Medium risk after score refresh. Legal added new compliance clause to templates.",
-  grc: "Material weakness DEF-002 is 6 days from deadline — remediation evidence pending. SOX progress moved to 58% after 3 controls tested yesterday. Workflow automation saved 45 person-hours this month. New risk RSK-012 identified in R2R — GL balance discrepancy across subsidiaries.",
-  excel: "",
-  sql: "Vendor Master DB shows 24,180 active vendors across 5 regions, with North leading at 38%. Outstanding invoices total 1.84M across public.invoices, with avg days-to-pay improving to 38d. 5 vendors crossed the 70+ risk-score threshold this week and need review. Hardware and Services categories together account for 54% of spend.",
+const INSIGHT_SEV: Record<LayeredInsight['severity'], { rank: number; label: string; pill: string }> = {
+  high: { rank: 0, label: 'High', pill: 'bg-risk-50 text-risk' },
+  med:  { rank: 1, label: 'Medium', pill: 'bg-mitigated-50 text-mitigated-700' },
+  low:  { rank: 2, label: 'Low', pill: 'bg-paper-100 text-ink-600' },
 };
+
+function DashboardInsightLines({ insights, onView, onRegenerate }: {
+  insights: LayeredInsight[];
+  onView: (i: LayeredInsight) => void;
+  onRegenerate: () => void;
+}) {
+  const sorted = [...insights].sort((a, b) => INSIGHT_SEV[a.severity].rank - INSIGHT_SEV[b.severity].rank);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2 px-1">
+        <span className="inline-flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-brand-700">
+          <Sparkles size={11} aria-hidden="true" /> AI insights · {sorted.length}
+        </span>
+        <span className="text-[0.625rem] text-ink-400">Cross-widget reads — what no single widget shows</span>
+        <button
+          type="button" onClick={onRegenerate}
+          className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+        >
+          <RefreshCw size={10} aria-hidden="true" /> Regenerate
+        </button>
+      </div>
+      {sorted.map(insight => {
+        const positive = insight.verdict.tone === 'positive';
+        return (
+          <button
+            key={insight.id} type="button" onClick={() => onView(insight)}
+            title="Open the full insight"
+            className="group flex w-full items-center gap-2.5 rounded-xl border border-brand-200/70 bg-brand-50/30 px-3.5 py-2.5 text-left hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer"
+          >
+            <span className="size-6 shrink-0 rounded-lg bg-brand-600 text-white flex items-center justify-center">
+              <Sparkles size={12} aria-hidden="true" />
+            </span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.625rem] font-semibold ${INSIGHT_SEV[insight.severity].pill}`}>
+              {INSIGHT_SEV[insight.severity].label}
+            </span>
+            {positive && (
+              <span className="hidden sm:inline-flex shrink-0 items-center gap-1 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[0.59375rem] font-bold text-compliant-700">
+                <ShieldCheck size={9} aria-hidden="true" /> Pass
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">
+              {insight.takeaway}
+            </span>
+            <span className="shrink-0 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700">
+              View insight <ArrowUpRight size={12} aria-hidden="true" className="text-brand-400 group-hover:text-brand-600 transition-colors" />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const SHARE_EMAIL_TEMPLATES: Record<DashboardId, { subject: string; body: string }> = {
   p2p: {
@@ -506,40 +567,6 @@ const SHARE_EMAIL_TEMPLATES: Record<DashboardId, { subject: string; body: string
 
 // ─── Alerts Panel Component ─────────────────────────────────────────────────
 
-function IRAInlineSummary({ dashboardId }: { dashboardId: DashboardId }) {
-  const summary = AI_SUMMARIES[dashboardId];
-
-  return (
-    <div className="px-5 pt-4 pb-3">
-      <div className="p-5 rounded-lg border border-brand-200 bg-canvas-elevated">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-brand-50">
-              <Sparkles size={13} className="text-brand-600" />
-            </div>
-            <span className="text-[0.75rem] font-bold text-brand-700 uppercase tracking-wide">IRA Summary</span>
-          </div>
-          <Sparkles size={13} className="text-brand-500" />
-        </div>
-        <p className="text-[0.8125rem] leading-[1.65] text-ink-800">
-          {summary}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── IRA Summary texts per dashboard ────────────────────────────────────────
-
-const AI_SUMMARIES: Record<DashboardId, string> = {
-  p2p: 'P2P saw 3 new duplicate flags overnight (Acme Corp & Global Supplies), but compliance rate improved to 94.2% after vendor master cleanup. Processing time is trending down to 1.8 days. One new vendor (Atlas Manufacturing) is pending KYC — recommend expediting before next payment batch.',
-  o2c: 'DSO improved by 2 days to 38 days. 5 customers account for 65% of outstanding receivables totalling ₹4.2Cr. Dispute rate trending upward in APAC region — 12 new disputes this week. Cash application automation rate hit 91%.',
-  s2c: '12 contracts expire within 30 days across 3 business units. Vendor TechParts Ltd compliance score dropped below 75% threshold. 4 contracts pending legal review — recommend prioritizing the ₹2.1Cr IT services renewal.',
-  grc: '2 critical risks in P2P have zero controls mapped. SOD violation detected in AP module — user JSmith has both invoice approval and payment release access. 3 audit findings from Q1 remain open past remediation deadline.',
-  excel: '',
-  sql: 'Vendor Master DB carries 24,180 active vendors across 5 regions. 5 vendors crossed the 70+ risk-score threshold this week — review before next payment batch. Avg days-to-pay improved to 38d after the early-payment discount drive. Hardware + Services account for 54% of spend; Procurement department drove an 18% MoM uplift in invoice volume.',
-};
-
 function EmptyAlertsPanel() {
   const [expanded, setExpanded] = useState(true);
   return (
@@ -551,7 +578,7 @@ function EmptyAlertsPanel() {
           </div>
           <span className="text-[0.8125rem] font-semibold text-text">Alerts & Daily Digest</span>
           <span className="text-[0.75rem] bg-canvas-elevated text-ink-400 px-2 py-0.5 rounded-full font-bold">0 alerts</span>
-          <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
+          <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Insights</span>
           <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
         </button>
         <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-ink-400 bg-canvas-elevated cursor-default opacity-60">
@@ -566,7 +593,7 @@ function EmptyAlertsPanel() {
                 <Sparkles size={18} className="text-ink-300" />
               </div>
               <p className="text-[0.8125rem] font-medium text-ink-500 mb-1">No alerts yet</p>
-              <p className="text-[0.75rem] text-ink-400 max-w-xs">Alerts and AI-generated summaries will appear here once your dashboard has data.</p>
+              <p className="text-[0.75rem] text-ink-400 max-w-xs">Alerts and AI-generated insights will appear here once your dashboard has data.</p>
             </div>
           </motion.div>
         )}
@@ -586,8 +613,22 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
   const [emailCopied, setEmailCopied] = useState(false);
   const [recipient, setRecipient] = useState('');
   const items = DAILY_DIGESTS[dashboardId];
-  const summary = DASHBOARD_SUMMARIES[dashboardId];
   const alertCount = items.filter(i => i.type === 'alert').length;
+  const dashboardName = DASHBOARDS.find(d => d.id === dashboardId)?.name ?? dashboardId;
+
+  // AI insights — trigger-gated, session-cached (same engine as controls/runs).
+  // The header CTA and the in-band gate share one signal; the header chip reads
+  // the cache so the collapsed band still shows what a Generate produced. The
+  // signal carries the dashboard it fired for, so switching boards can never
+  // auto-generate on a stale click.
+  const [genSignal, setGenSignal] = useState<{ id: DashboardId; n: number }>({ id: dashboardId, n: 0 });
+  const [insightDetail, setInsightDetail] = useState<LayeredInsight | null>(null);
+  const [alertWidgetTitle, setAlertWidgetTitle] = useState<string | null>(null);
+  useInsightCacheVersion();
+  const insightSubject = `dash-${dashboardId}`;
+  const generatedInsights = getGeneratedStack('engagement', insightSubject);
+  const cleanScan = !generatedInsights && hasCleanScan('engagement', insightSubject);
+  const highCount = generatedInsights?.filter(i => i.severity === 'high').length ?? 0;
 
   const typeIcons = { change: RefreshCw, alert: AlertTriangle, improvement: TrendingUp, new: Plus };
   const typeColors = {
@@ -643,21 +684,62 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
             </div>
             <span className="text-[0.8125rem] font-semibold text-text">Alerts & Daily Digest</span>
             {alertCount > 0 && <span className="text-[0.75rem] bg-risk-50 text-risk-700 px-2 py-0.5 rounded-full font-bold">{alertCount} alert{alertCount > 1 ? 's' : ''}</span>}
-            <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
+            {/* Insight state survives collapse: an honest count chip once
+                generated (never a bare "AI"), a compliant receipt when the
+                scan came back clean, nothing before the first Generate. */}
+            {generatedInsights && (
+              <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+                <Sparkles size={10} /> {generatedInsights.length} insight{generatedInsights.length === 1 ? '' : 's'}{highCount > 0 ? ` · ${highCount} High` : ''}
+              </span>
+            )}
+            {cleanScan && (
+              <span className="text-[0.75rem] bg-compliant-50 text-compliant-700 px-2 py-0.5 rounded-full font-bold">Scan clean</span>
+            )}
             <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           </button>
-          {can('db_share') && (
-            <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-              <Send size={11} /> Share with Team
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {!generatedInsights && !cleanScan && (
+              <button
+                onClick={() => { setExpanded(true); setGenSignal(s => ({ id: dashboardId, n: s.n + 1 })); }}
+                title="Read every widget on this dashboard and correlate movements across them — runs only when you ask"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 transition-colors cursor-pointer"
+              >
+                <Sparkles size={11} /> Generate insights
+              </button>
+            )}
+            {can('db_share') && (
+              <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+                <Send size={11} /> Share with Team
+              </button>
+            )}
+          </div>
         </div>
 
         <AnimatePresence>
           {expanded && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-              {/* IRA Summary — matches Working folder design */}
-              <IRAInlineSummary dashboardId={dashboardId} />
+              {/* AI insights — the slot the old always-on summary held. Now
+                  trigger-gated like every other insight surface: idle gate →
+                  honest pipeline → one-line strips (the drawer holds the full
+                  card). The digest below stays: those are events; these are
+                  cross-widget reads. */}
+              <div className="px-5 pt-4 pb-1">
+                <InsightGenerator
+                  key={dashboardId}
+                  layer="engagement"
+                  subjectId={insightSubject}
+                  subjectLabel={dashboardName}
+                  compact
+                  labelOverride="this dashboard"
+                  scanOverride={DASHBOARD_INSIGHT_SCAN}
+                  stepsOverride={DASHBOARD_INSIGHT_PIPELINE}
+                  runSignal={genSignal.id === dashboardId ? genSignal.n : 0}
+                  buildStack={() => buildDashboardInsights(dashboardId)}
+                  generatedStackView={(insights, regenerate) => (
+                    <DashboardInsightLines insights={insights} onView={setInsightDetail} onRegenerate={regenerate} />
+                  )}
+                />
+              </div>
 
               {/* Alert items */}
               <div className="px-5 pb-4 space-y-2">
@@ -786,6 +868,23 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Full insight — right-side drawer, the same reading surface as control
+          rows. Follow-through: set a threshold alert on the widget that would
+          have caught the finding earlier. */}
+      <InsightDrawer
+        insight={insightDetail}
+        onClose={() => setInsightDetail(null)}
+        onSetAlert={insightDetail ? () => setAlertWidgetTitle(insightAlertWidget(insightDetail.id)) : undefined}
+        cardHeaderLabel="this dashboard"
+        cardEvidenceLabel="Evidence · widgets read together"
+      />
+      <ThresholdAlertModal
+        open={alertWidgetTitle != null}
+        onClose={() => setAlertWidgetTitle(null)}
+        widgetTitle={alertWidgetTitle ?? ''}
+        addToast={addToast}
+      />
     </>
   );
 }
