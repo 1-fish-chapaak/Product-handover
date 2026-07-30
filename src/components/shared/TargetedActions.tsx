@@ -17,7 +17,7 @@
 
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, Bell, ShieldCheck, Zap,
+  Sparkles, X, RefreshCw, PenLine, Plus, Merge, Activity, Check, ArrowRight, ArrowUpRight, Bell, ShieldCheck, Zap, Play,
 } from 'lucide-react';
 import {
   LAYER_META, REC_INTENT_META, REC_PRIORITY_META, REC_PRIORITY_RANK,
@@ -136,17 +136,19 @@ export function TargetedActionList({
 }) {
   const live = actions.filter(a => getActionStatus(a) !== 'dismissed');
   if (live.length === 0) return null;
+  // Two tiles per row (the LayeredInsightCard RecommendedActions grid), so a
+  // 3–4 action set reads in two rows instead of a tall wall of full-width bars.
   const rows = (
-    <ul className="space-y-1.5">
+    <ul className="grid gap-1.5 sm:grid-cols-2 items-start">
         {live.map(a => {
           const applied = getActionStatus(a) === 'applied';
           const pm = REC_PRIORITY_META[a.rec.priority];
           return (
-            <li key={actionKey(a)}>
+            <li key={actionKey(a)} className="min-w-0">
               <button
                 type="button" onClick={() => onOpen(a)}
                 title="Review this action — apply it, work it in Ask IRA, or dismiss it"
-                className={`group flex w-full items-center gap-2.5 rounded-lg border py-2 pl-2.5 pr-2.5 text-left transition-colors cursor-pointer ${
+                className={`group flex w-full items-start gap-2.5 rounded-lg border py-2 pl-2.5 pr-2.5 text-left transition-colors cursor-pointer ${
                   applied
                     ? 'border-compliant-200 bg-compliant-50/40'
                     : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40'
@@ -155,18 +157,20 @@ export function TargetedActionList({
                 <span className={`size-5 shrink-0 rounded-md flex items-center justify-center ${applied ? 'bg-compliant-50 text-compliant-700' : intentIconCls(a.rec.intent)}`}>
                   {applied ? <Check size={11} aria-hidden="true" /> : <IntentIcon intent={a.rec.intent} />}
                 </span>
-                <span className={`min-w-0 flex-1 text-[12px] font-semibold leading-snug line-clamp-2 ${applied ? 'text-ink-500' : 'text-ink-900 group-hover:text-brand-700'} transition-colors`}>
-                  {a.rec.title}
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-[12px] font-semibold leading-snug line-clamp-2 ${applied ? 'text-ink-500' : 'text-ink-900 group-hover:text-brand-700'} transition-colors`}>
+                    {a.rec.title}
+                  </span>
+                  {provenance && (
+                    <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-brand-600/80">
+                      <Sparkles size={9} aria-hidden="true" /> from insight
+                    </span>
+                  )}
                 </span>
                 {applied ? (
-                  <span className="shrink-0 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[9.5px] font-bold text-compliant-700">Applied</span>
+                  <span className="mt-0.5 shrink-0 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[9.5px] font-bold text-compliant-700">Applied</span>
                 ) : (
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9.5px] font-bold ${PRIORITY_PILL[a.rec.priority]}`}>{pm.label}</span>
-                )}
-                {provenance && (
-                  <span className="hidden sm:inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold text-brand-600/80">
-                    <Sparkles size={9} aria-hidden="true" /> from insight
-                  </span>
+                  <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[9.5px] font-bold ${PRIORITY_PILL[a.rec.priority]}`}>{pm.label}</span>
                 )}
               </button>
             </li>
@@ -200,13 +204,16 @@ const SEV_STRIP_PILL: Record<LayeredInsight['severity'], string> = {
 };
 
 export function InsightSummaryStrip({
-  insight, onViewFull, onOpenAction, onRegenerate,
+  insight, onViewFull, onOpenAction, onRegenerate, anchorLabel,
 }: {
   insight: LayeredInsight;
   /** Navigate to the AI Insights hub, where the full card lives. */
   onViewFull?: () => void;
   onOpenAction: (a: TargetedAction) => void;
   onRegenerate?: () => void;
+  /** Override the anchor noun, e.g. "this workflow" for metric-derived
+   *  workflow insights whose layer doesn't name their surface. */
+  anchorLabel?: string;
 }) {
   const recs = [...(insight.recommendations ?? [])].sort(
     (a, b) => REC_PRIORITY_RANK[a.priority] - REC_PRIORITY_RANK[b.priority],
@@ -220,7 +227,9 @@ export function InsightSummaryStrip({
           <InsightMark className="mt-0.5" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-[9.5px] font-bold uppercase tracking-wider text-brand-600">AI insight · anchored at this control</p>
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-brand-600">
+                AI insight · anchored at {anchorLabel ?? (insight.layer === 'sop' ? 'this SOP' : `this ${insight.layer}`)}
+              </p>
               <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${SEV_STRIP_PILL[insight.severity]}`}>
                 {SEV_LABEL[insight.severity]}
               </span>
@@ -275,12 +284,20 @@ export function InsightSummaryStrip({
 // the reader never loses their place in the list.
 
 export function InsightDrawer({
-  insight, onClose, onCreateControl, onCreateWorkflow, onSetAlert, cardHeaderLabel, cardEvidenceLabel,
+  insight, onClose, onCreateControl, controlCtaVariant = 'create', onRunWorkflow, onCreateWorkflow, onSetAlert, cardHeaderLabel, cardEvidenceLabel,
 }: {
   insight: LayeredInsight | null;
   onClose: () => void;
-  /** Follow through on the insight: open the host surface's Add-control flow. */
+  /** Follow through on a WORKFLOW insight: open the executor for its workflow.
+   *  When present it is the primary CTA (the insight reasons over runs, so the
+   *  natural next step is another run — creating comes second). */
+  onRunWorkflow?: () => void;
+  /** Follow through on the insight: the primary control CTA. With the default
+   *  'create' variant this opens the host's Add-control flow; hosts whose
+   *  insight anchors at an EXISTING control pass variant 'edit' and route to
+   *  that control instead (an anchored insight never needs a new control). */
   onCreateControl?: () => void;
+  controlCtaVariant?: 'create' | 'edit';
   /** Follow through on the insight: open the workflow builder. */
   onCreateWorkflow?: () => void;
   /** Follow through on the insight: set a threshold alert on the widget that
@@ -320,15 +337,26 @@ export function InsightDrawer({
             <div className="flex-1 overflow-y-auto p-4">
               <LayeredInsightCard insight={insight} headerLabel={cardHeaderLabel} evidenceLabel={cardEvidenceLabel} />
             </div>
-            {(onCreateControl || onCreateWorkflow || onSetAlert) && (
+            {(onRunWorkflow || onCreateControl || onCreateWorkflow || onSetAlert) && (
               <div className="shrink-0 flex items-center gap-2 px-5 py-3.5 border-t border-canvas-border bg-canvas-elevated">
+                {onRunWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); onRunWorkflow(); }}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                  >
+                    <Play size={13} aria-hidden="true" /> Run workflow
+                  </button>
+                )}
                 {onCreateControl && (
                   <button
                     type="button"
                     onClick={() => { onClose(); onCreateControl(); }}
                     className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
                   >
-                    <Plus size={13} aria-hidden="true" /> Create control
+                    {controlCtaVariant === 'edit'
+                      ? <><PenLine size={13} aria-hidden="true" /> Edit control</>
+                      : <><Plus size={13} aria-hidden="true" /> Create control</>}
                   </button>
                 )}
                 {onSetAlert && (

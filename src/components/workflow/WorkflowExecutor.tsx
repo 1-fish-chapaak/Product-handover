@@ -12,6 +12,7 @@ import {
   Table2, Type as TypeIcon, Hash,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
+import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
 import { PlanSection, type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
@@ -1006,20 +1007,21 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  // Most workflow IDs resolve to the AP duplicate-detection mock. The
-  // consolidated-file tester is a dedicated single-run journey driven by one
-  // bundled workbook — its own flow is built out separately from the
-  // multi-input default executor.
-  const workflow =
-    workflowId === 'lw-consolidated-file'
-      ? CONSOLIDATED_FILE_WORKFLOW
-      : workflowId === 'lw-consolidated-file-multi'
-        ? CONSOLIDATED_FILE_MULTI_WORKFLOW
-        : workflowId === 'lw-consolidated-file-reference'
-          ? CONSOLIDATED_FILE_REFERENCE_WORKFLOW
-          : workflowId === 'lw-consolidated-file-compare'
-            ? CONSOLIDATED_FILE_COMPARE_WORKFLOW
-            : EXECUTOR_WORKFLOW;
+  // Most workflow IDs resolve to the AP duplicate-detection mock (inputs,
+  // steps, results) — but the HEADER identity comes from the library catalog,
+  // so launching "PO Approval Threshold Scan" never reads as a different
+  // workflow. The consolidated-file tester is a dedicated single-run journey
+  // driven by one bundled workbook — its own flow is built out separately.
+  const workflow = useMemo(() => {
+    if (workflowId === 'lw-consolidated-file') return CONSOLIDATED_FILE_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-multi') return CONSOLIDATED_FILE_MULTI_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-reference') return CONSOLIDATED_FILE_REFERENCE_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-compare') return CONSOLIDATED_FILE_COMPARE_WORKFLOW;
+    const lib = LIBRARY_WORKFLOWS.find(w => w.id === workflowId);
+    return lib
+      ? { ...EXECUTOR_WORKFLOW, name: lib.name, description: lib.description, category: lib.businessProcess }
+      : EXECUTOR_WORKFLOW;
+  }, [workflowId]);
 
   // Single "what this run means" insight, derived from the run's own output so
   // the numbers always match the results table. Aggregates the flagged rows by
