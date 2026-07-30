@@ -23,7 +23,7 @@ import { ConfigurableChart, PIE_DATA } from "./ConfigurableChart";
 // ─── Multi-table (model) widget building — merged into Add Widget ───
 import MultiTableFieldPicker from "../model/MultiTableFieldPicker";
 import ModelChart from "../model/ModelChart";
-import { buildWidgetRows } from "../model/joinEngine";
+import { buildWidgetRows, distinctValues, colByName, tableById } from "../model/joinEngine";
 import type { ModelTable, Relationship, WidgetModelConfig, WidgetModelField } from "../model/relationshipTypes";
 import Gated from "../../shared/Gated";
 import { FileTreeView, type FileTreeFile } from "./FileTreeView";
@@ -149,7 +149,7 @@ interface WidgetDef {
   title: string;
   Icon: React.ElementType;
   cardType: string;
-  builderType: "kpi" | "line" | "area" | "bar" | "pie" | "table" | "scatter" | "matrix" | "doughnut" | "grid";
+  builderType: "kpi" | "line" | "area" | "bar" | "pie" | "table" | "scatter" | "matrix" | "doughnut" | "grid" | "slicer";
   defaultX: string;
   defaultY: string;
   useFieldBuilder: boolean;
@@ -179,6 +179,8 @@ const WIDGETS: WidgetDef[] = [
   { id: "scatter",          title: "Scatter Chart",                  Icon: TrendingUp,    cardType: "Area Chart", builderType: "scatter",  defaultX: "Week",   defaultY: "Invoice Amount (₹)",  useFieldBuilder: true,  dimensions: [{ key: "yAxis", label: "Values" }, { key: "xAxis", label: "X-axis" }, { key: "legend", label: "Legend" }, { key: "size", label: "Size" }] },
   // 8. Table — always last
   { id: "table",            title: "Table",                          Icon: TableIcon,     cardType: "Table",      builderType: "table",    defaultX: "",       defaultY: "",                    useFieldBuilder: false, dimensions: [{ key: "xAxis", label: "Columns" }] },
+  // 9. Slicer — Power BI-style filter tile. Binds to one field and filters the page.
+  { id: "slicer",           title: "Slicer",                         Icon: Sliders,       cardType: "Slicer",     builderType: "slicer",   defaultX: "",       defaultY: "",                    useFieldBuilder: true,  dimensions: [{ key: "xAxis", label: "Field" }] },
 ];
 
 /* ─── Aggregation portal dropdown ─────────────────────────────────────────── */
@@ -322,7 +324,7 @@ export interface AddCardDashboardSource {
 interface AddCardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string; model?: WidgetModelConfig }) => void;
+  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string; model?: WidgetModelConfig; slicerMode?: string }) => void;
   /** Related tables → when present (and not a SQL dashboard), the Data Source
    *  tab becomes the multi-table model builder. */
   modelTables?: ModelTable[];
@@ -379,6 +381,8 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const [modelFields, setModelFields] = useState<WidgetModelField[]>(initialModel?.fields ?? []);
   const [modelType, setModelType] = useState<string>(initialWidgetType ?? 'Bar Chart');
   const [modelColor, setModelColor] = useState<string>(initialColor ?? '#6a12cd');
+  // Slicer display style — chosen here, changeable later on the tile itself.
+  const [slicerMode, setSlicerMode] = useState<'list' | 'dropdown' | 'between'>('list');
   useEffect(() => {
     if (!open) return;
     if (initialModel) {
@@ -558,11 +562,25 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const yAxisValue = yFieldIds[0] ? (FIELDS.find(f => f.id === yFieldIds[0])?.axisValue ?? "") : "";
   const needsFields = selected?.useFieldBuilder ?? false;
 
+  // ── Slicer (single-source flow): the picked field is mapped to a model column
+  //    (by label) so the tile can read real values and drive the page filter. ──
+  const isSlicer = selected?.builderType === 'slicer';
+  const findModelField = (label: string): WidgetModelField | null => {
+    if (!modelTables) return null;
+    for (const t of modelTables) {
+      const c = t.columns.find(col => col.label === label);
+      if (c) return { table: t.id, column: c.name, role: c.role };
+    }
+    return null;
+  };
+  const slicerFieldLabel = isSlicer && xFieldIds[0] ? (FIELDS.find(f => f.id === xFieldIds[0])?.label ?? "") : "";
+  const slicerModelField = isSlicer ? findModelField(slicerFieldLabel) : null;
+
   const editHasInitialValues = mode === 'edit' && !!(initialXAxis || initialYAxis);
-  const previewReady = !needsFields || (xAxisValue !== "" && yAxisValue !== "") || editHasInitialValues;
+  const previewReady = isSlicer ? true : (!needsFields || (xAxisValue !== "" && yAxisValue !== "") || editHasInitialValues);
   const isTable = selected?.builderType === 'table';
   const canCustomize = !!selected && (isTable ? xFieldIds.length > 0 || editHasInitialValues : previewReady);
-  const canAdd = selected && (!needsFields || previewReady);
+  const canAdd = selected && (isSlicer ? !!slicerModelField : (!needsFields || previewReady));
 
   const rawXAxis = xAxisValue || (editHasInitialValues ? initialXAxis : undefined) || selected?.defaultX || "";
   const resolvedYAxis = yAxisValue || (editHasInitialValues ? initialYAxis : undefined) || selected?.defaultY || "";
@@ -584,6 +602,16 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
   const handleAdd = () => {
     if (!selected) return;
+    if (isSlicer) {
+      onSelectCard('Slicer', {
+        xAxis: slicerFieldLabel, yAxis: '', color: chartColor,
+        name: widgetName || slicerFieldLabel || 'Slicer',
+        model: slicerModelField ? { fields: [slicerModelField] } : undefined,
+        slicerMode: 'list',
+      });
+      onOpenChange(false);
+      return;
+    }
     const xAxis = needsFields ? xAxisValue : "";
     const yAxis = needsFields ? yAxisValue : selected.defaultY;
     onSelectCard(selected.cardType, { xAxis, yAxis, color: chartColor, name: widgetName, description: widgetDescription, seriesColors: Object.keys(seriesColors).length > 0 ? seriesColors : undefined, fontFamily });
@@ -699,12 +727,23 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   //    csv / query / combo). SQL-typed dashboards keep their DB-table path
   //    (valid → DB tree, invalid binding → SQL empty state). ──
   const useModel = widgetSource?.type !== 'sql' && (modelTables?.length ?? 0) > 0;
-  const MODEL_CHART_TYPES = ['Bar Chart', 'Line Chart', 'Area Chart', 'Pie Chart', 'KPI', 'Table'];
+  const MODEL_CHART_TYPES = ['Bar Chart', 'Line Chart', 'Area Chart', 'Pie Chart', 'KPI', 'Table', 'Slicer'];
   const MODEL_COLORS = ['#6a12cd', '#0d9488', '#C2410C', '#1a2744', '#dc2626'];
-  const modelPreview = useModel ? buildWidgetRows(modelTables!, relationships, { fields: modelFields }) : null;
-  const canAddModel = useModel && modelFields.length > 0 && !modelPreview?.error;
+  const isSlicerType = modelType === 'Slicer';
+  // A slicer binds to ONE dimension field. Pick the first dimension the user
+  // added (or the first field, so any pick works).
+  const slicerField = modelFields.find(f => f.role === 'dimension') ?? modelFields[0];
+  const slicerCol = slicerField && useModel ? colByName(tableById(modelTables!, slicerField.table), slicerField.column) : undefined;
+  const slicerValues = slicerField && useModel ? distinctValues(modelTables!, slicerField.table, slicerField.column) : [];
+  const modelPreview = useModel && !isSlicerType ? buildWidgetRows(modelTables!, relationships, { fields: modelFields }) : null;
+  const canAddModel = useModel && (isSlicerType ? !!slicerField : (modelFields.length > 0 && !modelPreview?.error));
   const addModelWidget = () => {
-    onSelectCard(modelType, { xAxis: '', yAxis: '', color: modelColor, name: widgetName || 'Combined widget', model: { fields: modelFields } });
+    if (isSlicerType) {
+      if (!slicerField) return;
+      onSelectCard('Slicer', { xAxis: '', yAxis: '', color: modelColor, name: widgetName || (slicerCol?.label ?? 'Slicer'), model: { fields: [slicerField] }, slicerMode });
+    } else {
+      onSelectCard(modelType, { xAxis: '', yAxis: '', color: modelColor, name: widgetName || 'Combined widget', model: { fields: modelFields } });
+    }
     onOpenChange(false);
   };
 
@@ -734,16 +773,61 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             ))}
           </div>
         </div>
-        <div>
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
-          <div className="flex gap-1.5">
-            {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-md border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
+        {isSlicerType ? (
+          <div>
+            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Slicer style</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { id: 'list', label: 'List' },
+                { id: 'dropdown', label: 'Dropdown' },
+                { id: 'between', label: 'Between', numeric: true },
+              ] as { id: 'list' | 'dropdown' | 'between'; label: string; numeric?: boolean }[]).map(s => {
+                const disabled = s.numeric && slicerCol?.type !== 'number';
+                return (
+                  <button key={s.id} disabled={disabled} onClick={() => setSlicerMode(s.id)} title={disabled ? 'Between needs a numeric field' : undefined}
+                    className={`py-2 rounded-md border text-[10.5px] font-medium transition-colors ${disabled ? 'border-[#e5e7eb] text-ink-300 cursor-not-allowed' : slicerMode === s.id ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd] cursor-pointer' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20 cursor-pointer'}`}>
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-ink-400 leading-snug">A slicer filters every related widget on the dashboard — Power BI page-filter behaviour.</p>
           </div>
-        </div>
+        ) : (
+          <div>
+            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
+            <div className="flex gap-1.5">
+              {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-md border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
+            </div>
+          </div>
+        )}
         <div>
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
-          <div className="h-[200px] border border-[#e5e7eb] rounded-lg p-2 bg-white">
-            {modelFields.length === 0
+          <div className="h-[200px] border border-[#e5e7eb] rounded-lg p-2 bg-white overflow-hidden">
+            {isSlicerType ? (
+              !slicerField
+                ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick one field to slice by.</div>
+                : (
+                  <div className="h-full flex flex-col">
+                    <div className="text-[11px] font-semibold text-[#26064a] mb-1.5 truncate">{slicerCol?.label ?? slicerField.column}</div>
+                    {slicerMode === 'between' && slicerCol?.type === 'number' ? (
+                      <div className="flex items-center gap-2 text-[11px] text-ink-500">
+                        <span className="px-2 py-1 rounded-[6px] border border-[#e5e7eb] tabular-nums">{Math.min(...slicerValues.map(Number))}</span>
+                        <span>–</span>
+                        <span className="px-2 py-1 rounded-[6px] border border-[#e5e7eb] tabular-nums">{Math.max(...slicerValues.map(Number))}</span>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto space-y-0.5">
+                        {slicerValues.slice(0, 20).map(v => (
+                          <div key={String(v)} className="flex items-center gap-2 px-1 py-1 text-[11.5px] text-ink-700">
+                            <span className="w-3.5 h-3.5 rounded-[4px] border border-[#d1d5db] shrink-0" /> {String(v)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+            ) : modelFields.length === 0
               ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
               : <ModelChart data={modelPreview!} type={modelType} color={modelColor} />}
           </div>
@@ -1571,7 +1655,31 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
               <div className="flex-1 overflow-auto p-6">
                 {previewReady && selected && (
                   <div className="w-full h-full min-h-[300px]">
-                    {selected.id === "kpi" ? (
+                    {selected.builderType === "slicer" ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        {slicerModelField ? (
+                          <div className="w-[280px] rounded-[12px] border border-[#e5e7eb] bg-white p-4 shadow-sm">
+                            <p className="text-[0.75rem] font-semibold text-[#26064a] mb-2">{slicerFieldLabel}</p>
+                            <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+                              {distinctValues(modelTables!, slicerModelField.table, slicerModelField.column).slice(0, 12).map(v => (
+                                <div key={String(v)} className="flex items-center gap-2 text-[0.8125rem] text-[#374151]">
+                                  <span className="w-4 h-4 rounded-[4px] border border-[#d1d5db] shrink-0" /> {String(v)}
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mt-3 pt-2 border-t border-[#f3f4f6] text-[0.6875rem] text-[#9ca3af]">Filters every related widget on the page — Power BI behaviour. Switch to List / Dropdown / Between on the tile.</p>
+                          </div>
+                        ) : (
+                          <div className="text-center max-w-[300px]">
+                            <div className="mx-auto mb-4 size-20 rounded-2xl bg-[#f4f0ff] flex items-center justify-center">
+                              <Sliders className="size-10 text-[#6a12cd]/30" strokeWidth={1.5} />
+                            </div>
+                            <p className="text-[0.9375rem] font-semibold text-[#26064a] mb-1">Pick a field to slice by</p>
+                            <p className="text-[0.8125rem] text-[#9ca3af] leading-relaxed">Drag a field (e.g. Region, Status, Vendor Name, Department) into the Field slot above. The slicer then filters every related widget on the dashboard.</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : selected.id === "kpi" ? (
                       yFieldIds.length > 0 ? (
                         <div className="flex items-center justify-center h-full gap-5 flex-wrap">
                           {yFieldIds.map((fid, i) => {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Pencil, Download, Save, SlidersHorizontal, ArrowLeft,
-  ChevronUp, ChevronDown, Eye, EyeOff, ListTodo, RotateCcw,
+  ChevronUp, ChevronDown, Eye, EyeOff, ListTodo, RotateCcw, CalendarClock,
 } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
@@ -12,6 +12,9 @@ import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from '../../
 import { toAtrReportData } from '../toAtrReportData';
 import { useAtrUpload } from '../AtrUploadContext';
 import { WizardFooter } from '../footerSlot';
+import ObservationEscalationModal from '../components/ObservationEscalationModal';
+import { parseDueDate, deriveEscalationState } from '../escalationMatrix';
+import type { ExtractedObservation } from '../types';
 import type { AtrReportData } from '../../atrTypes';
 
 /** Screen 7 — ATR preview. Reuses the existing AtrDocument renderer (brand
@@ -31,6 +34,8 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const [order, setOrder] = useState<AtrSectionKey[]>(ATR_SECTION_ORDER);
   const [hidden, setHidden] = useState<AtrSectionKey[]>([]);
+  // Which observation's escalation schedule is open (null = none).
+  const [escalationObs, setEscalationObs] = useState<ExtractedObservation | null>(null);
 
   // Snapshot the session into an editable ATR draft on first entry.
   useEffect(() => {
@@ -44,6 +49,17 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   // filters by `selected`), so the per-observation action slot's index maps back here.
   const selectedObs = session.observations.filter(o => o.selected);
   const annexFor = (obsId: string) => session.annexures.filter(a => a.observationId === obsId);
+
+  // Escalation matrix configured on the Upload step. The soonest due date across
+  // an observation's action plans anchors the chip's current-rung state.
+  const escConfig = session.escalationMatrix;
+  const soonestDue = (o: ExtractedObservation): Date | null => {
+    const dues = (o.actionPlans ?? []).map(p => parseDueDate(p.dueDate)).filter((d): d is Date => !!d);
+    const own = parseDueDate(o.dueDate);
+    if (own) dues.push(own);
+    if (dues.length === 0) return null;
+    return dues.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
+  };
 
   const isEditing = editMode;
 
@@ -161,18 +177,43 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
           const eo = selectedObs[i];
           if (!eo) return null;
           const linked = annexFor(eo.id);
-          if (linked.length === 0) return null;
           const rowCount = linked.reduce((n, a) => n + a.rows.length, 0);
+
+          // Escalation chip — shown whenever the matrix is on and the observation
+          // has a due date to chase. Reflects the current rung relative to today.
+          const due = soonestDue(eo);
+          const showEsc = !!(escConfig?.enabled && due);
+          const escState = showEsc && due ? deriveEscalationState(due, escConfig!, new Date()) : null;
+          const escTone = escState?.escalating ? 'text-risk-700 bg-risk-50 hover:bg-risk-100'
+            : escState?.current?.kind === 'reminder' ? 'text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100'
+            : 'text-ink-600 bg-paper-100 hover:bg-paper-200';
+
+          if (!showEsc && linked.length === 0) return null;
           return (
-            <button
-              type="button"
-              onClick={() => onManageExceptions?.(eo.id)}
-              title="Open these cases in Manage Exceptions (new tab)"
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-[0.71875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors"
-            >
-              <ListTodo size={13} aria-hidden="true" /> Manage Exceptions
-              <span className="tabular-nums text-brand-500">({rowCount})</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {showEsc && (
+                <button
+                  type="button"
+                  onClick={() => setEscalationObs(eo)}
+                  title="View the escalation schedule for this observation's exceptions"
+                  className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-[0.71875rem] font-semibold cursor-pointer transition-colors ${escTone}`}
+                >
+                  <CalendarClock size={13} aria-hidden="true" /> Escalation
+                  {escState?.current && <span className="tabular-nums opacity-80">· {escState.current.code}</span>}
+                </button>
+              )}
+              {linked.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onManageExceptions?.(eo.id)}
+                  title="Open these cases in Manage Exceptions (new tab)"
+                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-[0.71875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors"
+                >
+                  <ListTodo size={13} aria-hidden="true" /> Manage Exceptions
+                  <span className="tabular-nums text-brand-500">({rowCount})</span>
+                </button>
+              )}
+            </div>
           );
         }}
       />
@@ -180,6 +221,12 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
       {isEditing && (
         <p className="text-center text-[0.71875rem] text-ink-400 mt-4 print:hidden">Click any text in the report to edit it. Changes save automatically.</p>
       )}
+
+      <AnimatePresence>
+        {escalationObs && escConfig && (
+          <ObservationEscalationModal obs={escalationObs} config={escConfig} onClose={() => setEscalationObs(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
