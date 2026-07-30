@@ -31,7 +31,7 @@ import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
-  computeQueryKpis, reportKind, collectBlockLibrary,
+  computeQueryKpis, reportKind, collectBlockLibrary, sayRating,
   type WorkflowResult,
   type QueryShape, type QueryComment, type GeneratedReport,
   type SignatorySlot, type Signoff,
@@ -49,7 +49,7 @@ import { buildReportFacts } from './byot/templateBinding';
 import TemplateBlockBody, { type CardFinding } from './TemplateBlockBody';
 import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadBaselineVersions, appendVersion, saveVersions, nowStamp, type AtrVersion } from './atrReview';
-import type { TemplateSection } from './reportShared';
+import type { TemplateSection, ScaleMap } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -129,7 +129,10 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
 }
 
 
-function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void; title?: string }) {
+function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title, scaleMap }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void; title?: string;
+  /** Their word for each of ours, where this report is printed in a client's
+   *  own format. The rating on the card is one of the spots the swap reaches. */
+  scaleMap?: ScaleMap }) {
   const { addToast } = useToast();
   const { can } = useCan();
   const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
@@ -197,7 +200,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="flex items-center gap-1.5 shrink-0">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-                <span className={query.severity === 'High' ? 'text-risk-700' : query.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}>{query.severity}</span>
+                <span className={query.severity === 'High' ? 'text-risk-700' : query.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}>{sayRating(query.severity, scaleMap)}</span>
               </span>
             </div>
             <div className="flex items-center gap-4 shrink-0">
@@ -1932,6 +1935,7 @@ function DraggableQuerySection({
   onDelete,
   comments,
   onAddComment,
+  scaleMap,
 }: {
   section: { id: string; kind: 'query'; title: string; query: QueryShape };
   index: number;
@@ -1941,6 +1945,8 @@ function DraggableQuerySection({
   onDelete: () => void;
   comments: QueryComment[];
   onAddComment: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
+  /** This report's own rating words, where it was made with an imported format. */
+  scaleMap?: ScaleMap;
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
@@ -1956,6 +1962,7 @@ function DraggableQuerySection({
           onDelete={onDelete}
           comments={comments}
           onAddComment={onAddComment}
+          scaleMap={scaleMap}
         />
       ) : (
         <QueryCardSkeleton />
@@ -2342,6 +2349,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       [...activeQueries, ...reportWorkflows.map(workflowToQueryDef)],
       report,
       activeStats,
+      report.scaleMap,
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeQueries, reportWorkflows, report, activeStats],
@@ -2401,7 +2409,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     if (tmpl.length > 0) {
       // The findings pool, flattened — stamped into repeating cards and linked
       // action-plan tables in the template's own shape and rating words.
-      const generatedFacts = buildReportFacts(evidence, report, activeStats);
+      const generatedFacts = buildReportFacts(evidence, report, activeStats, report.scaleMap);
       const cardFindings: CardFinding[] = generatedFacts.findings;
       const cardsBlockOf = (s: TemplateSection) => s.blocks?.find(b => b.kind === 'cards');
       const cardsSec = tmpl.find(s => s.kind === 'cards' || cardsBlockOf(s));
@@ -2437,13 +2445,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               title: s.name,
               tsec: patched,
               cards: needsCards ? cardFindings : undefined,
-              composed: wantsComposed ? composeSectionContent(s.name, evidence) : undefined,
+              composed: wantsComposed ? composeSectionContent(s.name, evidence, report.scaleMap) : undefined,
             }
           : {
               id: `sec-tmpl-${i}`,
               kind: 'note',
               title: s.name,
-              content: composeSectionContent(s.name, evidence),
+              content: composeSectionContent(s.name, evidence, report.scaleMap),
             };
         if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
         else post.push(block);
@@ -3337,7 +3345,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   // uses, so a severity-split section stamps only its own.
                   // Generation reads the mould: every block's binding is looked
                   // up against this report's own data before anything is drawn.
-                  const appliedFacts = buildReportFacts(activeQueries, report, activeStats);
+                  const appliedScaleMap = (appliedTemplate as { scaleMap?: ScaleMap }).scaleMap ?? report.scaleMap;
+                  const appliedFacts = buildReportFacts(activeQueries, report, activeStats, appliedScaleMap);
                   const appliedCards: CardFinding[] = appliedFacts.findings;
                   // The applied template may be a BYOT one, which carries typed
                   // blocks and its own rating words; the base seed type does not.
@@ -3347,7 +3356,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   const queryBlocks = (
                     <div className="space-y-4">
                       {activeQueries.map((q, qi) => (
-                        <QueryCard key={q.id} query={q} index={qi} onOpenQuery={onOpenQuery} />
+                        <QueryCard key={q.id} query={q} index={qi} onOpenQuery={onOpenQuery} scaleMap={appliedScaleMap} />
                       ))}
                     </div>
                   );
@@ -3358,8 +3367,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         const Icon = SECTION_ICONS[s.icon] || FileText;
                         const isExec = /executive summary/i.test(s.name);
                         const content = isExec
-                          ? composeExecSummary(appliedTemplate.name, activeQueries)
-                          : composeSectionContent(s.name, activeQueries);
+                          ? composeExecSummary(appliedTemplate.name, activeQueries, appliedScaleMap)
+                          : composeSectionContent(s.name, activeQueries, appliedScaleMap);
                         // The composed prose is a starting draft — a per-section
                         // edit (keyed by the applied template + position) wins over
                         // it and is remembered on the report.
@@ -3459,6 +3468,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                   tsec={s}
                                   cards={appliedCards}
                                   findingScale={appliedScale}
+                                  scaleMap={appliedScaleMap}
                                   composed={content}
                                   blockLibrary={appliedLibrary}
                                   facts={appliedFacts}
@@ -3674,6 +3684,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         sectionProps={sectionProps}
                         ready={sectionReady(i)}
                         onOpenQuery={onOpenQuery}
+                        scaleMap={report.scaleMap}
                         onDelete={() => {
                           // Snapshot the card and its position so Undo restores both.
                           const snapshot = sections.find(s => s.id === section.id);
@@ -3753,6 +3764,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                             facts={reportFacts}
                             cards={section.cards}
                             findingScale={report.findingScale}
+                            scaleMap={report.scaleMap}
                             composed={section.composed}
                             editing={secEditing}
                             tableFill={makeTableFill(section.id, section.title)}

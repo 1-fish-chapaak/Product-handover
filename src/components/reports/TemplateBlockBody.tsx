@@ -8,9 +8,9 @@
 
 import { useState } from 'react';
 import { Lock, Plus, Trash2 } from 'lucide-react';
-import { resolveBlock } from './reportShared';
+import { resolveBlock, sayRating, ratingLetter } from './reportShared';
 import { resolveBlock as bindBlock, type ReportFacts } from './byot/templateBinding';
-import type { TemplateBlock, TemplateSection } from './reportShared';
+import type { TemplateBlock, TemplateSection, ScaleMap } from './reportShared';
 
 /** One finding from the report's evidence pool, stamped into a repeating card
  *  or a linked action-plan row.
@@ -46,16 +46,9 @@ const FIELD_RATING_RE = /rating|risk level|severity|priority/i;
 const FIELD_REF_RE = /^(ref|id|no\.?|#)/i;
 const FIELD_STATUS_RE = /status/i;
 
-/** Say a severity in the template's own rating words (captured at import). */
-function rateIn(scale: string[] | undefined, severity: string): string {
-  if (!scale || scale.length === 0) return severity;
-  const hit = scale.find(s => s.toLowerCase() === severity.toLowerCase());
-  if (hit) return hit;
-  const s = severity.toLowerCase();
-  if (s === 'high' || s === 'critical') return scale[0];
-  if (s === 'medium' || s === 'moderate') return scale[Math.floor((scale.length - 1) / 2)];
-  return scale[scale.length - 1];
-}
+// Saying a severity in the client's own word is `sayRating` in reportShared:
+// one swap, through the map the client settled on the matching screen, used by
+// every spot a rating appears.
 
 function severityTint(severity: string): string {
   const s = severity.toLowerCase();
@@ -65,16 +58,23 @@ function severityTint(severity: string): string {
 }
 
 /** Generate a display ID from the captured shape: "IA-##-H##" → "IA-26-H01".
- *  The last digit run counts the finding; earlier runs read as the year. */
-function idFromPattern(pattern: string | undefined, index: number): string {
+ *  The last digit run counts the finding; earlier runs read as the year.
+ *
+ *  The letter their numbering carries is the rating, so it comes from the word
+ *  the card prints rather than from the pattern's own letter. Then the number
+ *  and the rating on the card can never disagree. */
+function idFromPattern(pattern: string | undefined, index: number, letter?: string): string {
   if (!pattern) return `F-${String(index + 1).padStart(2, '0')}`;
   const total = (pattern.match(/#+/g) ?? []).length;
   const year = String(new Date().getFullYear());
   let seen = 0;
-  return pattern.replace(/#+/g, run => {
+  const numbered = pattern.replace(/#+/g, run => {
     seen++;
     return seen === total ? String(index + 1).padStart(run.length, '0') : year.slice(-run.length);
   });
+  // A lone letter sitting immediately before the finding's own number is the
+  // rating letter, and nothing else in a reference looks like that.
+  return letter ? numbered.replace(/(^|[^A-Za-z])[A-Za-z](?=\d+$)/, (_m, before) => `${before}${letter}`) : numbered;
 }
 
 /** The value a card field or table column shows for one finding. Human fields
@@ -287,7 +287,7 @@ function EditableTable({ cols, initialRows, onSave, note }: {
   );
 }
 
-function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, proseFill, cards, findingScale, composed, manual, facts }: {
+function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, proseFill, cards, findingScale, scaleMap, composed, manual, facts }: {
   block: TemplateBlock;
   blockIndex: number;
   /** Whether the section is in edit mode (driven by its header Edit toggle). */
@@ -297,6 +297,9 @@ function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, pr
   proseFill?: ProseFill;
   cards: CardFinding[];
   findingScale?: string[];
+  /** Their word for each of ours, settled at import. Every rating printed here
+   *  is swapped through it. */
+  scaleMap?: ScaleMap;
   /** This report's data, read through the block's own binding. */
   facts?: ReportFacts;
   /** Composed prose for query-filled narrative blocks (the section's data-
@@ -349,8 +352,8 @@ function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, pr
     return (
       <div className="space-y-4">
         {cards.map((f, i) => {
-          const id = idFromPattern(block.idPattern, i);
-          const ratedAs = rateIn(findingScale, f.severity);
+          const ratedAs = sayRating(f.severity, scaleMap, findingScale);
+          const id = idFromPattern(block.idPattern, i, ratingLetter(f.severity, scaleMap, findingScale));
           const fields = block.cardFields ?? [];
           const resolve = (field: string, fallback: string) => cardFill?.get(blockIndex, i, field) ?? fallback;
           const title = resolve('title', f.title);
@@ -466,8 +469,8 @@ function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, pr
     // The report's own data, flattened to string cells so edited and generated
     // rows share one render path.
     const dataAsStrings = dataRows.map((f, i) => {
-      const id = idFromPattern(block.idPattern, i);
-      const ratedAs = rateIn(findingScale, f.severity);
+      const ratedAs = sayRating(f.severity, scaleMap, findingScale);
+      const id = idFromPattern(block.idPattern, i, ratingLetter(f.severity, scaleMap, findingScale));
       return cols.slice(0, 6).map(c => fieldValue(c, f, id, ratedAs) ?? '');
     });
     const savedRows = tableFill?.rowsFor(blockIndex);
@@ -746,12 +749,14 @@ function BlockBody({ block, blockIndex, editing = false, tableFill, cardFill, pr
   return <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{proseValue || '—'}</p>;
 }
 
-export default function TemplateBlockBody({ tsec, cards = [], findingScale, composed, manual, blockLibrary, facts, editing = false, tableFill, cardFill, proseFill }: {
+export default function TemplateBlockBody({ tsec, cards = [], findingScale, scaleMap, composed, manual, blockLibrary, facts, editing = false, tableFill, cardFill, proseFill }: {
   tsec: TemplateSection;
   /** The report's findings pool — stamped into repeating cards and linked tables. */
   cards?: CardFinding[];
   /** The template's own rating words (captured at import). */
   findingScale?: string[];
+  /** Their word for each of ours, settled on the matching screen at import. */
+  scaleMap?: ScaleMap;
   /** Composed prose for query-filled narrative blocks. */
   composed?: string;
   /** Manual-fill editing (door 1) — attached to the section's first manual
@@ -794,7 +799,7 @@ export default function TemplateBlockBody({ tsec, cards = [], findingScale, comp
           {b.label && b.kind !== 'chart' && b.kind !== 'stat' && b.kind !== 'callout' && (
             <h4 className="mb-2 text-[0.8125rem] font-semibold text-ink-900">{b.label}</h4>
           )}
-          <BlockBody block={b} blockIndex={i} editing={editing} tableFill={tableFill} cardFill={cardFill} proseFill={proseFill} cards={cards} findingScale={findingScale} composed={composed} manual={i === manualIdx ? manual : undefined} facts={facts} />
+          <BlockBody block={b} blockIndex={i} editing={editing} tableFill={tableFill} cardFill={cardFill} proseFill={proseFill} cards={cards} findingScale={findingScale} scaleMap={scaleMap} composed={composed} manual={i === manualIdx ? manual : undefined} facts={facts} />
         </div>
       ))}
     </div>

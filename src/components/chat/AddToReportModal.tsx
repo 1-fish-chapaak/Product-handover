@@ -17,6 +17,7 @@ import {
   useDialogA11y, useStableId, useOnlineStatus, useListKeyboardNav,
   useLocalCollapse, withTimeout,
 } from './useModalA11y';
+import { OUR_SCALE, sayRating, type ScaleMap } from '../reports/reportShared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,10 @@ export interface ReportOption {
   id: string;
   name: string;
   generatedBy?: string;
+  /** Their words for how bad a problem is, from the template this report was
+   *  made with. Set only where that template was imported from their own
+   *  report, and the severity picker speaks them when it is. */
+  scaleMap?: ScaleMap;
 }
 
 export type Severity = 'high' | 'medium' | 'low';
@@ -455,7 +460,12 @@ export function AddToReportModal({
 
                 <div>
                   <label id="existing-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
-                  <SeveritySelect value={existingSeverity} onChange={setExistingSeverity} labelledBy="existing-rpt-severity-label" />
+                  <SeveritySelect
+                    value={existingSeverity}
+                    onChange={setExistingSeverity}
+                    labelledBy="existing-rpt-severity-label"
+                    scaleMap={reports.find(r => r.id === selectedId)?.scaleMap}
+                  />
                   <span className="mt-1 block text-[0.6875rem] text-ink-400">Applies to this query within the report.</span>
                 </div>
               </div>
@@ -777,21 +787,24 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 // palette — low/compliant, medium/mitigated, high/risk — never a bright traffic-light
 // ramp (DESIGN.md "No-RAG rule").
 
-const SEVERITY_OPTIONS: { value: Severity; label: string; dot: string }[] = [
-  { value: 'low', label: 'Low', dot: 'bg-compliant' },
-  { value: 'medium', label: 'Medium', dot: 'bg-mitigated' },
-  { value: 'high', label: 'High', dot: 'bg-risk' },
-];
+// Read from one place: the same list the rating-word matching screen matches
+// their words against. Two copies would drift, and then a template could carry
+// a word the picker cannot set.
+const SEVERITY_OPTIONS: { value: Severity; label: string; dot: string }[] = OUR_SCALE;
 
 function SeveritySelect({
-  value, onChange, labelledBy,
+  value, onChange, labelledBy, scaleMap,
 }: {
   value: Severity | null;
   onChange: (v: Severity) => void;
   labelledBy?: string;
+  /** The report's own rating words, where its template carries them. An auditor
+   *  at that client chooses between their words, not ours. */
+  scaleMap?: ScaleMap;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = SEVERITY_OPTIONS.find(o => o.value === value) ?? null;
+  const options = SEVERITY_OPTIONS.map(o => ({ ...o, label: sayRating(o.value, scaleMap) }));
+  const selected = options.find(o => o.value === value) ?? null;
 
   return (
     <div
@@ -829,7 +842,7 @@ function SeveritySelect({
             aria-labelledby={labelledBy}
             className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-white border border-canvas-border rounded-lg py-1 shadow-lg"
           >
-            {SEVERITY_OPTIONS.map(o => {
+            {options.map(o => {
               const isSel = o.value === value;
               return (
                 <button

@@ -4,7 +4,7 @@
 
 import {
   brandGradient, reportGradient, reportAccent,
-  DEFAULT_TEMPLATE_BRAND, DEFAULT_HEADER_TEXT, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE,
+  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE,
 } from './reportShared';
 import type { SectionFill, DataBinding, TemplateBlock } from './reportShared';
 
@@ -211,7 +211,9 @@ export function reviewChrome(
     // the blank template's. Defaulted here so neither surface invents its own.
     desc: fallback.desc || BLANK_TEMPLATE.desc,
     brand,
-    headerText: theirHeader || fallback.headerText || DEFAULT_HEADER_TEXT,
+    // Their own running header if the read found one, and nothing otherwise:
+    // a letterhead only says what their document said.
+    headerText: theirHeader || fallback.headerText || '',
     footerText: theirFooter || fallback.footerText || defaultFooterText(brand),
     gradient: read?.coverColor
       ? brandGradient(read.coverColor)
@@ -219,4 +221,35 @@ export function reviewChrome(
     accent: read?.coverColor ?? reportAccent(theme, fallback.brandColor),
     logo: read?.logo || fallback.logo || undefined,
   };
+}
+
+/**
+ * When we cannot read the report.
+ *
+ * Some reports are too unusual to read: two parts found out of fifteen. Below
+ * that floor the check screen is a pretence, so it is skipped and the builder
+ * opens with whatever we did find, saying honestly that we read it badly.
+ *
+ * What is counted is PARTS, not sections. One repeating card standing for
+ * fourteen findings is fourteen parts of their report accounted for, and
+ * calling that a bad read because it came back as one section would be exactly
+ * backwards: folding a deck into one repeating unit is the reader working.
+ *
+ * Their own contents page is the measure wherever the document has one, because
+ * "too few parts" only means anything against how many the document claims. A
+ * short memo with three parts is read perfectly; a 15-entry report read as two
+ * is not.
+ */
+export function belowTheReadFloor(read: {
+  toc?: { docEntries: number };
+  pageCount: number;
+  sections: { blocks?: { cardCount?: number }[] }[];
+}): boolean {
+  const parts = read.sections.reduce((n, s) => {
+    const blocks = s.blocks ?? [];
+    return n + Math.max(1, blocks.reduce((m, b) => m + (b.cardCount ?? 1), 0));
+  }, 0);
+  const claimed = read.toc?.docEntries ?? 0;
+  if (claimed >= 6) return parts < Math.ceil(claimed / 3);
+  return parts < 3 && read.pageCount >= 8;
 }

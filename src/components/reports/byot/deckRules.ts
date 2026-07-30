@@ -61,9 +61,47 @@ const MAX_STAMP_SPAN = 4;
  */
 const FIELD_LABEL_SLIDE = /^(observations?|findings?|exceptions?|issues?|root causes?|causes?|risks?|implications?|impacts?|recommendations?|management (response|comment)s?|action plans?|agreed actions?|responsibilit(y|ies)|background|criteria|status|process|sub[\s-]?process)\b[:\s]*$/i;
 
+/**
+ * THE SAME LABEL, OPENING THE BODY INSTEAD OF TITLING THE SLIDE. The commoner
+ * shape of the same trap: nothing on the slide is a heading, and the box of
+ * writing simply starts "Observation: …", with the next slide starting "Root
+ * Cause …", and the pair coming round again for every finding.
+ *
+ * The finding's own title sits in another box and is repeated on each of its
+ * slides, so the label cannot be read off the heading — it has to be read off
+ * the first words of the body.
+ */
+const FIELD_LABEL_LEAD = /^(observations?|findings?|root causes?|implications?|impacts?|risks?|recommendations?|management (response|comment)s?|action plans?|agreed actions?)\s*[:.\-–—]?\s+\S/i;
+
 /** How often a label has to come round before it reads as a box rather than a
  *  part. Once is a section; twice is the format repeating. */
 const FIELD_LABEL_REPEATS = 2;
+
+/** A box holding nothing but the finding's number: "1.", "13 .". Their own
+ *  numbering, printed on every slide the finding runs across, which is what
+ *  says those slides are one finding rather than several. */
+const ITEM_NUMBER = /^\(?(\d{1,2})\s*[.)]$/;
+
+function itemNumber(unit: DeckUnit): string | undefined {
+  for (const line of unit.lines) {
+    const hit = ITEM_NUMBER.exec(line.text.trim());
+    if (hit) return hit[1];
+  }
+  return undefined;
+}
+
+/** The label a unit's body opens with, if it opens with one. The finding's own
+ *  number is stepped over on the way: "1." is not what the box is called. */
+function leadLabel(unit: DeckUnit): string | undefined {
+  for (const line of unit.lines) {
+    const text = line.text.trim();
+    if (!text || /^\(?\d+[.)]?$/.test(text)) continue;
+    const hit = FIELD_LABEL_LEAD.exec(text) ?? FIELD_LABEL_SLIDE.exec(text);
+    if (!hit) return undefined; // the first thing it says is not a box label
+    return titleCaseIfCaps(hit[1].replace(/[\s:.\-–—]+$/, ''));
+  }
+  return undefined;
+}
 
 /**
  * Field-labelled slides folded into the finding they belong to, before anything
@@ -78,33 +116,97 @@ export function foldFieldLabelSlides(units: DeckUnit[]): DeckUnit[] {
   }
   const recurring = (name: string) => (uses.get(norm(name)) ?? 0) >= FIELD_LABEL_REPEATS;
 
+  // The other way the same deck family prints it: the label opens the writing,
+  // and the finding's own title is repeated on every slide it runs across. Both
+  // have to recur before either counts, so a report with one "Observations"
+  // section keeps it as a section.
+  const leads = new Map<DeckUnit, string>();
+  const leadUses = new Map<string, number>();
+  for (const u of units) {
+    const label = u.skip ? undefined : leadLabel(u);
+    if (!label) continue;
+    leads.set(u, label);
+    leadUses.set(norm(label), (leadUses.get(norm(label)) ?? 0) + 1);
+  }
+  const sameHeading = (a?: DeckUnit, b?: DeckUnit) => {
+    const x = a?.heading?.text.trim();
+    const y = b?.heading?.text.trim();
+    return !!x && !!y && norm(x) === norm(y);
+  };
+
   const out: DeckUnit[] = [];
   /** The boxes each finding has collected, in the order they were printed. */
   const fields = new Map<DeckUnit, string[]>();
+  /** ITS BOXES ARE ITS SHAPE. Once a finding is a run of labelled boxes, the
+   *  box it opens with is what makes two findings the same stamp — not the
+   *  contents, which differ by definition, and not the geometry, which drifts
+   *  when one finding's observation is a table and the next one's is a
+   *  paragraph. Boxes can repeat or sit empty and it is still the same card. */
+  const stamp = (unit: DeckUnit, labels: string[]) => {
+    fields.set(unit, labels);
+    // Singular and plural are the same box. One finding's slide says
+    // "Observation:" and the next says "Observations", and they are the same
+    // part of the same format.
+    unit.signature = `fields:${norm(labels[0]).replace(/s$/, '')}`;
+  };
+
   for (const unit of units) {
     const name = unit.heading?.text.trim();
     const previous = out[out.length - 1];
-    if (unit.skip || !name || !previous || previous.skip
-      || !FIELD_LABEL_SLIDE.test(name) || !recurring(name)) {
-      out.push(unit);
+    const lead = leads.get(unit);
+    const leadRecurs = !!lead && (leadUses.get(norm(lead)) ?? 0) >= FIELD_LABEL_REPEATS;
+
+    // A slide whose whole title is the label: a box of the finding above it.
+    if (!unit.skip && name && previous && !previous.skip
+      && FIELD_LABEL_SLIDE.test(name) && recurring(name)) {
+      const label = titleCaseIfCaps(name.replace(/[\s:]+$/, ''));
+      previous.lines.push(labelMarker(label, unit.n), ...unit.lines);
+      stamp(previous, [...(fields.get(previous) ?? []), label]);
       continue;
     }
-    const label = titleCaseIfCaps(name.replace(/[\s:]+$/, ''));
-    previous.lines.push({
-      text: `§§${label}`,
-      cells: [{ text: label, x: 0, right: 0 }],
-      x: 0, y: 0, size: 0, bold: true, page: unit.n,
-    });
-    previous.lines.push(...unit.lines);
-    // ITS BOXES ARE ITS SHAPE. Once a finding is a run of labelled boxes, the
-    // labels in order are what makes two findings the same stamp — not the
-    // contents of the boxes, which differ by definition. One finding's
-    // observation is a table and the next one's is a paragraph, and they are
-    // still the same part of the same format.
-    fields.set(previous, [...(fields.get(previous) ?? []), label.toLowerCase()]);
-    previous.signature = `fields:${fields.get(previous)!.join('|')}`;
+
+    // A slide the finding above it runs on to. Their own numbering says so:
+    // the finding's number is printed on every slide it takes, so two slides in
+    // a row carrying the same number are one finding. Its title repeated on
+    // both says the same thing, and either is enough.
+    const runsOn = previous && !previous.skip && !unit.skip && !unit.divider
+      && (sameHeading(unit, previous)
+        || (!!itemNumber(unit) && itemNumber(unit) === itemNumber(previous)));
+    if (runsOn && fields.has(previous!)) {
+      // A box of its own where the writing names one, and otherwise just more
+      // of the same box.
+      if (lead) {
+        previous!.lines.push(labelMarker(lead, unit.n), ...unit.lines);
+        stamp(previous!, [...(fields.get(previous!) ?? []), lead]);
+      } else {
+        previous!.lines.push(...unit.lines);
+      }
+      continue;
+    }
+
+    // The slide that opens a finding. Its own first box is labelled too, and
+    // that label is what every other finding in the deck opens with, which is
+    // what makes them one repeating card rather than fourteen parts.
+    if (!unit.skip && leadRecurs) {
+      unit.lines = [labelMarker(lead!, unit.n), ...unit.lines];
+      out.push(unit);
+      stamp(unit, [lead!]);
+      continue;
+    }
+
+    out.push(unit);
   }
   return out;
+}
+
+/** The block marker a folded box leaves behind, so the writing under it keeps
+ *  the client's own label. */
+function labelMarker(label: string, page: number): Line {
+  return {
+    text: `§§${label}`,
+    cells: [{ text: label, x: 0, right: 0 }],
+    x: 0, y: 0, size: 0, bold: true, page,
+  };
 }
 
 export type Run = { start: number; span: number; reps: number };
@@ -158,6 +260,11 @@ export function sharedName(names: string[]): string | undefined {
     /[a-z]/i.test(w) && w.replace(/\W/g, '').length > 2 &&
     words.every(ws => ws.some(x => norm(x) === norm(w))));
   if (common.length === 0) return undefined;
+  // One word, and it is the word every heading OPENS with: that is the start of
+  // a sentence they all write the same way ("Need to define…", "Need to
+  // restrict…"), not a name. A section called "Need" reads as a bug, so the
+  // caller falls back to naming the part by what it holds.
+  if (common.length < 2 && words.every(ws => norm(ws[0]) === norm(common[0]))) return undefined;
   // Assembled from their words but not written by them, so the capital at the
   // front is ours to add: a heading reading "snapshot" looks broken.
   const joined = titleCaseIfCaps(common.join(' ')).replace(/^[\W_]+|[\W_]+$/g, '');

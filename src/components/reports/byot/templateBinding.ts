@@ -12,7 +12,7 @@
 // filter, it returns an honest empty state instead of a shape full of dashes,
 // because a template that quietly prints an empty grid reads as broken.
 
-import type { TemplateBlock, DataBinding } from '../reportShared';
+import type { TemplateBlock, DataBinding, ScaleMap } from '../reportShared';
 import type { CardFinding } from '../TemplateBlockBody';
 
 /** Everything this report can offer a template block.
@@ -41,6 +41,9 @@ export interface ReportFacts {
   /** The exception rows behind the findings — the query output itself, which
    *  is what an evidence annexure prints. */
   evidence: { title: string; columns: string[]; rows: string[][] }[];
+  /** Their word for each of ours, from the template this report is printed in.
+   *  A count strip captioned in their words resolves through it. */
+  scaleMap?: ScaleMap;
 }
 
 export type MetricKey =
@@ -65,6 +68,18 @@ const METRIC_WORDS: { key: MetricKey; re: RegExp }[] = [
   { key: 'actions', re: /\b(actions?|recommendations?)\b/i },
   { key: 'health', re: /\b(health|completeness|pass rate|%)\b/i },
 ];
+
+/** A caption written in the client's own rating word, read back to the count we
+ *  hold for it. Their words are the ones printed on their reports, so a count
+ *  strip only ever names theirs. */
+function theirRatingKey(label: string, map?: ScaleMap): MetricKey | undefined {
+  if (!map) return undefined;
+  for (const ours of ['high', 'medium', 'low'] as const) {
+    const word = map[ours];
+    if (word && new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(label)) return ours;
+  }
+  return undefined;
+}
 
 const DETAIL_WORDS: { key: DetailKey; re: RegExp }[] = [
   { key: 'title', re: /\b(report title|title|subject)\b/i },
@@ -115,7 +130,13 @@ export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
   if (!facts) return { kind: 'none', empty: true, emptyMessage: '' };
   if (block.fill !== 'query') return { kind: 'none', empty: true, emptyMessage: '' };
   const source = sourceOf(block);
-  const severity = block.severity?.toLowerCase();
+  // A severity split names its rating in THEIR word ("Observations — Moderate"),
+  // so it is read back to ours before the findings are filtered. Their word is
+  // also the one the empty state says, because it is their document.
+  const theirSplit = block.severity?.trim();
+  const severity = theirSplit
+    ? (theirRatingKey(theirSplit, facts.scaleMap) ?? theirSplit.toLowerCase())
+    : undefined;
 
   if (source === 'findings' || source === 'actions') {
     const rows = facts.findings.filter(f => !severity || (f.severity ?? '').toLowerCase() === severity);
@@ -124,7 +145,7 @@ export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
       rows,
       empty: rows.length === 0,
       emptyMessage: severity
-        ? `No ${severity}-rated findings in this report. This section fills itself the moment one is raised.`
+        ? `No ${theirSplit}-rated findings in this report. This section fills itself the moment one is raised.`
         : source === 'actions'
           ? 'No actions yet. This table is built from the findings, so it fills as they are raised.'
           : 'No findings in this report yet. This section fills itself the moment one is raised.',
@@ -134,7 +155,9 @@ export function resolveBlock(block: TemplateBlock, facts?: ReportFacts): Bound {
   if (source === 'metrics') {
     const labels = block.slotLabels?.length ? block.slotLabels : [block.label ?? 'Metric'];
     const cells = labels.map(label => {
-      const key = METRIC_WORDS.find(m => m.re.test(label))?.key;
+      // Their own rating word answers first: a strip captioned "Priority 1"
+      // counts the findings we rate high, and no wording of ours matches it.
+      const key = theirRatingKey(label, facts.scaleMap) ?? METRIC_WORDS.find(m => m.re.test(label))?.key;
       return { label, value: key ? facts.metrics[key] : undefined };
     });
     const found = cells.filter(c => c.value !== undefined).length;
@@ -228,6 +251,7 @@ export function buildReportFacts(
   }[],
   report: { name?: string; generatedAt?: string; reportPeriod?: string; id?: string | number; generatedBy?: string },
   stats?: { label: string; value: string }[],
+  scaleMap?: ScaleMap,
 ): ReportFacts {
   /** One query's own exception counts, read off its tiles by meaning. */
   const countsOf = (kpis?: { label: string; value: string }[]) => {
@@ -295,6 +319,7 @@ export function buildReportFacts(
   return {
     findings,
     metrics,
+    scaleMap,
     // The categories the queries carry, deduped and in the order they appear —
     // the draft in-scope list.
     categories: [...new Set(queries.map(q => q.risk).filter((r): r is string => !!r && r.trim().length > 0))],

@@ -569,6 +569,14 @@ function deckFurniture(deck: Deck): DeckFurniture {
     // The placeholders PowerPoint reserves for furniture are furniture at
     // once; everything else has to earn it by repeating.
     if (v.slides.size < Math.min(threshold, REPEAT_PAGES)) continue;
+    // FURNITURE RECURS THROUGHOUT THE DECK. A box saying the same thing on a
+    // run of NEIGHBOURING slides and nowhere else is one part running across
+    // them — a finding whose title is printed again on each of its four slides.
+    // Strike that and the finding loses its name, its slides stop being one
+    // finding, and each of them comes back as a part nobody can place.
+    const pages = [...v.slides];
+    const consecutive = Math.max(...pages) - Math.min(...pages) + 1 === v.slides.size;
+    if (consecutive && v.slides.size < threshold) continue;
     struck.add(key);
     if (/^(page\s*)?\d+(\s*(of|\/)\s*\d+)?$/i.test(v.text.trim())) {
       pageNumberPattern = /of|\//i.test(v.text) ? 'Page N of M' : 'N';
@@ -936,7 +944,10 @@ export async function readTemplateFromDeck(file: File): Promise<ReadOutcome> {
     });
 
     return { ok: true, result: { ...result, unit: 'slide' } };
-  } catch {
+  } catch (err) {
+    // Same reason as the PDF reader: the invariant throw has to be readable by
+    // whoever has to fix the check that broke it.
+    console.error('[byot] deck read failed', err);
     return { ok: false, reason: 'unreadable' };
   }
 }

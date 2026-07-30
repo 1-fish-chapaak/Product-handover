@@ -31,6 +31,15 @@ import {
 /** A row is in the check queue when one of the four situations named it, or
  *  when the detector's own confidence was low. The flag is the better signal of
  *  the two, because it says WHAT to look at. */
+/** How much fixed wording a row shows before it folds. Six lines is enough to
+ *  recognise the paragraph; past that the row stops being a row. */
+const FIXED_PREVIEW_LINES = 6;
+
+/** Actions on a block row. Real button chrome, because "Edit wording" set as
+ *  plain text next to "Remove" reads as a caption, and the one screen where a
+ *  client is meant to change things should not hide that they can. */
+const BLOCK_ACTION = 'inline-flex h-7 items-center rounded-md border border-canvas-border bg-white px-2.5 text-[0.6875rem] font-semibold text-ink-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40';
+
 const isShaky = (s: CanvasSection) =>
   s.evidence !== 'added'
   && (!!s.flag || (s.confidence !== undefined && s.confidence <= SHAKY_CONFIDENCE));
@@ -38,23 +47,31 @@ const isShaky = (s: CanvasSection) =>
 // ─── One block row inside an expanded section ───────────────────────────────
 // A compact sample of the shape that was kept: type chip, label, and the
 // structure that survives (columns, card fields, slot labels) — never values.
-function BlockRow({ block, refSource, onOwnWording }: {
+function BlockRow({ block, refSource, onOwnWording, onRemove }: {
   block: CanvasBlock;
   /** When this block is a second placement, the section that holds the shape. */
   refSource?: string;
-  /** The client makes authored wording theirs. Saving locks it like any other
-   *  fixed text: the flag is gone and it prints as written from then on. */
+  /** The client's own words, replacing whatever the read proposed. Also clears
+   *  the author's-voice flag, because they have just said it speaks for them. */
   onOwnWording?: (lines: string[]) => void;
+  /** Untick this block. Fixed wording is not the client's to be stuck with. */
+  onRemove?: () => void;
 }) {
   const fillMeta = fillTag(block.fill, block.frame);
   const [draft, setDraft] = useState<string | null>(null);
+  const [openWording, setOpenWording] = useState(false);
+  /** Fixed wording with actual prose in it — the only kind there is anything to
+   *  edit. A slot strip or a definitions table is fixed too, but its shape is
+   *  the thing that was kept, so it gets Remove and nothing else. */
+  const fixedProse = (block.kind === 'narrative' || block.kind === 'callout')
+    && block.fill === 'fixed' && (block.fixedBody?.length ?? 0) > 0;
   return (
     <div className="flex items-start gap-2 rounded-md border border-canvas-border/70 bg-white px-2.5 py-2">
       <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-1.5 py-px text-[0.5625rem] font-semibold uppercase tracking-wide mt-px">
         {BLOCK_KIND_LABEL[block.kind]}{block.kind === 'cards' && block.cardCount ? ` × ${block.cardCount}` : ''}
       </span>
       <div className="min-w-0 flex-1">
-        {block.label && <p className="text-[0.75rem] font-medium text-ink-900 truncate">{block.label}</p>}
+        {block.label && <p className="text-[0.75rem] font-medium text-ink-900 break-words">{block.label}</p>}
         {/* The same block printed twice is stored once. Saying so here is what
             stops it reading as a duplicate we failed to notice. */}
         {block.ref && (
@@ -65,7 +82,7 @@ function BlockRow({ block, refSource, onOwnWording }: {
         {/* The structure that was kept, said plainly. A placement has no shape
             of its own — the reference line above already said where it lives. */}
         {!block.ref && block.kind === 'table' && (
-          <p className="text-[0.6875rem] text-ink-500 truncate">
+          <p className="text-[0.6875rem] leading-relaxed text-ink-500">
             {block.columns?.length ? `Columns: ${block.columns.join(' · ')}` : 'Column names pending — rows are always thrown away'}
             {block.linkedTo ? ` — auto-built from “${block.linkedTo}”` : ''}
           </p>
@@ -78,71 +95,114 @@ function BlockRow({ block, refSource, onOwnWording }: {
           </p>
         )}
         {!block.ref && (block.kind === 'stat' || block.kind === 'slot') && (block.slotLabels?.length ?? 0) > 0 && (
-          <p className="text-[0.6875rem] text-ink-500 truncate">{block.kind === 'stat' ? 'Stats' : 'Slots'}: {block.slotLabels!.join(' · ')} — labels kept, values thrown away</p>
+          <p className="text-[0.6875rem] leading-relaxed text-ink-500">{block.kind === 'stat' ? 'Stats' : 'Slots'}: {block.slotLabels!.join(' · ')} — labels kept, values thrown away</p>
         )}
         {block.kind === 'signoff' && (
           <p className="text-[0.6875rem] text-ink-500">{block.signRoles?.length ? `Roles: ${block.signRoles.join(', ')}` : 'Signature slots'} — real people only</p>
         )}
         {block.kind === 'chart' && <p className="text-[0.6875rem] text-ink-500">A graph renders here — its numbers come from data, never the PDF.</p>}
-        {(block.kind === 'narrative' || block.kind === 'callout') && block.fill === 'fixed' && (block.fixedBody?.length ?? 0) > 0 && draft === null && (
-          <p className={`text-[0.6875rem] text-ink-500 ${block.authored ? '' : 'line-clamp-2'}`}><Lock size={9} className="inline mr-1" />{block.fixedBody!.join(' ')}</p>
-        )}
+        {/* THE LOCK IS ON THE AI, NEVER ON THE CLIENT. These are the words that
+            will print in every report unchanged, so this is the one screen
+            where they have to be readable in full and changeable — a padlock
+            and a clamped line read as "you cannot touch this", which is the
+            opposite of what the tag means. The whole text, then Edit and
+            Remove. Nothing becomes fixed silently. */}
+        {/* The stored words, as words rather than as a wall. Joining every line
+            with a space turned a two-column page into one 200-word blob with
+            its sentences interleaved, and nobody can answer "is this what I
+            want printed in every report?" from that. So: its own quiet panel,
+            one line per line the way the read captured them, 12px rather than
+            11, and anything past six lines folded until asked for. */}
+        {fixedProse && draft === null && (() => {
+          const lines = block.fixedBody!;
+          const folds = lines.length > FIXED_PREVIEW_LINES;
+          const shown = folds && !openWording ? lines.slice(0, FIXED_PREVIEW_LINES) : lines;
+          return (
+            <div className="mt-1 rounded-md bg-canvas px-2.5 py-2">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <Lock size={10} className="shrink-0 text-ink-400" aria-hidden="true" />
+                <span className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-400">Prints exactly like this</span>
+                <span className="ml-auto shrink-0 tabular-nums text-[0.625rem] text-ink-400">
+                  {lines.length} {lines.length === 1 ? 'line' : 'lines'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                {shown.map((line, i) => (
+                  <p key={i} className="text-[0.75rem] leading-relaxed text-ink-700">{line}</p>
+                ))}
+              </div>
+              {folds && (
+                <button
+                  type="button"
+                  onClick={() => setOpenWording(o => !o)}
+                  className="mt-1.5 text-[0.6875rem] font-semibold text-brand-700 transition-colors hover:text-brand-800 cursor-pointer"
+                >
+                  {openWording ? 'Show less' : `Show all ${lines.length} lines`}
+                </button>
+              )}
+            </div>
+          );
+        })()}
         {/* WHOSE WORDS ARE THESE? Boilerplate in their old report was written by
             whoever ran that engagement, and printing another firm's voice on
             their own reports would certify an engagement that never happened.
-            So it arrives as a draft, in their author's words, until the client
-            says it speaks for them. Then it locks like any other fixed text. */}
-        {block.fill === 'fixed' && block.authored && onOwnWording && (
-          draft === null ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <p className="flex-1 min-w-[14rem] text-[0.6875rem] text-mitigated-700 leading-relaxed">
-                This wording came from the report's author, so check it still speaks for you.
-              </p>
+            So it arrives flagged, in their author's words, until the client says
+            it speaks for them. The edit itself is the same one every fixed block
+            gets — this line only adds the reason to look. */}
+        {/* One row of actions, whatever the block is. Editing used to hang off
+            the author's-voice flag, so ordinary fixed wording — most of it — had
+            a padlock and no way through; and the flag's own button sat in a
+            second row, which made two rows of controls for one block. */}
+        {block.fill === 'fixed' && draft === null && (onOwnWording || onRemove) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {fixedProse && onOwnWording && (
               <button
-                onClick={() => setDraft((block.fixedBody ?? []).join('\n'))}
-                className="shrink-0 px-2 py-0.5 rounded-full bg-mitigated-100 text-[0.625rem] font-semibold text-mitigated-800 hover:bg-mitigated-200 transition-colors cursor-pointer"
-              >
-                Make it ours
-              </button>
+                type="button"
+                onClick={() => setDraft(block.fixedBody!.join('\n'))}
+                className={`${BLOCK_ACTION} gap-1.5 hover:border-brand-300 hover:text-brand-700`}
+              ><Pencil size={11} aria-hidden="true" /> Edit wording</button>
+            )}
+            {onRemove && (
               <button
-                onClick={() => onOwnWording(block.fixedBody ?? [])}
-                className="shrink-0 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-ink-500 hover:bg-canvas transition-colors cursor-pointer"
-              >
-                It already does
-              </button>
+                type="button"
+                onClick={onRemove}
+                className={`${BLOCK_ACTION} hover:border-risk-300 hover:bg-risk-50 hover:text-risk-700`}
+              >Remove</button>
+            )}
+          </div>
+        )}
+        {fixedProse && draft !== null && onOwnWording && (
+          <div className="mt-1">
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              rows={Math.min(16, Math.max(4, draft.split('\n').length))}
+              aria-label="Fixed wording"
+              autoFocus
+              // One line per line, the way it prints. The read captured the
+              // breaks; editing is where a client fixes the ones it got wrong.
+              className="w-full resize-y rounded-md border border-canvas-border bg-white px-2.5 py-2 text-[0.75rem] leading-relaxed text-ink-800 focus:border-brand-600/40 focus:outline-none focus:ring-2 focus:ring-brand-600/10"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onOwnWording(draft.split('\n').map(l => l.trim()).filter(Boolean));
+                  setDraft(null);
+                }}
+                className="inline-flex h-7 items-center rounded-md bg-brand-600 px-2.5 text-[0.6875rem] font-semibold text-white transition-colors hover:bg-brand-500 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+              >Save wording</button>
+              <button
+                type="button"
+                onClick={() => setDraft(null)}
+                className={BLOCK_ACTION}
+              >Cancel</button>
+              <span className="ml-1 text-[0.6875rem] text-ink-400">Saved once, it prints exactly like this in every report.</span>
             </div>
-          ) : (
-            <div className="mt-1">
-              <textarea
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                rows={Math.min(10, Math.max(3, draft.split('\n').length))}
-                aria-label="Fixed wording"
-                className="w-full resize-y rounded-md border border-canvas-border bg-white px-2 py-1.5 text-[0.6875rem] text-ink-700 leading-relaxed focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-              />
-              <div className="mt-1 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    onOwnWording(draft.split('\n').map(l => l.trim()).filter(Boolean));
-                    setDraft(null);
-                  }}
-                  className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.625rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
-                >
-                  Save wording
-                </button>
-                <button
-                  onClick={() => setDraft(null)}
-                  className="px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-ink-500 hover:bg-canvas transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <span className="text-[0.625rem] text-ink-400">Saved once, it prints exactly like this in every report.</span>
-              </div>
-            </div>
-          )
+          </div>
         )}
         {(block.kind === 'narrative' || block.kind === 'callout') && block.fill !== 'fixed' && (block.preview?.length ?? 0) > 0 && (
-          <p className="text-[0.6875rem] text-ink-400 line-clamp-1 italic">was: “{block.preview![0]}” — thrown away</p>
+          <p className="text-[0.6875rem] leading-relaxed text-ink-400 italic">was: “{block.preview![0]}” — thrown away</p>
         )}
       </div>
       <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-px text-[0.5625rem] font-semibold ${fillMeta.tint}`} title={fillMeta.hint}>
@@ -153,7 +213,7 @@ function BlockRow({ block, refSource, onOwnWording }: {
 }
 
 // ─── One draggable section row ──────────────────────────────────────────────
-function SectionRow({ section, index, total, flashed, registerRef, onRename, onDescribe, onDelete, onJump, onMerge, onWrapper, onOwnWording, refSources }: {
+function SectionRow({ section, index, total, flashed, registerRef, onRename, onDescribe, onDelete, onJump, onMerge, onWrapper, onOwnWording, onRemoveBlock, refSources }: {
   section: CanvasSection;
   index: number;
   total: number;
@@ -167,11 +227,15 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
   onWrapper: (keep: boolean) => void;
   /** The client took ownership of one block's authored wording. */
   onOwnWording: (blockId: string, lines: string[]) => void;
+  onRemoveBlock: (blockId: string) => void;
   /** Block id → the section that stores its shape, for placements. */
   refSources?: Record<string, string>;
 }) {
   const controls = useDragControls();
-  const [expanded, setExpanded] = useState(false);
+  // Open. Collapsed by default, the one line that says what a section really
+  // keeps — its columns, its card fields, its slot labels — was a click away on
+  // every row, so the check screen showed names and hid the substance.
+  const [expanded, setExpanded] = useState(true);
   const empty = !section.name.trim();
   const isDetected = section.source !== undefined || section.page !== undefined;
   const isFragment = section.evidence === 'fragment';
@@ -188,9 +252,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
       ? 'bg-high-50/50'
       : section.wrapper
         ? 'bg-mitigated-50/60'
-        : shaky
-          ? 'bg-mitigated-50/40'
-          : 'hover:bg-canvas';
+        : 'hover:bg-canvas';
   return (
     <Reorder.Item
       value={section}
@@ -204,7 +266,11 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           part of the uploaded report on the left — their own document is the
           best documentation for what a section is. */}
       <div
-        className="flex items-center gap-2.5"
+        // Wraps rather than squeezes. The name is an input, so it cannot wrap
+        // itself: when the tags took the width, a real heading like
+        // "Opportunities for automation across areas in scope of our coverage"
+        // clipped mid-word and the row stopped saying what the section was.
+        className="flex flex-wrap items-center gap-x-2.5 gap-y-1"
         onClick={e => {
           if ((e.target as HTMLElement).closest('input,select,button')) return;
           if (isDetected) onJump();
@@ -228,7 +294,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           onChange={e => onRename(e.target.value)}
           placeholder="Name this section"
           title="Click to rename this section"
-          className="flex-1 min-w-0 -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
+          className="min-w-[18ch] flex-1 -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
         />
         <Pencil size={12} className="shrink-0 text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
         {isDetected && (
@@ -344,6 +410,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
                   block={b}
                   refSource={b.ref ? refSources?.[b.ref] : undefined}
                   onOwnWording={lines => onOwnWording(b.id, lines)}
+                  onRemove={() => onRemoveBlock(b.id)}
                 />
               ))}
             </div>
@@ -388,6 +455,8 @@ export default function SectionReviewCanvas({
   toc,
   notIncluded,
   unit = 'page',
+  outlineOnly = false,
+  ratingWords,
 }: {
   sections: CanvasSection[];
   onSectionsChange: (next: CanvasSection[] | ((prev: CanvasSection[]) => CanvasSection[])) => void;
@@ -414,6 +483,16 @@ export default function SectionReviewCanvas({
   toc?: TocCheck;
   /** Sections the template does not keep, said once and never silently. */
   notIncluded?: { name: string; why: string; captured?: boolean }[];
+  /** Render the curated outline alone, for a caller that lays out its own
+   *  columns around it. The uploaded document is then that caller's to show. */
+  outlineOnly?: boolean;
+  /** What the source counts in, where a caller words its own copy in the same
+   *  unit. Kept as a prop so both callers read the same. */
+  partWord?: string;
+  /** Their rating words against ours, settled here rather than after the save.
+   *  It belongs beside the to-be template: it is a property of the format the
+   *  client is approving, not a setting they go looking for afterwards. */
+  ratingWords?: React.ReactNode;
 }) {
   const { addToast } = useToast();
   const sourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -484,6 +563,32 @@ export default function SectionReviewCanvas({
             : b)),
         }
       : s)));
+  // Untick one block. Fixed wording prints in every report from here on, so
+  // being able to take it out is the other half of being able to read it —
+  // "the lock is on the AI, never on the client". Undo, like every other
+  // removal on this screen, because a mis-click should cost one click back.
+  const removeBlock = (sectionId: string, blockId: string) => {
+    const section = sections.find(s => s.id === sectionId);
+    const idx = section?.blocks?.findIndex(b => b.id === blockId) ?? -1;
+    const removed = idx >= 0 ? section!.blocks![idx] : undefined;
+    if (!removed) return;
+    set(prev => prev.map(s => (s.id === sectionId
+      ? { ...s, blocks: s.blocks?.filter(b => b.id !== blockId) }
+      : s)));
+    addToast({
+      type: 'info',
+      persist: true,
+      message: `Removed “${removed.label?.trim() || BLOCK_KIND_LABEL[removed.kind]}” from “${section!.name || 'this section'}”.`,
+      secondaryAction: { label: 'Undo', onClick: () => set(prev => prev.map(s => {
+        if (s.id !== sectionId) return s;
+        const blocks = s.blocks ?? [];
+        if (blocks.some(b => b.id === blockId)) return s;
+        const next = [...blocks];
+        next.splice(Math.min(idx, next.length), 0, removed);
+        return { ...s, blocks: next };
+      })) },
+    });
+  };
   // Wrapper confirm: keep clears the flag; exclude deletes (with undo).
   const resolveWrapper = (id: string, keep: boolean) => {
     if (keep) {
@@ -541,12 +646,19 @@ export default function SectionReviewCanvas({
 
   const outlineBody = (
     <>
+      {/* Their rating words against ours. Part of the format being approved, so
+          it sits with the to-be template rather than in a settings panel the
+          client reaches only after saving. */}
+      {ratingWords && (
+        <div className="mb-2 rounded-md border border-canvas-border bg-white px-3 py-2.5">{ratingWords}</div>
+      )}
       {/* What the tags mean. Every part carries exactly one, and the tag is not
           decoration: it is the instruction the filling step reads. Here the
           client verifies it, at generation the engine obeys it, and when a
-          capability grows only the tag changes. Folded shut so the list stays
-          the screen, open for anyone asking what a badge does. */}
-      <details className="mb-2 rounded-md border border-canvas-border bg-white px-3 py-2 group/tags">
+          capability grows only the tag changes. Open with the screen: it is the
+          key to every badge below it, and folded it was a click away from the
+          first question anyone asks. */}
+      <details open className="mb-2 rounded-md border border-canvas-border bg-white px-3 py-2 group/tags">
         <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[0.6875rem] font-semibold text-ink-600 hover:text-ink-900">
           <ChevronRight size={12} className="shrink-0 transition-transform group-open/tags:rotate-90" />
           What the tags mean
@@ -606,6 +718,7 @@ export default function SectionReviewCanvas({
             onMerge={dir => mergeSection(s.id, dir)}
             onWrapper={keep => resolveWrapper(s.id, keep)}
             onOwnWording={(blockId, lines) => ownWording(s.id, blockId, lines)}
+            onRemoveBlock={blockId => removeBlock(s.id, blockId)}
             refSources={refSources}
           />
         ))}
@@ -653,18 +766,26 @@ export default function SectionReviewCanvas({
     </>
   );
 
+  if (outlineOnly) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto -mx-2 px-2 pb-2">
+        {outlineBody}
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="grid grid-cols-[2fr_3fr] gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-[2fr_3fr] gap-0 flex-1 min-h-0">
         {/* Left — the source document (the report as uploaded: the "as-is" state) */}
-        <section className="flex flex-col min-h-0">
-          <div className="shrink-0 pb-2.5 flex items-baseline gap-1.5">
+        <section className="flex flex-col min-h-0 border-r border-canvas-border pr-6">
+          <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
-            <span className="text-[0.6875rem] text-ink-400">the {unit === 'slide' ? 'deck' : 'report'} you uploaded</span>
+            <span className="text-[0.6875rem] text-ink-400">the {unit === 'slide' ? 'deck' : 'report'} you uploaded{pageCount ? `, ${pageCount} ${unit === 'slide' ? 'slides' : 'pages'}` : ''}</span>
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {hasPages ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {pages!.map((src, pi) => {
                   const pageNo = pi + 1;
                   const first = sections.find(s => s.page === pageNo);
@@ -674,14 +795,16 @@ export default function SectionReviewCanvas({
                       ref={el => { pageRefs.current[pageNo] = el; }}
                       onClick={() => { if (first) jumpToSection(first.id); }}
                       title={first ? `Show this ${unit}’s first section in the detected list` : undefined}
-                      className={`rounded-lg p-1 transition-colors duration-300 ${first ? 'cursor-pointer hover:bg-canvas/70' : ''} ${flashPage === pageNo ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/25' : ''}`}
+                      className={`group/pg relative rounded-lg p-1 transition-colors duration-300 ${first ? 'cursor-pointer hover:bg-canvas/70' : ''} ${flashPage === pageNo ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/25' : ''}`}
                     >
                       <img
                         src={src}
                         alt={`${unitLabel} ${pageNo} of the uploaded ${unit === 'slide' ? 'deck' : 'report'}`}
                         className="w-full rounded-md border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]"
                       />
-                      <figcaption className="mt-1 text-center text-[0.625rem] text-ink-400 tabular-nums">{unitLabel} {pageNo}{pageCount ? ` of ${pageCount}` : ''}</figcaption>
+                      <figcaption className="pointer-events-none absolute right-2.5 top-2.5 rounded bg-ink-900/50 px-1.5 py-0.5 text-[0.625rem] font-semibold tabular-nums text-white/90 opacity-0 transition-opacity group-hover/pg:opacity-100">
+                        {unitLabel} {pageNo}
+                      </figcaption>
                     </figure>
                   );
                 })}
@@ -708,7 +831,7 @@ export default function SectionReviewCanvas({
                     } ${flashId === d.id ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/20' : ''}`}
                   >
                     <h4 className={`flex items-center gap-1.5 text-ink-900 ${idx === 0 ? 'text-[1.0625rem] font-bold tracking-tight' : 'text-[0.9375rem] font-semibold'}`}>
-                      <span className="min-w-0 truncate">{d.name}</span>
+                      <span className="min-w-0">{d.name}</span>
                       <CornerDownRight size={12} className="shrink-0 text-brand-600 opacity-0 group-hover/src:opacity-100 transition-opacity" />
                     </h4>
                     {(d.source ?? []).map((line, i) => (
@@ -722,10 +845,10 @@ export default function SectionReviewCanvas({
         </section>
 
         {/* Right — the curated skeleton, inside the report's own chrome. */}
-        <section className="flex flex-col min-h-0">
-          <div className="shrink-0 pb-2.5 flex items-baseline gap-1.5">
+        <section className="flex flex-col min-h-0 pl-6">
+          <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-brand-600">To-be state</span>
-            <span className="text-[0.6875rem] text-ink-400">your template</span>
+            <span className="text-[0.6875rem] text-ink-400">the template your reports come out of</span>
           </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {reportChrome ? (
@@ -739,8 +862,8 @@ export default function SectionReviewCanvas({
                   footer={
                     <div className="grid grid-cols-2 gap-4">
                       {[
-                        { label: 'Brand', value: reportChrome.brand || 'Irame' },
-                        { label: 'Sections', value: `${sections.length}` },
+                        { label: 'Prepared by', value: reportChrome.brand || 'Irame' },
+                        { label: 'Period', value: 'Fills from the report' },
                       ].map(f => (
                         <div key={f.label} className="min-w-0">
                           <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-white/50 whitespace-nowrap">{f.label}</div>

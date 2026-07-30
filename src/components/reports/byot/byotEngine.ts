@@ -100,6 +100,11 @@ export interface ReadDropped {
   why: string;
   /** Not really left out: its structure came back as a template setting. */
   captured?: boolean;
+  /** A block inside a section we KEPT, not a section of its own. Its claim was
+   *  vetoed by the section's heading, so it is listed here rather than left
+   *  unaccounted for — and it must never be promoted back into a section.
+   *  Anything counting sections has to skip these. */
+  block?: boolean;
 }
 
 export interface ReadResult {
@@ -201,7 +206,19 @@ const FIELD_LABELS: { key: keyof ReadFurniture['fields']; re: RegExp }[] = [
 /** Boilerplate fingerprints: the phrasings that mark words as standard, and
  *  that must therefore print unchanged. Names are a hint, the wording is the
  *  evidence. */
-const FIXED_NAME = /\b(rating (definitions?|scale)|definitions?|criteria|significance|how to read|basis of|conformance|standards?|disclaimer|glossary|legal|statement of responsibility)\b/i;
+// The memo's own list of what prints word for word: rating and root-cause
+// definitions, APPROACH AND METHODOLOGY, "how to read this report", the legal
+// and conformance lines. Approach and methodology were missing, and the pages
+// that name themselves that way were reaching the catch-all instead — the bug
+// meter's whole point. They sit at the weak end of the fixed-wording check, so
+// a heading like "Scope, objectives and approach" that a data check already
+// claimed is untouched: this only catches what nothing else wanted.
+// "Assurance" is deliberately NOT here. A page named for it is this audit's own
+// verdict ("net risk is assessed as MODERATE… REASONABLE assurance over the
+// Council's approach"), not the table that defines the words, and the table
+// already matches on "definitions" or "criteria". Left out with the opinion's
+// own reason, which is what it is.
+const FIXED_NAME = /\b(rating (definitions?|scale)|definitions?|criteria|significance|how to read|basis of|conformance|standards?|disclaimer|glossary|legal|statement of responsibility|approach|methodolog(y|ies))\b/i;
 const FIXED_PHRASE = /\b(is defined as|are defined as|for the purposes of this report|in (conformance|compliance) with (the )?(international )?standards|conforms? (to|with) the|the following definitions|this report (should|must) be read|no assurance is given|does not constitute|shall not be (relied|reproduced)|without our prior written consent)\b/i;
 
 /** WHOSE WORDS ARE THESE? Much of the boilerplate in a client's old report was
@@ -271,18 +288,38 @@ const COMMITTEE_FORM = /^(purpose of (the )?report|recommendations?|current situ
  *  judged on its own and this is a marker, not a part. */
 const GROUP_MARKER = /^(appendices|appendix|annexures?|annexes?|attachments?|enclosures?|exhibits?|supporting (documents?|information))\s*$/i;
 
+/** What to call a vetoed block on the left-out list when it carried no label
+ *  of its own. Its section's name leads, because the row has to be findable in
+ *  the document the client is looking at. */
+const VETOED_BLOCK_NOUN: Record<RawBlock['kind'], string> = {
+  narrative: 'the writing on it',
+  table: 'its table',
+  stat: 'its row of numbers',
+  slot: 'its fill-in boxes',
+  callout: 'its highlighted box',
+  chart: 'its chart',
+  cards: 'its repeating card',
+  signoff: 'its sign-off block',
+};
+
 /**
- * A part our results cannot fill, named by WHAT IT NEEDS rather than by a
- * shrug. Applied after detection, never before, so a findings section that
- * happens to mention a follow-up still keeps its rated cards: only a part that
- * produced nothing else is left out on the strength of its heading.
+ * WHAT THIS HEADING SAYS WE DO NOT HOLD — read before a single block is kept.
  *
- * `coverSheet` says this document carries a committee form, which is what
- * lets its standing headings be named as one rather than shrugged at one by
- * one. It is a document-level fact for exactly the reason above: the words on
- * their own mean nothing.
+ * This is the data list having the last word, and it has to have it BEFORE the
+ * keeps happen, not after. Read afterwards it becomes a section-level verdict
+ * thrown over blocks that were already kept, which is the downward override the
+ * memo bans and the state `keepSection` now treats as impossible. So the
+ * heading stops the CLAIM instead: a page about the year's plan may still hold
+ * wording that prints unchanged, but nothing inside it may say it fills from
+ * audit results. With every claim vetoed the section keeps nothing, and the
+ * same reason then leaves it out whole — a drop with a name on it, rather than
+ * a keep with an empty box in it.
+ *
+ * Only reasons about data we do not hold live here. The two that read the
+ * heading's STRUCTURE — a group name, a committee form field — are not about
+ * data at all and stay in `notHeldReason`, where nothing was kept anyway.
  */
-function notHeldReason(name: string, body = '', nothingKept = false, coverSheet = false): string | undefined {
+function claimVetoReason(name: string, body = ''): string | undefined {
   if (AUDIT_PLAN.test(name)) {
     return 'Not included: this is the year’s audit plan, so it covers audits outside this report.';
   }
@@ -305,14 +342,16 @@ function notHeldReason(name: string, body = '', nothingKept = false, coverSheet 
   if (BACKGROUND_NAME.test(name)) {
     return 'Not included: this is background about your organisation, and our audit checks do not produce that.';
   }
-  // A limitations page that reached here is not the standard wording (that is
-  // kept as fixed text); it is this audit's own account of how the work went.
+  // A limitations page vetoed here is not the standard wording — that is kept
+  // as fixed text, which claims nothing and so is never vetoed. This is the
+  // impression classifier, and this is the ONLY power it has: it can stop a
+  // claim, it can name a drop, and it can never take a section that kept
+  // something. Seven of eight blocks kept and the section dropped anyway is
+  // the caught case, and it turned a 21-page report into an empty template.
   if (LIMITS_NAME.test(name)) {
     return 'Not included: it describes how this particular audit went, which is different in every report.';
   }
-  // The heading can veto a claim; the body only ever names a drop, which is why
-  // it is read on a section where nothing was kept and nowhere else.
-  if (FINANCIAL_NAME.test(name) || (nothingKept && financialBody(body))) {
+  if (FINANCIAL_NAME.test(name)) {
     return 'Not included: these are financial figures from your books, and our audit checks do not produce those.';
   }
   if (HUMAN_ANSWER_NAME.test(name)) {
@@ -321,11 +360,33 @@ function notHeldReason(name: string, body = '', nothingKept = false, coverSheet 
   if (body && ADVISORY_PROSE.test(name)) {
     return 'Not included: advice without a rating on it, so we cannot tell which findings it belongs to. Add it to a report through Add Observation.';
   }
-  // The last two reasons read the HEADING alone, so both are gated on the
-  // section having produced nothing. Keeps flow up and drops never flow down:
-  // a group name or a form field holding a block we kept is a section, and our
-  // own report's "Appendix" — which holds its sources list — is the caught case.
+  return undefined;
+}
+
+/**
+ * The reason a section that kept NOTHING is left out, named by what it needs
+ * rather than by a shrug.
+ *
+ * Every branch is behind the one gate at the top, because keeps flow up and
+ * drops never flow down: a heading holding a block we kept is a section,
+ * whatever its words suggest, and our own report's "Appendix" — which holds
+ * its sources list — is the caught case. The data-availability reasons already
+ * ran as claim vetoes before the keeps, so anything reaching here with claims
+ * vetoed arrives with nothing kept and gets the same words.
+ *
+ * `coverSheet` says this document carries a committee form, which is what
+ * lets its standing headings be named as one rather than shrugged at one by
+ * one. It is a document-level fact because the words on their own mean nothing.
+ */
+function notHeldReason(name: string, body = '', nothingKept = false, coverSheet = false): string | undefined {
   if (!nothingKept) return undefined;
+  const veto = claimVetoReason(name, body);
+  if (veto) return veto;
+  // The body only ever names a drop, never causes one, which is why it is read
+  // on a section where nothing was kept and nowhere else.
+  if (financialBody(body)) {
+    return 'Not included: these are financial figures from your books, and our audit checks do not produce those.';
+  }
   // The back matter's own group name. It names what follows and holds nothing,
   // so the pages under it are judged one by one and it is not a part itself.
   if (GROUP_MARKER.test(name)) {
@@ -343,7 +404,11 @@ function notHeldReason(name: string, body = '', nothingKept = false, coverSheet 
  *  every audit but this one. Scoped as decision 10, deliberately not built. */
 const AUDIT_PLAN = /\b((annual|yearly|year'?s) (audit )?plan|audit plan|plan (for the year|status)|planned audits|status of (the )?plan)\b/i;
 /** The auditor's accountable judgment on the engagement. */
-const FORMAL_OPINION = /\b((audit|assurance|overall|formal|our) opinion|basis (of|for) (our )?opinion|overall (conclusion|assessment|assurance))\b/i;
+// "Assurance assessment" is "overall assessment" with the words swapped, and it
+// holds the same sentence: this audit's own verdict on the control framework.
+// It was reaching the catch-all, which invites "why did you remove this?" about
+// the one page whose answer we actually know.
+const FORMAL_OPINION = /\b((audit|assurance|overall|formal|our) opinion|basis (of|for) (our )?opinion|overall (conclusion|assessment|assurance)|assurance assessment)\b/i;
 /** Their books: revenue, margins, ratios. Not our query output. */
 const FINANCIAL_NAME = /\b(financial (statements?|extracts?|highlights?|tables?|summary|performance)|profit (and|&) loss|balance sheet|ratios?|revenue|margins?|turnover|cost implications?)\b/i;
 
@@ -415,6 +480,12 @@ export type Line = {
   /** This line opens a page but carries on the sentence the page before it
    *  left unfinished, so it belongs to that page's last block. */
   continuation?: boolean;
+  /** First line of a new column on a two-column page. A column boundary is a
+   *  block boundary: without it the foot of the left column and the head of the
+   *  right one run together into one paragraph, which is how PwC's approach
+   *  bullets ended up inside its limitation wording and neither could be
+   *  claimed as what it is. */
+  columnBreak?: boolean;
 };
 
 type Unpacked = {
@@ -540,6 +611,7 @@ async function passUnpack(doc: PdfDoc): Promise<Unpacked> {
   let textItems = 0;
   let coverColor: string | undefined;
   const sizes: number[] = [];
+  lastColumns.length = 0;
 
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
@@ -569,7 +641,21 @@ async function passUnpack(doc: PdfDoc): Promise<Unpacked> {
       sizes.push(size);
     }
 
-    perPage.push(piecesToLines(pieces, p));
+    // This page's own body size, because the gutter test is measured in ems and
+    // the document median is not known until every page has been read.
+    const pageBody = median(pieces.map(pc => pc.size)) || 10;
+    const runs = columnRuns(pieces, pageBody, p);
+    perPage.push(runs.flatMap(run => {
+      const lines = piecesToLines(run, p);
+      // Every run of a split page opens a new column or follows a full-width
+      // line, and either way the text does not carry on from what came before.
+      // The FIRST run counts too: it starts a fresh column, so the page before
+      // it does not flow into it either. Without that, page 3's limitation
+      // wording ran on into page 4's revenue overview and the paragraph failed
+      // the fixed-wording gate on a figure it never contained.
+      if (runs.length > 1 && lines[0]) lines[0] = { ...lines[0], columnBreak: true };
+      return lines;
+    }));
     aspects.push(viewport.height > 0 ? viewport.width / viewport.height : 1);
 
     // Page snapshots for the side by side review, plus the cover colour that
@@ -591,6 +677,157 @@ async function passUnpack(doc: PdfDoc): Promise<Unpacked> {
   }
 
   return { pageCount: doc.numPages, perPage, aspects, textItems, snapshots, coverColor, bodySize: median(sizes) };
+}
+
+/** Why each page did or did not split into columns. A debug hook like
+ *  `lastRead`: when a page comes back interleaved, this says which guard
+ *  turned it down, so the next guess is not a guess. */
+export const lastColumns: { page: number; split: boolean; why: string }[] = [];
+
+/**
+ * TWO COLUMNS ARE TWO READINGS, NOT ONE WIDE ONE.
+ *
+ * A PDF states no reading order. Bucketing pieces by baseline across the whole
+ * page width is right for one column and wrong for two: the left column's line
+ * and the right column's line share a baseline, so they come back as one line,
+ * and the page reads as its two halves alternating sentence by sentence. The
+ * PwC front matter is the caught case — "Commission, Payment Gateway, Shipping,
+ * Logistics etc..) We will however, communicate to you as appropriate" is the
+ * end of a left-column list glued to the middle of a right-column sentence, and
+ * once that is the stored fixed wording it prints that way in every report.
+ *
+ * So the page is split at its gutter first and each column read top to bottom
+ * on its own. Anything that crosses the gutter is full width by definition — a
+ * spanning heading, a wide table row — and cuts the page into zones, which is
+ * what keeps a heading above its two columns rather than inside one of them.
+ *
+ * Deliberately hard to trigger, because a two-column TABLE looks like this from
+ * a distance and splitting one would tear every row in half. All of: enough
+ * text to have a layout at all, a genuinely empty band near the middle, that
+ * band wider than any cell gap (a gutter is set in ems, a table gap in points),
+ * real content on both sides, and almost nothing crossing it.
+ */
+function columnRuns(pieces: Piece[], bodySize: number, page = 0): Piece[][] {
+  const single = [pieces];
+  const no = (why: string) => { lastColumns.push({ page, split: false, why }); return single; };
+  if (pieces.length < 25) return no(`only ${pieces.length} pieces`);
+  const left = Math.min(...pieces.map(p => p.x));
+  const right = Math.max(...pieces.map(p => p.right));
+  const span = right - left;
+  if (span <= 0) return no('no width');
+
+  // How many of the page's rows put ink in each slice of the text extent?
+  // Counted in ROWS, not pieces, or a dense table column outvotes a paragraph.
+  const N = 60;
+  const cover = new Array<number>(N).fill(0);
+  const rows = new Map<number, Piece[]>();
+  for (const p of pieces) {
+    const key = Math.round(p.y / Math.max(2, p.size * 0.55));
+    (rows.get(key) ?? rows.set(key, []).get(key)!).push(p);
+  }
+  for (const row of rows.values()) {
+    const hit = new Set<number>();
+    for (const p of row) {
+      const a = Math.max(0, Math.floor(((p.x - left) / span) * N));
+      const b = Math.min(N - 1, Math.ceil(((p.right - left) / span) * N) - 1);
+      for (let i = a; i <= b; i++) hit.add(i);
+    }
+    for (const i of hit) cover[i] += 1;
+  }
+  // QUIET, NOT EMPTY. Requiring a completely empty band means one full-width
+  // heading anywhere on the page hides the gutter under it, and then nothing
+  // ever splits — which is exactly what happened on the first build of this.
+  // A gutter is where almost no row puts ink; the rows that do cross it are
+  // handled below as the spanning lines they are.
+  const quiet = Math.max(1, Math.round(Math.max(...cover) * 0.12));
+  let best: { a: number; b: number } | null = null;
+  for (let i = 0; i < N;) {
+    if (cover[i] > quiet) { i++; continue; }
+    let j = i;
+    while (j + 1 < N && cover[j + 1] <= quiet) j++;
+    const mid = ((i + j + 1) / 2) / N;
+    if (mid > 0.3 && mid < 0.7 && (!best || j - i > best.b - best.a)) best = { a: i, b: j };
+    i = j + 1;
+  }
+  if (!best) return no(`no quiet band (quiet<=${quiet}, peak ${Math.max(...cover)})`);
+  const gutterStart = left + (best.a / N) * span;
+  const gutterEnd = left + ((best.b + 1) / N) * span;
+  // Measured in ems, because that is how a gutter is set. A page-width floor
+  // was tried and is wrong: a wide page with a normal 2.4em gutter fails it,
+  // which is what kept the PwC front matter interleaved. The absolute floor is
+  // only there so a 4pt page cannot split on a hairline.
+  const width = gutterEnd - gutterStart;
+  const need = Math.max(bodySize * 1.8, 10);
+  if (width < need) return no(`gutter ${width.toFixed(1)} < ${need.toFixed(1)} (body ${bodySize.toFixed(1)})`);
+
+  const inLeft = pieces.filter(p => p.right <= gutterStart + 0.5);
+  const inRight = pieces.filter(p => p.x >= gutterEnd - 0.5);
+  const crossing = pieces.filter(p => p.x < gutterEnd - 0.5 && p.right > gutterStart + 0.5);
+  if (inLeft.length < pieces.length * 0.25 || inRight.length < pieces.length * 0.25) {
+    return no(`lopsided ${inLeft.length}/${inRight.length} of ${pieces.length}`);
+  }
+  if (crossing.length > pieces.length * 0.15) return no(`${crossing.length} of ${pieces.length} cross`);
+
+  // COLUMNS OF TEXT, NOT COLUMNS OF A TABLE. A wide two-column table has the
+  // same silhouette from here — ink, gap, ink — and splitting one reads every
+  // row's halves as two unrelated runs, which loses the row.
+  //
+  // The tell is whether the two sides SHARE BASELINES. A table's rows pair up
+  // by definition: each left cell has its right cell on the same line. Two
+  // columns of text are independent flows and drift apart within a line or two.
+  // Measured across this corpus the two populations do not overlap — the PwC
+  // text pages sit at 0.18–0.32 and its annexure tables at 0.76–0.88 — so the
+  // line is drawn at half and there is nothing near it.
+  //
+  // Line length was tried first and is the wrong test: it reads a left column
+  // of bullets ("• Marketing Promotion Revenue") as table cells and refuses to
+  // split the page, which left PwC's approach list and its limitation wording
+  // running together in one block. A words floor survives only to keep a page
+  // of bare figures out; one side making sentences is enough.
+  const keyOf = (pc: Piece) => Math.round(pc.y / Math.max(2, pc.size * 0.55));
+  const lk = new Set(inLeft.map(keyOf));
+  const rk = new Set(inRight.map(keyOf));
+  let paired = 0;
+  for (const k of lk) if (rk.has(k)) paired++;
+  const pairFrac = lk.size ? paired / lk.size : 0;
+  const wordiness = (side: Piece[]) => {
+    const perRow = new Map<number, number>();
+    for (const pc of side) {
+      const k = keyOf(pc);
+      perRow.set(k, (perRow.get(k) ?? 0) + pc.text.trim().split(/\s+/).filter(Boolean).length);
+    }
+    return { rows: perRow.size, words: median([...perRow.values()]) };
+  };
+  const wl = wordiness(inLeft);
+  const wr = wordiness(inRight);
+  if (wl.rows < 3 || wr.rows < 3 || Math.max(wl.words, wr.words) < 5 || pairFrac >= 0.5) {
+    return no(`not text columns (${wl.rows}r/${wl.words}w · ${wr.rows}r/${wr.words}w · pair ${pairFrac.toFixed(2)})`);
+  }
+
+  // Full-width lines cut the page into zones. Within a zone, left then right.
+  const cuts: Piece[][] = [];
+  for (const p of [...crossing].sort((a, b) => a.y - b.y)) {
+    const open = cuts[cuts.length - 1];
+    if (open && Math.abs(p.y - open[0].y) <= Math.max(2, p.size * 0.55)) open.push(p);
+    else cuts.push([p]);
+  }
+  const runs: Piece[][] = [];
+  const zone = (lo: number, hi: number) => {
+    const zl = inLeft.filter(p => p.y > lo && p.y <= hi);
+    const zr = inRight.filter(p => p.y > lo && p.y <= hi);
+    if (zl.length) runs.push(zl);
+    if (zr.length) runs.push(zr);
+  };
+  let from = -Infinity;
+  for (const cut of cuts) {
+    const at = Math.min(...cut.map(p => p.y)) - 0.5;
+    zone(from, at);
+    runs.push(cut);
+    from = at;
+  }
+  zone(from, Infinity);
+  lastColumns.push({ page, split: true, why: `gutter ${gutterStart.toFixed(0)}–${gutterEnd.toFixed(0)}, ${runs.length} runs, ${crossing.length} spanning, pair ${pairFrac.toFixed(2)}` });
+  return runs.length ? runs : single;
 }
 
 /** Pieces on a shared baseline become one line; wide gaps split it into cells. */
@@ -780,8 +1017,16 @@ function markPageContinuations(body: Line[][]): void {
     const opensLower = /^["'“‘([]?[a-z]/.test(first.text.trim());
     const previousUnfinished = !/[.!?:;]["'”’)\]]?$/.test(last.text.trim());
     if (!opensLower && !previousUnfinished) continue;
-    // A heading of its own is never a continuation, whatever it starts with.
-    if (NUMBERED.test(first.text.trim()) || APPENDIX.test(first.text.trim())) continue;
+    // A heading of its own is never a continuation, whatever it starts with —
+    // and that includes a LETTERED one. "B. Overview of Revenue & Payouts"
+    // opens page 4 right after page 3 trails off on a comma, so
+    // `previousUnfinished` alone would mark it a continuation and headingOf()
+    // would never even be asked about it. The result was a heading silently
+    // erased into the paragraph above it, which then absorbed the next
+    // section's numbers and failed the fixed-wording gate for containing them.
+    const trimmed = first.text.trim();
+    const lettered = LETTERED.exec(trimmed);
+    if (NUMBERED.test(trimmed) || APPENDIX.test(trimmed) || (lettered && !sentenceish(lettered[2]))) continue;
     if (first.cells.length > 2) continue;                 // a table row carries on as a table
 
     first.continuation = true;
@@ -868,8 +1113,13 @@ function headingOf(line: Line, bodySize: number): HeadingHit | null {
     return { name: numbered[2].trim(), level: Math.min(depth, 3), evidence: 'explicit', confidence: 0.9, appendix: false };
   }
 
+  // BIGGER *OR* BOLDER, not both. A lettered title needed weight to count, and
+  // a report that letters its parts and sets them large but not bold had every
+  // one of them read as body text — "B. Overview of Revenue & Payouts" at 14pt
+  // over a 9.4pt body, sitting inside the paragraph above it. Size is the same
+  // evidence weight is: what the page does to say "this names what follows".
   const lettered = LETTERED.exec(text);
-  if (lettered && !sentenceish(lettered[2]) && line.bold) {
+  if (lettered && !sentenceish(lettered[2]) && (line.bold || line.size >= bodySize * HEADING_SIZE)) {
     return { name: lettered[2].trim(), level: 2, evidence: 'inferred', confidence: 0.7, appendix: false };
   }
 
@@ -985,7 +1235,7 @@ function passBuildTree(furnished: Furnished, unpacked: Unpacked): Tree {
     }
   });
 
-  const resolved = foldLookAlikes(spine);
+  const resolved = unswallow(foldLookAlikes(spine), cardFieldLabel);
 
   // A heading with no prose beneath it is not a section. It is never dropped in
   // silence either: the caller offers it back.
@@ -1009,6 +1259,113 @@ function passBuildTree(furnished: Furnished, unpacked: Unpacked): Tree {
     : undefined;
 
   return { spine: kept.slice(0, SECTION_CAP), skipped, cover, toc };
+}
+
+/**
+ * Takes the rating letter off the end of a heading, on the spine and on the
+ * buried §§ markers alike, and hands the original line to `rated` so the run
+ * still reads as rated.
+ *
+ * Deliberately narrow, because a trailing capital is not always a rating.
+ * It only fires when the client's own scale gives at least two distinct
+ * initials to match against, and only on a heading of three words or more:
+ * "Annexure A" and "Part B" are NAMED by their letter and keep it.
+ */
+function stripTitleRatings(
+  spine: SpineSection[],
+  scale: string[] | undefined,
+  rated: string[],
+): SpineSection[] {
+  const initials = new Set((scale ?? []).map(w => w.trim().charAt(0).toUpperCase()).filter(Boolean));
+  if (initials.size < 2) return spine;
+  /** The title without its letter, or null when the letter is part of the name. */
+  const shorn = (name: string): string | null => {
+    const m = /^(.*\S)\s+[([]?([A-Za-z])[)\]]?[.\s]*$/.exec(name);
+    if (!m || !initials.has(m[2].toUpperCase())) return null;
+    const head = m[1].trim();
+    return head.split(/\s+/).length >= 3 ? head : null;
+  };
+  return spine.map(s => {
+    const name = shorn(s.name);
+    if (name) rated.push(s.name);
+    const lines = s.lines.map(l => {
+      if (!l.text.startsWith('§§')) return l;
+      const inner = shorn(l.text.slice(2));
+      if (!inner) return l;
+      rated.push(l.text.slice(2));
+      return { ...l, text: `§§${inner}` };
+    });
+    return name || lines !== s.lines ? { ...s, name: name ?? s.name, lines } : s;
+  });
+}
+
+/**
+ * THE SWALLOW GUARD — a section that IS the document is a mis-ranked heading,
+ * never a verdict.
+ *
+ * A lettered opener ("A. Introduction and background") lands before any
+ * numbering has started, so it becomes the first top-level section, and every
+ * properly numbered heading after it ranks below and folds inside as a §§
+ * marker. One section then holds twenty-one pages, and whatever verdict it gets
+ * it gets for the whole report: kept, and the template is one enormous part;
+ * dropped, and the template is empty. Both shipped.
+ *
+ * So the tree is re-ranked rather than judged. The buried markers come back up
+ * as the parts they always were, and the opener keeps only the lines that were
+ * genuinely its own.
+ *
+ * Two markers are NOT parts and stay buried, because promoting them is the
+ * failure this guard would otherwise cause on a findings-heavy report: a card's
+ * field label (already demoted by recurrence upstream), and any name appearing
+ * more than once inside the host, which is a stamp's label by the same logic.
+ * With fewer than two real parts left to promote there is nothing to re-rank
+ * and the tree is returned untouched.
+ */
+function unswallow(spine: SpineSection[], isFieldLabel: (name: string) => boolean): SpineSection[] {
+  const total = spine.reduce((n, s) => n + s.lines.length, 0);
+  // Below this a "share of the document" means nothing — a four-page memo's
+  // one real section legitimately holds most of it.
+  if (total < 40) return spine;
+  const idx = spine.findIndex(s => s.lines.length >= total * 0.7);
+  if (idx < 0) return spine;
+  const host = spine[idx];
+
+  const uses = new Map<string, number>();
+  for (const l of host.lines) {
+    if (l.text.startsWith('§§')) {
+      const n = norm(l.text.slice(2));
+      uses.set(n, (uses.get(n) ?? 0) + 1);
+    }
+  }
+  const promotable = (name: string) => !isFieldLabel(name) && (uses.get(norm(name)) ?? 0) === 1;
+  const cuts = host.lines.filter(l => l.text.startsWith('§§') && promotable(l.text.slice(2)));
+  if (cuts.length < 2) return spine;
+
+  const rebuilt: SpineSection[] = [];
+  // The opener's own lines, under its own name. Often empty, which is correct:
+  // a heading that held nothing but other headings is a group marker, and the
+  // prose filter downstream offers it back rather than inventing a part.
+  let open: SpineSection = { ...host, lines: [] };
+  for (const line of host.lines) {
+    if (line.text.startsWith('§§') && promotable(line.text.slice(2))) {
+      rebuilt.push(open);
+      open = {
+        name: line.text.slice(2),
+        level: 1,
+        page: line.page,
+        evidence: 'inferred',
+        confidence: 0.6,
+        appendix: host.appendix,
+        wrapper: false,
+        lines: [],
+      };
+      continue;
+    }
+    open.lines.push(line);
+  }
+  rebuilt.push(open);
+
+  return [...spine.slice(0, idx), ...rebuilt, ...spine.slice(idx + 1)];
 }
 
 /**
@@ -1121,6 +1478,14 @@ export function passClassifyBlocks(section: SpineSection, bodySize: number): Raw
   while (i < lines.length) {
     const line = lines[i];
 
+    // A column boundary ends whatever paragraph was running. Flushed before
+    // anything else reads the line, because the line itself is ordinary — it is
+    // only its position, at the head of a new column, that says the prose above
+    // it has finished.
+    // …unless the line genuinely finishes the sentence the page before left
+    // open, which the continuation rule below already knows how to place.
+    if (line.columnBreak && !line.continuation && prose.length > 0) { pushNarrative(prose); prose = []; }
+
     // The page break rule: this line finishes the sentence the previous page
     // left open, so it joins that page's last block instead of starting one.
     if (line.continuation) {
@@ -1229,11 +1594,36 @@ export function passClassifyBlocks(section: SpineSection, bodySize: number): Raw
       continue;
     }
 
-    // Callout: text set apart as a note or key message.
-    if (/^(note|important|key (message|point)|please note|caution|disclaimer)\b/i.test(line.text)) {
+    // Callout: text set apart as a note or key message — and a COMPLETE one.
+    // The same fragment test the headings use, for the same reason: "important
+    // to recognize that there are inherent limitations in the" is the middle of
+    // a sentence whose line happens to start on that word, and taking it for a
+    // callout cut PwC's limitation paragraph in half. The remaining 22 lines
+    // then opened mid-sentence and stopped reading as the fixed wording they
+    // are, so the disclaimer went into the template as nothing at all.
+    if (/^(note|important|key (message|point)|please note|caution|disclaimer)\b/i.test(line.text)
+      && !fragmentLine(line.text)) {
       pushNarrative(prose); prose = [];
       blocks.push({ kind: 'callout', label: subLabel, confidence: 0.65, page: line.page, lines: [line.text] });
       subLabel = undefined;
+      i++;
+      continue;
+    }
+
+    // A SHORT LINE NAMING A FIXED-WORDING CONCEPT IS A LABEL, NOT PROSE.
+    // "Limitation" sits on its own line above nineteen lines of boilerplate and
+    // below the tail of an approach list. It is not set any bigger than the
+    // body, so pass 3 never saw a heading, and the paragraph it opens stayed
+    // glued to the list above it — one mixed block, claimable as nothing. This
+    // is the block-level form of the rule the section level already applies:
+    // test what is inside a mixed part, and boilerplate inside it stays as
+    // fixed wording. It labels the block that follows, the way a §§ sub heading
+    // does, so nothing is thrown away.
+    const bare = line.text.trim();
+    if (bare.split(/\s+/).length <= 4 && !/[.:,;]$/.test(bare)
+      && (FRAME_NAME.test(bare) || FIXED_NAME.test(bare))) {
+      pushNarrative(prose); prose = [];
+      subLabel = bare;
       i++;
       continue;
     }
@@ -1567,6 +1957,10 @@ const LIST_NUMBER = /(?:^|\n)\s*\(?\d{1,2}[.)]\s/g;
  *  this pattern reads the second as the first — which quietly turned whole
  *  paragraphs of boilerplate into "this report's data". */
 const ORG_NAME = /\b[A-Z][\w&.'’-]*(?:\s+(?:[A-Z][\w&.'’-]*|and|of|&))*\s+(Limited|Ltd\.?|Inc\.?|PLC|Plc|LLP|LLC|GmbH|S\.A\.|Corporation|Corp\.?|Company|Pvt\.?|Private Limited|Holdings|Group)\b/;
+/** The bit of a company name that is the company FORM rather than the company:
+ *  what to take off to get from "Acme Holdings Private Limited" to "Acme
+ *  Holdings", which is what its own boilerplate calls it. */
+const CORPORATE_SUFFIX = /[\s,]+(private\s+limited|pvt\.?\s*ltd\.?|public\s+limited|limited|ltd\.?|inc\.?|plc|llp|llc|gmbh|corporation|corp\.?|company|holdings|group)\.?$/i;
 /** The same, for swapping every mention in a block out for the blank. */
 const ORG_NAME_ALL = new RegExp(ORG_NAME.source, 'g');
 /** Somebody's name, with the title a report gives it. */
@@ -1581,7 +1975,7 @@ const REFERENCE_CODE = /\b[A-Z]{1,5}\/[A-Z0-9]{2,}(?:\/[A-Z0-9-]+)*\b|\b[A-Z]{2,
  * rather than kept: printing last quarter's figures as this quarter's
  * boilerplate is the worst thing the template could do.
  */
-function hasVariableData(text: string, orgNames: string[] = []): boolean {
+function hasVariableData(text: string, orgNames: string[] = [], framed = false): boolean {
   // Strip the two figures a format is allowed to state, then any digit still
   // standing is a value from this particular report.
   const stripped = text.replace(RULE_FIGURE, ' ').replace(LIST_NUMBER, ' ');
@@ -1594,7 +1988,14 @@ function hasVariableData(text: string, orgNames: string[] = []): boolean {
   if (new RegExp(`\\b${MONTH}\\w*\\s*[,'’]?\\s*\\d`).test(text)) return true;
   if (new RegExp(`\\d\\s*(?:st|nd|rd|th)?\\s+${MONTH}\\b`, 'i').test(text)) return true;
   if (/[₹$£€]/.test(text)) return true;
-  if (ORG_NAME.test(text)) return true;
+  // A FRAME EXISTS TO BLANK THE CLIENT'S NAME, so the name must not then veto
+  // the frame. The tokeniser works line by line and a name the layout broke in
+  // half ("Board of Directors of Paytm E-" / "Commerce management") survives it
+  // untouched — and one unreachable half was enough to throw away a whole
+  // limitation paragraph the memo names as textbook fixed wording. People are
+  // still content and still veto: a name below is this report's team, not its
+  // letterhead.
+  if (!framed && ORG_NAME.test(text)) return true;
   // A person is this report's content, always: the people interviewed, the
   // owners, the team on the engagement. Keeping their names as fixed wording
   // would print last quarter's team into every report from then on.
@@ -1635,7 +2036,18 @@ function frameOf(lines: string[], ctx: DetectContext): { lines: string[]; text: 
     { value: details.auditPeriod ?? '', token: '{{period}}' },
     { value: details.preparedBy ?? '', token: '{{preparedBy}}' },
     { value: details.reportId ?? '', token: '{{reference}}' },
-    ...(ctx.orgNames ?? []).map(name => ({ value: name, token: '{{entity}}' })),
+    // Their legal name AND the short one. A cover reads "Paytm E-Commerce
+    // Private Limited" and the disclaimer inside says "Board of Directors of
+    // Paytm E-Commerce" — the same client, one form of which matches nothing,
+    // so no blank is found, so no frame is built, so the org-name gate throws
+    // the whole limitation paragraph away for naming the client it is written
+    // for. Longest first, or the short form eats the long one's tail.
+    ...(ctx.orgNames ?? []).flatMap(name => {
+      const bare = name.replace(CORPORATE_SUFFIX, '').trim();
+      return bare && bare !== name
+        ? [{ value: name, token: '{{entity}}' }, { value: bare, token: '{{entity}}' }]
+        : [{ value: name, token: '{{entity}}' }];
+    }),
   ].filter(s => s.value.trim().length > 3);
 
   let hit = false;
@@ -2095,7 +2507,7 @@ function detectFixedText(block: RawBlock, ctx: DetectContext): Detected | null {
     ? framed.text.replace(/\{\{\w+\}\}/g, ' ').split(/\s+/).filter(w => /[a-z]/i.test(w)).length
     : 0;
   const usable = framed && framedWords >= 6 ? framed : null;
-  if (hasVariableData(usable?.text ?? text, usable ? [] : ctx.orgNames)) return null;
+  if (hasVariableData(usable?.text ?? text, usable ? [] : ctx.orgNames, !!usable)) return null;
   const frame = usable
     ? { fixedBody: usable.lines, frame: true }
     : undefined;
@@ -2532,7 +2944,14 @@ function foldOrphanPages(spine: SpineSection[]): SpineSection[] {
  * the one that rated them. With nothing ahead of it, the run becomes one
  * section of its own, named the only way that holds no content of theirs.
  */
-function foldRatedRun(spine: SpineSection[], ratedLines: string[]): SpineSection[] {
+function foldRatedRun(
+  spine: SpineSection[],
+  ratedLines: string[],
+  /** Is this section part of the evidence the findings point at? Evidence is
+   *  never another repetition of the finding it belongs to, so it is excluded
+   *  from the stamp however much its title looks like one. */
+  inAnnexure: (index: number) => boolean = () => false,
+): SpineSection[] {
   if (ratedLines.length === 0 || spine.length < 2) return spine;
   const ratedKeys = new Set(ratedLines.map(itemKey));
 
@@ -2561,6 +2980,12 @@ function foldRatedRun(spine: SpineSection[], ratedLines: string[]): SpineSection
   const isFindingTitle = (name: string, index: number) => {
     const words = new Set(itemKey(name).split(' ').filter(Boolean));
     if (words.size < 3) return false;                          // too short to match on
+    // LINKAGE OUTRANKS A NAME MATCH. An annexure a finding points at holds that
+    // finding's evidence; folding it into the stamp makes it a twelfth copy of
+    // the finding and takes the evidence off the review screen entirely. The
+    // caught case is "Marketing Promotion Revenue - Intel Campaign", whose
+    // title matches a scope bullet on the front page word for word.
+
     // A definitions or criteria page is never a finding, however often the
     // report quotes it. Folding one away costs the source of their rating
     // words, which is the one thing the back pages are for.
@@ -2570,7 +2995,18 @@ function foldRatedRun(spine: SpineSection[], ratedLines: string[]): SpineSection
     // Listed as an item in some other part of the report. A deck's snapshot
     // slide lists its findings by title and rates them by count beside the
     // list, so the titles themselves carry no rating word at all.
-    return listed.some(l => l.section !== index && agree(words, l.words));
+    // EVIDENCE IS LISTED BY THE FINDINGS, NOT BY THE SCOPE. A page in the
+    // annexure region may be folded into the stamp on the strength of another
+    // annexure-region part listing it — that is a finding naming the evidence
+    // it points at. It may NOT be folded because the front matter happens to
+    // name it: "Marketing Promotion Revenue - Intel Campaign" matches the scope
+    // bullet "• Marketing Promotion Revenue" word for word, and folding on that
+    // turned an evidence annexure into a twelfth copy of a finding and took the
+    // evidence off the review screen. Whole-region exclusion was tried and is
+    // wrong: the findings themselves sit in that region too.
+    return listed.some(l => l.section !== index
+      && (!inAnnexure(index) || inAnnexure(l.section))
+      && agree(words, l.words));
   };
   /** Which parts list this title, for the single-page case below. */
   const listedBy = (name: string, index: number) => {
@@ -2744,10 +3180,36 @@ export function assemble(input: AssembleInput): ReadResult {
         pointedAt.add(`${hit[1].toLowerCase()} ${hit[2].toLowerCase()}`);
       }
     }
+    // A RATING LETTER GLUED TO A TITLE IS NOT PART OF THE TITLE. Consultant
+    // reports print the level as a single letter on the end of the finding's
+    // own heading — "Improve controls over contract management H". Left there
+    // it becomes part of the name, so the template ships a part called
+    // "…contract management H", and the rating the letter was carrying is read
+    // by nothing, because the word-based scan never matches a bare initial.
+    // Parsed off, and the original heading joins the rated lines, which is
+    // where the letter was trying to get to in the first place.
+    const unlettered = stripTitleRatings(tree.spine, findingScale, ratedLines);
+
+    // THE ANNEXURE REGION, READ BEFORE THE FOLD. It used to be worked out from
+    // the folded list, which is one step too late: the fold had already taken
+    // an evidence annexure for a repetition of the finding that points at it,
+    // and by the time "linkage outranks topic" was applied there was nothing
+    // left to apply it to. Same rule, same divider, just early enough to be
+    // heard — and computed twice on purpose, because folding renumbers the
+    // sections and the classifier below needs the folded indices.
+    const annexDivider = /^(annexures?|appendices|appendix)\b/i;
+    const annexureRegion = (list: SpineSection[]) => {
+      const start = list.findIndex(sec =>
+        annexDivider.test(sec.name.trim())
+        || sec.lines.some(l => annexDivider.test(l.text.trim()) && l.text.trim().length <= 40));
+      return (index: number) => start >= 0 && index > start && pointedAt.size >= 2;
+    };
+
     // The tree, with its repeats folded: one stamp per finding, orphan pages
     // joined back to the part they continue. Everything after this reads the
     // folded list, so section positions mean the same thing throughout.
-    const folded = foldRatedRun(foldOrphanPages(foldObservationFrames(tree.spine)), ratedLines);
+    const prefold = foldOrphanPages(foldObservationFrames(unlettered));
+    const folded = foldRatedRun(prefold, ratedLines, annexureRegion(prefold));
 
     // THE ANNEXURE REGION. A report's evidence does not always announce itself
     // in every heading: one divider page reads "Annexures (Part 1)" and the
@@ -2757,7 +3219,6 @@ export function assemble(input: AssembleInput): ReadResult {
     // divider is the evidence they point at, whatever it is titled. The money
     // rule still bars financial content NO finding points at — a revenue
     // overview page in the body of the report.
-    const annexDivider = /^(annexures?|appendices|appendix)\b/i;
     const annexStart = folded.findIndex(sec =>
       annexDivider.test(sec.name.trim())
       || sec.lines.some(l => annexDivider.test(l.text.trim()) && l.text.trim().length <= 40));
@@ -2804,6 +3265,33 @@ export function assemble(input: AssembleInput): ReadResult {
 
     const sections: ReadSection[] = [];
     const dropped: ReadDropped[] = [];
+
+    /**
+     * THE ONE DOOR OUT. Every section-level drop goes through here, and here
+     * the invariant is enforced rather than described: a dropped section that
+     * still holds kept blocks is an impossible state, so the run fails loudly
+     * at the offending line instead of quietly emitting the drop.
+     *
+     * This is deliberately a throw. Five separate breaks survived the rule
+     * while it was written down as advice — an impression overriding seven
+     * kept blocks, a heading swallowing the document and then being verdicted,
+     * blocks made the only judge and taking the findings section with them —
+     * and each one shipped a template with the client's own report missing
+     * from it. A read that would produce that is not a read worth returning,
+     * and the caller already turns a thrown read into an honest "we could not
+     * read this file" rather than a silently wrong template.
+     */
+    const dropSection = (kept: ReadBlock[], row: ReadDropped) => {
+      if (kept.length > 0) {
+        throw new Error(
+          `BYOT invariant: "${row.name}" was dropped while holding ${kept.length} kept `
+          + `block${kept.length === 1 ? '' : 's'} (${kept.map(b => b.fill).join(', ')}). `
+          + 'Keeps flow up and drops never flow down: fix the check that claimed the block, '
+          + `or the veto that took the section. Reason given: ${row.why}`,
+        );
+      }
+      dropped.push(row);
+    };
     // Position: a rollup only rolls up what came before it, so the findings
     // have to have appeared already for a recommendations heading to count.
     let findingsSeen = false;
@@ -2860,13 +3348,49 @@ export function assemble(input: AssembleInput): ReadResult {
         verdicts: verdicts.map(v => `${v.keep ?? 'out'} — ${v.why}`),
       });
 
+      // The data list has the last word, and it takes it here — before a single
+      // block is kept — so that no verdict ever has to reach back over a keep.
+      // Two of the reasons outrank everything, findings and all: the year's
+      // plan covers other audits, and last audit's actions are something we do
+      // not track, so a stamp of finding cards inside one of those is still a
+      // part we cannot fill. The rest defer to a rated card or to evidence a
+      // finding points at, so a findings section is never lost for mentioning
+      // money or a management response, and linkage still outranks topic.
+      const body = s.lines.map(l => l.text).join('\n');
+      const vetoOutranksCards = AUDIT_PLAN.test(s.name) || PRIOR_PERIOD.test(s.name);
+      // The exemption is the SECTION's, not the block's. A rated card or
+      // evidence a finding points at proves the part is ours whatever its
+      // heading sounds like, and once that is proved the heading has no say
+      // over anything else in it either — an "Executive summary and audit
+      // opinion" holding finding cards keeps its summary prose too, and
+      // linkage still outranks topic on the annexure beside it. Read per block
+      // instead, the same heading strips four rollup blocks out of a section
+      // it just admitted was ours.
+      const exempt = !vetoOutranksCards
+        && verdicts.some((v, i) => v.keep === 'query' && (v.binding === 'evidence' || raw[i].kind === 'cards'));
+      const claimVeto = exempt ? undefined : claimVetoReason(s.name, body);
+
       // Only the blocks a detector claimed survive. A kept section is their
       // shape around our data, never a shape with an empty box in it.
       const blocks: ReadBlock[] = [];
       const kinds: Detected[] = [];
+      // Blocks the veto took. They are not sections of their own and never
+      // become any — they go to the left-out list with the reason that took
+      // them, so a client reading it sees the same words either way.
+      const vetoed: string[] = [];
       raw.forEach((rb, i) => {
         const v = verdicts[i];
         if (!v.keep) return;
+        // The veto is about CLAIMS. A heading stops us claiming to fill a part
+        // from data we do not hold — but wording kept word for word claims
+        // nothing, so a block of fixed text survives its section's heading.
+        // Their standard limitation paragraph is the caught case: boilerplate
+        // that prints unchanged, taken out by a reason written for a
+        // limitations page we could not place.
+        if (claimVeto && v.keep === 'query') {
+          vetoed.push(rb.label?.trim() || `${s.name} · ${VETOED_BLOCK_NOUN[rb.kind]}`);
+          return;
+        }
         const { lines, ...rest } = rb;
         // A header whose rows were lost is saved as the table it is, not as the
         // prose it looked like, or the template keeps their column names in a
@@ -2912,43 +3436,24 @@ export function assemble(input: AssembleInput): ReadResult {
       const signRoles = raw.find(b => b.kind === 'signoff' && (b.signRoles?.length ?? 0) > 0)?.signRoles;
       if (signRoles?.length) signoffRoles.push(...signRoles.filter(r => !signoffRoles.includes(r)));
 
-      // The data list has the last word. A part about last audit's actions or
-      // about a decision taken before the queries ran can look generatable —
-      // a status table has exactly the columns an action plan has — so the
-      // heading vetoes a claim no rated card is standing behind. Left out with
-      // the missing data named, which is also what makes the drop log tell us
-      // what to build next.
-      // Two of the named reasons outrank everything, findings and all: the
-      // year's audit plan covers other audits, and what happened to last
-      // audit's actions is something we do not track. A stamp of finding cards
-      // inside one of those is still a part we cannot fill. The rest of the
-      // reasons defer to a rated card, so a findings section is never lost for
-      // mentioning money or a management response.
-      const body = s.lines.map(l => l.text).join('\n');
-      // Linkage outranks topic: evidence a finding points at is kept however
-      // financial its title sounds, because those rows are our own exception
-      // records rather than their books.
-      const evidence = ctx.evidenceTarget && blocks.some(b => b.binding === 'evidence');
-      // The veto is about CLAIMS. A heading stops us claiming to fill a part
-      // from data we do not hold — but wording kept word for word claims
-      // nothing, so a section whose only keep is fixed text survives its
-      // heading. Their standard limitation paragraph is the caught case: it is
-      // boilerplate that prints unchanged, and the reason written for a
-      // limitations page we could not place was taking it out.
-      const claimsData = blocks.some(b => b.fill === 'query');
+      // Blocks the claim veto took, listed one by one with the reason that took
+      // them. They are not sections and never become any — this is the whole of
+      // where an unkept block inside a kept section goes.
+      if (claimVeto) for (const name of vetoed) dropped.push({ name, why: claimVeto, block: true });
+
       const nothingKept = blocks.length === 0;
-      const notHeld = AUDIT_PLAN.test(s.name) || PRIOR_PERIOD.test(s.name)
-        ? notHeldReason(s.name, body, nothingKept, coverSheet)
-        : evidence || blocks.some(b => b.kind === 'cards') ? undefined
-          : nothingKept || claimsData ? notHeldReason(s.name, body, nothingKept, coverSheet) : undefined;
+      // Every reason is now behind one gate inside `notHeldReason`: a section
+      // that kept something cannot be left out, whatever its heading says. The
+      // data-availability reasons already ran, as vetoes, before the keeps.
+      const notHeld = notHeldReason(s.name, body, nothingKept, coverSheet);
       if (notHeld) {
-        dropped.push({ name: s.name, why: notHeld });
+        dropSection(blocks, { name: s.name, why: notHeld });
         continue;
       }
 
-      if (blocks.length === 0) {
+      if (nothingKept) {
         if (signRoles?.length) {
-          dropped.push({
+          dropSection(blocks, {
             name: s.name,
             captured: true,
             why: 'Saved as a setting: the signature page, with the job titles it is signed off by.',
@@ -2959,7 +3464,7 @@ export function assemble(input: AssembleInput): ReadResult {
         // is a part we genuinely could not place. That is the only case the
         // generic line is for: on a recognisable part it just invites "why did
         // you remove this?".
-        dropped.push({
+        dropSection(blocks, {
           name: s.name,
           why: 'Not included: nothing here comes from audit results, and it is not wording that never changes.',
         });
@@ -3121,12 +3626,21 @@ export function classifyStamped(section: SpineSection, bodySize: number): RawBlo
   const fields = cardFieldsFrom(lines);
   const labels = first.map(b => b.label).filter((l): l is string => !!l);
 
+  // Every box the card carries, however it was labelled: the ones written
+  // "Observation:" in the body, and the ones the reader folded in as their own
+  // slide or sub-heading. Taking only the first kind loses the box that makes
+  // the pair — a card with an issue and no action is not claimed, and their
+  // findings are dropped over a colon.
+  const boxes = [...fields.fields];
+  for (const label of labels) {
+    if (!boxes.some(f => f.toLowerCase() === label.toLowerCase())) boxes.push(label);
+  }
+
   const card: RawBlock = {
     kind: 'cards',
     cardCount: section.stamp.length,
     cardFields: section.frameFields?.length ? section.frameFields
-      : fields.fields.length ? fields.fields
-        : labels.length ? labels : undefined,
+      : boxes.length ? boxes : undefined,
     humanFields: fields.human.length ? fields.human : undefined,
     columns: first.find(b => b.kind === 'table')?.columns,
     confidence: 0.88,
@@ -3154,6 +3668,12 @@ function deckShapedTree(furnished: Furnished): Tree {
   let docEntries = 0;
   const units: DeckUnit[] = [];
 
+  // A RUNNING SECTION TITLE OUTRANKS THE PAGE'S OWN HEADING, the same way a
+  // deck's title box does — tracked across the loop below as a run of
+  // consecutive pages sharing one top-band candidate.
+  let runningTitle: string | null = null;
+  let runLength = 0;
+
   furnished.body.forEach((page, pi) => {
     const lines = page.filter(l => l.text.trim() && !BLANK_PAGE.test(l.text.trim()));
     if (lines.length === 0) return;
@@ -3161,7 +3681,7 @@ function deckShapedTree(furnished: Furnished): Tree {
     // Page one is the letterhead, the same way slide one is.
     if (pi === 0) { cover.push(...lines); return; }
 
-    const heading = pageHeading(lines);
+    let heading = pageHeading(lines);
 
     // Their own contents page is never copied; our export engine builds one.
     // It is read only as the sanity check. A deck rarely titles the page
@@ -3178,14 +3698,35 @@ function deckShapedTree(furnished: Furnished): Tree {
       return;
     }
 
+    // pageHeading() picks the BIGGEST candidate in the top band, on ONE page,
+    // in isolation. A written report exported to PDF often prints its current
+    // section's own title as a running header — bigger than the real,
+    // page-specific heading underneath it ("Executive summary" at 20pt over
+    // "B. Overview of Revenue & Payouts" at 14pt) — and with no cross-page
+    // memory, every page of that section reads the running header as ITS
+    // heading. headKey folding below then merges them all into one section,
+    // and every real sub-heading in between is never seen again — just body
+    // text inside one giant block. The tell is repetition, exactly as it is
+    // for a deck's title box (§09): the SAME candidate on two or more pages
+    // running is furniture, and the real heading is what pageHeading finds
+    // once that text is taken out of the running. First occurrence is kept —
+    // that page is genuinely where the section starts.
+    const key = heading ? norm(heading.text) : null;
+    runLength = key && key === runningTitle ? runLength + 1 : 1;
+    runningTitle = key;
+    if (runLength >= 2 && heading) {
+      const runningKey = key;
+      heading = pageHeading(lines.filter(l => norm(l.text) !== runningKey));
+    }
+
     // "The section name repeated at the top of its pages becomes furniture."
     // Pass 2 only strikes what repeats across the WHOLE document, so a heading
     // that runs for three pages of one part survives it. Here it is dropped
     // from the body of every page after the first, which is what stops one
-    // part being read as three.
-    const body = heading
-      ? lines.filter(l => norm(l.text) !== norm(heading.text))
-      : lines;
+    // part being read as three. The running title itself is dropped from the
+    // body too, whether or not it ended up chosen as this page's heading.
+    const body = lines.filter(l =>
+      norm(l.text) !== runningTitle && (!heading || norm(l.text) !== norm(heading.text)));
 
     units.push({
       n: pi + 1,
@@ -3277,7 +3818,11 @@ export async function readTemplateFromPdf(file: File): Promise<ReadOutcome> {
         classify: s => classifyStamped(s, unpacked.bodySize),
       }),
     };
-  } catch {
+  } catch (err) {
+    // Loud where it can be heard. The client gets an honest decline either
+    // way, but a swallowed invariant break is the same silence that let five
+    // of them ship, so the message reaches the console with the section named.
+    console.error('[byot] read failed', err);
     return { ok: false, reason: 'unreadable' };
   }
 }

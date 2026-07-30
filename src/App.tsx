@@ -601,7 +601,14 @@ function AppInner() {
                 ...BUILTIN_DASHBOARDS,
                 ...SHARED_DASHBOARD_OPTIONS,
               ]}
-              availableReports={GENERATED_REPORTS.map(r => ({ id: r.id, name: r.name, generatedBy: r.generatedBy }))}
+              availableReports={GENERATED_REPORTS.map(r => ({
+                id: r.id,
+                name: r.name,
+                generatedBy: r.generatedBy,
+                // A report made with an imported template rates in that
+                // client's own words, so the severity picker offers theirs.
+                scaleMap: customTemplates.find(t => t.id === r.templateId)?.scaleMap,
+              }))}
               onAddResultToDashboard={(payload) => {
                 if (payload.isNew && payload.newName) {
                   createDashboard({

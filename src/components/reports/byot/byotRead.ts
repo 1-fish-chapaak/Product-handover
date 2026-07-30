@@ -14,7 +14,11 @@ import { readTemplateFromDeck } from './pptxEngine';
 export type { ReadOutcome, ReadResult, ReadFailReason, ReadSection, ReadBlock, ReadFurniture, ReadDropped, ReadTocCheck } from './byotEngine';
 /** The last read, block by block, with the verdict each block got. The result
  *  says what was kept; this says why every other block was not. */
-export { lastRead } from './byotEngine';
+export { lastRead, lastColumns } from './byotEngine';
+
+/** How many pages or slides we read. The decline message says this number
+ *  rather than a hard-coded "about 50", so the two can never disagree. */
+export { PAGE_CAP } from './byotEngine';
 
 /** What the picker accepts, and the only two things this can return. */
 export type UploadKind = 'deck' | 'pdf';
