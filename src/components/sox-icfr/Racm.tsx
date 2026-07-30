@@ -429,7 +429,9 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  const colSpan = isAuditor ? 9 : 8;
+  // 13 columns: W/P · Risk · Root cause · Control · Nature · Design · Operating ·
+  // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
+  const colSpan = isAuditor ? 13 : 12;
 
   return (
     <div>
@@ -511,6 +513,9 @@ export default function Racm() {
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
               <th style={{ width: 56 }} title="Working-paper reference">W/P</th>
               <th style={{ width: 200 }}>Risk</th>
+              {/* why the risk exists — the source RACM carries it beside the risk,
+                  because a control aimed at the symptom is the commonest design gap */}
+              <th style={{ width: 200 }} title="The condition underneath the risk — what makes it possible">Root cause</th>
               <th>Control</th>
               <th style={{ width: 104 }}>
                 <span className="inline-flex items-center gap-1">Nature
@@ -527,6 +532,11 @@ export default function Racm() {
                   <ColumnFilter label="Operating" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
                 </span>
               </th>
+              {/* who did the work, where the evidence lives, and which report
+                  paragraph the row lands in — the source RACM's own columns */}
+              <th style={{ width: 110 }} title="Who on the audit team performed the work">Performed by</th>
+              <th style={{ width: 150 }} title="Where the evidence physically lives — hard-copy file reference and soft-copy path">Evidence W/P</th>
+              <th style={{ width: 92 }} title="The paragraph in the issued report this row lands in">Report ref</th>
               <th style={{ width: 200 }} title="Approving a row means the control as documented is ready to test">Pre-testing review</th>
               <th style={{ width: 88 }} />
             </tr>
@@ -546,6 +556,11 @@ export default function Racm() {
                     <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
                   </td>
                   <td className="tight">
+                    {c.rootCause
+                      ? <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.rootCause}>{c.rootCause}</div>
+                      : <span className="text-ink-300">—</span>}
+                  </td>
+                  <td className="tight">
                     <div className="flex items-center gap-1.5">
                       {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                       <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[300px]" title={c.description}>{c.description}</span>
@@ -560,6 +575,16 @@ export default function Racm() {
                   <td><NatureChip nature={c.nature} small /></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Design — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Operating — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td>{c.performedBy ? <span className="text-[11.5px] text-ink-600">{c.performedBy}</span> : <span className="text-ink-300">—</span>}</td>
+                  <td className="tight">
+                    {c.wpRefHard || c.wpRefSoft ? (
+                      <>
+                        {c.wpRefHard && <div className="font-mono text-[10.5px] text-ink-600" title={`Hard-copy file — ${c.wpRefHard}`}>{c.wpRefHard}</div>}
+                        {c.wpRefSoft && <div className="font-mono text-[10px] text-ink-400 truncate max-w-[140px]" title={`Soft-copy path — ${c.wpRefSoft}`}>{c.wpRefSoft}</div>}
+                      </>
+                    ) : <span className="text-ink-300">—</span>}
+                  </td>
+                  <td>{c.reportRef ? <span className="font-mono text-[11px] text-ink-600">{c.reportRef}</span> : <span className="text-ink-300">—</span>}</td>
                   <td><ReviewCell c={c} /></td>
                   <td onClick={e => e.stopPropagation()}>
                     {isAuditor && (

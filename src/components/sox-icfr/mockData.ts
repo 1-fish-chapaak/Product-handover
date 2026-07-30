@@ -1,7 +1,8 @@
 import { validationQA } from './helpers';
+import { ipeChecklist } from './types';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
-  EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
+  EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
   RacmReview, ReviewNote, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
@@ -72,6 +73,41 @@ const autoTrack = (conclusion: TrackConclusion, steps: OperatingStep[]): Operati
   testedBy: conclusion !== 'Not tested' ? 'CCM workflows' : null,
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
+
+/** A tested entity-produced report. The three checks come from the standard
+ *  checklist so a seeded paper reads exactly like one the auditor worked; the
+ *  findings are what a real paper carries — the tie-out numbers, not "OK". */
+let _ipe = 0;
+const ipeTest = (meta: {
+  reportName: string; system?: string; reportRef: string; parameters: string;
+  generatedBy: string; recordCount: number; controlTotal: string; file: string;
+  findings: [string, string, string];
+  /** Which dimension failed, if any — its check goes Fail and the report sinks. */
+  failed?: 0 | 1 | 2;
+}): IpeTest => {
+  const n = ++_ipe;
+  const reliable = meta.failed === undefined;
+  return {
+    reportName: meta.reportName,
+    system: meta.system ?? 'SAP S/4HANA',
+    reportRef: meta.reportRef,
+    parameters: meta.parameters,
+    generatedBy: meta.generatedBy,
+    generatedAt: '02 May',
+    recordCount: meta.recordCount,
+    controlTotal: meta.controlTotal,
+    file: { id: `f-ipe-${n}`, name: meta.file, kind: 'XLSX', uploadedBy: meta.generatedBy, uploadedAt: '02 May' },
+    checks: ipeChecklist(meta.reportName).map((k, i) => ({
+      ...k,
+      id: `ipe-${n}-${i}`,
+      result: meta.failed === i ? 'Fail' : 'Pass',
+      note: meta.findings[i],
+    })),
+    conclusion: reliable ? 'Reliable' : 'Not reliable',
+    testedBy: 'A. Mehta · Auditor',
+    testedAt: '03 May',
+  };
+};
 
 const sampling = (size: number, basis: string, method: Sampling['method'], fails = 0, refs?: string[]): Sampling => ({
   basis, method, size,
@@ -190,6 +226,15 @@ const DETAILED: Control[] = [
     precision: 'Any change to a vendor bank account is blocked until a second authoriser approves in SAP.',
     controlActivity: 'R. Khanna (Master Data) raises every vendor addition and bank-detail change in SAP S/4HANA against the signed vendor request form and the bank confirmation letter. The record stays inactive until a second Master Data authoriser, independent of the raiser, approves the change in the workflow; the approval log is the evidence. Nothing pays out of an unapproved record.',
     owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
+    rootCause: 'Vendor bank details can be edited in the master record by the same team that raises the payment run, so a single person can redirect a genuine payable.',
+    auditSteps: [
+      'Obtain the SAP role matrix for the vendor-master transactions (XK01 / XK02) and identify every user holding create and approve.',
+      'Obtain the vendor change log for the period and agree the record count to the system total.',
+      'For each sampled change, inspect the workflow approval and confirm the approver is a different user from the requester.',
+      'Attempt a bank-detail change as the requester in the QA client and confirm the activation block holds.',
+      'Confirm the change log is retained and cannot be edited by the master-data team.',
+    ],
+    performedBy: 'AM', wpRefHard: 'P2P/01', wpRefSoft: '/FY26/ICFR/P2P/P-01 vendor master/', reportRef: '4.1',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
     // fully through the review gate — signed and countersigned, the paper is final
@@ -215,6 +260,15 @@ const DETAILED: Control[] = [
     precision: 'POs above ₹5L route to the next authority tier; release is blocked without approval at the correct tier.',
     controlActivity: 'S. Iyer (Procurement) reviews each purchase requisition against the delegation-of-authority matrix before it is converted to a PO. SAP S/4HANA routes the order to the authority tier its value demands and blocks release until that tier approves; the approval trail on the PO is the evidence. Orders raised at the wrong tier are returned to the buyer, not overridden.',
     owner: 'S. Iyer · Procurement', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
+    rootCause: 'The delegation-of-authority matrix is maintained offline and was last refreshed before two reorganisations, so SAP still routes some orders to authority tiers that no longer exist.',
+    auditSteps: [
+      'Obtain the signed delegation-of-authority matrix in force for FY26 and agree the tiers to the current org structure.',
+      'Extract the PO release log (ME2N) for the period and validate it as information produced by the entity.',
+      'For each sampled PO, inspect the approval trail and agree the approving tier to the order value per the matrix.',
+      'Confirm from the delegation register that the approver held that authority on the approval date.',
+      'Re-perform the release-timing check to confirm no order released before its approval timestamp.',
+    ],
+    performedBy: 'AM', wpRefHard: 'P2P/02', wpRefSoft: '/FY26/ICFR/P2P/P-02 purchasing/', reportRef: '4.2',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(), testDueInDays: 0,
     design: designTrack('Effective', [
@@ -226,11 +280,27 @@ const DETAILED: Control[] = [
       point('DoA tiers map to current org and signing limits.'),
       point('System enforces tier by PO value (not advisory).'),
     ]),
-    operating: manualTrack('Not tested', [
+    // the population came out of a client-run report, so the report is tested first
+    operating: { ...manualTrack('Not tested', [
       step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass', attest('Approval screenshots for all 25 sampled POs attached; each shows the correct tier per the DoA matrix.', 'S. Iyer · Procurement', ['PO_approval_screens_25_samples_Apr26.pdf', 'DoA_matrix_FY26_v2_signed.xlsx'])),
       step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass', attest('Delegation register extract confirms authority held on each approval date.', 'S. Iyer · Procurement', ['Delegation_register_extract_01-30Apr26.pdf'])),
       step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested', { ...wf('wf-po-release-timing', 'PO release-timing check', undefined), evidenceMode: 'ai', aiValidation: true, inputFile: file('ME2N_release_timing_extract_Apr26.csv', 'S. Iyer · Procurement', 'CSV') }),
     ], sampling(25, '25 POs — daily manual control, moderate reliance (handbook — no fixed minimum, judgment documented).', 'Random', 0, PO_SAMPLE_REFS), 2640, 'SAP ECC — ME2N PO release log, FY26 YTD (POs 4500012840–4500013008)', 'ME2N_PO_release_log_FY26_YTD.xlsx'),
+      ipe: ipeTest({
+        reportName: 'PO release log',
+        reportRef: 'ME2N',
+        parameters: 'Company code AG01 · document types NB, FO · release date 01 Apr 2026 – 31 Mar 2027 · all purchasing groups',
+        generatedBy: 'S. Iyer · Procurement',
+        recordCount: 2640,
+        controlTotal: '₹ 412.64 Cr — agreed to GL 21100 (Trade payables) movement',
+        file: 'ME2N_PO_release_log_FY26_YTD.xlsx',
+        findings: [
+          'Parameter screen capture inspected: company code AG01, document types NB and FO, release window 01 Apr 26 – 31 Mar 27 — agrees to the test scope. No purchasing group excluded.',
+          '2,640 lines against the ME2N system total of 2,640. Report total ₹412.64 Cr agrees to the GL 21100 movement of ₹412.64 Cr — nil difference. Re-run for Apr–Jun returned 631 lines, which tie to the full extract.',
+          '15 lines vouched to the PO print and the approval trail — order value, tier and release date agree in every case. The "days to release" column re-performed off the raw dates without exception.',
+        ],
+      }),
+    },
   },
   {
     id: 'P2P-C-03', wpRef: 'P-03', description: 'Invoices are matched three-way (PO, GRN, invoice) before payment; exceptions route to buyer.',
@@ -238,6 +308,15 @@ const DETAILED: Control[] = [
     precision: 'Quantity/price tolerance breaches are held and cannot pay until cleared by the buyer.',
     controlActivity: 'M. Nair (Accounts Payable) works the daily blocked-invoice report from SAP S/4HANA, which holds any invoice whose quantity or price falls outside tolerance on the three-way match against the PO and goods receipt. The buyer investigates each held line and clears or rejects it, evidencing the outcome on the report. A held invoice cannot be paid until it is cleared.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
+    rootCause: 'Tolerance limits were set centrally years ago in absolute rupees and never indexed, so on high-value spares an out-of-tolerance price difference still falls inside the limit and passes the match.',
+    auditSteps: [
+      'Obtain the MM tolerance configuration export and agree the quantity and price limits to the approved policy.',
+      'Extract the invoice register (MIR5) for the period and validate it as information produced by the entity.',
+      'For each sampled invoice, agree quantity and price to the PO and the goods receipt, and re-perform the tolerance calculation.',
+      'Obtain the blocked-invoice report and confirm every held line was cleared or rejected by the buyer with evidence.',
+      'Confirm no held invoice was paid before clearance by agreeing the payment date to the clearance date.',
+    ],
+    performedBy: 'RS', wpRefHard: 'P2P/03', wpRefSoft: '/FY26/ICFR/P2P/P-03 invoice processing/', reportRef: '4.3',
     assertions: ['Accuracy', 'Existence / Occurrence'],
     racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'), testDueInDays: 0,
     design: designTrack('Effective', [
@@ -260,6 +339,15 @@ const DETAILED: Control[] = [
     precision: 'SAP blocks postings where vendor + invoice number + amount match an existing document.',
     controlActivity: 'The duplicate-invoice check is configured in SAP S/4HANA and runs on every invoice as it is posted, comparing vendor, invoice number and amount against documents already on the ledger. A match is blocked at posting; the block log is the evidence. M. Nair (Accounts Payable) reviews the log and releases only after confirming the second document is genuine.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
+    rootCause: 'The duplicate check compares the invoice reference as typed, so any formatting difference — a leading zero, a trailing space — reads as a new document and clears the block.',
+    auditSteps: [
+      'Obtain the SAP duplicate-check configuration and confirm the match key includes vendor, reference and amount.',
+      'Confirm the check is active across every company code in scope.',
+      'Re-perform the exact-match test over the period postings and confirm nil duplicates cleared.',
+      'Re-perform the test on reference variants — leading zeros, trailing spaces, case differences — and quantify anything that posted.',
+      'For each variant duplicate found, trace to the payment run and establish whether cash left the business.',
+    ],
+    performedBy: 'AM', wpRefHard: 'P2P/04', wpRefSoft: '/FY26/ICFR/P2P/P-04 duplicate block/', reportRef: '4.4',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
     // concluded ineffective, paper signed — sitting in the reviewer's court
@@ -284,6 +372,15 @@ const DETAILED: Control[] = [
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     controlActivity: 'D. Rao (Controller) reviews every manual journal to the AP control account each month, before the ledger closes, against the supporting schedule and the originating document. The journal is posted only after review, and the sign-off on the journal package is the evidence. Journals raised without support are returned to the preparer.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
+    rootCause: 'The review was designed around the month-end reporting pack rather than the posting itself, so it happens after the journal has already hit the ledger.',
+    auditSteps: [
+      'Obtain the manual-journal narrative and walk the review step with the Controller.',
+      'Extract the manual journal register (FB03) for the period and validate it as information produced by the entity.',
+      'For each sampled journal, compare the review sign-off date to the posting date.',
+      'Confirm the reviewer is independent of the preparer on every sampled journal.',
+      'Agree the journal population to the ledger to establish whether the review covered all of it.',
+    ],
+    performedBy: 'RS', wpRefHard: 'P2P/05', wpRefSoft: '/FY26/ICFR/P2P/P-05 manual journals/', reportRef: '4.5',
     assertions: ['Accuracy', 'Completeness'],
     racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
     design: designTrack('Ineffective', [
@@ -306,6 +403,14 @@ const DETAILED: Control[] = [
     precision: 'Receipts in the last/first 5 days are checked to GRN dates for correct-period recording.',
     controlActivity: 'M. Nair (Accounts Payable) takes the goods-receipt listing for the last five days of the period and the first five of the next, and agrees each line to the GRN date and the carrier documentation. Receipts recorded in the wrong period are reclassified before close; the reviewed listing carries dated sign-off as evidence.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-21', riskDescription: 'Goods/liabilities recorded in the wrong period (cut-off).',
+    rootCause: 'Receiving sites post goods receipts from paper docket books the next working day, so the recorded date follows the data-entry date rather than the date the goods arrived.',
+    auditSteps: [
+      'Obtain the cut-off narrative and confirm the review window is defined and applied consistently.',
+      'Extract the goods-receipt listing for the five days either side of period end.',
+      'Agree each sampled line to the GRN date and the carrier documentation.',
+      'Confirm anything recorded in the wrong period was reclassified before close.',
+    ],
+    performedBy: 'RS', wpRefHard: 'P2P/06', wpRefSoft: '/FY26/ICFR/P2P/P-06 GR cut-off/', reportRef: '4.6',
     assertions: ['Cut-off', 'Completeness'],
     testDueInDays: 0,
     design: designTrack('Not tested', [
@@ -326,6 +431,8 @@ const DETAILED: Control[] = [
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
     controlActivity: 'M. Nair (Accounts Payable) reviews the aged GR/IR report from SAP S/4HANA each month and investigates every entry open beyond 60 days with the buyer and the receiving site. Each item is cleared, accrued or written back with a documented reason; the annotated report is retained as evidence and the closing balance is agreed to the ledger.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
+    rootCause: 'Ageing the GR/IR account is a month-end housekeeping task with no owner named in the close calendar, so it slips whenever close is compressed.',
+    performedBy: 'RS', wpRefHard: 'P2P/07', wpRefSoft: '/FY26/ICFR/P2P/P-07 GR-IR ageing/', reportRef: '4.7',
     assertions: ['Completeness', 'Accuracy'],
     racmReview: remark('Row is incomplete — no design documents or test attributes defined yet. Complete the RACM row, then resubmit for approval.'),
     design: designTrack('Not tested', [], []),
@@ -485,8 +592,18 @@ const TASKS: HandoffTask[] = [
 ];
 
 const DEFICIENCIES: Deficiency[] = [
-  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair · Accounts Payable', status: 'In progress' }, status: 'Remediation' },
-  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
+  // DEF-001 was found by sampling — the control is designed correctly and did not
+  // operate, so it is a testing gap, and the four variant duplicates that posted
+  // are real money: two were paid and are recoverable, two were caught pre-payment.
+  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', gapType: 'TG', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
+    exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
+    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair · Accounts Payable', status: 'In progress' }, status: 'Remediation' },
+  // DEF-002 was found in the walkthrough, on a manual control — a manual design
+  // gap. Nothing has gone wrong yet, so there is no recovery to price: the number
+  // is what could pass unchecked in a month of manual journals.
+  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', gapType: 'MDG', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', reportRef: '4.5',
+    exposure: { recovery: 0, workingCapital: 0, leakage: 640_000, basis: 'No error identified in the period. Priced at the average monthly value of manual AP journals posted without prior review (₹6.4L) — the amount that could reach the ledger unchecked before the next review cycle catches it.' },
+    remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
 ];
 
 // ── review notes — one at each lifecycle stage, so every hat sees its move ───────

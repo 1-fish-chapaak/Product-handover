@@ -22,9 +22,12 @@ import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
  * kept verbatim for every engagement except the one the new flow is being built
  * on. See flow.ts for why.
  *
- * Six tabs, no audits, deficiencies reached as a drill-in. Nothing in here
- * should gain features: when the new flow is signed off this file goes, and
- * until then it is the control group.
+ * Six tabs, no audits, deficiencies reached as a drill-in. What this file pins is
+ * the SHELL — which tabs exist, what the drill-ins are, what a failed control is
+ * called. It is not a feature freeze: the surfaces it renders (ControlDossier,
+ * Racm, DeficienciesView, the working paper) are the same components the new flow
+ * uses, so work landing there lands here too. That is deliberate — new capability
+ * ships to every SOX engagement, and only the reworked journey is held back.
  */
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },

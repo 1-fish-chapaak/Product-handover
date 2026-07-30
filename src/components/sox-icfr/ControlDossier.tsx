@@ -10,7 +10,7 @@ import {
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designCompleteness, discussionsFor, isControlLocked, operatingProgress,
+  controlConclusion, courtFor, designCompleteness, discussionsFor, formatINR, isControlLocked, operatingProgress,
   sampleSizeGuide, trackResult, pointResult, stepResult,
 } from './helpers';
 import { programmeFor } from './auditScope';
@@ -21,10 +21,10 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS } from './types';
+import { DESIGN_DOC_KINDS, EXPOSURE_LABEL, exposureTotal, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, OperatingStep,
+  Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -886,6 +886,226 @@ function FilePickerModal({ existing, onUpload, onChoose, slots, onClose }: {
   );
 }
 
+// ── IPE (step 2) — the entity-produced report is itself the thing under test ──────
+/** A plausible report identity per sub-process, so the auditor edits rather than
+ *  authors. The transaction code matters as much as the name: it is how anyone
+ *  re-runs the report and lands on the same population. */
+const IPE_SUGGESTION: Record<string, { reportName: string; reportRef: string }> = {
+  'Vendor master': { reportName: 'Vendor master change log', reportRef: 'S_ALR_87012089' },
+  Purchasing: { reportName: 'PO release log', reportRef: 'ME2N' },
+  'Invoice processing': { reportName: 'Invoice register', reportRef: 'MIR5' },
+  'Period close': { reportName: 'Manual journal register', reportRef: 'FB03' },
+};
+
+/** One labelled input in the registration grid. */
+function IpeField({ label, value, onChange, hint, wide, numeric }: { label: string; value: string; onChange: (v: string) => void; hint?: string; wide?: boolean; numeric?: boolean }) {
+  return (
+    <label className={cn('block min-w-0', wide && 'col-span-2')}>
+      <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">{label}</span>
+      <input value={value} onChange={e => onChange(e.target.value)} inputMode={numeric ? 'numeric' : undefined}
+        className={cn('w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200', numeric && 'tabular-nums')} />
+      {hint && <span className="block text-[0.65625rem] text-ink-400 mt-1">{hint}</span>}
+    </label>
+  );
+}
+
+function IpeSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
+  const { eng, registerIpe, setIpeCheck, concludeIpe, clearIpe } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const ipe = control.operating.ipe;
+  const suggested = IPE_SUGGESTION[control.subProcess] ?? { reportName: `${control.subProcess} listing`, reportRef: 'Custom report' };
+  const span = eng.audits[0]?.periodSpan ?? `${eng.periodStart} – ${eng.periodEnd}`;
+
+  const [form, setForm] = useState({
+    reportName: suggested.reportName,
+    system: 'SAP S/4HANA',
+    reportRef: suggested.reportRef,
+    parameters: `Company code AG01 · ${span} · all document types`,
+    generatedBy: control.owner,
+    generatedAt: '02 May',
+    recordCount: '2640',
+    controlTotal: '₹ 412.6 Cr — agreed to the GL control account',
+  });
+  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }));
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  if (locked) {
+    return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title="Report testing is locked" hint="Conclude the Test of Design as effective first — there is no point proving a report for a control that isn't designed to work.">
+          <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
+        </EmptyState>
+      </div>
+    );
+  }
+
+  // Nothing registered yet — name the report and how it was run. Every field is
+  // pre-filled from the control, because the auditor's job here is to check the
+  // facts against the parameter screen, not to type them out.
+  if (!ipe) {
+    if (!canEdit || isControlLocked(control)) {
+      return <div className="p-5"><p className="text-[0.75rem] text-ink-400">No report registered yet — the auditor records the report the population comes from, then tests it.</p></div>;
+    }
+    return (
+      <div className="p-5">
+        <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-3.5 py-3 mb-3.5 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed">
+            The population comes out of a report <b className="font-semibold">the client ran</b>. Until that report is proven — right source, nothing missing, nothing wrong — a sample drawn from it proves nothing either.
+          </p>
+        </div>
+        <div className="subcard p-3.5">
+          <div className="text-[0.71875rem] font-bold text-ink-700 mb-3 inline-flex items-center gap-1.5"><FileSpreadsheet size={12} /> Register the report</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+            <IpeField label="Report name" value={form.reportName} onChange={set('reportName')} />
+            <IpeField label="Source system" value={form.system} onChange={set('system')} />
+            <IpeField label="Transaction / report ref" value={form.reportRef} onChange={set('reportRef')} hint="How anyone re-runs it" />
+            <IpeField label="Run by (at the client)" value={form.generatedBy} onChange={set('generatedBy')} hint="What makes it entity-produced" />
+            <IpeField label="Parameters" value={form.parameters} onChange={set('parameters')} wide hint="Company code, date range, document types — a report run over the wrong window is a wrong population" />
+            <IpeField label="Run on" value={form.generatedAt} onChange={set('generatedAt')} />
+            <IpeField label="Records" value={form.recordCount} onChange={set('recordCount')} numeric />
+            <IpeField label="Control total" value={form.controlTotal} onChange={set('controlTotal')} wide hint="The number it totals to, and what it was agreed against" />
+          </div>
+          <div className="flex items-center justify-end gap-2 mt-3.5">
+            <button
+              disabled={!form.reportName.trim() || !form.reportRef.trim()}
+              onClick={() => {
+                registerIpe(control.id, {
+                  reportName: form.reportName.trim(),
+                  system: form.system.trim(),
+                  reportRef: form.reportRef.trim(),
+                  parameters: form.parameters.trim(),
+                  generatedBy: form.generatedBy.trim(),
+                  generatedAt: form.generatedAt.trim(),
+                  recordCount: Number(form.recordCount.replace(/\D/g, '')) || 0,
+                  controlTotal: form.controlTotal.trim(),
+                });
+                logEvent({ action: 'Create', description: `Registered "${form.reportName.trim()}" (${form.reportRef.trim()}) as IPE for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+              }}
+              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+              <ClipboardCheck size={14} /> Register and start testing
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const suggestion = ipeSuggestion(ipe);
+  const concluded = ipe.conclusion !== 'Not tested';
+  const reliable = ipe.conclusion === 'Reliable';
+  const canWrite = canEdit && !isControlLocked(control);
+
+  return (
+    <div className="p-5">
+      {/* the report's identity — the facts a reviewer re-runs it from */}
+      <div className={cn('rounded-xl border p-3.5 mb-3', reliable ? 'border-compliant-200 bg-compliant-50/30' : ipe.conclusion === 'Not reliable' ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-canvas-elevated')}>
+        <div className="flex items-start justify-between gap-3 mb-2.5">
+          <div className="min-w-0">
+            <div className="text-[0.8125rem] font-bold text-ink-900">{ipe.reportName}</div>
+            <p className="text-[0.71875rem] text-ink-500 mt-0.5">{ipe.system} · <span className="font-mono">{ipe.reportRef}</span> · run by {ipe.generatedBy} on {ipe.generatedAt}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Pill tone={reliable ? 'compliant' : ipe.conclusion === 'Not reliable' ? 'risk' : 'draft'}>{ipe.conclusion}</Pill>
+            {canWrite && (
+              <button onClick={() => setWithdrawing(true)} title="Withdraw this report and start again"
+                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer" aria-label="Withdraw report"><RotateCcw size={12} /></button>
+            )}
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[0.71875rem]">
+          <span className="text-ink-700"><span className="text-ink-400">Parameters</span> · {ipe.parameters}</span>
+          <span className="text-ink-700"><span className="text-ink-400">Records</span> · <span className="tabular-nums">{ipe.recordCount.toLocaleString()}</span></span>
+          <span className="text-ink-700 sm:col-span-2"><span className="text-ink-400">Control total</span> · {ipe.controlTotal}</span>
+        </div>
+      </div>
+
+      {/* the three checks — what is claimed, how it was proven, what was found */}
+      <div className="space-y-2">
+        {ipe.checks.map(k => {
+          const pass = k.result === 'Pass';
+          const fail = k.result === 'Fail';
+          return (
+            <div key={k.id} className={cn('subcard p-3.5', fail && 'border-risk-200')}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Tickmark result={k.result} size={15} />
+                    <span className="text-[0.78125rem] font-bold text-ink-900">{k.dimension}</span>
+                  </div>
+                  <p className="text-[0.75rem] text-ink-700 mt-1 leading-relaxed">{k.description}</p>
+                  <p className="text-[0.71875rem] text-ink-400 mt-1 leading-relaxed"><b className="font-semibold text-ink-500">How</b> — {k.method}</p>
+                </div>
+                {canWrite && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => setIpeCheck(control.id, k.id, { result: 'Pass' })}
+                      className={cn('h-7 px-2.5 rounded-md border text-[0.71875rem] font-semibold cursor-pointer transition-colors', pass ? 'bg-compliant-50 border-compliant-200 text-compliant-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>Pass</button>
+                    <button onClick={() => setIpeCheck(control.id, k.id, { result: 'Fail' })}
+                      className={cn('h-7 px-2.5 rounded-md border text-[0.71875rem] font-semibold cursor-pointer transition-colors', fail ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>Fail</button>
+                  </div>
+                )}
+              </div>
+              {/* the finding IS the working paper — the tie-out numbers, the variance */}
+              {canWrite ? (
+                <textarea rows={2} value={k.note ?? ''} onChange={e => setIpeCheck(control.id, k.id, { note: e.target.value })}
+                  placeholder={k.dimension === 'Completeness' ? 'What it tied to — the report total against the GL control account, and the difference' : k.dimension === 'Accuracy' ? 'What was vouched, and what came back' : 'What the parameter screen showed against the test scope'}
+                  className="mt-2.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+              ) : k.note ? (
+                <p className="mt-2.5 text-[0.75rem] text-ink-700 bg-paper-50 border border-canvas-border rounded-lg px-2.5 py-1.5">{k.note}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* conclude — one failed check sinks the report, and says so */}
+      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-[0.71875rem] text-ink-500 max-w-[420px]">
+          {suggestion === 'Reliable' ? 'All three checks pass — the report can be relied on, and the sample step opens.'
+            : suggestion === 'Not reliable' ? 'A check failed. An incomplete or inaccurate report is the wrong population, so nothing can be sampled from it until a corrected extract is registered.'
+            : 'Work all three checks to conclude on the report.'}
+        </p>
+        {concluded ? (
+          <span className="text-[0.71875rem] font-semibold text-ink-500 inline-flex items-center gap-1.5">
+            <Tickmark result={reliable ? 'Pass' : 'Fail'} size={14} /> Concluded {ipe.conclusion.toLowerCase()} — {ipe.testedBy}, {ipe.testedAt}
+          </span>
+        ) : canWrite && (
+          <div className="flex items-center gap-2">
+            <button disabled={suggestion === 'Not tested'} onClick={() => { concludeIpe(control.id, 'Not reliable'); addToast({ type: 'warning', title: 'Report not reliable', message: 'The sample step stays closed until a corrected extract is registered and proven.' }); }}
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={13} /> Not reliable</button>
+            <button disabled={suggestion !== 'Reliable'}
+              title={suggestion === 'Reliable' ? undefined : 'Every check has to pass before a report can be relied on'}
+              onClick={() => { concludeIpe(control.id, 'Reliable'); addToast({ type: 'success', title: 'Report reliable', message: 'The sample can now be drawn from it.' }); }}
+              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable — continue</button>
+          </div>
+        )}
+      </div>
+
+      {withdrawing && createPortal(
+        <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>
+          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div>
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Withdraw this report?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">The three checks proved <span className="font-semibold text-ink-700">{ipe.reportName}</span> as it was run. Withdrawing it clears them, because a different extract has to be proven on its own.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => { clearIpe(control.id); setWithdrawing(false); logEvent({ action: 'Delete', description: `Withdrew the registered IPE report for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw and restart</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+    </div>
+  );
+}
+
 function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
   const { eng, racmDocs, openAuditId, setPopulation, setSampling, me } = useIcfr();
   const logEvent = useAuditLog();
@@ -1028,12 +1248,27 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     logEvent({ action: 'Delete', description: `Rejected extracted sample for ${control.id} — journey restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
 
+  // Two gates stand in front of the sample, and they fail for different reasons —
+  // so the locked state names the one actually holding it up.
   if (locked) {
+    const designBlocked = trackResult(control.design) !== 'Effective';
     return (
       <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked" hint="Conclude the Test of Design as effective first — the sample is only worth pulling for a control that is designed effectively.">
-          <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
-        </EmptyState>
+        {designBlocked ? (
+          <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked" hint="Conclude the Test of Design as effective first — the sample is only worth pulling for a control that is designed effectively.">
+            <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
+          </EmptyState>
+        ) : (
+          <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked"
+            hint={o.ipe
+              ? 'The report the population comes from is not concluded reliable — a sample drawn from it would prove nothing. Finish the report testing above.'
+              : 'Register and test the report the population comes from first — a sample is only as good as the report it was drawn out of.'}>
+            <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+              <span>Report is currently</span>
+              <Pill tone={o.ipe?.conclusion === 'Not reliable' ? 'risk' : 'draft'}>{o.ipe?.conclusion ?? 'Not registered'}</Pill>
+            </span>
+          </EmptyState>
+        )}
       </div>
     );
   }
@@ -1504,6 +1739,13 @@ export default function ControlDossier() {
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
   const toeLocked = designResult !== 'Effective';
+  const ipe = control.operating.ipe;
+  // The sample sits behind two gates: design has to conclude effective, and the
+  // report the population comes out of has to be proven reliable. An already-drawn
+  // sample is never re-locked — that work is done, and its own IPE is on the paper.
+  const ipeBlocked = !control.operating.sampling && !ipeReliable(control.operating);
+  const sampleLocked = toeLocked || ipeBlocked;
+  const def = eng.deficiencies.find(d => d.controlId === control.id);
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
@@ -1536,6 +1778,9 @@ export default function ControlDossier() {
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
                 <span><span className="text-ink-400">Risk {control.riskId}</span> · {control.riskDescription}</span>
                 <span><span className="text-ink-400">Assertions</span> · {control.assertions.join(', ')}</span>
+                {/* why the risk exists at all — a control aimed at the symptom
+                    rather than the cause is the commonest design gap there is */}
+                {control.rootCause && <span><span className="text-ink-400">Root cause</span> · {control.rootCause}</span>}
               </div>
             </div>
             <div className="shrink-0 flex flex-col items-end gap-2">
@@ -1566,29 +1811,88 @@ export default function ControlDossier() {
         <RagStrip meters={designRagMeters(control)} />
       </motion.div>
 
+      {/* the audit programme — the steps actually walked in the field, from the
+          source RACM. Distinct from the design considerations (what must be true)
+          and the test attributes (what each sample proves): these are the
+          instructions, so they sit above the stepper rather than inside a step. */}
+      {control.auditSteps && control.auditSteps.length > 0 && (
+        <motion.div className="mb-5 rounded-xl border border-canvas-border bg-canvas-elevated p-4" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+          <div className="flex items-center gap-2 mb-2.5">
+            <ListChecks size={14} className="text-brand-600 shrink-0" />
+            <h3 className="text-[0.8125rem] font-bold text-ink-900">Audit programme</h3>
+            <span className="text-[0.6875rem] text-ink-400">{control.auditSteps.length} steps · from the RACM</span>
+            {control.performedBy && <span className="ml-auto text-[0.6875rem] text-ink-400">Performed by <b className="font-semibold text-ink-600">{control.performedBy}</b></span>}
+          </div>
+          <ol className="space-y-1.5">
+            {control.auditSteps.map((s, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-[0.75rem] text-ink-700 leading-relaxed">
+                <span className="w-[18px] h-[18px] rounded-md bg-brand-50 text-brand-700 text-[0.625rem] font-bold inline-flex items-center justify-center shrink-0 mt-0.5 tabular-nums">{i + 1}</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ol>
+          {(control.wpRefHard || control.wpRefSoft) && (
+            <div className="mt-3 pt-2.5 border-t border-canvas-border flex flex-wrap items-center gap-x-5 gap-y-1 text-[0.6875rem] text-ink-500">
+              {control.wpRefHard && <span><span className="text-ink-400">Hard-copy file</span> · <span className="font-mono">{control.wpRefHard}</span></span>}
+              {control.wpRefSoft && <span className="min-w-0"><span className="text-ink-400">Soft-copy path</span> · <span className="font-mono break-all">{control.wpRefSoft}</span></span>}
+              {control.reportRef && <span><span className="text-ink-400">Report ref</span> · <span className="font-mono">{control.reportRef}</span></span>}
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           <VStep n={1} title="Test of design" subtitle="Is the control designed to prevent or detect the risk? Grounded in the documents and walkthrough — each consideration validated by a workflow." status={designResult}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
-          <VStep n={2} title="Extract sample" subtitle="Pull the testing sample out of the population — add the population and transaction files, explain the extraction logic, then approve it for testing." hideStatus
-            status={toeLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={toeLocked}
+          <VStep n={2} title="Test the report (IPE)" subtitle="The population comes out of a report the client ran. Prove that report first — right source and parameters, nothing missing, nothing wrong — before a single item is sampled from it." hideStatus
+            status={ipe ? (ipe.conclusion === 'Reliable' ? 'Effective' : ipe.conclusion === 'Not reliable' ? 'Ineffective' : 'Not tested') : 'Not tested'} locked={toeLocked}
+            right={toeLocked
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
+              : !ipe
+                ? <span className="text-[0.6875rem] font-semibold text-ink-400">No report registered</span>
+                : ipe.conclusion === 'Reliable'
+                  ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Reliable · {ipe.recordCount.toLocaleString()} records</span>
+                  : ipe.conclusion === 'Not reliable'
+                    ? <span className="text-[0.6875rem] font-bold text-risk-700 inline-flex items-center gap-1"><XCircle size={12} /> Not reliable</span>
+                    : <span className="text-[0.6875rem] font-semibold text-ink-400">{ipe.checks.filter(k => k.result !== 'Not tested').length}/{ipe.checks.length} checks worked</span>}>
+            <IpeSection control={control} canEdit={canEdit} locked={toeLocked} />
+          </VStep>
+          <VStep n={3} title="Extract sample" subtitle="Pull the testing sample out of the proven population — add the population and transaction files, explain the extraction logic, then approve it for testing." hideStatus
+            status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
               : control.operating.sampling
                 ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Sample approved · {control.operating.sampling.size} items</span>
-                : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting extraction</span>}>
-            <SampleExtractSection control={control} canEdit={canEdit} locked={toeLocked} />
+                : ipeBlocked
+                  ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the report is reliable</span>
+                  : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting extraction</span>}>
+            <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
-          <VStep n={3} id="vstep-toe" title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={4} id="vstep-toe" title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
           {concl === 'Ineffective' && (
             <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
-              <div className="flex items-center gap-2 mb-1"><AlertTriangle size={15} className="text-risk-700" /><h3 className="text-[0.8125rem] font-bold text-risk-700">Deficiency raised</h3></div>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <AlertTriangle size={15} className="text-risk-700" /><h3 className="text-[0.8125rem] font-bold text-risk-700">Deficiency raised</h3>
+                {/* what kind of gap this is — a design gap needs a redesign, a
+                    testing gap needs discipline, and the fix follows the label */}
+                {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>}
+              </div>
               <p className="text-[0.75rem] text-ink-600">This control concluded ineffective. Assess severity (likelihood × magnitude) and remediation in <button onClick={() => setView('deficiencies')} className="font-semibold text-risk-700 hover:underline inline-flex items-center gap-0.5">Deficiencies <ChevronRight size={12} /></button>.</p>
+              {/* priced, if the auditor has priced it — the number is what moves a CFO */}
+              {def && exposureTotal(def.exposure) > 0 && (
+                <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.71875rem]">
+                  <span className="font-semibold text-risk-700">Exposure {formatINR(exposureTotal(def.exposure))}</span>
+                  {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[])
+                    .filter(k => (def.exposure as Exposure)[k] > 0)
+                    .map(k => <span key={k} className="text-ink-600"><span className="text-ink-400">{EXPOSURE_LABEL[k]}</span> · {formatINR((def.exposure as Exposure)[k])}</span>)}
+                </div>
+              )}
             </motion.div>
           )}
         </motion.div>

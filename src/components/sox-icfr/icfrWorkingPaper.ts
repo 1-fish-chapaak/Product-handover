@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
+import { exposureTotal, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -15,6 +16,7 @@ export type PaperBlock =
   | { kind: 'note'; label: string; text: string; tone: 'good' | 'bad' | 'neutral' };
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';
+export const IPE_TITLE = 'Information produced by the entity (IPE)';
 
 /** P / r ticks, as real working papers mark them. */
 const tick = (r: TestResult | 'Effective' | 'Ineffective' | undefined): string =>
@@ -57,6 +59,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const pop = c.operating.population;
+  const ipe = c.operating.ipe;
   const def = eng.deficiencies.find(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
 
@@ -71,11 +74,29 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Control frequency', c.frequency],
       ['Nature / type', `${c.nature} · ${c.type}${c.isKey ? ' · Key control' : ''}`],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
+      ['Root cause', c.rootCause ?? '—'],
       ['Assertions', c.assertions.join(', ')],
       ['Precision', c.precision],
       ['Period', periodLine(eng)],
+      // Where the evidence physically lives, and which report paragraph this row
+      // lands in. Both outlive the engagement, so the paper has to cite them.
+      ['Performed by', c.performedBy ?? '—'],
+      ['W/P reference — hard copy', c.wpRefHard ?? '—'],
+      ['W/P reference — soft copy', c.wpRefSoft ?? '—'],
+      ['Report reference', c.reportRef ?? '—'],
     ],
   });
+
+  // The audit programme — the steps actually walked, as instructions rather than
+  // conclusions. A reviewer re-performs the test off this list.
+  if (c.auditSteps?.length) {
+    blocks.push({
+      kind: 'table', title: 'Audit programme — steps performed',
+      note: `${c.auditSteps.length} step${c.auditSteps.length === 1 ? '' : 's'}${c.performedBy ? ` · performed by ${c.performedBy}` : ''}`,
+      headers: ['', 'Step'],
+      rows: c.auditSteps.map((s, i) => [String(i + 1), s]),
+    });
+  }
 
   blocks.push({ kind: 'kv', title: SIGNOFF_TITLE, rows: controlSignoffRows(eng, c) });
 
@@ -90,10 +111,38 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     tickFrom: 2,
   });
 
+  // IPE — the report the population came out of, and the three checks that proved
+  // it. Printed BEFORE the attributes table because that is the order the work
+  // happened in: nothing below is worth reading if the report itself didn't hold.
+  if (ipe) {
+    blocks.push({
+      kind: 'kv', title: IPE_TITLE, rows: [
+        ['Report', ipe.reportName],
+        ['Source system', ipe.system],
+        ['Transaction / report ref', ipe.reportRef],
+        ['Parameters', ipe.parameters],
+        ['Run by (client)', `${ipe.generatedBy} — ${ipe.generatedAt}`],
+        ['Records', String(ipe.recordCount)],
+        ['Control total', ipe.controlTotal],
+        ['File', ipe.file?.name ?? '—'],
+        ['Conclusion', ipe.conclusion === 'Not tested' ? 'Not tested' : `${ipe.conclusion}${ipe.testedBy ? ` — ${ipe.testedBy}, ${ipe.testedAt}` : ''}`],
+      ],
+    });
+    blocks.push({
+      kind: 'table', title: 'IPE — validation of the report',
+      note: `${ipe.checks.filter(k => k.result === 'Pass').length}/${ipe.checks.length} checks passed · a report that does not conclude reliable cannot be sampled from`,
+      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Tick'],
+      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', tick(k.result)]),
+      tickFrom: 5,
+    });
+  } else {
+    blocks.push({ kind: 'note', label: 'IPE', text: 'No entity-produced report registered — the population has not been validated for source, completeness or accuracy.', tone: 'neutral' });
+  }
+
   // To be tested — every attribute with its population and sample coverage
   blocks.push({
     kind: 'table', title: 'To be tested — attributes & coverage',
-    note: pop ? `Population: ${pop.count} items from ${pop.source}${pop.ipeValidated ? ' (IPE validated)' : ''}` : 'No population drawn',
+    note: pop ? `Population: ${pop.count} items from ${pop.source}${ipe ? ` · report ${ipe.conclusion.toLowerCase()}` : ''}` : 'No population drawn',
     headers: ['', 'Attribute', 'Assertion', 'Population', 'Samples drawn', 'Samples tested', 'Exceptions'],
     rows: steps.map((s, i) => {
       const results = samples.map(smp => s.sampleResults?.[smp.id]).filter(r => r && r !== 'Not tested');
@@ -154,10 +203,20 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // Linked exception, if the testing raised one
   if (def) {
     const a = assessSeverity(def, eng);
+    const ex = def.exposure;
     blocks.push({
       kind: 'kv', title: `Exception — ${def.id}`, rows: [
         ['Description', def.description],
+        // Where it was found and what kind of thing broke — the label the fix follows
+        ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
         ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
+        // What the gap is worth, split the way the source RACM splits it
+        ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
+        ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
+        ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
+        ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
+        ['Exposure — basis', ex?.basis ?? '—'],
+        ['Report reference', def.reportRef ?? c.reportRef ?? '—'],
         ['Status', def.status],
         ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${formatDueDate(def.remediation.date)}` : ''} · ${def.remediation.owner}`],
         ['Remediation evidence', def.remediation.evidence?.map(f => f.name).join('; ') || 'None'],
@@ -178,11 +237,17 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
     if (b.kind === 'kv') {
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
-      if (b.title === 'Test legend') return 'Operating Testing';
+      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'Operating Testing';
       return 'Results'; // linked exception
     }
-    if (b.kind === 'table') return b.title === 'Test of design' ? 'Design Testing' : 'Operating Testing';
-    return b.label === 'Samples' ? 'Operating Testing' : 'Results'; // notes
+    if (b.kind === 'table') {
+      if (b.title === 'Test of design') return 'Design Testing';
+      // the programme is what the auditor was instructed to do, so it reads with
+      // the control it belongs to rather than inside one track's results
+      if (b.title === 'Audit programme — steps performed') return 'Control';
+      return 'Operating Testing';
+    }
+    return b.label === 'Samples' || b.label === 'IPE' ? 'Operating Testing' : 'Results'; // notes
   };
   const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));
   buildControlPaper(eng, c).forEach(b => grouped.get(sectionOf(b))!.push(b));
@@ -271,8 +336,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'TOD (design)', 'TOE (operating)', 'TOE method', 'Conclusion'],
-      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, trackResult(c.design), trackResult(c.operating), c.operating.method, controlConclusion(c)]),
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'Root cause', 'TOD (design)', 'Report (IPE)', 'TOE (operating)', 'TOE method', 'Conclusion', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c), c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
     }],
   };
 
@@ -301,11 +366,12 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
       kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
-      headers: ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
+      headers: ['Deficiency', 'Control', 'Track', 'Gap type', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis', 'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
+        const ex = d.exposure;
+        return [d.id, d.controlId, d.track, d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—', d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, ex ? formatINR(ex.recovery) : '—', ex ? formatINR(ex.workingCapital) : '—', ex ? formatINR(ex.leakage) : '—', ex ? formatINR(exposureTotal(ex)) : '—', ex?.basis ?? '—', d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
       }),
     }],
   };
