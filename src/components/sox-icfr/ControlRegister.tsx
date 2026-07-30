@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, StickyNote,
+  Star, FileText, X, Send, LayoutGrid, Table2, StickyNote,
 } from 'lucide-react';
 import { HeaderFilter } from '../shared/FilterSelect';
 import { useAuditControls } from './useAuditControls';
@@ -12,7 +12,6 @@ import {
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
-import BulkTestModal from './BulkTestModal';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -106,7 +105,6 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 export default function ControlRegister() {
   const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
   const { addToast } = useToast();
-  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   // The register shows what the OPEN audit covers — its entities' processes.
   const auditScoped = useAuditControls(eng.controls);
@@ -348,20 +346,17 @@ export default function ControlRegister() {
       )}
       <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
-      {/* bulk bar */}
+      {/* bulk bar — no bulk TEST here (user ask, 30 Jul: SOX controls aren't
+          bulk-tested) */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
-
-      {/* bulk test — compile files → attach unique datasets → execute */}
-      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
 
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}

@@ -2,9 +2,9 @@ import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
 import { FIVE_W_1H, ipeChecklist } from './types';
 import type {
-  Assertion, Attestation, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
-  EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, GapType, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
+  ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -765,7 +765,7 @@ const RUNS: RunRecord[] = [
     by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
   },
   {
-    id: 'run-s1', kind: 'bulk-test', label: 'Bulk test — 2 controls',
+    id: 'run-s1', kind: 'control-test', label: 'Control test — 2 controls',
     detail: 'Scoping run across PO approval and vendor master controls',
     controls: [runOutcome('P2P-C-01', 'Effective'), runOutcome('P2P-C-02', 'Effective')],
     datasets: ['PO release log (ME2N)', 'Vendor master snapshot'],
@@ -867,11 +867,11 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
     by: 'A. Mehta · Auditor', role: 'auditor', at: '2w ago',
   });
 
-  // ④ last cycle's bulk test — only the two processes CY 2025 covered
+  // ④ last cycle's control test — only the two processes CY 2025 covered
   const prior = controls.filter(c => processes.slice(0, 2).includes(c.process));
   if (prior.length) runs.push({
-    id: 'run-prior-1', kind: 'bulk-test',
-    label: `Bulk test — ${prior.length} controls`,
+    id: 'run-prior-1', kind: 'control-test',
+    label: `Control test — ${prior.length} controls`,
     detail: 'CY 2025 cycle · carried forward for reference',
     controls: outcomesFor(prior, 'Effective'),
     by: 'A. Mehta · Auditor', role: 'auditor', at: '52w ago',
@@ -880,30 +880,140 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
   return runs;
 }
 
-/** The cycles this engagement has run. CY 2025 covered the two processes the
- *  group started with, CY 2026 covers all four — and that difference is the
- *  point: it is why a Treasury control sits in two audits and a Fixed Assets
- *  control sits in one. Scoped by RACM rather than by entity so the record
- *  needs no entity lookup (the entities live in another store). */
-function libraryAudits(processes: string[]): AuditRecord[] {
+/**
+ * The cycles this engagement has run — the engagement Overview's primary content.
+ *
+ * Three, across two fiscal years, and each one earns its place:
+ *
+ *   CY 2025 · year-end     concluded, and ARCHIVED. Its conclusions and the two
+ *                          deficiencies it raised survive as a snapshot, which is
+ *                          what makes prior-year continuity possible at all.
+ *   CY 2026 · interim      the LIVE cycle — its results are the ones on the
+ *                          controls. First in the array, because the array is
+ *                          newest-created-first and the live audit is the newest
+ *                          unarchived record (see liveAuditId).
+ *   CY 2026 · roll-forward  planned, P2P + O2C only. Nothing tested under it yet.
+ *
+ * What that shape demonstrates: two-year grouping, a coverage timeline with
+ * Oct–Dec 2026 visibly uncovered, a Treasury control that appears in two audits
+ * (test once, rely many), prior-year deficiencies to carry forward, and the
+ * materiality check reading ✓ because both CY 2026 rounds share ₹12 Cr.
+ *
+ * Scoped by RACM rather than by entity so the record needs no entity lookup —
+ * the entities live in another store.
+ */
+function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] {
   if (!processes.length) return [];
   const basisLabel = 'Profit before tax (consolidated)';
-  const audits: AuditRecord[] = [{
-    id: 'audit-cy26', period: 'CY 2026', yearBasis: 'cy', periodSpan: 'Jan 2026 – Dec 2026',
-    scopeKind: 'racm', scopeNames: processes, scopeIds: [],
-    files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
-    materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '02 Jan 2026',
-  }];
   const first = processes.slice(0, 2);
-  if (first.length) audits.push({
-    id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', periodSpan: 'Jan 2025 – Dec 2025',
-    scopeKind: 'racm', scopeNames: first, scopeIds: [],
-    files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
-    materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '03 Jan 2025',
-  });
-  return audits;
+
+  // The prior year's archive. Built from the controls it covered so the snapshot
+  // names real W/P references rather than invented ones — but its conclusions are
+  // ITS conclusions, not this cycle's: two controls failed and were remediated.
+  const priorScope = controls.filter(c => first.includes(c.process));
+  const failedIds = priorScope.slice(0, 2).map(c => c.id);
+  const archive: AuditArchive = {
+    conclusions: priorScope.map(c => ({
+      controlId: c.id,
+      wpRef: c.wpRef,
+      process: c.process,
+      description: c.description,
+      design: 'Effective' as const,
+      operating: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
+      conclusion: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
+    })),
+    // One was verified on retest, one is still open — which is exactly the split
+    // the continuity section exists to show. Next year's audit starts here.
+    deficiencies: failedIds.map((controlId, i) => ({
+      id: `def-cy25-0${i + 1}`,
+      controlId,
+      track: 'operating' as const,
+      gapType: 'Testing gap — sample exception' as GapType,
+      description: i === 0
+        ? 'Two of five sampled payment approvals were released without the second signature.'
+        : 'Quarterly reconciliation for Q3 was signed a month after the close deadline.',
+      rootCause: i === 0 ? 'Approval matrix not enforced in the payment run.' : 'No calendar reminder on the close checklist.',
+      likelihood: 'Reasonably possible' as const,
+      magnitude: i === 0 ? 4.2 : 1.1,
+      mwIndicators: [],
+      aggregationGroup: first[i % first.length]!,
+      remediation: {
+        action: i === 0 ? 'Enforce the second signature in the payment run configuration.' : 'Add the close deadline to the reconciliation checklist.',
+        date: i === 0 ? '2025-11-30' : '2025-12-15',
+        owner: 'R. Iyer · Controller',
+        status: 'Done' as const,
+      },
+      status: (i === 0 ? 'Closed' : 'Retest') as ExceptionStatus,
+      retest: i === 0 ? { result: 'Pass' as const, at: '12 Dec 2025', by: 'A. Mehta · Auditor' } : undefined,
+      severity: 'Significant Deficiency' as Severity,
+    })),
+    concludedAt: '12 Jan 2026',
+  };
+
+  return [
+    {
+      id: 'audit-cy26-interim', period: 'CY 2026', yearBasis: 'cy', fiscalYear: 2026,
+      periodSpan: 'Jan 2026 – Dec 2026', round: 'interim', windowFrom: '2026-01-01', windowTo: '2026-06-30',
+      scopeKind: 'racm', scopeNames: processes, scopeIds: [],
+      files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
+      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
+      by: 'A. Mehta · Auditor', role: 'auditor', at: '02 Jan 2026',
+    },
+    {
+      id: 'audit-cy26-rf', period: 'CY 2026', yearBasis: 'cy', fiscalYear: 2026,
+      periodSpan: 'Jan 2026 – Dec 2026', round: 'rollforward', windowFrom: '2026-07-01', windowTo: '2026-09-30',
+      scopeKind: 'racm', scopeNames: first, scopeIds: [],
+      // Same threshold as the interim round on purpose: one opinion, one ruler.
+      // The consistency check on the engagement Overview is reading these two.
+      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
+      rolledFromId: 'audit-cy26-interim',
+      by: 'A. Mehta · Auditor', role: 'auditor', at: '04 Jul 2026',
+    },
+    {
+      id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', fiscalYear: 2025,
+      periodSpan: 'Jan 2025 – Dec 2025', round: 'yearend', windowFrom: '2025-10-01', windowTo: '2025-12-31',
+      scopeKind: 'racm', scopeNames: first, scopeIds: [],
+      files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
+      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
+      signoff: { preparer: { by: 'A. Mehta · Auditor', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes · Audit Manager', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
+      archive,
+      by: 'A. Mehta · Auditor', role: 'auditor', at: '03 Jan 2025',
+    },
+  ];
+}
+
+/**
+ * The one cycle a plain SOX engagement has under way.
+ *
+ * Every SOX engagement's Overview is the audit portfolio now, so an engagement
+ * with no audits would show its testing nowhere — the work would sit behind an
+ * audit that doesn't exist. One year-end round covering everything, holding
+ * whatever the seed tested. Status derives itself: an engagement whose controls
+ * are untested reads Planned without anything having to say so.
+ */
+function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
+  if (!controls.length) return [];
+  const year = Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  const processes = Array.from(new Set(controls.map(c => c.process)));
+  return [{
+    id: `audit-${meta.id ?? 'eng'}-ye`,
+    period: `FY ${year - 1}-${String(year).slice(-2)}`,
+    yearBasis: 'fy',
+    fiscalYear: year,
+    periodSpan: `Apr ${year - 1} – Mar ${year}`,
+    round: 'yearend',
+    windowFrom: `${year}-01-01`,
+    windowTo: `${year}-03-31`,
+    scopeKind: 'racm',
+    scopeNames: processes,
+    scopeIds: [],
+    files: [],
+    materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5 },
+    overall: 12,
+    by: meta.owner ? `${meta.owner} · Auditor` : 'A. Mehta · Auditor',
+    role: 'auditor',
+    at: `01 Apr ${year - 1}`,
+  }];
 }
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
@@ -924,6 +1034,11 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
       if (meta.periodStart) base.periodStart = meta.periodStart;
       if (meta.periodEnd) base.periodEnd = meta.periodEnd;
     }
+    // The flagship's testing belongs to an audit too. Its Overview is the audit
+    // portfolio now, so leaving it with none would strand 32 tested controls
+    // behind an audit that doesn't exist — and show an empty state on the
+    // engagement with the most data in it.
+    base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer.split(' · ')[0] }, base.controls);
     return base;
   }
   // Any other engagement → a fresh engagement scoped to the picked process —
@@ -940,8 +1055,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const controls = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
-  // A 'live' cycle claims tested controls — back that claim with the bulk run
-  // that produced them, so the SOX audit registry isn't empty on arrival.
+  // A 'live' cycle claims tested controls — back that claim with the run that
+  // produced them, so the SOX audit registry isn't empty on arrival. Control
+  // test, not bulk test — SOX controls aren't tested in a bulk batch.
   const runs: RunRecord[] = [];
   if (meta.seedMode === 'live') {
     const tested = controls.filter(c => c.design.conclusion === 'Effective' && c.operating.conclusion === 'Effective');
@@ -949,15 +1065,15 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
       const datasets = Array.from(new Set(tested.flatMap(c => requiredDatasetsFor(c).map(d => d.name))));
       const checks = tested.reduce((n, c) => n + c.design.points.length + c.operating.steps.length, 0);
       runs.push({
-        id: 'run-seed-live', kind: 'bulk-test',
-        label: `Bulk test — ${tested.length} control${tested.length === 1 ? '' : 's'}`,
+        id: 'run-seed-live', kind: 'control-test',
+        label: `Control test — ${tested.length} control${tested.length === 1 ? '' : 's'}`,
         detail: `${checks} checks · ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
         controls: tested.map(c => ({ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: 'Effective' as const, checks: c.design.points.length + c.operating.steps.length })),
         datasets, by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
       });
     }
   }
-  // Appended, not prepended: every record these add is older than the bulk run
+  // Appended, not prepended: every record these add is older than the run
   // above, so the array stays newest-first.
   if (rich) runs.push(...libraryRunHistory(controls));
   return {
@@ -979,10 +1095,10 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     reviewNotes: [],
     executions: [],
     runs,
-    // Every other engagement still starts with no audits — the New audit sheet
-    // is how one arrives, and AuditLogsView's empty state is the honest first
-    // view. This engagement has run two cycles, so it states them.
-    audits: rich ? libraryAudits(meta.processes ?? []) : base.audits,
+    // Every SOX engagement has at least one audit now: the Overview IS the audit
+    // portfolio, so testing that belongs to no audit would be testing with no
+    // home. Altura has run three rounds across two years; the rest have one.
+    audits: rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls),
     signoff: {},
     rulesLog: [],
   };

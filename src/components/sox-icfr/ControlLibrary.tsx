@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
-  Search, Plus, FileSpreadsheet, Layers, Rows3, Star, FileText, X, Send, LayoutGrid, Table2,
-  FlaskConical, ListChecks, Sparkles, Workflow, History, ScrollText, ArrowRight,
+  Search, Plus, Layers, Rows3, Star, FileText, X, Send, LayoutGrid, Table2,
+  FlaskConical, ListChecks, Sparkles, Workflow, History, ScrollText, ArrowRight, Clock,
 } from 'lucide-react';
 import { HeaderFilter } from '../shared/FilterSelect';
 import Drawer from '../shared/Drawer';
 import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
-import { normaliseProcess, processesForAudit } from './auditScope';
+import { auditCovers, normaliseProcess, processesForAudit } from './auditScope';
 import {
   controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
 } from './helpers';
 import { NatureChip, Tickmark } from './parts';
-import BulkTestModal from './BulkTestModal';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -48,7 +47,7 @@ import type { AuditRecord, Control, IcfrEngagement, RunKind, RunRecord } from '.
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
 
-const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConical; chip: string }> = {
+export const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConical; chip: string }> = {
   'bulk-test': { label: 'Bulk test', Icon: FlaskConical, chip: 'bg-brand-50 text-brand-700' },
   'control-test': { label: 'Control test', Icon: ListChecks, chip: 'bg-evidence-50 text-evidence-700' },
   'workflow-run': { label: 'Workflow run', Icon: Workflow, chip: 'bg-compliant-50 text-compliant-700' },
@@ -63,30 +62,21 @@ const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConical; chi
  *  carries a workflow, so counting those would add the same constant to every
  *  control and say nothing. Attributes are where mapping is a choice — it is
  *  what `mapStepWorkflow` writes — so that is the number worth showing. */
-function attributeStats(c: Control): { attrs: number; mapped: number } {
+export function attributeStats(c: Control): { attrs: number; mapped: number } {
   const attrs = c.operating.steps.length;
   return { attrs, mapped: c.operating.steps.filter(s => s.workflowId).length };
 }
 
 /** Every run this control appears in, newest first (the registry is stored that
  *  way, so document order is date order). */
-function runsForControl(runs: RunRecord[], controlId: string): RunRecord[] {
+export function runsForControl(runs: RunRecord[], controlId: string): RunRecord[] {
   return runs.filter(r => r.controls.some(rc => rc.controlId === controlId));
 }
 
 /** This control's outcome inside one run. */
-const outcomeIn = (r: RunRecord, controlId: string) => r.controls.find(rc => rc.controlId === controlId);
+export const outcomeIn = (r: RunRecord, controlId: string) => r.controls.find(rc => rc.controlId === controlId);
 
-/** Does this audit's scope cover this control?
- *
- *  Same precedence useAuditControls applies: controls picked one by one on the
- *  scope step decide, and only when none were does the process filter. */
-function auditCovers(a: AuditRecord, c: Control, engagementId: string): boolean {
-  if (a.controlIds?.length) return a.controlIds.includes(c.id);
-  const procs = processesForAudit(a, engagementId);
-  return !procs || procs.includes(normaliseProcess(c.process));
-}
-const auditsForControl = (eng: IcfrEngagement, c: Control): AuditRecord[] =>
+export const auditsForControl = (eng: IcfrEngagement, c: Control): AuditRecord[] =>
   eng.audits.filter(a => auditCovers(a, c, eng.id));
 
 // ── filters ─────────────────────────────────────────────────────────────────────
@@ -112,26 +102,45 @@ const PRESET_LABEL: Record<string, string> = {
 
 // ── card ────────────────────────────────────────────────────────────────────────
 
-/** One label → value row on a card. `hint` trails the value in muted type. */
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/** "Last run" fact, self-contained tags (label baked into the tag text, not a
+ *  separate eyebrow above it) — shared between the grid card and the
+ *  control's own detail page, so they never drift apart. Not clickable — the
+ *  full history itself lives on the control's own page now. */
+export function LastRunFact({ c, runs }: { c: Control; runs: RunRecord[] }) {
+  const last = runs[0];
+  const lastOutcome = last ? outcomeIn(last, c.id) : undefined;
+  const Kind = last ? KIND_META[last.kind] : undefined;
+  if (!(last && Kind && lastOutcome)) {
+    return (
+      <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-400">
+        <Clock size={10} /> Never run
+      </span>
+    );
+  }
   return (
-    <div className="flex items-baseline gap-2 text-[0.71875rem]">
-      <span className="text-ink-500 w-[6.75rem] shrink-0">{label}</span>
-      <span className="flex items-baseline gap-1.5 min-w-0">{children}</span>
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-500">
+          <Clock size={10} /> Last run: {last.at}
+        </span>
+        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-500">
+          <History size={10} /> {runs.length} run{runs.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <span className="inline-flex items-center gap-1 shrink-0">
+        <Tickmark result={lastOutcome.outcome} size={13} />
+        <span className={cn('text-[0.6875rem] font-semibold', lastOutcome.outcome === 'Effective' ? 'text-compliant-700' : 'text-risk-700')}>{lastOutcome.outcome}</span>
+      </span>
     </div>
   );
 }
 
-function LibraryCard({ c, runs, audits, onOpen, onHistory, selectable, selected, onToggle }: {
+function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }: {
   c: Control; runs: RunRecord[]; audits: AuditRecord[];
-  onOpen: () => void; onHistory: () => void;
+  onOpen: () => void;
   selectable?: boolean; selected?: boolean; onToggle?: () => void;
 }) {
   const { attrs, mapped } = attributeStats(c);
-  const pct = attrs === 0 ? 0 : Math.round((mapped / attrs) * 100);
-  const last = runs[0];
-  const lastOutcome = last ? outcomeIn(last, c.id) : undefined;
-  const Kind = last ? KIND_META[last.kind] : undefined;
 
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
@@ -151,56 +160,85 @@ function LibraryCard({ c, runs, audits, onOpen, onHistory, selectable, selected,
       <div className="ac-meta">{c.id} · {c.nature} · {c.frequency}</div>
       <div className="ac-div" />
 
-      <div className="space-y-1.5">
-        <Fact label="Attributes">
-          <span className="font-semibold text-ink-900 tabular-nums">{attrs}</span>
-        </Fact>
-        <Fact label="Workflows mapped">
-          <span className={cn('font-semibold tabular-nums', mapped === 0 ? 'text-ink-400' : 'text-ink-900')}>{mapped} of {attrs}</span>
-          {attrs > 0 && (
-            <span className="meter" aria-hidden>
-              <span style={{ width: `${pct}%`, background: mapped === attrs ? 'var(--color-compliant-500)' : mapped === 0 ? 'var(--color-ink-300)' : 'var(--color-evidence-500)' }} />
-            </span>
-          )}
-        </Fact>
-        <Fact label="Audit runs">
-          <span className={cn('font-semibold tabular-nums', audits.length === 0 ? 'text-ink-400' : 'text-ink-900')}>{audits.length}</span>
-          {audits.length > 0 && (
-            <span className="text-[0.65625rem] text-ink-400 truncate">{audits.map(a => a.period).join(' · ')}</span>
-          )}
-        </Fact>
+      {/* three stats, equal weight, side by side — was three ragged label/value
+          rows (one truncating a repeated audit-period list mid-word) */}
+      <div className="grid grid-cols-3 gap-x-2">
+        <div>
+          <div className="text-[1.0625rem] font-bold text-ink-900 tabular-nums leading-none">{attrs}</div>
+          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Attributes</div>
+        </div>
+        <div>
+          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', mapped === 0 ? 'text-ink-400' : 'text-ink-900')}>{mapped}</div>
+          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Mapped</div>
+        </div>
+        <div>
+          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', audits.length === 0 ? 'text-ink-400' : 'text-ink-900')}>{audits.length}</div>
+          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Audit runs</div>
+        </div>
       </div>
 
       <div className="ac-div" />
-      {last && Kind && lastOutcome ? (
-        <div>
-          <div className="flex items-center gap-2 text-[0.71875rem]">
-            <span className="text-ink-500 w-[6.75rem] shrink-0">Last run</span>
-            <span className="font-medium text-ink-700 truncate">{Kind.label} · {last.at}</span>
-            <span className="ml-auto inline-flex items-center gap-1 shrink-0">
-              <Tickmark result={lastOutcome.outcome} size={14} />
-              <span className={cn('text-[0.6875rem] font-semibold', lastOutcome.outcome === 'Effective' ? 'text-compliant-700' : 'text-risk-700')}>{lastOutcome.outcome}</span>
-            </span>
-          </div>
-          <button onClick={e => { e.stopPropagation(); onHistory(); }}
-            className="mt-2 inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer"
-            aria-label={`Run history for ${c.wpRef} — ${runs.length} run${runs.length === 1 ? '' : 's'}`}>
-            <History size={12} /> {runs.length} run{runs.length === 1 ? '' : 's'} in history <ArrowRight size={11} />
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 text-[0.71875rem]">
-          <span className="text-ink-500 w-[6.75rem] shrink-0">Last run</span>
-          <span className="text-ink-400">Never run</span>
-        </div>
-      )}
+      <LastRunFact c={c} runs={runs} />
     </div>
   );
 }
 
-// ── run history drawer ──────────────────────────────────────────────────────────
+// ── run history — as a drawer (grid/table quick-look) or inline (control page) ────
 
-function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
+/** The run history list itself, independent of how it's framed — a drawer on
+ *  the grid, inline on the control's own page (user ask, 30 Jul: run history
+ *  belongs on the control page, not gated behind a side sheet there). */
+export function RunHistoryList({ c, runs }: { c: Control; runs: RunRecord[] }) {
+  if (runs.length === 0) {
+    return (
+      <p className="text-[0.8125rem] text-ink-400 py-10 text-center">
+        Nothing has been run on this control yet.<br />
+        A control test, a workflow run or an AI validation all land here.
+      </p>
+    );
+  }
+  return (
+    <ol className="space-y-2.5">
+      {runs.map(r => {
+        const meta = KIND_META[r.kind];
+        const mine = outcomeIn(r, c.id);
+        return (
+          <li key={r.id} className="rounded-xl border border-canvas-border bg-canvas-elevated p-3.5">
+            <div className="flex items-start gap-2.5">
+              <span className={cn('h-6 w-6 rounded-md inline-flex items-center justify-center shrink-0', meta.chip)}>
+                <meta.Icon size={13} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{r.label}</span>
+                  <span className="ml-auto text-[0.6875rem] text-ink-400 shrink-0 tabular-nums">{r.at}</span>
+                </div>
+                {r.detail && <p className="text-[0.71875rem] text-ink-500 mt-0.5">{r.detail}</p>}
+                <div className="flex items-center gap-2.5 mt-2 flex-wrap text-[0.6875rem] text-ink-500">
+                  <span className={cn('px-1.5 h-[1.125rem] inline-flex items-center rounded font-semibold', meta.chip)}>{meta.label}</span>
+                  {mine && (
+                    <span className="inline-flex items-center gap-1">
+                      <Tickmark result={mine.outcome} size={13} />
+                      <span className={cn('font-semibold', mine.outcome === 'Effective' ? 'text-compliant-700' : 'text-risk-700')}>{mine.outcome}</span>
+                      <span className="text-ink-400">· {mine.checks} check{mine.checks === 1 ? '' : 's'}</span>
+                    </span>
+                  )}
+                  {r.controls.length > 1 && <span className="text-ink-400">with {r.controls.length - 1} other control{r.controls.length === 2 ? '' : 's'}</span>}
+                  <span className="text-ink-400">{r.by}</span>
+                </div>
+                {r.datasets && r.datasets.length > 0 && (
+                  <p className="text-[0.65625rem] text-ink-400 mt-1.5">Ran against {r.datasets.join(', ')}</p>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
   c: Control; runs: RunRecord[]; onClose: () => void; onOpenControl: () => void;
 }) {
   return (
@@ -218,50 +256,7 @@ function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
         </div>
       )}
     >
-      {runs.length === 0 ? (
-        <p className="text-[0.8125rem] text-ink-400 py-10 text-center">
-          Nothing has been run on this control yet.<br />
-          A bulk test, a control test, a workflow run or an AI validation all land here.
-        </p>
-      ) : (
-        <ol className="space-y-2.5">
-          {runs.map(r => {
-            const meta = KIND_META[r.kind];
-            const mine = outcomeIn(r, c.id);
-            return (
-              <li key={r.id} className="rounded-xl border border-canvas-border bg-canvas-elevated p-3.5">
-                <div className="flex items-start gap-2.5">
-                  <span className={cn('h-6 w-6 rounded-md inline-flex items-center justify-center shrink-0', meta.chip)}>
-                    <meta.Icon size={13} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{r.label}</span>
-                      <span className="ml-auto text-[0.6875rem] text-ink-400 shrink-0 tabular-nums">{r.at}</span>
-                    </div>
-                    {r.detail && <p className="text-[0.71875rem] text-ink-500 mt-0.5">{r.detail}</p>}
-                    <div className="flex items-center gap-2.5 mt-2 flex-wrap text-[0.6875rem] text-ink-500">
-                      <span className={cn('px-1.5 h-[1.125rem] inline-flex items-center rounded font-semibold', meta.chip)}>{meta.label}</span>
-                      {mine && (
-                        <span className="inline-flex items-center gap-1">
-                          <Tickmark result={mine.outcome} size={13} />
-                          <span className={cn('font-semibold', mine.outcome === 'Effective' ? 'text-compliant-700' : 'text-risk-700')}>{mine.outcome}</span>
-                          <span className="text-ink-400">· {mine.checks} check{mine.checks === 1 ? '' : 's'}</span>
-                        </span>
-                      )}
-                      {r.controls.length > 1 && <span className="text-ink-400">with {r.controls.length - 1} other control{r.controls.length === 2 ? '' : 's'}</span>}
-                      <span className="text-ink-400">{r.by}</span>
-                    </div>
-                    {r.datasets && r.datasets.length > 0 && (
-                      <p className="text-[0.65625rem] text-ink-400 mt-1.5">Ran against {r.datasets.join(', ')}</p>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      <RunHistoryList c={c} runs={runs} />
     </Drawer>
   );
 }
@@ -271,10 +266,8 @@ function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
 export default function ControlLibrary() {
   const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
   const { addToast } = useToast();
-  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
-  const [wpPreview, setWpPreview] = useState(false);
   const [reportPreview, setReportPreview] = useState(false);
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -400,7 +393,6 @@ export default function ControlLibrary() {
             className={cn('p-1.5 rounded-[0.4375rem] cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><Table2 size={15} /></button>
         </div>
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
-        {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
         {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
         {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
@@ -414,7 +406,7 @@ export default function ControlLibrary() {
           { k: 'Runs logged', v: String(rail.runs), t: 'text-brand-700' },
           { k: 'Audit runs', v: String(eng.audits.length), t: 'text-mitigated-700' },
         ].map(s => (
-          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
+          <div key={s.k} className="flex-1 min-w-[7.5rem] rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
             <div className={cn('text-[1.25rem] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
             <div className="text-[0.71875rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
@@ -452,7 +444,7 @@ export default function ControlLibrary() {
                 <div className="card-grid">
                   {g.rows.map(c => (
                     <LibraryCard key={c.id} c={c} runs={runsBy.get(c.id) ?? []} audits={auditsBy.get(c.id) ?? []}
-                      onOpen={() => openControl(c.id)} onHistory={() => setHistoryFor(c.id)}
+                      onOpen={() => openControl(c.id)}
                       selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} />
                   ))}
                 </div>
@@ -556,13 +548,12 @@ export default function ControlLibrary() {
       )}
       <div className="mt-3 text-[0.71875rem] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
-      {/* bulk bar — unchanged from the testing lens: the library is still where a
-          run is started from, and where design documents are chased. */}
+      {/* bulk bar — no bulk TEST here (user ask, 30 Jul: SOX controls aren't
+          bulk-tested); the library is still where design documents are chased. */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
@@ -580,10 +571,8 @@ export default function ControlLibrary() {
         )}
       </AnimatePresence>
 
-      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {/* the paper and the report follow the filters — only the visible controls go in */}
-      {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
     </div>
   );

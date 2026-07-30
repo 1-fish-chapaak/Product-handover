@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { ArrowRight, Building2, Grid3x3, Paperclip, Plus, RefreshCw, ScrollText } from 'lucide-react';
+import { Building2, Grid3x3, Paperclip, Plus, RefreshCw, ScrollText } from 'lucide-react';
 import type { AuditRecord } from './types';
 import { useIcfr } from './store';
 import EmptyState from '../shared/EmptyState';
@@ -84,7 +84,12 @@ export default function AuditLogsView() {
           {eng.audits.map(a => (
             <div
               key={a.id}
-              className="rounded-xl border border-canvas-border bg-white p-4 hover:border-brand-300 transition-colors"
+              onClick={() => openAudit(a.id)}
+              tabIndex={0}
+              role="button"
+              aria-label={`Open ${a.period} audit`}
+              onKeyDown={e => { if (e.key === 'Enter') openAudit(a.id); }}
+              className="rounded-xl border border-canvas-border bg-white p-4 hover:border-brand-300 transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
@@ -93,21 +98,17 @@ export default function AuditLogsView() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-[11px] text-ink-400 text-right mr-1">{a.by} · {a.at}</div>
-                  {canCreate && (
+                  {/* Quarter / custom audits are one-off checks, not a round of a
+                      named annual cycle — there is no "next cycle" to roll into. */}
+                  {canCreate && (a.yearBasis === 'fy' || a.yearBasis === 'cy') && (
                     <button
-                      onClick={() => setRolling(a)}
+                      onClick={e => { e.stopPropagation(); setRolling(a); }}
                       title={`Carry ${a.period} into the next cycle`}
                       className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       <RefreshCw size={13} /> Roll forward
                     </button>
                   )}
-                  <button
-                    onClick={() => openAudit(a.id)}
-                    className="h-8 px-3 inline-flex items-center gap-1 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-                  >
-                    Open <ArrowRight size={13} />
-                  </button>
                 </div>
               </div>
 

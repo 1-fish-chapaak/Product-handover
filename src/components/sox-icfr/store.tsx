@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
-  Assertion, Attestation, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
+  Assertion, Attestation, AuditArchive, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   IpeConclusion, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, SignificantAccount, TestResult, TrackConclusion,
@@ -263,7 +263,9 @@ interface IcfrCtx {
   addRemediationEvidence: (id: string, fileName: string) => void;
   // create control + engagement-level sign-off
   addControl: (draft: NewControlDraft) => string;
-  signOffEngagement: (step: 'preparer' | 'reviewer') => void;
+  /** Sign off the OPEN audit. There is no engagement-level ICFR sign-off — the
+   *  testing lives inside an audit, so the conclusion does too. */
+  signOffAudit: (step: 'preparer' | 'reviewer') => void;
   // unlock a concluded control — auditor only, reason required, logged in the trail
   reopenControl: (controlId: string, reason: string) => void;
   // per-working-paper sign-off — auditor signs a concluded control's paper, reviewer countersigns
@@ -772,12 +774,47 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const resetIds = new Set(prev.controls.filter(covers).map(c => c.id));
       const hit = (controlId: string) => resetIds.has(controlId);
 
+      // ARCHIVE, don't delete. The outgoing cycle's results are snapshotted onto
+      // the audit that produced them before the controls are reset, so the
+      // engagement's portfolio can read prior-year deficiencies, what a control
+      // concluded last year, and last year's ICFR opinion. Deleting them — which
+      // is what this did — made every one of those questions unanswerable.
+      //
+      // Which audit owns them: the live one, i.e. the newest audit that is not
+      // itself already archived. There is only ever one, because creating an
+      // audit archives whatever was live.
+      const liveIdx = prev.audits.findIndex(a => !a.archive);
+      const live = liveIdx >= 0 ? prev.audits[liveIdx] : undefined;
+      const archive: AuditArchive | undefined = live && resetIds.size ? {
+        conclusions: prev.controls.filter(c => resetIds.has(c.id)).map(c => ({
+          controlId: c.id,
+          wpRef: c.wpRef,
+          process: c.process,
+          description: c.description,
+          design: c.design.conclusion,
+          operating: c.operating.conclusion,
+          conclusion: controlConclusion(c),
+        })),
+        // Severity is resolved NOW: assessSeverity applies the compensating-control
+        // cap against the live engagement, and that engagement is about to change.
+        deficiencies: prev.deficiencies.filter(d => hit(d.controlId))
+          .map(d => ({ ...d, severity: assessSeverity(d, prev).final })),
+        concludedAt: 'just now',
+      } : undefined;
+
       return {
         ...prev,
-        audits: [audit, ...prev.audits],
+        audits: [
+          audit,
+          ...prev.audits.map((a, i) => (i === liveIdx && archive
+            // The outgoing audit keeps its results, and its ICFR conclusion with
+            // them. Sign-off is per audit, so whatever it was signed as stands.
+            ? { ...a, archive, signoff: { ...a.signoff, icfrConclusion: icfrConclusion(prev) } }
+            : a)),
+        ],
         controls: prev.controls.map(c => (resetIds.has(c.id) ? untested(c) : c)),
         // A deficiency is a conclusion about a control, so it cannot outlive the
-        // result it came from.
+        // result it came from — but it lives on in the archive above.
         deficiencies: prev.deficiencies.filter(d => !hit(d.controlId)),
         // The control page reads its history out of `executions`; leaving last
         // cycle's runs there would show "tested by A. Mehta" on a control the
@@ -791,9 +828,6 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         reviewNotes: prev.reviewNotes.filter(n => !hit(n.controlId)),
         // A run whose every control was reset has no surviving outcome to show.
         runs: prev.runs.filter(r => !r.controls.every(rc => hit(rc.controlId))),
-        // The ICFR opinion covered last cycle's results. Keeping it would leave
-        // the engagement locked (isEngagementLocked) with nothing tested under it.
-        signoff: resetIds.size ? {} : prev.signoff,
       };
     });
   }, [me, role]);
@@ -874,19 +908,22 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchStep(controlId, stepId, s => ({ ...s, inputFile: { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : fileName.endsWith('.csv') ? 'CSV' : 'PDF', uploadedBy: me, uploadedAt: 'just now' } }));
   }, [patchStep, me, role]);
 
+  // Attributes are structure, not testing — the control's owner knows its shape
+  // as well as the auditor does, so both roles can define one and map its
+  // evidence workflow. Only a reviewer, who signs off rather than builds, is shut out.
   const addAttribute = useCallback<IcfrCtx['addAttribute']>((controlId, description) => {
-    if (role !== 'auditor') return;
+    if (role === 'reviewer') return;
     patchControl(controlId, c => {
       const step: OperatingStep = { id: uid('os'), code: `${c.wpRef}.${c.operating.steps.length + 1}`, description, assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection'], result: 'Not tested' };
       return { ...c, operating: { ...c.operating, steps: [...c.operating.steps, step] } };
     });
   }, [patchControl, role]);
   const removeAttribute = useCallback<IcfrCtx['removeAttribute']>((controlId, stepId) => {
-    if (role !== 'auditor') return;
+    if (role === 'reviewer') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.filter(s => s.id !== stepId) } }));
   }, [patchControl, role]);
   const mapStepWorkflow = useCallback<IcfrCtx['mapStepWorkflow']>((controlId, stepId, name) => {
-    if (role !== 'auditor') return;
+    if (role === 'reviewer') return;
     patchStep(controlId, stepId, s => ({ ...s, evidenceMode: 'workflow', workflowId: uid('wf'), workflowName: name, workflowRunRef: undefined }));
   }, [patchStep, role]);
   const setStepEvidenceMode = useCallback<IcfrCtx['setStepEvidenceMode']>((controlId, stepId, mode) => {
@@ -1444,17 +1481,32 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
   // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
   // Same-person guard: one human never holds both signatures on the opinion.
-  const signOffEngagement = useCallback<IcfrCtx['signOffEngagement']>((step) => {
-    setEng(prev => (step === 'reviewer' && prev.reviewer === prev.preparer) ? prev : ({
-      ...prev,
-      signoff: {
+  /**
+   * Sign off the OPEN AUDIT — preparer signs, reviewer countersigns.
+   *
+   * Sign-off moved from the engagement to the audit because that is where the
+   * testing happens: an engagement spanning several cycles cannot have one
+   * conclusion, and the ICFR opinion belongs to the period that was tested. Four
+   * eyes still applies — the same person cannot do both.
+   */
+  const signOffAudit = useCallback<IcfrCtx['signOffAudit']>((step) => {
+    setEng(prev => {
+      if (step === 'reviewer' && prev.reviewer === prev.preparer) return prev;
+      const idx = prev.audits.findIndex(a => a.id === openAuditId);
+      if (idx < 0) return prev;
+      const a = prev.audits[idx]!;
+      // A concluded audit's archive is history; it cannot be re-signed.
+      if (a.archive) return prev;
+      const signoff = {
+        ...a.signoff,
         ...(step === 'preparer'
-          ? { ...prev.signoff, preparer: { by: prev.preparer, at: 'just now' } }
-          : { ...prev.signoff, reviewer: { by: prev.reviewer, at: 'just now' } }),
+          ? { preparer: { by: prev.preparer, at: 'just now' } }
+          : { reviewer: { by: prev.reviewer, at: 'just now' } }),
         icfrConclusion: icfrConclusion(prev),
-      },
-    }));
-  }, []);
+      };
+      return { ...prev, audits: prev.audits.map((x, i) => (i === idx ? { ...x, signoff } : x)) };
+    });
+  }, [openAuditId]);
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
@@ -1469,9 +1521,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
-    addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
+    addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

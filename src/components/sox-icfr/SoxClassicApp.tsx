@@ -4,13 +4,20 @@ import './register.css';
 import { cn } from '../../lib/cn';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { useIcfr, type SoxTab } from './store';
+import { AUDIT_TABS } from './flow';
+import type { SoxTabLike } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
+import EngagementOverview from './EngagementOverview';
+import AuditConfigView from './AuditConfigView';
+import AuditArchiveView from './AuditArchiveView';
 import Racm, { RacmLanding } from './Racm';
 import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
+import ControlLibrary from './ControlLibrary';
 import ControlDossier from './ControlDossier';
+import ControlLibraryDetail from './ControlLibraryDetail';
 import AuditLogsView from './AuditLogsView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
@@ -28,6 +35,13 @@ import ConfigurationView from './ConfigurationView';
  * uses, so work landing there lands here too. That is deliberate — new capability
  * ships to every SOX engagement, and only the reworked journey is held back.
  */
+/* Control Library — LENS SWAP (user ask, 30 Jul), same as the reworked shell.
+   Kept as its own flag here rather than importing SoxIcfrApp's, so the two
+   shells can't accidentally couple through it. ControlRegister is untouched
+   and still compiles — flip this to false to bring the testing lens straight
+   back for every classic engagement. */
+const LIBRARY_LENS = true;
+
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
@@ -60,11 +74,22 @@ const SOX_TABS: TabDef[] = [
 export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
-  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
-  // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
-  // and their controls. RACM and Runs are audit-side surfaces.
-  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
+  /* Audits reached this shell with the portfolio Overview, so opening one has to
+     work here too — a register row whose Open button did nothing would be worse
+     than no register. Same two levels and the same AUDIT_TABS as the reworked
+     shell, imported rather than restated so the two can't drift. What still
+     differs between the shells is the WORDING (exception vs deficiency, see
+     flow.ts), which is why they remain separate files. */
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const inAudit = !!audit;
+  // The owner's SOX is a to-do list, not a workspace: just their inbox and their
+  // controls. RACM and the audit register are auditor-side surfaces.
+  const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
+  const tabs = role === 'risk-owner'
+    ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
+    : levelTabs;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
@@ -139,20 +164,41 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   // header, no tabs; its breadcrumb carries the context and every step back up.
   const isRacmMatrix = view === 'racm-list';
   const isScope = view === 'scope';
-  const isDeficiencies = view === 'deficiencies';
+  // Deficiencies is one of the audit's four tabs inside an audit, and a
+  // breadcrumbed drill-in outside one.
+  const isDeficiencies = view === 'deficiencies' && !inAudit;
   const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header
   const isDrillIn = isRacmMatrix || isScope || isDeficiencies || isHandoffs;
-  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs' || view === 'config';
-  const body = view === 'dossier' ? <ControlDossier />
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
+    || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
+  // Same as the reworked shell: a concluded audit is its archive, read-only.
+  const body = (inAudit && audit!.archive && isRoot)
+    ? <AuditArchiveView audit={audit!} tab={(tab === 'racm' || tab === 'risks' || tab === 'runs' ? 'overview' : tab) as SoxTabLike} />
+    : view === 'dossier' ? (inAudit ? <ControlDossier /> : <ControlLibraryDetail />)
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'handoffs' ? <HandoffsView />
     : view === 'scope' ? <ScopeView />
-    : tab === 'overview' ? <Overview />
+    // The engagement's Overview is the audit portfolio; the audit's own Dashboard
+    // is Overview.tsx, reached by opening an audit. This shell has no audit level,
+    // so it only ever shows the portfolio — see SoxIcfrApp for the pair.
+    : (inAudit && tab === 'deficiencies') ? <DeficienciesView />
+    : (inAudit && tab === 'config') ? <AuditConfigView audit={audit!} />
+    // The risk owner never gets the portfolio: their engagement-level tabs are an
+    // inbox and their controls, and the inbox (RiskOwnerPortal, inside Overview)
+    // is engagement-wide anyway — their controls and their deficiencies, whichever
+    // audit is testing them. A portfolio of audits is an auditor's question.
+    : tab === 'overview' ? ((inAudit || role === 'risk-owner') ? <Overview /> : <EngagementOverview />)
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
     : tab === 'config' ? <ConfigurationView />
+    // Two different Control Library lenses (user ask, 30 Jul), same split as
+    // the reworked shell: engagement root = ControlLibrary (attributes,
+    // workflow mapping); inside an audit = ControlRegister (TOD/TOE results,
+    // Not tested/Effective/Ineffective), independent of LIBRARY_LENS.
+    : inAudit ? <ControlRegister />
+    : LIBRARY_LENS ? <ControlLibrary />
     : <ControlRegister />;
 
   return (
@@ -160,10 +206,28 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
-      {view !== 'dossier' && !isDrillIn && topBar}
+      {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
       <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
+        {inAudit && isRoot && (
+          <div className="flex items-start justify-between gap-3">
+            <SoxBreadcrumb onBack={closeAudit} items={[
+              ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
+              { label: eng.name, onClick: closeAudit },
+              { label: `${audit!.period} · ${audit!.round === 'interim' ? 'Interim' : audit!.round === 'rollforward' ? 'Roll-forward' : 'Year-end'}` },
+            ]} />
+            <div className="flex items-center gap-3 shrink-0 -mt-1">
+              <NotificationsBell />
+              <span className="w-px h-6 bg-canvas-border" aria-hidden />
+              <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+                <RoleSwitcher role={role} onChange={setRole} />
+                {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+              </div>
+            </div>
+          </div>
+        )}
         {isRoot && (
-          <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
+          <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={inAudit ? `sox-audit-${eng.id}` : `sox-${eng.id}`} size="md" />
         )}
         {isRacmMatrix && (
           <SoxBreadcrumb onBack={() => setView('racm')} items={[

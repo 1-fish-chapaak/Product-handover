@@ -609,13 +609,78 @@ export interface RunRecord {
 // files attached, and the materiality rule in force. Distinct from RunRecord
 // above: a run is one execution, an audit is the scoped piece of work.
 export type AuditScopeKind = 'entity' | 'racm';
+
+/**
+ * Which round of the cycle an audit is.
+ *
+ * SOX is not tested once a year — interim testing covers the first part of the
+ * period, roll-forward extends that evidence towards the year end, and the
+ * year-end round tests what is left as of the balance-sheet date. The engagement
+ * portfolio groups by fiscal year and then by this, and the coverage timeline
+ * places each audit from its window, so a gap in the period is visible.
+ */
+export type AuditRound = 'interim' | 'rollforward' | 'yearend';
+
+/** The audit tabs a read-only archive can be asked to render. A subset of the
+ *  store's SoxTab, redeclared here because the store imports this module and not
+ *  the other way round. */
+export type SoxTabLike = 'overview' | 'controls' | 'deficiencies' | 'config';
+export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
+  { id: 'interim', label: 'Interim', hint: 'Tests the first part of the period, well before the year end.' },
+  { id: 'rollforward', label: 'Roll-forward', hint: 'Extends interim evidence towards the year end.' },
+  { id: 'yearend', label: 'Year-end', hint: 'Tests as of the balance-sheet date.' },
+];
+
+/**
+ * What an audit concluded, frozen when the next audit starts.
+ *
+ * A control holds ONE live design / operating paper, so a new cycle has to reset
+ * it. Before the rework that reset simply deleted the previous results — which
+ * made the engagement portfolio impossible: no prior-year deficiencies to carry
+ * forward, no way to say what a control concluded last year, and last year's ICFR
+ * opinion gone. The outgoing cycle is now snapshotted onto the audit it belonged
+ * to instead (store.tsx createAudit), and the engagement Overview reads these.
+ *
+ * Severity is stored ON the snapshot: assessSeverity() needs the live engagement
+ * to apply the compensating-control cap, and that engagement no longer exists in
+ * the state the deficiency was raised in.
+ */
+export interface AuditArchive {
+  conclusions: {
+    controlId: string;
+    wpRef: string;
+    process: string;
+    description: string;
+    design: TrackConclusion;
+    operating: TrackConclusion;
+    conclusion: Conclusion;
+  }[];
+  deficiencies: (Deficiency & { severity: Severity })[];
+  concludedAt: string;
+}
+
 export interface AuditRecord {
   id: string;
   /** Cycle label the period step produced, e.g. 'FY 2026-27' or 'CY 2027'. */
   period: string;
-  /** 'fy' | 'cy' — kept so the review step and the list can re-state the span. */
-  yearBasis: 'fy' | 'cy';
+  /** 'fy' | 'cy' | 'quarter' | 'custom' — kept so the review step and the list
+   *  can re-state the span. Quarter and custom are one-off checks rather than a
+   *  named annual cycle: they skip the round question (store.tsx / auditPortfolio.ts
+   *  treat 'round' as 'yearend' for these two, and the engagement-level portfolio
+   *  rollups only group fy/cy audits into a fiscal year). */
+  yearBasis: 'fy' | 'cy' | 'quarter' | 'custom';
+  /** The year the cycle ENDS on, as a number — 'FY 2026-27' ⇒ 2027. Stored rather
+   *  than regex-parsed out of `period` at every call site, which is what the
+   *  portfolio's grouping used to have to do. */
+  fiscalYear: number;
   periodSpan: string;               // 'Apr 2026 – Mar 2027'
+  /** Which round of the cycle this is. */
+  round: AuditRound;
+  /** The window the round actually covers, as ISO dates. `periodSpan` above is
+   *  the prose label and can't be measured; the coverage timeline needs real
+   *  months to place a bar and to spot an uncovered stretch. */
+  windowFrom: string;               // '2026-01-01'
+  windowTo: string;                 // '2026-06-30'
   scopeKind: AuditScopeKind;
   /** Names of the entities or RACM processes selected — display-ready. */
   scopeNames: string[];
@@ -636,6 +701,16 @@ export interface AuditRecord {
   materiality: { basisLabel: string; benchmark: number; pct: number };
   /** ₹ Cr threshold the rule computes, frozen at creation. */
   overall: number;
+  /** This audit's own conclusion. Sign-off is per AUDIT, not per engagement —
+   *  the testing happens inside an audit, so that is where the preparer signs and
+   *  the reviewer countersigns. There is no engagement-level ICFR sign-off. */
+  signoff?: EngagementSignoff;
+  /** The audit this one was rolled forward from, so the carry-forward chain can
+   *  be read back. Roll-forward used to leave no trace at all. */
+  rolledFromId?: string;
+  /** What this audit concluded, frozen when the next one started. Absent while it
+   *  is the live cycle — its results are then on the controls themselves. */
+  archive?: AuditArchive;
   by: string;
   role: Role;
   at: string;

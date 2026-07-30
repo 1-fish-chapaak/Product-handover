@@ -37,7 +37,7 @@ const WAIVER_BTN: Record<DesignWaiverReason, string> = {
 };
 
 const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Requested: 'text-mitigated-700', Missing: 'text-ink-400' };
-const WORKFLOW_LIBRARY = ['Three-way match check', 'Approval-tier check', 'Duplicate-invoice detection', 'Segregation-of-duties scan', 'Timeliness / cut-off check', 'Reconciliation completeness', 'Access review', 'Tolerance-breach monitor'];
+export const WORKFLOW_LIBRARY = ['Three-way match check', 'Approval-tier check', 'Duplicate-invoice detection', 'Segregation-of-duties scan', 'Timeliness / cut-off check', 'Reconciliation completeness', 'Access review', 'Tolerance-breach monitor'];
 
 // ── primitives ───────────────────────────────────────────────────────────────────
 function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: () => void; buttons: { label: string; onClick: (note: string) => void }[] }) {
@@ -68,7 +68,7 @@ function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; ti
 /** The menu is portalled to the body and positioned against the trigger, so a
  *  card's own bounds can never clip it — it opens over the page, and flips
  *  above the button when there isn't room below. */
-function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
+export function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ y: number; right: number; flip: boolean } | null>(null);
@@ -116,7 +116,7 @@ function Dropdown({ trigger, children }: { trigger: React.ReactNode; children: (
     </div>
   );
 }
-const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[0.78125rem] text-ink-700 hover:bg-paper-50 cursor-pointer flex items-center gap-2';
+export const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[0.78125rem] text-ink-700 hover:bg-paper-50 cursor-pointer flex items-center gap-2';
 
 // ── request-data modal (TOD) ──────────────────────────────────────────────────────
 function RequestDataModal({ control, onClose }: { control: Control; onClose: () => void }) {
@@ -421,7 +421,7 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 // asked for it to be editable at every control level. Only the auditor sets it,
 // and a concluded control refuses the patch — so the switch shows itself shut
 // rather than accepting a click that changes nothing.
-function KeyControlChip({ control, canEdit }: { control: Control; canEdit: boolean }) {
+export function KeyControlChip({ control, canEdit }: { control: Control; canEdit: boolean }) {
   const { role, updateControlMeta } = useIcfr();
   const logEvent = useAuditLog();
   const locked = isControlLocked(control);

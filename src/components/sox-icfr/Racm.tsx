@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileUp, FlaskConical, Loader2, MessageSquareWarning,
+  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileUp, Loader2, MessageSquareWarning,
   Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
@@ -11,7 +11,6 @@ import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
 import { FilterSelect } from '../shared/FilterSelect';
-import BulkTestModal from './BulkTestModal';
 import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
@@ -376,7 +375,6 @@ export default function Racm() {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [remarkFor, setRemarkFor] = useState<Control | null>(null);
   const [remarkText, setRemarkText] = useState('');
-  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   // a bulk approve whose selection carries open remarks waits behind a confirm
   const [bulkApproveIds, setBulkApproveIds] = useState<string[] | null>(null);
   // Upload a RACM / SOP for THIS process — the drilled page is where the
@@ -472,11 +470,6 @@ export default function Racm() {
           className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
           {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
         </button>
-        {isAuditor && <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
-          title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-          <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
-        </button>}
         <button onClick={() => openEditorTab(eng.id, proc)}
           title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
           className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
@@ -629,7 +622,6 @@ export default function Racm() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {isAuditor && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
           {isAuditor && <button onClick={() => {
             const ids = Array.from(sel);
             // approving over an open remark erases it — that never happens silently
@@ -640,9 +632,6 @@ export default function Racm() {
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
-
-      {/* bulk test — compile files → attach unique datasets → execute */}
-      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
 
       {/* bulk approve over open remarks — say what gets erased before it is */}
       {bulkApproveIds && (() => {
