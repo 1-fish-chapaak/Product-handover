@@ -21,7 +21,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
-  Crosshair, MessageSquare, ArrowUpRight,
+  Crosshair, MessageSquare, ArrowUpRight, Mail,
 } from 'lucide-react';
 import {
   LAYER_META,
@@ -32,6 +32,7 @@ import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
 import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
 import RunTrajectoryBand from './RunTrajectoryBand';
+import InsightEmailModal from './InsightEmailModal';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
 
@@ -145,6 +146,8 @@ export default function LayeredInsightCard({
   // Header scope, sentence-cased: "This control" / "Across workflows" / …
   const scope = headerLabel ?? meta.label;
   const scopeText = scope.charAt(0).toUpperCase() + scope.slice(1);
+  // Share-by-email — every full card carries it; collapsed rows stay calm.
+  const [emailOpen, setEmailOpen] = useState(false);
   // Typed recommendations, most-urgent first.
   const recs = [...(insight.recommendations ?? [])].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
 
@@ -228,6 +231,13 @@ export default function LayeredInsightCard({
             {insight.verdict.tone === 'positive' && (
               <span className="inline-flex items-center gap-1 rounded-full bg-compliant-50 px-2 py-0.5 text-[10px] font-semibold text-compliant-700"><ShieldCheck size={10} /> Signed pass</span>
             )}
+            <button
+              type="button" onClick={() => setEmailOpen(true)}
+              aria-label="Email this insight" title="Email this insight"
+              className="shrink-0 p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+            >
+              <Mail size={14} aria-hidden="true" />
+            </button>
             {collapsible && (
               <button
                 type="button" onClick={onToggleOpen} aria-expanded={open}
@@ -365,6 +375,7 @@ export default function LayeredInsightCard({
           )}
         </AnimatePresence>
       </div>
+      <InsightEmailModal insight={insight} scopeLabel={scope} open={emailOpen} onClose={() => setEmailOpen(false)} />
     </motion.section>
   );
 }
