@@ -994,7 +994,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   );
 }
 
-// ── sample extraction (step ③) — attributes → ITGC gate → size/method/seed → gate 2 ───
+// ── sample extraction (step ③) — transaction detail → size/method/seed → draw ───
 /** Deterministic mock row facts so filters and specs are stable across runs. */
 function sampleRowFacts(i: number): { date: string; amountL: number } {
   const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -1783,8 +1783,9 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     );
   }
 
-  // Already drawn (this session or seeded) — read-only, plus IPE gate 2, which is
-  // the one thing still outstanding once the items exist.
+  // Already drawn (this session or seeded) — read-only. Nothing is outstanding
+  // once the items exist: the confirmation gate that used to sit here went with
+  // the IPE step.
   if (o.sampling) {
     const s = o.sampling;
     const origCount = s.samples.filter(x => !x.extension).length;
@@ -2496,7 +2497,7 @@ export default function ControlDossier() {
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
               : control.operating.sampling
-                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.sampling.size} items{control.operating.extractionConfirmed ? ' · confirmed' : ' · awaiting gate 2'}</span>
+                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.sampling.size} items</span>
                 : !popLocked
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the population locks</span>
                   : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>

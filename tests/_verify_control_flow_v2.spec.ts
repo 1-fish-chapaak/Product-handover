@@ -107,6 +107,9 @@ test('five steps, and only five', async ({ page }) => {
     'Count matches expected',
     'Date range covers the full period',
     'Source is the production system',
+    // The step ③ badge promised a confirmation that went with the IPE gates,
+    // so nothing could ever clear it.
+    'awaiting gate 2',
   ];
   for (const text of gone) {
     await expect(page.getByText(text, { exact: false })).toHaveCount(0);

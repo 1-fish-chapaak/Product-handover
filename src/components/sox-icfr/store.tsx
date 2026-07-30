@@ -669,7 +669,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       ...c,
       operating: {
         ...c.operating, population: undefined, sampling: undefined, extractionConfirmed: undefined, exceptions: undefined,
-        steps: c.operating.steps.map(s => (s.sampleResults ? { ...s, sampleResults: undefined } : s)),
+        // The per-item map goes AND the result it produced. `setSampleResult`
+        // derives `result` from this map, so wiping the map alone left the
+        // attribute reading Pass or Fail off items that no longer exist —
+        // exactly the "results keyed to items nobody can find" the withdraw
+        // confirmation warns about, happening anyway.
+        //
+        // Only steps that were tested against the sample are reset. An
+        // attribute concluded some other way — an attestation, a workflow run —
+        // was never drawn from this population and is not the population's to
+        // undo. An override is left alone for the same reason: it is a recorded
+        // human judgement with a rationale attached, and withdrawing an extract
+        // is not grounds to delete somebody's reasoning.
+        steps: c.operating.steps.map(s => (s.sampleResults ? { ...s, sampleResults: undefined, result: 'Not tested' } : s)),
       },
     }));
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: 'withdrew the population — the sample drawn from it went with it' }));
