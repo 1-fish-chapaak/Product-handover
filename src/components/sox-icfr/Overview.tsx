@@ -69,6 +69,11 @@ export default function Overview() {
   // With no audit open — the engagement's own Overview tab — useAuditControls
   // returns every control, so the same page serves both levels.
   const inAudit = !!openAuditId;
+  // Inside an audit, Deficiency management is one of the audit's TABS, so going
+  // there has to move the tab bar with it — swapping only the content left the
+  // page reading "Dashboard" while showing something else. At engagement level
+  // there is no such tab and it stays a drill-in off the Overview.
+  const openDeficiencies = () => (inAudit ? setTab('deficiencies') : setView('deficiencies'));
   const scoped = useAuditControls(eng.controls);
   const scopedIds = useMemo(() => new Set(scoped.map(c => c.id)), [scoped]);
   const scopedDefs = useMemo(() => eng.deficiencies.filter(d => scopedIds.has(d.controlId)), [eng.deficiencies, scopedIds]);
@@ -211,7 +216,7 @@ export default function Overview() {
               </div>
               <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
             </button>
-            <button onClick={() => setView('deficiencies')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
+            <button onClick={() => openDeficiencies()} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
               <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
                 <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
@@ -278,7 +283,7 @@ export default function Overview() {
             ))}
             {sev.trivial > 0 && <div className="text-[11px] text-ink-400 pt-1">{sev.trivial} clearly trivial (logged, not evaluated)</div>}
           </div>
-          <button onClick={() => setView('deficiencies')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
+          <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
         </div>
 
         {/* handoffs */}
@@ -347,9 +352,9 @@ export default function Overview() {
         // One row per outstanding item — each keeps the same filtered destination it linked to before.
         // The exceptions count lives HERE and only here — the sign-off block below never restates it.
         const rows = [
-          { key: 'mw', show: sev.mwOpen > 0, onClick: () => setView('deficiencies'), icon: <AlertTriangle size={13} className="text-risk-600" />,
+          { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
-          { key: 'other', show: openOther > 0, onClick: () => setView('deficiencies'), icon: <Circle size={11} className="text-high-600" />,
+          { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
             label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through remediation → retest → close</> },
           { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
             label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
