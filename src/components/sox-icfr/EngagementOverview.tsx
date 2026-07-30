@@ -79,17 +79,26 @@ const inputCls = 'h-8 px-2 rounded-md border border-canvas-border bg-canvas-elev
  * in the auditor's pen, title in Source Serif, and the reason it exists in plain
  * English under it — so a title never has to carry an explanation it can't hold.
  */
-function Widget({ kind, title, titleMeta, caption, action, index = 0, className, children }: {
+function Widget({ kind, title, titleMeta, caption, action, index = 0, className, onClick, openLabel, children }: {
   kind?: string; title: string; titleMeta?: React.ReactNode; caption?: string;
-  action?: React.ReactNode; index?: number; className?: string; children: React.ReactNode;
+  action?: React.ReactNode; index?: number; className?: string;
+  /** Makes the WHOLE tile the way in. Anything inside that acts on its own —
+   *  Roll forward, a drill-in link — has to stop the event, or it opens this too. */
+  onClick?: () => void; openLabel?: string;
+  children: React.ReactNode;
 }) {
   const still = useReducedMotion();
   return (
     <motion.section
-      className={cn(cardCls, 'flex flex-col', className)}
+      className={cn(cardCls, 'flex flex-col', onClick && 'cursor-pointer hover:border-brand-300 transition-colors', className)}
       initial={still ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.04 + index * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? openLabel : undefined}
+      onKeyDown={onClick ? e => { if (e.key === 'Enter') onClick(); } : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -584,31 +593,42 @@ export default function EngagementOverview() {
       </div>
 
       {/* ── Attention: an open MW anywhere is an entity-level problem ─────────
-           Rendered with the system's single sanctioned side-stripe (3px risk on
-           the left edge, no background tint) rather than a red wash. */}
+           The lightest red in the ramp with a red hairline all round, and no
+           left stripe (user ask) — the tint alone carries it. Deliberate on this
+           one card: it reports a finding rather than a number, so it has to be
+           findable before it is read. */}
       {mw.length > 0 && (
-        <div className={cn(cardCls, 'card-alert-critical mb-4')}>
-          <span className={cn(eyebrow, 'text-risk-700 inline-flex items-center gap-1.5')}>
-            <ShieldAlert size={13} /> Needs attention
-          </span>
-          <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900 mt-0.5 mb-2.5">
-            Material weakness open — the entity's conclusion is at risk
-          </h2>
-          <div className="-mx-4 px-4 divide-y divide-canvas-border">
+        <div className={cn(cardCls, 'mb-4 bg-risk-50 border-risk-100')}>
+          {/* Two lines, not four (user ask). The tag sits BESIDE the headline —
+              the register's own opener idiom — and each deficiency is one row
+              with its cycle as mono meta on the right, so the card's height is
+              header + one line per weakness. */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className={cn(eyebrow, 'text-risk-700 inline-flex items-center gap-1.5 shrink-0')}>
+              <ShieldAlert size={13} /> Needs attention
+            </span>
+            <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900">
+              Material weakness open — the entity's conclusion is at risk
+            </h2>
+          </div>
+          {/* Dividers and hover step UP off the tint — canvas-border and a
+              translucent wash both vanish against risk-50. */}
+          <div className="mt-2 -mx-4 px-4 divide-y divide-risk-100">
             {mw.map(({ audit, deficiency }) => (
               <button
                 key={deficiency.id}
                 onClick={() => { openAudit(audit.id); setView('deficiencies'); }}
-                className="group w-full text-left flex items-start gap-2.5 py-2.5 -mx-4 px-4 text-[0.8125rem] text-ink-700 hover:bg-risk-50/40 transition-colors cursor-pointer"
+                /* Truncated to hold the row to one line — the full text is a
+                   click away on the deficiency itself, and here as the tooltip. */
+                title={deficiency.description}
+                className="group w-full text-left flex items-center gap-2.5 py-2 -mx-4 px-4 text-[0.8125rem] text-ink-700 hover:bg-risk-100 transition-colors cursor-pointer"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-risk-500 mt-[7px] shrink-0" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">{deficiency.description}</span>
-                  <span className="block text-[0.75rem] text-ink-400 mt-0.5 tabular-nums">
-                    {audit.period} · {ROUND_LABEL[audit.round].toLowerCase()}
-                  </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-risk-500 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 font-medium truncate">{deficiency.description}</span>
+                <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                  {audit.period} · {ROUND_LABEL[audit.round].toLowerCase()}
                 </span>
-                <ArrowRight size={14} className="shrink-0 mt-0.5 text-ink-300 group-hover:text-risk-700 transition-colors" />
+                <ArrowRight size={14} className="shrink-0 text-risk-300 group-hover:text-risk-700 transition-colors" />
               </button>
             ))}
           </div>
@@ -629,6 +649,12 @@ export default function EngagementOverview() {
             /* No kind tag and no title furniture (user ask) — the audit names
                itself, and "Current audit" said nothing the record does not. */
             title={current.period}
+            /* The whole tile is the way in — the Open button it replaces said
+               nothing the card itself could not. Only when the record is
+               actually on show: out of range the tile holds a message, not an
+               audit, and there is nothing to open. */
+            onClick={curInRange ? () => openAudit(current.id) : undefined}
+            openLabel={`${current.archive ? 'View' : 'Open'} ${current.period} ${ROUND_LABEL[current.round].toLowerCase()}`}
             titleMeta={curInRange ? (
               <>
                 <span className="text-[0.8125rem] font-medium text-ink-500">{ROUND_LABEL[current.round]}</span>
@@ -647,19 +673,13 @@ export default function EngagementOverview() {
                     named annual cycle — there is no "next cycle" to roll into. */}
                 {canCreate && !current.archive && (current.yearBasis === 'fy' || current.yearBasis === 'cy') && (
                   <button
-                    onClick={() => setRolling(current)}
+                    onClick={e => { e.stopPropagation(); setRolling(current); }}
                     title={`Carry ${current.period} ${ROUND_LABEL[current.round].toLowerCase()} into the next round`}
                     className="h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
                   >
                     Roll forward
                   </button>
                 )}
-                <button
-                  onClick={() => openAudit(current.id)}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
-                >
-                  {current.archive ? 'View' : 'Open'} <ArrowRight size={13} />
-                </button>
               </div>
             ) : undefined}
           >
