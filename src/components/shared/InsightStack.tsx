@@ -25,8 +25,17 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUpRight, Brain, Sparkles, ChevronDown } from 'lucide-react';
-import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness } from '../../data/layeredInsights';
-import LayeredInsightCard from './LayeredInsightCard';
+import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness, EntityRef } from '../../data/layeredInsights';
+import LayeredInsightCard, { type InsightEntityNav } from './LayeredInsightCard';
+
+/** Row-level navigation a host surface offers the stack: which entities have a
+ *  real row it can take the reader to, and how. The stack layers its own
+ *  fallback on top — an entity without a row but WITH a card in this stack
+ *  jumps to that card instead, so no reference is ever a dead end. */
+export interface StackRowNav {
+  canOpen: (ref: EntityRef) => boolean;
+  open: (ref: EntityRef) => void;
+}
 
 // The attention budget: 1 expanded hero + this many scannable rows before the
 // ledger fold. Everything past it still renders — one click away, never hidden.
@@ -58,7 +67,7 @@ function confOf(i: LayeredInsight): number {
 
 export default function InsightStack({
   insights, scopeLabel = '', onCheckMore, initialOpen = 1,
-  previewCount, onSeeAll, foldLedger = true, groupByAnchor = false,
+  previewCount, onSeeAll, foldLedger = true, groupByAnchor = false, rowNav,
 }: {
   insights: LayeredInsight[];
   /** Trailing phrase for the header, e.g. "across this engagement". */
@@ -77,6 +86,9 @@ export default function InsightStack({
    *  risk → control with group labels (the AI Insights tab's B+C reading),
    *  severity-ranked within each group. Disables the ledger fold. */
   groupByAnchor?: boolean;
+  /** Host-surface row navigation — makes every card name its exact
+   *  risk/control and redirect there (entity chips + go-to-row affordances). */
+  rowNav?: StackRowNav;
 }) {
   // Most-severe first; within a severity, escalation altitude, then what
   // changed, then finding tone, then confidence. Stable across renders.
@@ -107,6 +119,32 @@ export default function InsightStack({
     });
   // Preview only when there is actually more than the preview shows.
   const preview = !!onSeeAll && previewCount != null && previewCount < sorted.length;
+
+  // ── Entity navigation — rows first, sibling cards second, never a dead end.
+  // An entity with a real row redirects out to it; one without (a workflow-
+  // tested control, a cross-cutting risk) jumps to its own full card here.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const entityNav = useMemo<InsightEntityNav | undefined>(() => {
+    if (!rowNav) return undefined;
+    const cardFor = (ref: EntityRef) => sorted.find(i => i.layer === ref.kind && i.subjectId === ref.id);
+    return {
+      resolve: ref => (rowNav.canOpen(ref) ? 'row' : cardFor(ref) ? 'insight' : null),
+      open: ref => {
+        if (rowNav.canOpen(ref)) { rowNav.open(ref); return; }
+        const card = cardFor(ref);
+        if (!card) return;
+        setOpenIds(prev => new Set(prev).add(card.id));
+        setLedgerOpen(o => o || sorted.indexOf(card) >= 1 + TAIL_COUNT);
+        setFlashId(card.id);
+        window.setTimeout(() => {
+          document.getElementById(`insight-card-${card.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+        window.setTimeout(() => setFlashId(f => (f === card.id ? null : f)), 2400);
+      },
+    };
+  }, [rowNav, sorted]);
+  const flashCls = (id: string) =>
+    flashId === id ? 'rounded-2xl ring-2 ring-brand-400/60 transition-shadow duration-500' : '';
 
   const counts = {
     high: sorted.filter(i => i.severity === 'high').length,
@@ -164,13 +202,16 @@ export default function InsightStack({
                   <span className="flex-1 h-px bg-canvas-border" aria-hidden="true" />
                 </div>
               )}
-              <LayeredInsightCard
-                insight={insight}
-                onCheckMore={onCheckMore}
-                collapsible
-                open={openIds.has(insight.id)}
-                onToggleOpen={() => toggle(insight.id)}
-              />
+              <div id={`insight-card-${insight.id}`} className={flashCls(insight.id)}>
+                <LayeredInsightCard
+                  insight={insight}
+                  onCheckMore={onCheckMore}
+                  collapsible
+                  open={openIds.has(insight.id)}
+                  onToggleOpen={() => toggle(insight.id)}
+                  entityNav={entityNav}
+                />
+              </div>
             </li>
           );
         })}
@@ -221,13 +262,16 @@ export default function InsightStack({
               >
                 {ledger.map((insight) => (
                   <li key={insight.id}>
-                    <LayeredInsightCard
-                      insight={insight}
-                      onCheckMore={onCheckMore}
-                      collapsible
-                      open={openIds.has(insight.id)}
-                      onToggleOpen={() => toggle(insight.id)}
-                    />
+                    <div id={`insight-card-${insight.id}`} className={flashCls(insight.id)}>
+                      <LayeredInsightCard
+                        insight={insight}
+                        onCheckMore={onCheckMore}
+                        collapsible
+                        open={openIds.has(insight.id)}
+                        onToggleOpen={() => toggle(insight.id)}
+                        entityNav={entityNav}
+                      />
+                    </div>
                   </li>
                 ))}
               </motion.ul>

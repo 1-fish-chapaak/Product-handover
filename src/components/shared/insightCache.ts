@@ -23,10 +23,12 @@ export const cacheKey = (layer: InsightLayer, subjectId: string) => `${layer}:${
 const cacheListeners = new Set<() => void>();
 let cacheVersion = 0;
 
-/** Call after any cache write so subscribed surfaces re-render. */
+/** Call after any cache write so subscribed surfaces re-render. Also mirrors
+ *  the write to sibling tabs (see the cross-tab sync block at the bottom). */
 export function notifyCacheChanged() {
   cacheVersion += 1;
   cacheListeners.forEach(l => l());
+  broadcastSnapshot();
 }
 
 const subscribeCache = (cb: () => void) => {
@@ -129,4 +131,97 @@ export function getActionStatus(a: TargetedAction): ActionStatus | null {
 export function setActionStatus(a: TargetedAction, status: ActionStatus): void {
   ACTION_STATUS.set(actionKey(a), status);
   notifyCacheChanged();
+}
+
+// ─── Insight feedback — the signal-back loop ────────────────────────────────
+// Keyed by insight id, session-scoped like everything else in this module. It
+// lives here rather than in component state because one insight is rendered by
+// several surfaces at once (its anchor card, the stack row, the detail
+// slide-over) — a rating given in one has to be true in all of them, and has to
+// survive the collapse/expand of a stack row.
+
+export interface InsightFeedback {
+  kind: 'up' | 'down';
+  /** Only meaningful for 'down' — which fixed reason the reader picked. */
+  reason?: string;
+  /** Optional free-text note attached to the rating. */
+  note?: string;
+}
+
+const INSIGHT_FEEDBACK = new Map<string, InsightFeedback>();
+
+export function getInsightFeedback(insightId: string): InsightFeedback | null {
+  return INSIGHT_FEEDBACK.get(insightId) ?? null;
+}
+
+/** Record (or, with `null`, clear) the reader's rating of an insight. */
+export function setInsightFeedback(insightId: string, feedback: InsightFeedback | null): void {
+  if (feedback) INSIGHT_FEEDBACK.set(insightId, feedback);
+  else INSIGHT_FEEDBACK.delete(insightId);
+  notifyCacheChanged();
+}
+
+// ─── Cross-tab sync ─────────────────────────────────────────────────────────
+// The insights drawer's "open control to act" redirect opens the row in a NEW
+// browser tab — a fresh JS context whose caches start empty, which would land
+// the reader on a row that no longer shows the very insight that sent them.
+// A BroadcastChannel mirrors this module's state across same-origin tabs: a
+// new tab says hello and any seeded tab answers with a snapshot; after that,
+// every cache write broadcasts one. Union-merge (never clears), structured
+// clone (insights are plain data), still session-scoped — nothing persists.
+
+interface CacheSnapshot {
+  type: 'snapshot';
+  single: [string, LayeredInsight][];
+  multi: [string, LayeredInsight[]][];
+  empty: string[];
+  actions: [string, ActionStatus][];
+  feedback: [string, InsightFeedback][];
+}
+
+const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('ira-insight-cache');
+let applyingRemote = false;
+let broadcastQueued = false;
+
+function broadcastSnapshot() {
+  if (!channel || applyingRemote || broadcastQueued) return;
+  broadcastQueued = true;
+  // Microtask so a burst of writes (a stack Generate seeds every subject)
+  // coalesces into one message.
+  queueMicrotask(() => {
+    broadcastQueued = false;
+    const msg: CacheSnapshot = {
+      type: 'snapshot',
+      single: [...CACHE],
+      multi: [...MULTI_CACHE],
+      empty: [...EMPTY_CACHE],
+      actions: [...ACTION_STATUS],
+      feedback: [...INSIGHT_FEEDBACK],
+    };
+    channel.postMessage(msg);
+  });
+}
+
+if (channel) {
+  channel.onmessage = (e: MessageEvent) => {
+    const msg = e.data as CacheSnapshot | { type: 'hello' };
+    if (msg.type === 'hello') {
+      if (CACHE.size || MULTI_CACHE.size || EMPTY_CACHE.size) broadcastSnapshot();
+      return;
+    }
+    if (msg.type !== 'snapshot') return;
+    applyingRemote = true;
+    try {
+      msg.single.forEach(([k, v]) => CACHE.set(k, v));
+      msg.multi.forEach(([k, v]) => MULTI_CACHE.set(k, v));
+      msg.empty.forEach(k => EMPTY_CACHE.add(k));
+      msg.actions.forEach(([k, v]) => ACTION_STATUS.set(k, v));
+      msg.feedback.forEach(([k, v]) => INSIGHT_FEEDBACK.set(k, v));
+      // Re-render subscribers; applyingRemote stops the echo broadcast.
+      notifyCacheChanged();
+    } finally {
+      applyingRemote = false;
+    }
+  };
+  channel.postMessage({ type: 'hello' });
 }

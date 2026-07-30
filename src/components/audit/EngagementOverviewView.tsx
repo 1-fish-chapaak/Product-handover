@@ -17,8 +17,9 @@ import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator'
 import { useInsightStackRun, type InsightStackRun } from '../shared/useInsightStackRun';
 import InsightStackDrawer from '../shared/InsightStackDrawer';
 import { InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/TargetedActions';
+import type { StackRowNav } from '../shared/InsightStack';
 import { getGeneratedInsight, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
-import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight } from '../../data/layeredInsights';
+import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight, type EntityRef } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -46,13 +47,13 @@ import {
 } from '../../data/engagement-exceptions';
 import EngagementExceptionDrawer from './EngagementExceptionDrawer';
 import RACMTab from './RACMTab';
-import ControlsTab from './ControlsTab';
+import ControlsTab, { seededControlStatus } from './ControlsTab';
 import EvidenceTab from './EvidenceTab';
 import WorkingPaperTab from './WorkingPaperTab';
 import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
-import { EngagementWorkspaceProvider, useEngagementWorkspace } from './engagementWorkspace';
+import { EngagementWorkspaceProvider, useEngagementWorkspace, baseControlsFor, type WorkspaceControl } from './engagementWorkspace';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -91,6 +92,27 @@ const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
   trail:           { icon: Activity,        chip: 'bg-fuchsia-50 text-fuchsia-600' },
   config:          { icon: Settings,        chip: 'bg-slate-100 text-slate-600' },
 };
+
+/** The drawer's new-tab deep link (?tab= & ?focusControl=), read AND stripped
+ *  from the URL once at module load — module scope because a useState
+ *  initializer is impure territory (StrictMode double-invokes it, so a
+ *  replaceState there strips the URL before the surviving read). `delivered`
+ *  flips after the first mount applies it, so a later in-tab navigation back
+ *  into this view never re-applies a stale tab/focus. */
+const DEEP_LINK: { eng: string | null; tab: TabId | null; focusControl: string | null; delivered: boolean } = (() => {
+  const none = { eng: null, tab: null, focusControl: null, delivered: true };
+  if (typeof window === 'undefined') return none;
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('view') !== 'engagement-overview') return none;
+  const t = p.get('tab');
+  const tab = t && t in TAB_META ? (t as TabId) : null;
+  const focusControl = p.get('focusControl');
+  if (!t && !focusControl) return none;
+  p.delete('tab');
+  p.delete('focusControl');
+  window.history.replaceState(null, '', `${window.location.pathname}?${p.toString()}`);
+  return { eng: p.get('eng'), tab, focusControl, delivered: false };
+})();
 
 function tabsForType(type: EngType): { id: TabId; label: string; icon: React.ElementType }[] {
   const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
@@ -131,34 +153,36 @@ function loadTabPrefs(type: EngType): TabPrefs {
 
 // ─── Mock content (per type — kept small + realistic) ─────────────────────────
 
-const MOCK_CONTROLS: Record<string, { id: string; ref: string; name: string; status: 'Effective' | 'In Test' | 'Failed' | 'Pending'; key: boolean }[]> = {
-  default: [
-    { id: 'c1', ref: 'P2P-C-01', name: 'Vendor master add/change requires dual approval', status: 'Effective', key: true },
-    { id: 'c2', ref: 'P2P-C-02', name: 'PO approval threshold enforced by amount tier', status: 'Effective', key: true },
-    { id: 'c3', ref: 'P2P-C-03', name: 'Three-way match (PO · GRN · Invoice) before payment', status: 'In Test', key: true },
-    { id: 'c4', ref: 'P2P-C-04', name: 'Duplicate invoice prevention check on AP posting', status: 'Failed', key: false },
-    { id: 'c5', ref: 'P2P-C-05', name: 'Segregation of duties between PO creator and approver', status: 'Effective', key: true },
-    { id: 'c6', ref: 'P2P-C-06', name: 'Payment release dual sign-off above ₹10L threshold', status: 'Pending', key: true },
-    { id: 'c7', ref: 'P2P-C-07', name: 'Bank account change call-back verification', status: 'Effective', key: true },
-    { id: 'c8', ref: 'P2P-C-08', name: 'GRN quantity tolerance check at receipt', status: 'Effective', key: false },
-    { id: 'c9', ref: 'P2P-C-09', name: 'Non-PO spend coding review before posting', status: 'Failed', key: false },
-    { id: 'c10', ref: 'P2P-C-10', name: 'Month-end AP accrual completeness review', status: 'In Test', key: false },
-    { id: 'c11', ref: 'P2P-C-11', name: 'One-time vendor usage monitoring', status: 'Effective', key: false },
-    { id: 'c12', ref: 'P2P-C-12', name: 'Credit note matched to original before refund', status: 'Pending', key: false },
-  ],
-};
+/** The engagement escalation's "where to check" — the risk and controls the
+ *  finding resolves to, with REAL Controls-tab row ids where rows exist so the
+ *  drawer's redirects land. Entities without a row of their own (the workflow-
+ *  tested chargeback control, the cross-cutting risk) resolve to their full
+ *  cards inside the same stack instead. */
+const FLAGSHIP_CHECK_AT: EntityRef[] = [
+  { kind: 'risk', id: 'R-PRICING', label: 'Pricing accuracy risk', note: 'Exposed — every mapped control tests the feed’s output, none its source.' },
+  { kind: 'control', id: 'C-CHARGEBACK-PRICING', label: 'Chargeback Pricing Validation', note: '70 of the 90 exception lines this run.' },
+  { kind: 'control', id: 'P2P-C-06', label: 'Three-way match enforced (PO · GRN · Invoice) before AP posting', note: 'MCKESSON invoice lines fail the price match against the stale master.' },
+  { kind: 'control', id: 'P2P-C-07', label: 'Duplicate-invoice detection on PAN + invoice-number + amount + date', note: 'Re-billed MCKESSON lines resurface as near-duplicates at AP posting.' },
+];
 
 /** The engine's multi-insight roll-up subjects for an engagement: the
  *  escalation, its pricing risk (when the engagement carries the chargeback
- *  thread), and one insight per in-scope control — statuses map to Pass / Fail /
- *  Not tested so each card reasons distinctly. Shared by the Overview preview
- *  and the AI Insights tab so one Generate fills both (same session cache). */
+ *  thread), and one insight per in-scope control. Control subjects are built
+ *  from the SAME rows the Controls tab renders (baseControlsFor) with the same
+ *  seeded statuses, so every control card names — and redirects to — a row
+ *  that exists and reads the same when the user lands on it. */
 function engagementInsightSubjects(eng: Engagement): BuildInsightInput[] {
   const isPricing = /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`);
-  const controls = MOCK_CONTROLS[eng.id] ?? MOCK_CONTROLS.default;
-  const mapStatus = (s: string): string => (s === 'Failed' ? 'Fail' : s === 'Effective' ? 'Pass' : 'Not tested');
+  const controls = baseControlsFor(eng);
+  const statusFor = (c: WorkspaceControl): string => {
+    const s = seededControlStatus(c.attributes.map(a => a.id), eng.health);
+    return s === 'Pass' ? 'Pass' : s === 'Fail' ? 'Fail' : 'Not tested';
+  };
   const subs: BuildInsightInput[] = [
-    { layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing },
+    {
+      layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing,
+      ...(isPricing ? { checkAt: FLAGSHIP_CHECK_AT } : {}),
+    },
   ];
   if (isPricing) {
     subs.push(
@@ -181,8 +205,8 @@ function engagementInsightSubjects(eng: Engagement): BuildInsightInput[] {
   for (const c of controls) {
     // Skip a control whose name would re-trigger the flagship pricing card —
     // the stack already carries that thread once.
-    if (isPricing && isPricingSubject(c.name)) continue;
-    subs.push({ layer: 'control', subjectId: c.ref, subjectLabel: c.name, status: mapStatus(c.status), isKey: c.key });
+    if (isPricing && isPricingSubject(c.description)) continue;
+    subs.push({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status: statusFor(c), isKey: c.isKey });
   }
   return subs;
 }
@@ -289,9 +313,20 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const { openShare } = useShare();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
 
-  // Default the tab to overview; pick the first tab for the type once we know the engagement.
+  // Default the tab to overview; pick the first tab for the type once we know
+  // the engagement. A drawer deep link (?tab=&focusControl=, opened in a new
+  // tab by "go to control") seeds both the tab and the row focus instead.
+  // Deliver only during the initial load window: the view mounts more than
+  // once while the app hydrates (so a mount-effect "consumed" flag loses the
+  // link before the surviving instance reads it), while a later in-tab
+  // re-entry to this engagement must NOT re-apply the stale tab/focus.
+  const [deepLink] = useState(() =>
+    !DEEP_LINK.delivered && DEEP_LINK.eng === engagementId && performance.now() < 10_000
+      ? { tab: DEEP_LINK.tab, focusControl: DEEP_LINK.focusControl }
+      : { tab: null, focusControl: null },
+  );
   const tabs = useMemo(() => engagement ? tabsForType(engagement.type) : [], [engagement]);
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [activeTab, setActiveTab] = useState<TabId>(deepLink.tab ?? 'overview');
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
   // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
   const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
@@ -313,6 +348,31 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     // result, not an absence). Errors stay in the header pill with retry.
     onSettled: (p) => { if (p === 'generated' || p === 'empty') setInsightsPanelOpen(true); },
   });
+
+  // Drawer → row redirect: an insight card's entity chip opens the exact row
+  // in a NEW browser tab (user decision 2026-07-31) — the reader keeps the
+  // insight report open here and acts on the row alongside it. The new tab
+  // deep-links back into this view (?tab=controls&focusControl=), where the
+  // landing focuses the row (expand + scroll + pulse). Only entities with a
+  // real Controls-tab row are navigable — the stack sends the rest to their
+  // full card inside the drawer instead.
+  const [focusControlId, setFocusControlId] = useState<string | null>(deepLink.focusControl);
+  const navigableControlIds = useMemo(
+    () => new Set(engagement ? baseControlsFor(engagement).map(c => c.controlId) : []),
+    [engagement],
+  );
+  const insightRowNav = useMemo<StackRowNav>(() => ({
+    canOpen: (ref) => ref.kind === 'control' && navigableControlIds.has(ref.id),
+    open: (ref) => {
+      if (!(ref.kind === 'control' && navigableControlIds.has(ref.id)) || !engagement) return;
+      const params = new URLSearchParams();
+      params.set('view', 'engagement-overview');
+      params.set('eng', engagement.id);
+      params.set('tab', 'controls');
+      params.set('focusControl', ref.id);
+      window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+    },
+  }), [navigableControlIds, engagement]);
 
   // Tab order + hidden set — drag to reorder, toggle visibility from Configuration; persisted per type.
   const [tabPrefs, setTabPrefs] = useState<TabPrefs>(() => engagement ? loadTabPrefs(engagement.type) : { order: [], hidden: [] });
@@ -601,6 +661,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
                 onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
                 onRunWorkflow={onRunWorkflow}
+                focusControlId={focusControlId}
+                onFocusHandled={() => { setFocusControlId(null); DEEP_LINK.delivered = true; }}
               />
             )}
 
@@ -667,6 +729,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
         subjectLabel={eng.name}
         scopeLabel="across this engagement"
         run={insightRun}
+        rowNav={insightRowNav}
       />
     </div>
     </EngagementWorkspaceProvider>
