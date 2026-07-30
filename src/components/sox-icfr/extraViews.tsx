@@ -5,7 +5,7 @@ import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
-import { SeverityPill } from './parts';
+import { SeverityPill, Toggle } from './parts';
 import { FormSelect } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
 import { Pill, type Tone } from '../shared/StatusBadge';
@@ -18,10 +18,6 @@ const GAP_TYPES: GapType[] = ['MDG', 'ITDG', 'TG'];
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
-
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-  return <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cn('toggle', on && 'on')} />;
-}
 
 // ─── Threshold advice — what this period's exceptions say about next period's rules ──
 // Read-only guidance. The thresholds themselves are frozen once testing starts, so

@@ -219,6 +219,14 @@ export interface RacmReview {
   at: string;
 }
 
+// ─── Risk rating — how bad it is if this control fails ───────────────────────────
+// Agreed with management at scoping; it can never be read off an SOP. It sets how
+// deep the sample goes, because frequency on its own cannot: a quarterly control
+// whose risk is Low is one occurrence a year, the same control rated High is every
+// quarter. See `sampleSizeGuide`.
+export type RiskRating = 'High' | 'Medium' | 'Low';
+export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
 export interface Control {
@@ -248,6 +256,9 @@ export interface Control {
    *  this beside the risk, because a control aimed at the symptom rather than the
    *  cause is the commonest design gap there is. */
   rootCause?: string;
+  /** The risk's agreed rating. Drives how deep the sample goes — see
+   *  `sampleSizeGuide` — and is argued with management, not derived. */
+  riskRating?: RiskRating;
   /** The programme the auditor actually walks — obtain X, check Y, verify Z.
    *  Distinct from the design considerations (what must be true) and the test
    *  attributes (what each sample proves): these are the field instructions. */

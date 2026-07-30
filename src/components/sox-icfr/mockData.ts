@@ -3,7 +3,7 @@ import { ipeChecklist } from './types';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  RacmReview, ReviewNote, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -234,6 +234,7 @@ const DETAILED: Control[] = [
       'Attempt a bank-detail change as the requester in the QA client and confirm the activation block holds.',
       'Confirm the change log is retained and cannot be edited by the master-data team.',
     ],
+    riskRating: 'High',
     performedBy: 'AM', wpRefHard: 'P2P/01', wpRefSoft: '/FY26/ICFR/P2P/P-01 vendor master/', reportRef: '4.1',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
@@ -268,6 +269,7 @@ const DETAILED: Control[] = [
       'Confirm from the delegation register that the approver held that authority on the approval date.',
       'Re-perform the release-timing check to confirm no order released before its approval timestamp.',
     ],
+    riskRating: 'High',
     performedBy: 'AM', wpRefHard: 'P2P/02', wpRefSoft: '/FY26/ICFR/P2P/P-02 purchasing/', reportRef: '4.2',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(), testDueInDays: 0,
@@ -316,6 +318,7 @@ const DETAILED: Control[] = [
       'Obtain the blocked-invoice report and confirm every held line was cleared or rejected by the buyer with evidence.',
       'Confirm no held invoice was paid before clearance by agreeing the payment date to the clearance date.',
     ],
+    riskRating: 'Medium',
     performedBy: 'RS', wpRefHard: 'P2P/03', wpRefSoft: '/FY26/ICFR/P2P/P-03 invoice processing/', reportRef: '4.3',
     assertions: ['Accuracy', 'Existence / Occurrence'],
     racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'), testDueInDays: 0,
@@ -347,6 +350,7 @@ const DETAILED: Control[] = [
       'Re-perform the test on reference variants — leading zeros, trailing spaces, case differences — and quantify anything that posted.',
       'For each variant duplicate found, trace to the payment run and establish whether cash left the business.',
     ],
+    riskRating: 'Medium',
     performedBy: 'AM', wpRefHard: 'P2P/04', wpRefSoft: '/FY26/ICFR/P2P/P-04 duplicate block/', reportRef: '4.4',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
@@ -380,6 +384,7 @@ const DETAILED: Control[] = [
       'Confirm the reviewer is independent of the preparer on every sampled journal.',
       'Agree the journal population to the ledger to establish whether the review covered all of it.',
     ],
+    riskRating: 'High',
     performedBy: 'RS', wpRefHard: 'P2P/05', wpRefSoft: '/FY26/ICFR/P2P/P-05 manual journals/', reportRef: '4.5',
     assertions: ['Accuracy', 'Completeness'],
     racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
@@ -410,6 +415,7 @@ const DETAILED: Control[] = [
       'Agree each sampled line to the GRN date and the carrier documentation.',
       'Confirm anything recorded in the wrong period was reclassified before close.',
     ],
+    riskRating: 'Medium',
     performedBy: 'RS', wpRefHard: 'P2P/06', wpRefSoft: '/FY26/ICFR/P2P/P-06 GR cut-off/', reportRef: '4.6',
     assertions: ['Cut-off', 'Completeness'],
     testDueInDays: 0,
@@ -432,6 +438,7 @@ const DETAILED: Control[] = [
     controlActivity: 'M. Nair (Accounts Payable) reviews the aged GR/IR report from SAP S/4HANA each month and investigates every entry open beyond 60 days with the buyer and the receiving site. Each item is cleared, accrued or written back with a documented reason; the annotated report is retained as evidence and the closing balance is agreed to the ledger.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
     rootCause: 'Ageing the GR/IR account is a month-end housekeeping task with no owner named in the close calendar, so it slips whenever close is compressed.',
+    riskRating: 'Low',
     performedBy: 'RS', wpRefHard: 'P2P/07', wpRefSoft: '/FY26/ICFR/P2P/P-07 GR-IR ageing/', reportRef: '4.7',
     assertions: ['Completeness', 'Accuracy'],
     racmReview: remark('Row is incomplete — no design documents or test attributes defined yet. Complete the RACM row, then resubmit for approval.'),
@@ -548,6 +555,9 @@ function generate(): Control[] {
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
         isKey: i % 4 !== 0, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
+        // The rating tracks the key judgement: the row that isn't key is the one
+        // whose failure the group can absorb, so it sizes at the bottom of the band.
+        riskRating: (i % 4 === 0 ? 'Low' : i % 3 === 0 ? 'Medium' : 'High') as RiskRating,
         owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
         assertions: ['Accuracy', 'Existence / Occurrence'],
         // review spread: fully-tested rows approved, one recurring remark pattern, rest pending
@@ -819,6 +829,7 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
           process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
           isKey: true, precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
+          riskRating: (i % 3 === 0 ? 'High' : i % 3 === 1 ? 'Medium' : 'Low') as RiskRating,
           owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
           riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
           assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
@@ -873,6 +884,7 @@ export function racmTemplate(process: string): Control[] {
     id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
     isKey: true, precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
+    riskRating: (i % 3 === 0 ? 'High' : i % 3 === 1 ? 'Medium' : 'Low') as RiskRating,
     owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),

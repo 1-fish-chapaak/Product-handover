@@ -15,7 +15,7 @@ import {
 } from './helpers';
 import { programmeFor } from './auditScope';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
-import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, Toggle, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
@@ -32,10 +32,6 @@ const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Re
 const WORKFLOW_LIBRARY = ['Three-way match check', 'Approval-tier check', 'Duplicate-invoice detection', 'Segregation-of-duties scan', 'Timeliness / cut-off check', 'Reconciliation completeness', 'Access review', 'Tolerance-breach monitor'];
 
 // ── primitives ───────────────────────────────────────────────────────────────────
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-  return <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cn('toggle', on && 'on')} />;
-}
-
 function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: () => void; buttons: { label: string; onClick: (note: string) => void }[] }) {
   const [note, setNote] = useState('');
   return (
@@ -1396,7 +1392,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
                     <option key={n} value={n}>{n}{n === guide.suggested ? ' — suggested' : ''}</option>
                   ))}
                 </select>
-                <span className="text-[0.6875rem] text-ink-400">{control.frequency} · {control.nature} — {guide.range}. {guide.note}</span>
+                <span className="text-[0.6875rem] text-ink-400">{control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — {guide.range}. {guide.note}</span>
                 <div className="flex-1" />
                 {/* the logic can be written first — sending needs the data */}
                 <button disabled={!filesReady || stage === 'extracting'} onClick={sendLogic}

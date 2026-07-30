@@ -190,9 +190,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const reqSatisfied = REQUIRED_DOCS.filter(d => attached.some(a => a.req === d.id)).length;
   const allReqsSatisfied = reqSatisfied === REQUIRED_DOCS.length;
 
-  // Scoping can be skipped (user ask): the programme is created without
-  // RACMs / TBs and the workspace Overview flags what's missing until the
-  // RACM is added (RACM tab) and the GL / TBs are uploaded (Configuration).
+  // Scoping can be skipped (user ask): the programme is created without RACMs
+  // and the workspace Overview flags that until one is added on the RACM tab.
+  // The GL / TBs are no longer asked for here — they arrive on the audit that
+  // tests them, from that audit's own Configuration tab.
   const [scopingSkipped, setScopingSkipped] = useState(false);
   const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 
@@ -1351,7 +1352,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {SCOPING_STEP && step === 2 && (
               <button
                 onClick={skipScoping}
-                title="Create without scoping — the workspace Overview flags the missing RACM and GL / trial balances"
+                title="Create without scoping — the workspace Overview flags the missing RACM; the trial balance and GL arrive on the audit that tests them"
                 className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Skip for now
