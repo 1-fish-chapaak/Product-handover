@@ -16,6 +16,13 @@ export function TrackPill({ c }: { c: TrackConclusion }) { return <Pill tone={TR
 const SEVERITY_TONE: Record<Severity, Tone> = { 'Material Weakness': 'risk', 'Significant Deficiency': 'high', Deficiency: 'mitigated' };
 export function SeverityPill({ s }: { s: Severity }) { return <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>; }
 
+/** The house switch. Lifted here because the control page, the rules editor and
+ *  the scope table all need the same one. `disabled` matters on a locked control:
+ *  the store silently refuses the patch, so the switch has to look refused. */
+export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return <button role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={cn('toggle', on && 'on', disabled && 'opacity-40 cursor-not-allowed')} />;
+}
+
 export function NatureChip({ nature, small }: { nature: Nature; small?: boolean }) {
   const Icon = nature === 'Automated' ? WorkflowIcon : nature === 'IT-dependent' ? Cpu : Hand;
   const tone = nature === 'Automated' ? 'bg-evidence-50 border-evidence-100 text-evidence-700' : nature === 'IT-dependent' ? 'bg-brand-50 border-brand-100 text-brand-700' : 'bg-paper-50 border-canvas-border text-ink-600';

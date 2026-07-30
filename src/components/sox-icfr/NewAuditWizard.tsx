@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet, Grid3x3,
-  Landmark, Paperclip, Scale, Sparkles, Star, Trash2, X,
+  Landmark, Minus, Paperclip, Scale, Sparkles, Star, Trash2, X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
@@ -11,33 +11,35 @@ import {
   BASIS_OPTIONS, currentFyEnd, cycleYears, ruleOverall,
   type GroupEntity, type MaterialityBasis,
 } from '../audit/sox-testing/soxTestingData';
-import { entitiesFor } from './auditScope';
+import { entitiesFor, entitiesInFiles, mergeScopeEntities } from './auditScope';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import type { AuditScopeKind, Control } from './types';
 import { cn } from '../../lib/cn';
 
 /**
- * New audit — the wizard behind the Audit logs tab's primary button.
+ * New audit — the wizard behind the New audit button on the Overview and the
+ * SOX audit tab.
  *
- * Period → Scope & files → Materiality → Review. Scope and files were separate
- * steps first and were merged on user ask: TB / GL is an attachment to what the
- * audit covers, not a stage of its own. The files half stays optional ("uploads
- * tb and gl if needed") — Continue gates on the scope half alone.
+ * Period → Materiality & files → Scope → Review (user ask). Materiality leads
+ * because that is the order the work happens in: you set the threshold, load the
+ * trial balance it is applied to, and what comes back is what should be in
+ * scope — so scope is the answer, not the opening question. The files half stays
+ * optional — Continue gates on the materiality half alone.
  *
  * Scope is a hard either/or by design: you pick entities OR RACMs, and
  * switching sides clears the other selection rather than quietly keeping both.
  *
- * Entities come from the engagement's programme record when it has one. The
- * Audit logs tab is on EVERY SOX engagement now, including ones the scoping
- * wizard never created a programme for, so those fall back to the demo group
- * (SEED_ENTITIES) — a prototype stand-in, not a real derivation.
+ * Entities come from the engagement's programme record when it has one. This
+ * wizard is on EVERY SOX engagement now, including ones the scoping wizard never
+ * created a programme for, so those fall back to the demo group (SEED_ENTITIES)
+ * — a prototype stand-in, not a real derivation.
  *
  * RACMs are the engagement's processes: a RACM here IS a process's set of
  * controls, the same equivalence Racm.tsx and createRacm() work from.
  */
 
-const STEPS = ['Period', 'Scope & files', 'Materiality', 'Review'] as const;
+const STEPS = ['Period', 'Materiality & files', 'Scope', 'Review'] as const;
 const REVIEW = STEPS.length - 1;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -60,6 +62,13 @@ function StepShell({ title, sub, children }: { title: string; sub: string; child
       {children}
     </div>
   );
+}
+
+/** One cell of the scope step's two-source matrix: present, or pointedly not. */
+function SourceMark({ present }: { present: boolean }) {
+  return present
+    ? <Check size={13} strokeWidth={3} className="text-compliant-600" aria-label="Present" />
+    : <Minus size={13} strokeWidth={3} className="text-ink-300" aria-label="Absent" />;
 }
 
 /** Review rows — label left, value right, matching the wizard's review cards. */
@@ -85,6 +94,19 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   const [year, setYear] = useState(currentFyEnd);
   const periodLabel = yearBasis === 'fy' ? fyLabel(year) : cyLabel(year);
   const periodSpan = spanOf(yearBasis, year);
+
+  // ── Files (optional) ─────────────────────────────────────────────────────
+  const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
+  const addFile = (kind: 'tb' | 'gl') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = () => {
+      const f = input.files?.[0];
+      if (f) setFiles(prev => [...prev, { name: f.name, kind }]);
+    };
+    input.click();
+  };
 
   // ── Scope ────────────────────────────────────────────────────────────────
   const [scopeKind, setScopeKind] = useState<AuditScopeKind>('entity');
@@ -131,10 +153,30 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     setPickedControls(prev => prev.filter(id => keyIds.has(id)));
   }, [keyOnly, eng.controls]);
 
+  // ── The scope step's two sources ─────────────────────────────────────────
+  // The engagement's entity register, and the entities the uploaded TB / GL
+  // turned out to contain. Both are shown, matched by name: the register is kept
+  // by hand and can be missing a company, the trial balance can't be (user ask).
+  const dataEntities = useMemo(() => entitiesInFiles(eng.id, files.length > 0), [eng.id, files.length]);
+  const entityRows = useMemo(() => mergeScopeEntities(entities, dataEntities), [entities, dataEntities]);
+  const unregistered = entityRows.filter(r => !r.inRegister).length;
+  const noData = entityRows.filter(r => r.inRegister && !r.inData).length;
+
+  // Removing the trial balance takes its unregistered entities off the list with
+  // it. Anything already ticked has to go too, or the count keeps claiming a
+  // selection with no row behind it.
+  useEffect(() => {
+    // Entity side only — on the RACM side `picked` holds process names, which
+    // this list knows nothing about, and pruning against it would empty them.
+    if (scopeKind !== 'entity') return;
+    const live = new Set(entityRows.map(r => r.id));
+    setPicked(prev => (prev.every(id => live.has(id)) ? prev : prev.filter(id => live.has(id))));
+  }, [entityRows, scopeKind]);
+
   // Entities are picked by id — the workspace filter maps ids to processes.
   // RACMs are picked by process name, which IS their identity.
   const options = scopeKind === 'entity'
-    ? entities.map(e => ({ id: e.id, primary: e.name, secondary: e.type }))
+    ? entityRows.map(e => ({ id: e.id, primary: e.name, secondary: e.type }))
     : racms.map(r => ({ id: r.name, primary: r.name, secondary: `${r.count} control${r.count === 1 ? '' : 's'}` }));
 
   // Switching sides clears the other side's picks — the two are never merged.
@@ -171,19 +213,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   /** Display-ready labels for what's picked — ids are storage, not copy. */
   const pickedNames = picked.map(id => options.find(o => o.id === id)?.primary ?? id);
 
-  // ── Files (optional) ─────────────────────────────────────────────────────
-  const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
-  const addFile = (kind: 'tb' | 'gl') => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = () => {
-      const f = input.files?.[0];
-      if (f) setFiles(prev => [...prev, { name: f.name, kind }]);
-    };
-    input.click();
-  };
-
   // ── Materiality ──────────────────────────────────────────────────────────
   const [basis, setBasis] = useState<MaterialityBasis>('pbt');
   const basisOpt = BASIS_OPTIONS.find(b => b.id === basis)!;
@@ -199,13 +228,13 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
 
   // ── Gates ────────────────────────────────────────────────────────────────
   // Files is skippable on purpose — everything else must be answered.
-  // Scope & files gates on the scope half only — the TB / GL half is optional,
-  // so an empty file list must never block Continue.
+  // Materiality & files gates on the materiality half only: the TB / GL half is
+  // optional, so an empty file list must never block Continue.
   const canContinue = step === 0 ? true
+    : step === 1 ? benchmark > 0 && (basis === 'custom' || pct > 0)
     // Scoping by RACM means picking controls: a RACM ticked with nothing
     // under it covers nothing, so Continue waits for at least one row.
-    : step === 1 ? (scopeKind === 'entity' ? picked.length > 0 : pickedControls.length > 0)
-    : step === 2 ? benchmark > 0 && (basis === 'custom' || pct > 0)
+    : step === 2 ? (scopeKind === 'entity' ? picked.length > 0 : pickedControls.length > 0)
     : true;
 
   const create = () => {
@@ -296,7 +325,101 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
           </StepShell>
         )}
 
+        {/* No StepShell here (user ask): the step title and strapline were removed.
+            The rail above already names the step, and each half carries its own
+            heading, so a third layer of titling was just noise. */}
         {step === 1 && (
+          <div>
+            {/* Files lead (user ask): the trial balance is what the threshold
+                below gets applied TO, so it is loaded first. Optional all the
+                same — Continue waits on the materiality half alone, never on
+                this one. */}
+            <div className="flex items-baseline gap-2 mb-0.5">
+              <h4 className="text-[13px] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Optional</span>
+            </div>
+            <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+              Attach them if this audit needs them — you can add them later instead.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, title]) => (
+                <button
+                  key={kind}
+                  onClick={() => addFile(kind)}
+                  className="px-3 py-3 rounded-lg border border-dashed border-canvas-border bg-white hover:border-brand-400 hover:bg-brand-50/40 transition-all cursor-pointer text-center"
+                >
+                  <FileSpreadsheet size={16} className="text-brand-600 mx-auto mb-1" />
+                  <span className="block text-[12px] font-semibold text-ink-800">{title}</span>
+                  <span className="block text-[10.5px] text-ink-400">XLSX · CSV</span>
+                </button>
+              ))}
+            </div>
+
+            {files.length > 0 && (
+              <div className="border border-canvas-border rounded-xl overflow-hidden">
+                {files.map((f, i) => (
+                  <div key={`${f.name}-${i}`} className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0">
+                    <Paperclip size={13} className="text-ink-400 shrink-0" />
+                    <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">
+                      {f.kind}
+                    </span>
+                    <button
+                      onClick={() => setFiles(prev => prev.filter((_, x) => x !== i))}
+                      className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
+                      aria-label={`Remove ${f.name}`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* The threshold — the half Continue gates on. */}
+            <div className="mt-6 pt-5 border-t border-canvas-border">
+              <h4 className="text-[13px] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
+              <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+                Set before testing starts — exceptions are measured against it.
+              </p>
+
+              <label className={labelCls}>Basis</label>
+              <FormSelect
+                value={basis}
+                options={BASIS_OPTIONS.map(b => ({ value: b.id, label: b.label }))}
+                onChange={v => changeBasis(v as MaterialityBasis)}
+                className={`${selectCls} mb-1.5`}
+                ariaLabel="Materiality basis"
+                menuCls="w-full"
+              />
+              <p className="text-[11px] text-ink-400 mb-4">{basisOpt.hint}</p>
+
+              <div className="flex gap-3 mb-4">
+                <div className="flex-1">
+                  <label className={labelCls}>{basis === 'custom' ? 'Amount (₹ Cr)' : 'Benchmark (₹ Cr)'}</label>
+                  <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
+                </div>
+                {basis !== 'custom' && (
+                  <div className="w-24">
+                    <label className={labelCls}>%</label>
+                    <input type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
+                <Scale size={14} className="text-brand-600 shrink-0" />
+                <p className="text-[11.5px] text-ink-600 leading-relaxed">
+                  Overall materiality <span className="font-semibold text-ink-900 tabular-nums">₹{overall} Cr</span>
+                  {basis !== 'custom' && <> — {pct}% of ₹{benchmark} Cr</>}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
           <StepShell title="What this audit covers" sub="Scope by entity or by RACM — one or the other, then pick as many as the audit covers.">
             <div className="grid grid-cols-2 gap-1.5 mb-4">
               {([['entity', 'By entity', Building2], ['racm', 'By RACM', Grid3x3]] as const).map(([id, title, Icon]) => (
@@ -339,7 +462,36 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               </button>
             )}
 
+            {/* What the two columns are reconciling. Only worth saying once a
+                file has been attached — with nothing uploaded there is no second
+                source to compare against. */}
+            {scopeKind === 'entity' && (
+              <p className="text-[11.5px] text-ink-500 mb-2 leading-relaxed">
+                {dataEntities.length === 0 ? (
+                  <>Attach a trial balance on the previous step and its entities are matched against the register here.</>
+                ) : (
+                  <>
+                    <span className="font-semibold text-ink-900">{entities.length}</span> in the engagement ·{' '}
+                    <span className="font-semibold text-ink-900">{dataEntities.length}</span> in the data
+                    {unregistered > 0 && <> · <span className="font-semibold text-high-700">{unregistered} not in the engagement</span></>}
+                    {noData > 0 && <> · <span className="text-ink-400">{noData} with no data yet</span></>}
+                  </>
+                )}
+              </p>
+            )}
+
             <div className="border border-canvas-border rounded-xl overflow-hidden">
+              {/* Column headings — the entity, then the same entity from each
+                  source. Only on the entity side; RACM rows have no two sources. */}
+              {scopeKind === 'entity' && options.length > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2 bg-canvas border-b border-canvas-border">
+                  <span className="w-4 shrink-0" aria-hidden />
+                  <span className="w-[14px] shrink-0" aria-hidden />
+                  <span className="flex-1 min-w-0 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Entity</span>
+                  <span className="w-[76px] text-center text-[10px] font-semibold uppercase tracking-wider text-ink-400 shrink-0">Engagement</span>
+                  <span className="w-[52px] text-center text-[10px] font-semibold uppercase tracking-wider text-ink-400 shrink-0">Data</span>
+                </div>
+              )}
               {options.length === 0 ? (
                 <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
                   {scopeKind === 'entity'
@@ -349,6 +501,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               ) : options.map(o => {
                 const on = picked.includes(o.id);
                 if (scopeKind === 'entity') {
+                  const row = entityRows.find(r => r.id === o.id)!;
                   return (
                     <button
                       key={o.id}
@@ -364,8 +517,20 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                       {o.secondary === 'Holding'
                         ? <Landmark size={14} className="text-brand-600 shrink-0" />
                         : <Building2 size={14} className="text-ink-400 shrink-0" />}
-                      <span className="text-[13px] text-ink-900 flex-1 min-w-0 truncate">{o.primary}</span>
-                      <span className="text-[11px] text-ink-400 shrink-0">{o.secondary}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] text-ink-900 truncate">{o.primary}</span>
+                        <span className="block text-[10.5px] text-ink-400">
+                          {row.inRegister ? o.secondary : 'Found in the data only — not on the engagement'}
+                        </span>
+                      </span>
+                      {/* The same entity from each side. An empty cell is the
+                          finding, so it reads as absent rather than as nothing. */}
+                      <span className="w-[76px] flex justify-center shrink-0">
+                        <SourceMark present={row.inRegister} />
+                      </span>
+                      <span className="w-[52px] flex justify-center shrink-0">
+                        <SourceMark present={row.inData} />
+                      </span>
                     </button>
                   );
                 }
@@ -442,96 +607,20 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 : `${picked.length} RACM${picked.length === 1 ? '' : 's'} · ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} selected`}
             </p>
 
-            {/* Files — the optional half of this step. Divided off rather than
-                given its own step: it's an attachment to the scope above, and
-                Continue never waits on it. */}
-            <div className="mt-6 pt-5 border-t border-canvas-border">
-              <div className="flex items-baseline gap-2 mb-0.5">
-                <h4 className="text-[13px] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Optional</span>
-              </div>
-              <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-                Attach them if this audit needs them — you can add them later instead.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 mb-4">
-              {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, title]) => (
-                <button
-                  key={kind}
-                  onClick={() => addFile(kind)}
-                  className="px-3 py-3 rounded-lg border border-dashed border-canvas-border bg-white hover:border-brand-400 hover:bg-brand-50/40 transition-all cursor-pointer text-center"
-                >
-                  <FileSpreadsheet size={16} className="text-brand-600 mx-auto mb-1" />
-                  <span className="block text-[12px] font-semibold text-ink-800">{title}</span>
-                  <span className="block text-[10.5px] text-ink-400">XLSX · CSV</span>
-                </button>
-              ))}
-            </div>
-
-              {files.length > 0 && (
-                <div className="border border-canvas-border rounded-xl overflow-hidden">
-                  {files.map((f, i) => (
-                    <div key={`${f.name}-${i}`} className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0">
-                      <Paperclip size={13} className="text-ink-400 shrink-0" />
-                      <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">
-                        {f.kind}
-                      </span>
-                      <button
-                        onClick={() => setFiles(prev => prev.filter((_, x) => x !== i))}
-                        className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </StepShell>
-        )}
-
-        {step === 2 && (
-          <StepShell title="Materiality rule" sub="Set before testing starts — the threshold this audit measures exceptions against.">
-            <label className={labelCls}>Basis</label>
-            <FormSelect
-              value={basis}
-              options={BASIS_OPTIONS.map(b => ({ value: b.id, label: b.label }))}
-              onChange={v => changeBasis(v as MaterialityBasis)}
-              className={`${selectCls} mb-1.5`}
-              ariaLabel="Materiality basis"
-              menuCls="w-full"
-            />
-            <p className="text-[11px] text-ink-400 mb-4">{basisOpt.hint}</p>
-
-            <div className="flex gap-3 mb-4">
-              <div className="flex-1">
-                <label className={labelCls}>{basis === 'custom' ? 'Amount (₹ Cr)' : 'Benchmark (₹ Cr)'}</label>
-                <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
-              </div>
-              {basis !== 'custom' && (
-                <div className="w-24">
-                  <label className={labelCls}>%</label>
-                  <input type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
-              <Scale size={14} className="text-brand-600 shrink-0" />
-              <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                Overall materiality <span className="font-semibold text-ink-900 tabular-nums">₹{overall} Cr</span>
-                {basis !== 'custom' && <> — {pct}% of ₹{benchmark} Cr</>}.
-              </p>
-            </div>
           </StepShell>
         )}
 
         {step === REVIEW && (
-          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's Audit logs.">
+          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's SOX audit tab.">
             <div className="rounded-xl border border-canvas-border bg-white p-4">
+              {/* Same order the steps ran in — Period, then materiality and its
+                  files, then what they scoped. */}
               <ReviewRow label="Period" value={<>{periodLabel} <span className="font-normal text-ink-400">· {periodSpan}</span></>} />
+              <ReviewRow label="Materiality" value={<>₹{overall} Cr <span className="font-normal text-ink-400">· {basisOpt.label}</span></>} />
+              <ReviewRow
+                label="TB / GL"
+                value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}
+              />
               <ReviewRow
                 label={scopeKind === 'entity' ? 'Entities' : 'RACMs'}
                 value={pickedNames.join(', ')}
@@ -542,11 +631,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                   value={<>{pickedControls.length} selected{keyOnly && <span className="font-normal text-ink-400"> · key controls only</span>}</>}
                 />
               )}
-              <ReviewRow
-                label="TB / GL"
-                value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}
-              />
-              <ReviewRow label="Materiality" value={<>₹{overall} Cr <span className="font-normal text-ink-400">· {basisOpt.label}</span></>} />
             </div>
           </StepShell>
         )}

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
+import { assessSeverity, controlConclusion, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -15,6 +16,23 @@ export type PaperBlock =
   | { kind: 'note'; label: string; text: string; tone: 'good' | 'bad' | 'neutral' };
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';
+export const IPE_TITLE = 'Information produced by the entity (IPE)';
+export const WALKTHROUGH_TITLE = 'Walkthrough — design tested on one transaction';
+export const WALKTHROUGH_TABLE = 'Walkthrough — attributes on the walked transaction';
+export const JUDGEMENTS_TITLE = 'Design judgements';
+export const DESIGN_ELEMENTS_TABLE = 'Design elements — evidence & waivers';
+
+/** How the drawn sample falls across the quarters. A quarterly-or-less control is
+ *  stated as its own cadence; anything sampled gets an even spread, which is what
+ *  the reviewer's workbook shows and what a reader checks the coverage against. */
+function quarterlySplit(c: Control): string {
+  const n = c.operating.sampling?.samples.length ?? 0;
+  if (!n) return 'No sample drawn';
+  if (c.frequency === 'Annual') return 'Annual control — single occurrence, no quarterly split';
+  const per = Math.floor(n / 4), rem = n % 4;
+  const q = [0, 1, 2, 3].map(i => per + (i < rem ? 1 : 0));
+  return `Q1 ${q[0]} · Q2 ${q[1]} · Q3 ${q[2]} · Q4 ${q[3]} (${n} items)`;
+}
 
 /** P / r ticks, as real working papers mark them. */
 const tick = (r: TestResult | 'Effective' | 'Ineffective' | undefined): string =>
@@ -31,7 +49,7 @@ const letter = (i: number): string => String.fromCharCode(65 + i);
  *  Until an audit exists there is nothing to read, so this falls back to the
  *  engagement's own start/end dates: a paper exported early still states the
  *  span it covers instead of going blank. */
-function periodLine(eng: IcfrEngagement): string {
+export function periodLine(eng: IcfrEngagement): string {
   const latest = eng.audits[0];   // createAudit prepends, so [0] is newest
   return latest
     ? `${latest.periodSpan} · ${latest.period}`
@@ -57,43 +75,171 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const pop = c.operating.population;
+  const ipe = c.operating.ipe;
   const def = eng.deficiencies.find(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
 
   blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — Test of Design & Operating Effectiveness`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
+  const guide = sampleSizeGuide(c);
   blocks.push({
     kind: 'kv', title: 'Control', rows: [
       ['Control owner', c.owner],
       ['Control number', c.id],
+      // what the control is FOR, above what it does and how it is worded
+      ['Control objective', c.objective ?? '—'],
       ['Control description', c.description],
       ['Control activity', c.controlActivity ?? '—'],
+      ['Classification', c.clazz ?? '—'],
       ['Control frequency', c.frequency],
-      ['Nature / type', `${c.nature} · ${c.type}${c.isKey ? ' · Key control' : ''}`],
+      ['Nature / type', `${c.nature} · ${c.type} · ${c.isKey ? 'Key control' : 'Non-key control'}`],
+      // the rating and the size it drives, side by side — the reviewer sizes on
+      // frequency AND rating, so a paper that prints one without the other is
+      // asking the reader to take the number on trust
+      ['Risk rating', c.riskRating ?? 'Not rated'],
+      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
+      ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
+      ['Quarterly split', quarterlySplit(c)],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
+      ['Root cause', c.rootCause ?? '—'],
       ['Assertions', c.assertions.join(', ')],
       ['Precision', c.precision],
       ['Period', periodLine(eng)],
+      // Where the evidence physically lives, and which report paragraph this row
+      // lands in. Both outlive the engagement, so the paper has to cite them.
+      ['Performed by', c.performedBy ?? '—'],
+      ['W/P reference — hard copy', c.wpRefHard ?? '—'],
+      ['W/P reference — soft copy', c.wpRefSoft ?? '—'],
+      ['Report reference', c.reportRef ?? '—'],
     ],
   });
+
+  // The audit programme — the steps actually walked, as instructions rather than
+  // conclusions. A reviewer re-performs the test off this list.
+  if (c.auditSteps?.length) {
+    blocks.push({
+      kind: 'table', title: 'Audit programme — steps performed',
+      note: `${c.auditSteps.length} step${c.auditSteps.length === 1 ? '' : 's'}${c.performedBy ? ` · performed by ${c.performedBy}` : ''}`,
+      headers: ['', 'Step'],
+      rows: c.auditSteps.map((s, i) => [String(i + 1), s]),
+    });
+  }
 
   blocks.push({ kind: 'kv', title: SIGNOFF_TITLE, rows: controlSignoffRows(eng, c) });
 
   // Test of design — documents received + each consideration ticked
   const docsIn = c.design.documents.filter(d => d.status === 'Received').length;
-  const outstanding = c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind);
+  const waived = c.design.documents.filter(d => d.waiver && d.status !== 'Received');
+  const outstanding = designOutstanding(c).map(d => d.kind);
   blocks.push({
     kind: 'table', title: 'Test of design',
-    note: `${docsIn}/${c.design.documents.length} design documents received${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
+    note: `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
     headers: ['', 'Design consideration', 'Tick'],
     rows: c.design.points.map((p, i) => [String(i + 1), p.text, tick(p.override?.result ?? p.result)]),
     tickFrom: 2,
   });
 
+  // Every design element with what backs it — and, where nothing does, the reason
+  // it was waived. A waiver the paper doesn't show is an unexplained hole in the
+  // completeness the conclusion rests on.
+  if (c.design.documents.length) {
+    blocks.push({
+      kind: 'table', title: DESIGN_ELEMENTS_TABLE,
+      note: `${docsIn} evidenced · ${waived.length} waived · ${outstanding.length} outstanding`,
+      headers: ['', 'Element', 'Required', 'Status', 'Evidence / reason', 'Recorded by'],
+      rows: c.design.documents.map((d, i) => [
+        String(i + 1),
+        d.kind === 'Custom' ? d.name : d.kind,
+        d.required === false ? 'Optional' : 'Required',
+        d.status === 'Received' ? 'Evidenced' : d.waiver ? 'Waived' : d.status,
+        d.status === 'Received'
+          ? (d.files?.map(f => f.name).join(' · ') || d.name)
+          : d.waiver ? `${d.waiver.reason} — ${d.waiver.note}` : 'Not provided',
+        d.status === 'Received' ? `${d.uploadedBy ?? '—'}${d.at ? `, ${d.at}` : ''}` : d.waiver ? `${d.waiver.by}, ${d.waiver.at}` : '—',
+      ]),
+    });
+  }
+
+  // The walkthrough — who was in the room, which transaction was walked, and what
+  // each attribute showed on it. Captured on the control page, printed from there.
+  const w = c.design.walkthrough;
+  if (w) {
+    blocks.push({
+      kind: 'kv', title: WALKTHROUGH_TITLE, rows: [
+        ['Transaction walked', w.sampleRef],
+        ['Date walked', w.date],
+        ['Performed by', w.tester],
+        ['Attended by (client)', w.attendees.length ? w.attendees.join(' · ') : 'Not recorded'],
+        ['What it showed', w.notes?.trim() || '—'],
+      ],
+    });
+    if (steps.length) {
+      const walkTested = steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') !== 'Not tested').length;
+      blocks.push({
+        kind: 'table', title: WALKTHROUGH_TABLE,
+        note: `${walkTested}/${steps.length} attributes tested on ${w.sampleRef} — the same attributes the sample tests, proved once on a live transaction`,
+        headers: ['', 'Attribute', 'Assertion', 'Result on ' + w.sampleRef, 'Tick'],
+        rows: steps.map((s, i) => {
+          const r = w.attributeResults[s.id] ?? 'Not tested';
+          return [letter(i), `${s.description} (${s.code})`, s.assertion, r, tick(r)];
+        }),
+        tickFrom: 4,
+      });
+    }
+  } else {
+    blocks.push({ kind: 'note', label: 'Walkthrough', text: 'No walkthrough recorded — the design has not been tested against a live transaction.', tone: 'neutral' });
+  }
+
+  // The four judgements the paper has to state rather than imply.
+  const j = c.design.judgements;
+  const compensating = j?.compensatingControlId ? eng.controls.find(x => x.id === j.compensatingControlId) : undefined;
+  const stated = (v: boolean | undefined): string => v === true ? 'Yes' : v === false ? 'No' : 'Not stated';
+  blocks.push({
+    kind: 'kv', title: JUDGEMENTS_TITLE, rows: [
+      ...FIVE_W_1H.map(a => [
+        `Description answers “${a.k}”`,
+        j?.coverage?.[a.k] === true ? 'Present' : j?.coverage?.[a.k] === false ? 'MISSING' : 'Not stated',
+      ] as [string, string]),
+      ['Compensating control', compensating ? `${compensating.id} — ${compensating.description}` : j?.compensatingControlId ? j.compensatingControlId : 'None identified'],
+      ['Frequency appropriate to the risk', stated(j?.frequencyAppropriate)],
+      [`Control type appropriate (${c.type})`, stated(j?.typeAppropriate)],
+      ['Basis', j?.note?.trim() || '—'],
+      ['Recorded by', j?.by ? `${j.by}, ${j.at}` : 'Not recorded'],
+    ],
+  });
+
+  // IPE — the report the population came out of, and the three checks that proved
+  // it. Printed BEFORE the attributes table because that is the order the work
+  // happened in: nothing below is worth reading if the report itself didn't hold.
+  if (ipe) {
+    blocks.push({
+      kind: 'kv', title: IPE_TITLE, rows: [
+        ['Report', ipe.reportName],
+        ['Source system', ipe.system],
+        ['Transaction / report ref', ipe.reportRef],
+        ['Parameters', ipe.parameters],
+        ['Run by (client)', `${ipe.generatedBy} — ${ipe.generatedAt}`],
+        ['Records', String(ipe.recordCount)],
+        ['Control total', ipe.controlTotal],
+        ['File', ipe.file?.name ?? '—'],
+        ['Conclusion', ipe.conclusion === 'Not tested' ? 'Not tested' : `${ipe.conclusion}${ipe.testedBy ? ` — ${ipe.testedBy}, ${ipe.testedAt}` : ''}`],
+      ],
+    });
+    blocks.push({
+      kind: 'table', title: 'IPE — validation of the report',
+      note: `${ipe.checks.filter(k => k.result === 'Pass').length}/${ipe.checks.length} checks passed · a report that does not conclude reliable cannot be sampled from`,
+      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Tick'],
+      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', tick(k.result)]),
+      tickFrom: 5,
+    });
+  } else {
+    blocks.push({ kind: 'note', label: 'IPE', text: 'No entity-produced report registered — the population has not been validated for source, completeness or accuracy.', tone: 'neutral' });
+  }
+
   // To be tested — every attribute with its population and sample coverage
   blocks.push({
     kind: 'table', title: 'To be tested — attributes & coverage',
-    note: pop ? `Population: ${pop.count} items from ${pop.source}${pop.ipeValidated ? ' (IPE validated)' : ''}` : 'No population drawn',
+    note: pop ? `Population: ${pop.count} items from ${pop.source}${ipe ? ` · report ${ipe.conclusion.toLowerCase()}` : ''}` : 'No population drawn',
     headers: ['', 'Attribute', 'Assertion', 'Population', 'Samples drawn', 'Samples tested', 'Exceptions'],
     rows: steps.map((s, i) => {
       const results = samples.map(smp => s.sampleResults?.[smp.id]).filter(r => r && r !== 'Not tested');
@@ -154,10 +300,20 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // Linked exception, if the testing raised one
   if (def) {
     const a = assessSeverity(def, eng);
+    const ex = def.exposure;
     blocks.push({
       kind: 'kv', title: `Exception — ${def.id}`, rows: [
         ['Description', def.description],
+        // Where it was found and what kind of thing broke — the label the fix follows
+        ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
         ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
+        // What the gap is worth, split the way the source RACM splits it
+        ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
+        ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
+        ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
+        ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
+        ['Exposure — basis', ex?.basis ?? '—'],
+        ['Report reference', def.reportRef ?? c.reportRef ?? '—'],
         ['Status', def.status],
         ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${formatDueDate(def.remediation.date)}` : ''} · ${def.remediation.owner}`],
         ['Remediation evidence', def.remediation.evidence?.map(f => f.name).join('; ') || 'None'],
@@ -178,11 +334,21 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
     if (b.kind === 'kv') {
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
-      if (b.title === 'Test legend') return 'Operating Testing';
+      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'Operating Testing';
+      // the walkthrough and the judgements are the design's own work, so they read
+      // on the design tab beside the considerations they support
+      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'Design Testing';
       return 'Results'; // linked exception
     }
-    if (b.kind === 'table') return b.title === 'Test of design' ? 'Design Testing' : 'Operating Testing';
-    return b.label === 'Samples' ? 'Operating Testing' : 'Results'; // notes
+    if (b.kind === 'table') {
+      if (b.title === 'Test of design' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'Design Testing';
+      // the programme is what the auditor was instructed to do, so it reads with
+      // the control it belongs to rather than inside one track's results
+      if (b.title === 'Audit programme — steps performed') return 'Control';
+      return 'Operating Testing';
+    }
+    if (b.label === 'Walkthrough') return 'Design Testing';
+    return b.label === 'Samples' || b.label === 'IPE' ? 'Operating Testing' : 'Results'; // notes
   };
   const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));
   buildControlPaper(eng, c).forEach(b => grouped.get(sectionOf(b))!.push(b));
@@ -271,8 +437,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'TOD (design)', 'TOE (operating)', 'TOE method', 'Conclusion'],
-      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, trackResult(c.design), trackResult(c.operating), c.operating.method, controlConclusion(c)]),
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'Root cause', 'TOD (design)', 'Report (IPE)', 'TOE (operating)', 'TOE method', 'Conclusion', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c), c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
     }],
   };
 
@@ -301,11 +467,12 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
       kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
-      headers: ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
+      headers: ['Deficiency', 'Control', 'Track', 'Gap type', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis', 'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
+        const ex = d.exposure;
+        return [d.id, d.controlId, d.track, d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—', d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, ex ? formatINR(ex.recovery) : '—', ex ? formatINR(ex.workingCapital) : '—', ex ? formatINR(ex.leakage) : '—', ex ? formatINR(exposureTotal(ex)) : '—', ex?.basis ?? '—', d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
       }),
     }],
   };

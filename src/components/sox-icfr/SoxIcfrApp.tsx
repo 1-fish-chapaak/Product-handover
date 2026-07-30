@@ -1,37 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, BadgeCheck, Plus, ScrollText } from 'lucide-react';
-import EmptyState from '../shared/EmptyState';
+import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import './register.css';
 import { cn } from '../../lib/cn';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
-import { isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
+import { defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
 import SoxClassicInner from './SoxClassicApp';
-import type { AuditRecord } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm, { RacmLanding } from './Racm';
 import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
+import ControlLibrary from './ControlLibrary';
 import ControlDossier from './ControlDossier';
-import RunsView from './RunsView';
+import AuditLogsView from './AuditLogsView';
+import AuditConfigView from './AuditConfigView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
-/* Configuration is PARKED behind the Audit logs tab (user ask) — see the
-   'config' entry in SOX_TABS. ConfigurationView.tsx is untouched and still
-   compiles; restore by uncommenting this import and swapping the render
-   branch below back from <AuditLogsView /> to <ConfigurationView />.
+/* Control Library — LENS SWAP (user ask, 30 Jul). The Control Library tab now
+   shows the LIBRARY lens (ControlLibrary: attributes, workflow mapping, run
+   history, audit runs) instead of the TESTING lens (ControlRegister: design /
+   operating tracks, conclusion, due-now). ControlRegister is untouched and
+   still renders on every classic SOX engagement (SoxClassicApp) — only this
+   reworked shell switched. Flip LIBRARY_LENS to false to park the new lens and
+   bring the testing lens straight back; nothing else has to change. */
+const LIBRARY_LENS = true;
+/* Three surfaces are UNREACHABLE (user ask). Their files are untouched and still
+   compile — nothing was deleted, only unwired, so restoring one is re-importing
+   it and putting its branch back:
+
+     ConfigurationView  — the engagement's entities / TBs / period / materiality.
+                          The AUDIT has its own Configuration (AuditConfigView);
+                          this was the engagement-wide one.
+     DashboardView      — the engagement read-out that listed audits, from the
+                          Dashboard / Audit logs pair the engagement used to have
+     RunsView           — the engagement-wide run registry, which the SOX audit
+                          tab used to hold before it became the audit register
+
 // import ConfigurationView from './ConfigurationView';
+// import DashboardView from './DashboardView';
+// import RunsView from './RunsView';
 */
-import AuditLogsView from './AuditLogsView';
-import DashboardView from './DashboardView';
-import AuditConfigView from './AuditConfigView';
-import NewAuditWizard from './NewAuditWizard';
-import RollForwardSheet from './RollForwardSheet';
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
@@ -47,60 +60,73 @@ const SOX_TABS: TabDef[] = [
      them. Nothing navigates into the tab, so no link is left dangling. */
   // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
+  /* Deficiency management is not an ENGAGEMENT tab either — it is one of the
+     audit's four (AUDIT_TABS below). Reached from the engagement level it is
+     still a DRILL-IN under a breadcrumb: every route in calls
+     setView('deficiencies'), which works at either level. */
+  { id: 'runs', label: 'SOX audit' },
+  /* Configuration is not an ENGAGEMENT tab — it belongs to an audit, and lives
+     in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
+     cycle, so there is nothing engagement-wide left to configure here; the
+     engagement's own ConfigurationView stays parked. */
+];
+
+/**
+ * The audit's own tabs (user ask). Creating an audit opens it here.
+ *
+ * Four, and deliberately not the engagement's four: no RACM (the matrix is
+ * maintained on the engagement, not per cycle) and no SOX audit (you are inside
+ * one). 'overview' keeps its id and wears the label Dashboard — renaming the id
+ * would ripple through SoxTab, View, TAB_ROOT and RETURNABLE in store.tsx for no
+ * user-visible gain.
+ */
+const AUDIT_TABS: TabDef[] = [
+  { id: 'overview', label: 'Dashboard' },
+  { id: 'controls', label: 'Control Library' },
   { id: 'deficiencies', label: 'Deficiency management' },
-  /* Test runs — PARKED from the engagement tabs (user ask). As with the Risk
-     Register above, only this line is commented out: the 'runs' SoxTab/View
-     types, TAB_ROOT, RETURNABLE, the `tab === 'runs' ? <RunsView />` branch
-     below and the dossier breadcrumb's 'Test runs' label all stay wired, so
-     restoring the tab is uncommenting this line. The registry itself keeps
-     recording (store.tsx addRun / bulkTestControls) and mockData keeps seeding
-     it, so a restored tab shows full history rather than an empty list.
-     Known consequence while it's off — RunsView was the only engagement-wide
-     run log (every run across all controls, filterable by kind and date), so
-     that roll-up isn't visible anywhere. Per-control history survives on the
-     control page (ControlDossier reads eng.executions), so testing evidence
-     isn't lost — only the cross-control view, and the run → control drill-in.
-     The one inbound link, BulkTestModal's "View run" button, was removed with
-     this park; restoring the tab means restoring that button too. */
-  // { id: 'runs', label: 'Test runs' },
-  /* 'config' is the AUDIT's own Configuration — period, scope, TB/GL and
-     materiality for the open audit. The id stays 'config' on purpose: it is
-     internal only, and renaming it would ripple through SoxTab, View, TAB_ROOT
-     and RETURNABLE in store.tsx for no user-visible gain. */
   { id: 'config', label: 'Configuration' },
 ];
 
-/** The engagement level — two tabs, and only once an audit exists. Kept in
- *  local state rather than the store's SoxTab union: it is a different level of
- *  navigation, and the store's tab belongs to whatever audit is open. */
-type EngTab = 'dashboard' | 'auditlogs';
-const ENGAGEMENT_TABS: TabDef[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'auditlogs', label: 'Audit logs' },
-];
-
+/**
+ * Two levels again (user ask).
+ *
+ * The ENGAGEMENT is the four tabs in SOX_TABS above — Overview, RACM, Control
+ * Library and SOX audit, the audit register. Opening an audit from that register,
+ * or creating one (createAudit opens what it creates), swaps in AUDIT_TABS behind
+ * a breadcrumb: that cycle's Dashboard, its Control Library — only the controls
+ * its scope covers, reset to Not started by createAudit — its deficiencies and
+ * its Configuration.
+ *
+ * What stays retired: DashboardView, the engagement-level Dashboard / Audit logs
+ * pair it belonged to, and the engagement's own Configuration tab. Their files
+ * are untouched and still compile.
+ *
+ * Deficiency management is a TAB inside an audit and a DRILL-IN outside one —
+ * hence the `inAudit` term in `isRoot` below. Every route into it calls
+ * setView('deficiencies'), which works at either level.
+ *
+ * What survives without an audit: every reader of the open audit already had a
+ * fallback for the pre-first-audit state, and they all take it now —
+ * useAuditControls returns the full control set rather than an audit's scope,
+ * and the working paper's period line falls back to the engagement's own span
+ * (periodLine in icfrWorkingPaper.ts). So nothing goes blank; the numbers are
+ * engagement-wide instead of cycle-wide.
+ */
 function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
-  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, openAudit, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
-
-  // Two levels. The engagement holds Dashboard + Audit logs; drilling into an
-  // audit swaps in that audit's own four tabs behind a breadcrumb. Before the
-  // first audit exists there is no tab bar at all — just the empty screen that
-  // starts one.
-  const [engTab, setEngTab] = useState<EngTab>('dashboard');
-  const [creating, setCreating] = useState(false);
-  // The audit being rolled forward — its sheet prefills from it.
-  const [rolling, setRolling] = useState<AuditRecord | null>(null);
+  const W = defWord(eng.id);
   const audit = eng.audits.find(a => a.id === openAuditId);
   const inAudit = !!audit;
-  // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
-  // and their controls. RACM, Risk Register and Runs are audit-side surfaces.
-  // Audit logs carries no scoping gate: it's on every SOX engagement (user ask),
-  // unlike the Configuration tab it replaced, which only rendered for
-  // engagements the SOX Testing wizard had created a programme record for.
-  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
+
+  // The owner's SOX is a to-do list, not a workspace: just their inbox and their
+  // controls. RACM and the audit register are auditor-side surfaces.
+  const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
+  const tabs = role === 'risk-owner'
+    ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
+    : levelTabs;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
@@ -158,39 +184,6 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     </div>
   );
 
-  const wizard = (
-    <AnimatePresence>
-      {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
-      {rolling && <RollForwardSheet prior={rolling} onClose={() => setRolling(null)} />}
-    </AnimatePresence>
-  );
-
-  // Nothing has been audited yet: no tab bar at all, just the one thing there
-  // is to do. Tabs arrive with the first audit.
-  if (eng.audits.length === 0) {
-    return (
-      <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
-        {topBar}
-        <div className="max-w-[1320px] mx-auto px-6 pt-6 pb-6">
-          <EmptyState
-            icon={ScrollText}
-            title="No audits yet"
-            body="An audit sets the period, what it covers and the materiality it is measured against. Start one to begin testing."
-            action={(
-              <button
-                onClick={() => setCreating(true)}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-              >
-                <Plus size={15} /> Create audit
-              </button>
-            )}
-          />
-        </div>
-        {wizard}
-      </div>
-    );
-  }
-
   // The RACM spreadsheet editor takes over full-height — the Process-Hub experience.
   if (view === 'racm-editor') {
     return (
@@ -210,27 +203,25 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const isScope = view === 'scope';
   const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header.
-  // Deficiencies used to be one; it is a tab now, so it keeps the tab bar.
-  const isDrillIn = isRacmMatrix || isScope || isHandoffs;
-  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register' || view === 'runs' || view === 'deficiencies' || view === 'config';
-  // Engagement level first: with no audit open, the only two surfaces are the
-  // Dashboard and the Audit logs. Everything below belongs to an open audit.
-  const auditBody = view === 'dossier' ? <ControlDossier />
+  // Deficiencies is one again now that its tab is parked — 'deficiencies' is out
+  // of `isRoot` below so the tab bar gives way to its own trail.
+  // Deficiencies keeps the tab bar inside an audit (it IS one of the four) and
+  // stands alone under a breadcrumb outside one.
+  const isDeficiencies = view === 'deficiencies' && !inAudit;
+  const isDrillIn = isRacmMatrix || isScope || isHandoffs || isDeficiencies;
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
+    || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
+  const body = view === 'dossier' ? <ControlDossier />
     : (view === 'deficiencies' || tab === 'deficiencies') ? <DeficienciesView />
     : view === 'handoffs' ? <HandoffsView />
     : view === 'scope' ? <ScopeView />
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
-    : tab === 'runs' ? <RunsView />
+    : tab === 'runs' ? <AuditLogsView />
     : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : null)
+    : LIBRARY_LENS ? <ControlLibrary />
     : <ControlRegister />;
-
-  const body = inAudit
-    ? auditBody
-    : engTab === 'dashboard'
-      ? <DashboardView onNewAudit={() => setCreating(true)} onRollForward={setRolling} />
-      : <AuditLogsView onNewAudit={() => setCreating(true)} onOpenAudit={openAudit} onRollForward={setRolling} />;
 
   return (
     <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
@@ -239,17 +230,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
       <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
-        {/* Engagement level — Dashboard / Audit logs under the usual header. */}
-        {!inAudit && (
-          <EngagementTabBar
-            tabs={ENGAGEMENT_TABS}
-            activeTab={engTab}
-            onSelect={(id) => setEngTab(id as EngTab)}
-            storageKey={`sox-eng-${eng.id}`}
-            size="md"
-          />
-        )}
-        {/* Audit level — the engagement header gives way to a breadcrumb, but
+        {/* Inside an audit the engagement header gives way to a breadcrumb, but
             the persona switcher comes WITH it: every testing, review and
             sign-off action lives inside an audit, so this is where switching
             hats has to be possible. */}
@@ -271,8 +252,16 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
             </div>
           </div>
         )}
-        {inAudit && isRoot && (
-          <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
+        {/* One bar, two levels — the engagement's four tabs, or the open audit's.
+            Separate storage keys so reordering one doesn't reorder the other. */}
+        {isRoot && (
+          <EngagementTabBar
+            tabs={tabs}
+            activeTab={tab}
+            onSelect={(id) => setTab(id as SoxTab)}
+            storageKey={inAudit ? `sox-audit-${eng.id}` : `sox-${eng.id}`}
+            size="md"
+          />
         )}
         {isRacmMatrix && (
           <SoxBreadcrumb onBack={() => setView('racm')} items={[
@@ -296,7 +285,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Deficiency management',
-            scope: 'Materiality & scope', runs: 'Test runs', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';
@@ -316,17 +305,32 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
             { label: 'Handoffs' },
           ]} />
         )}
-        {/* Deficiency management had its own breadcrumb + persona switcher while
-            it was a drill-in. As a tab it inherits the audit's, above — the
-            three-lines handoff still walks by switching hats, just from the one
-            switcher the whole audit shares. */}
+        {isDeficiencies && (
+          /* Reached from the Overview, a control's dossier, the reviewer queue and
+             notifications — so the arrow returns to context, not a pinned page.
+             The persona switcher rides along here (it does not on the other
+             drill-ins): this page IS the three-lines handoff, walked by switching
+             hats — owner remediates, auditor retests, reviewer closes. Back on a
+             breadcrumb now that its tab is parked. */
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <SoxBreadcrumb onBack={back} items={[
+              ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
+              { label: eng.name, onClick: () => setTab('overview') },
+              { label: role === 'risk-owner' ? W.mine : W.page },
+            ]} />
+            <div className="flex items-center gap-2 mb-3 shrink-0 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+              <RoleSwitcher role={role} onChange={setRole} />
+              {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+            </div>
+          </div>
+        )}
         <AnimatePresence mode="wait">
-          <motion.div key={`${role}-${openAuditId ?? engTab}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+          <motion.div key={`${role}-${openAuditId ?? 'eng'}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
             {body}
           </motion.div>
         </AnimatePresence>
       </div>
-      {wizard}
     </div>
   );
 }

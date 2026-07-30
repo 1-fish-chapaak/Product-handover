@@ -1,6 +1,6 @@
 import type {
-  Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, Role, Severity, TrackConclusion,
+  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
+  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -90,21 +90,35 @@ export function isItgcDependent(c: Control): boolean {
   return c.nature !== 'Manual' && c.process !== 'IT General Controls';
 }
 
-// ─── Frequency-based sample sizing (handbook table) ───────────────────────────────
-// Annual 1 · Quarterly 2 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
+// ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────
+// Annual 1 · Quarterly 1–4 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
 // (per-transaction) 25–60 · Automated nature = test of one, valid only while ITGCs hold.
+//
+// Frequency alone doesn't settle the size — the RATING moves it inside the band,
+// and at the bottom it drops the count outright: a quarterly control whose risk is
+// Low is one occurrence a year, not two quarters. Where no rating has been agreed
+// the middle of the band stands, which is what this sized at before.
+const SIZE_BANDS: Record<Frequency, { low: number; mid: number; high: number; range: string; note: string }> = {
+  Annual: { low: 1, mid: 1, high: 1, range: '1', note: 'Runs once a year — test the occurrence.' },
+  Quarterly: { low: 1, mid: 2, high: 4, range: '1–4', note: 'Test the quarters that carry the risk.' },
+  Monthly: { low: 2, mid: 4, high: 5, range: '2–5', note: 'A handful of months.' },
+  Weekly: { low: 5, mid: 10, high: 15, range: '5–15', note: 'Spread across the period.' },
+  Daily: { low: 15, mid: 25, high: 40, range: '15–40', note: 'A meaningful spread of days.' },
+  Recurring: { low: 25, mid: 40, high: 60, range: '25–60', note: 'Runs many times a day — the deepest samples.' },
+  'Ad-hoc': { low: 5, mid: 10, high: 15, range: 'judgment', note: 'Size by how often it actually ran.' },
+};
+const RATING_NOTE: Record<RiskRating, string> = {
+  High: 'Rated high risk — sized at the top of the band.',
+  Medium: 'Rated medium risk — the middle of the band.',
+  Low: 'Rated low risk — the lightest test that still holds.',
+};
 export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
   if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
   if (c.nature === 'Automated' && !itgcHolds) return { suggested: 25, range: '25–60', note: 'ITGC failure in force — test of one is invalid; size like a manual control.' };
-  switch (c.frequency) {
-    case 'Annual': return { suggested: 1, range: '1', note: 'Runs once a year — test the occurrence.' };
-    case 'Quarterly': return { suggested: 2, range: '2', note: 'Test two quarters.' };
-    case 'Monthly': return { suggested: 4, range: '2–5', note: 'A handful of months.' };
-    case 'Weekly': return { suggested: 10, range: '5–15', note: 'Spread across the period.' };
-    case 'Daily': return { suggested: 25, range: '15–40', note: 'A meaningful spread of days.' };
-    case 'Recurring': return { suggested: 40, range: '25–60', note: 'Runs many times a day — the deepest samples.' };
-    case 'Ad-hoc': return { suggested: 10, range: 'judgment', note: 'Size by how often it actually ran.' };
-  }
+  const band = SIZE_BANDS[c.frequency];
+  const rating = c.riskRating;
+  const suggested = rating === 'High' ? band.high : rating === 'Low' ? band.low : band.mid;
+  return { suggested, range: band.range, note: rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note };
 }
 
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
@@ -227,8 +241,22 @@ export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
  *  Concluding design effective is gated on this reaching 100%. */
 export function designCompleteness(c: Control): { done: number; total: number; pct: number } {
   const req = c.design.documents.filter(d => d.required !== false);
-  const done = req.filter(d => d.status === 'Received').length;
+  // A waived element is accounted for, not outstanding — the audit team wrote it,
+  // the client holds it, or there is nothing to hold. Either way the auditor has
+  // recorded why, and a recorded judgement shouldn't read as a missing file.
+  const done = req.filter(d => d.status === 'Received' || d.waiver).length;
   return { done, total: req.length, pct: req.length ? Math.round((done / req.length) * 100) : 0 };
+}
+/** Elements still genuinely outstanding — neither evidenced nor waived. */
+export function designOutstanding(c: Control): DesignDoc[] {
+  return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+}
+/** Attributes the walkthrough hasn't settled yet. Empty when it hasn't started —
+ *  the gate is soft until the auditor commits to walking a transaction. */
+export function walkthroughUntested(c: Control): OperatingStep[] {
+  const w = c.design.walkthrough;
+  if (!w) return [];
+  return c.operating.steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') === 'Not tested');
 }
 
 // ─── Materiality worksheet math ──────────────────────────────────────────────────
@@ -332,8 +360,12 @@ export function testsDueNow(controls: Control[]): Control[] {
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────
 
-export function engagementProgress(eng: IcfrEngagement) {
-  const cs = eng.controls;
+export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
+  // `controls` narrows the count to a subset — the open audit's scope, so the
+  // audit Dashboard reports its own six rather than the engagement's thirty-two.
+  // Omitted, it counts the whole engagement, which is what every other caller
+  // wants.
+  const cs = controls ?? eng.controls;
   const concl = cs.map(controlConclusion);
   return {
     total: cs.length,

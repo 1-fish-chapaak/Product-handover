@@ -115,8 +115,10 @@ export default function ControlRegister() {
     () => VIEWS.map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
     [eng.id],
   );
-  // preview-before-download for the consolidated working paper
+  // preview-before-download for the consolidated working paper, and for the audit
+  // report — the deliverable the paper isn't. Same modal, same block format.
   const [wpPreview, setWpPreview] = useState(false);
+  const [reportPreview, setReportPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
@@ -227,6 +229,9 @@ export default function ControlRegister() {
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
+          {/* the audit report — what management and the board actually read: the
+              observations, what they are worth, and who has committed to the fix */}
+          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -362,6 +367,7 @@ export default function ControlRegister() {
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {/* the paper follows the filters — only the visible controls' data goes in */}
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
+      {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
 
     </div>
   );

@@ -11,28 +11,50 @@ import Racm, { RacmLanding } from './Racm';
 import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
-import RunsView from './RunsView';
+import AuditLogsView from './AuditLogsView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 import ConfigurationView from './ConfigurationView';
-import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 
 /**
  * The SOX engagement as it stood before the audit-first rework (commit 1a0fe4d),
  * kept verbatim for every engagement except the one the new flow is being built
  * on. See flow.ts for why.
  *
- * Six tabs, no audits, deficiencies reached as a drill-in. Nothing in here
- * should gain features: when the new flow is signed off this file goes, and
- * until then it is the control group.
+ * No audits, deficiencies reached as a drill-in. What this file pins is the
+ * SHELL — which tabs exist, what the drill-ins are, what a failed control is
+ * called. It is not a feature freeze: the surfaces it renders (ControlDossier,
+ * Racm, DeficienciesView, the working paper) are the same components the new flow
+ * uses, so work landing there lands here too. That is deliberate — new capability
+ * ships to every SOX engagement, and only the reworked journey is held back.
  */
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
-  { id: 'risks', label: 'Risk Register' },
+  /* Risk Register — PARKED from the engagement tabs (user ask), matching the
+     park already in place on the reworked flow. Only this line is commented
+     out: the 'risks' SoxTab/View types, TAB_ROOT, RETURNABLE, the
+     `tab === 'risks' ? <RiskLibrary />` branch below and the dossier
+     breadcrumb's 'Risk Register' label all stay wired and compiling, so
+     restoring the tab is uncommenting this line.
+     Known consequence while it's off — RiskLibrary was the only surface
+     carrying the inherent / residual heatmaps, so risk exposure isn't visible
+     anywhere in a SOX engagement; the RACM lists risk rows but doesn't score
+     them. Nothing navigates into the tab, so no link is left dangling. */
+  // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'Test runs' },
-  { id: 'config', label: 'Configuration' },
+  { id: 'runs', label: 'SOX audit' },
+  /* Configuration — PARKED from the engagement tabs (user ask). Same shape as
+     the park on the reworked flow, where engagement-level Configuration gave
+     way to Audit logs. The `tab === 'config' ? <ConfigurationView />` branch
+     below stays wired, so restoring is uncommenting this line.
+     Known consequence while it's off — ConfigurationView was the only place a
+     classic engagement could edit its entities, upload their trial balances or
+     re-derive scoping. Materiality survives as the 'Materiality & scope'
+     drill-in off the Overview. The one inbound link, the Overview's
+     scoping-gap nag, was rewritten with this park rather than left pointing at
+     a tab that no longer exists. */
+  // { id: 'config', label: 'Configuration' },
 ];
 
 export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
@@ -41,12 +63,8 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
-  // and their controls. RACM, Risk Register and Runs are audit-side surfaces.
-  // Configuration only exists for scoping-backed engagements — it edits the
-  // programme record the SOX Testing wizard created.
-  const hasProgramme = PROGRAMMES.some(p => p.engagementId === eng.id);
-  const tabs = (role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS)
-    .filter(t => t.id !== 'config' || hasProgramme);
+  // and their controls. RACM and Runs are audit-side surfaces.
+  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
@@ -133,7 +151,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
-    : tab === 'runs' ? <RunsView />
+    : tab === 'runs' ? <AuditLogsView />
     : tab === 'config' ? <ConfigurationView />
     : <ControlRegister />;
 
@@ -169,7 +187,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
-            scope: 'Materiality & scope', runs: 'Test runs', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

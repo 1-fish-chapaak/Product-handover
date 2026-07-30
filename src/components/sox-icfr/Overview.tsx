@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import {
-  AlertTriangle, BadgeCheck, CheckCircle2, ChevronRight, Circle, Hourglass, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning, X,
+  AlertTriangle, BadgeCheck, CheckCircle2, ChevronRight, Circle, Hourglass, Inbox, PenLine, Plus, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning, X,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { defWord, isNewFlow } from './flow';
+import { useAuditControls } from './useAuditControls';
+import NewAuditWizard from './NewAuditWizard';
+import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
   assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
@@ -55,29 +58,38 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, meOwner, setView, setTab, openRegister, signOffEngagement } = useIcfr();
+  const { eng, role, meOwner, openAuditId, setView, setTab, openRegister, signOffEngagement } = useIcfr();
   const { addToast } = useToast();
   // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
-  const stats = engagementProgress(eng);
+  // The New audit sheet — this tab and the SOX audit tab both open it.
+  const [creating, setCreating] = useState(false);
+  // Every count on this page is scoped to the OPEN AUDIT (user ask): as the
+  // audit's Dashboard it must report what the audit covers, not the engagement.
+  // With no audit open — the engagement's own Overview tab — useAuditControls
+  // returns every control, so the same page serves both levels.
+  const inAudit = !!openAuditId;
+  const scoped = useAuditControls(eng.controls);
+  const scopedIds = useMemo(() => new Set(scoped.map(c => c.id)), [scoped]);
+  const scopedDefs = useMemo(() => eng.deficiencies.filter(d => scopedIds.has(d.controlId)), [eng.deficiencies, scopedIds]);
+  const stats = engagementProgress(eng, scoped);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
   // Scoping-skipped gap (wizard "Skip for now"): flag what's missing until it
   // is added.
   const W = defWord(eng.id);
-  const newFlow = isNewFlow(eng.id);
   const prog = PROGRAMMES.find(p => p.engagementId === eng.id);
-  const racmMissing = eng.controls.length === 0;
-  // The GL / trial-balance half only exists on classic engagements. On the new
-  // flow the Configuration tab it pointed at became Audit logs and carries no
-  // upload, and nagging about a file with nowhere to add it is worse than
-  // staying quiet — there, the files arrive on the audit.
-  const tbMissing = !prog?.entities.some(e => e.tbFile);
-  const scopingGap = !!prog?.scopingSkipped && (racmMissing || (!newFlow && tbMissing));
+  const racmMissing = scoped.length === 0;
+  // The GL / trial-balance half of this nag is gone on every SOX engagement now
+  // that Configuration is off the engagement tabs — on the reworked flow it
+  // became Audit logs, on the classic shell it was parked with the four-tab set.
+  // Nagging about a file with nowhere to add it is worse than staying quiet, so
+  // the RACM is the only gap this flags; the files arrive with scoping.
+  const scopingGap = !!prog?.scopingSkipped && racmMissing;
   // The owner's overview is their court only — engagement-wide dashboards,
   // materiality and the sign-off chain are audit-side surfaces.
-  const myControls = isOwner ? eng.controls.filter(c => c.owner === meOwner) : [];
-  const myDefs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : [];
+  const myControls = isOwner ? scoped.filter(c => c.owner === meOwner) : [];
+  const myDefs = isOwner ? scopedDefs.filter(d => scoped.find(c => c.id === d.controlId)?.owner === meOwner) : [];
 
   // sign-off readiness — every control concluded AND its paper countersigned;
   // the reviewer's per-paper gate feeds the engagement-level one.
@@ -89,14 +101,14 @@ export default function Overview() {
   const sev = useMemo(() => {
     const c: Record<Severity, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0 };
     let open = 0; let mwOpen = 0;
-    eng.deficiencies.forEach(d => {
+    scopedDefs.forEach(d => {
       // assessed severity — a validly-capped MW counts as an SD everywhere
       const s = assessSeverity(d, eng).final;
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
-    return { c, open, mwOpen, trivial: eng.deficiencies.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
-  }, [eng, M]);
+    return { c, open, mwOpen, trivial: scopedDefs.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
+  }, [eng, M, scopedDefs]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
@@ -119,7 +131,7 @@ export default function Overview() {
 
   const processes = useMemo(() => {
     const map = new Map<string, Control[]>();
-    eng.controls.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
+    scoped.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
     return Array.from(map, ([name, rows]) => {
       const concl = rows.map(controlConclusion);
       return {
@@ -131,11 +143,11 @@ export default function Overview() {
         inProgress: concl.filter(x => x === 'In progress').length,
       };
     }).sort((a, b) => b.total - a.total);
-  }, [eng.controls]);
+  }, [scoped]);
 
   // engagement-wide RAG trio — the control-level trio (completeness, evidence
   // validated, TOD coverage) lives on each control's own page
-  const ragMeters = useMemo<RagMeterDef[]>(() => engagementRagMeters(eng.controls), [eng.controls]);
+  const ragMeters = useMemo<RagMeterDef[]>(() => engagementRagMeters(scoped), [scoped]);
 
   // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
@@ -149,6 +161,27 @@ export default function Overview() {
 
   return (
     <div className="space-y-5">
+      {/* New audit — appended above the read-out rather than woven into it, so the
+          Overview keeps the shape it had. The same sheet the SOX audit tab opens;
+          both replace the parked Audit logs tab's button (user ask). Auditor and
+          reviewer only — starting a cycle is not the owner's call. Hidden once
+          inside an audit (this same component doubles as its Dashboard): a new
+          audit is created from the engagement's SOX audit tab, one level up —
+          not from inside a cycle that is already open. */}
+      {!isOwner && !inAudit && (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => setCreating(true)}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+          >
+            <Plus size={15} /> New audit
+          </button>
+        </div>
+      )}
+      <AnimatePresence>
+        {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
+      </AnimatePresence>
+
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && <RiskOwnerPortal />}
 
@@ -191,20 +224,10 @@ export default function Overview() {
         <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-ink-900">
-              {newFlow
-                ? 'The RACM is missing'
-                : `Scoping was skipped — ${racmMissing && tbMissing ? 'the RACM and the GL / trial balances are' : racmMissing ? 'the RACM is' : 'the GL / trial balances are'} missing`}
-            </h2>
+            <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
             <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
-              {racmMissing && (<>
-                Add or generate the RACM from the{' '}
-                <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.{' '}
-              </>)}
-              {!newFlow && tbMissing && (<>
-                Upload the GL and trial balances from the{' '}
-                <button onClick={() => setTab('config')} className="font-semibold text-brand-700 hover:underline cursor-pointer">Configuration tab</button>.
-              </>)}
+              Add or generate the RACM from the{' '}
+              <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.
             </p>
           </div>
         </div>
@@ -220,10 +243,13 @@ export default function Overview() {
         ))}
       </div>}
 
-      {/* engagement health — RAG roll-ups across the register */}
-      {!isOwner && (
+      {/* Audit health — RAG roll-ups across the controls this AUDIT covers, and
+          only shown inside one (user ask). It was called Engagement health and
+          sat on the engagement's Overview, where it described a register nobody
+          tests as a whole; a cycle is what these meters are actually about. */}
+      {!isOwner && inAudit && (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
           <RagStrip meters={ragMeters} />
         </div>
       )}
@@ -234,7 +260,7 @@ export default function Overview() {
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {eng.deficiencies.length} total</span>
+            <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
             {SEV_META.map(s => (

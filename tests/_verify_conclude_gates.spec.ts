@@ -1,5 +1,5 @@
 import { test, expect } from './_helpers';
-import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
+import { concludeIpeReliable, createSoxEngagement, openFromLibrary } from './_sox_helpers';
 
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/b428675a-455c-4a0e-9017-16bd4ea1aa22/scratchpad/conclude-gates-shots';
 
@@ -46,7 +46,11 @@ test('conclude gates: validated checks before design, sample before TOE', async 
   await concludeDesign.click();
   await page.waitForTimeout(600);
 
-  // Gate 2 — the AUTOMATED control still runs the extract journey (no bypass)…
+  // Gate 2 — the report behind the population is proven before the sample opens.
+  // This is a gate in its own right: an unproven extract is the wrong population.
+  await concludeIpeReliable(page);
+
+  // Gate 3 — the AUTOMATED control still runs the extract journey (no bypass)…
   await expect(page.getByText('No sample needed')).toHaveCount(0);
   await expect(page.getByText('Required files')).toBeVisible();
   // …and TOE's effective conclusion is locked until the sample is approved

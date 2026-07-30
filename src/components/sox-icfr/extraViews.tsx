@@ -5,19 +5,19 @@ import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
-import { SeverityPill } from './parts';
+import { SeverityPill, Toggle } from './parts';
 import { FormSelect } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity, type SignificantAccount, type TaskType } from './types';
+import { EXPOSURE_LABEL, exposureTotal, GAP_HINT, GAP_LABEL, MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type Exposure, type GapType, type IcfrEngagement, type Severity, type SignificantAccount, type TaskType } from './types';
+
+/** A blank price sheet — patching one line must never drop the other two. */
+const NO_EXPOSURE: Exposure = { recovery: 0, workingCapital: 0, leakage: 0 };
+const GAP_TYPES: GapType[] = ['MDG', 'ITDG', 'TG'];
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
-
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-  return <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cn('toggle', on && 'on')} />;
-}
 
 // ─── Threshold advice — what this period's exceptions say about next period's rules ──
 // Read-only guidance. The thresholds themselves are frozen once testing starts, so
@@ -600,7 +600,11 @@ export function DeficienciesView() {
                     <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
                     <button onClick={() => openControl(d.controlId)} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
                     <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
+                    {/* the gap taxonomy — a design gap needs a redesign, a testing
+                        gap needs discipline, so the label is what the fix follows */}
+                    {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
                     {ct && <Pill tone="draft">Clearly trivial</Pill>}
+                    {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
                   </div>
                   <div className="inline-flex items-center gap-2"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
                 </div>
@@ -626,6 +630,15 @@ export function DeficienciesView() {
                 {isAuditor && !locked ? (
                   <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
                     <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
+                    {/* what kind of gap it is — defaulted when the exception was
+                        raised, re-typed here when the walkthrough says otherwise */}
+                    <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                      <span className="text-ink-500 w-[120px]">Gap type</span>
+                      {GAP_TYPES.map(g => (
+                        <button key={g} title={GAP_HINT[g]} onClick={() => updateDeficiency(d.id, { gapType: g })}
+                          className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapType === g ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_LABEL[g]}</button>
+                      ))}
+                    </div>
                     <div className="flex items-center gap-2 flex-wrap text-[12px]">
                       <span className="text-ink-500 w-[120px]">Likelihood</span>
                       {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
@@ -638,6 +651,29 @@ export function DeficienciesView() {
                       <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
                     </div>
                     <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
+                    {/* …and what the gap is actually worth, split three ways. This
+                        is money already on the table, not the exposure above: it is
+                        what makes a finding something the CFO acts on. */}
+                    <div className="rounded-md border border-canvas-border bg-paper-50/40 p-2.5 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Priced impact — what the gap is worth</span>
+                        {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-700 tabular-nums">total {fmt(exposureTotal(d.exposure))}</span>}
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).map(k => (
+                          <label key={k} className="block min-w-0">
+                            <span className="block text-[10.5px] text-ink-500 mb-1">{EXPOSURE_LABEL[k]}</span>
+                            <input type="number" value={d.exposure?.[k] ?? 0}
+                              onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, [k]: Number(e.target.value) || 0 } })}
+                              className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                          </label>
+                        ))}
+                      </div>
+                      <input value={d.exposure?.basis ?? ''}
+                        onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, basis: e.target.value } })}
+                        placeholder="How the numbers were arrived at — the arithmetic behind the claim"
+                        className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                    </div>
                     <div className="flex items-start gap-2 text-[12px] flex-wrap">
                       <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
                       {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} title={ind} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
@@ -677,6 +713,13 @@ export function DeficienciesView() {
                       <span className="text-ink-700"><span className="text-ink-400">MW indicators</span> · {d.mwIndicators.length ? `${d.mwIndicators.length} in force` : 'None'}</span>
                       <span className="text-ink-700"><span className="text-ink-400">Compensating control</span> · {d.compensatingControlId ?? 'None'}</span>
                       <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
+                      <span className="text-ink-700"><span className="text-ink-400">Gap type</span> · {d.gapType ? GAP_LABEL[d.gapType] : 'Not typed'}</span>
+                      {exposureTotal(d.exposure) > 0 && (
+                        <span className="text-ink-700 sm:col-span-2">
+                          <span className="text-ink-400">Priced impact</span> · {fmt(exposureTotal(d.exposure))}
+                          <span className="text-ink-400"> ({(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).filter(k => (d.exposure as Exposure)[k] > 0).map(k => `${EXPOSURE_LABEL[k].toLowerCase()} ${fmt((d.exposure as Exposure)[k])}`).join(' · ')})</span>
+                        </span>
+                      )}
                       {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
                     </div>
                     {/* the owner sees their classification, never the engagement's thresholds */}

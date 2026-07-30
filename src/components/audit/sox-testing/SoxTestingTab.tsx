@@ -5,9 +5,9 @@ import { useToast } from '../../shared/Toast';
 import ScopingWizard from './ScopingWizard';
 import RollForwardWizard from './RollForwardWizard';
 
-/** Card actions parked (user ask) — Roll forward moved to the workspace
- *  Configuration tab; the scoping-summary modal has no entry point while
- *  this is off. Flip to bring the card buttons back. */
+/** Card actions parked (user ask) — roll forward is a per-audit action now,
+ *  reached from the engagement's Audit logs tab; the scoping-summary modal has
+ *  no entry point while this is off. Flip to bring the card buttons back. */
 const CARD_ACTIONS = false;
 import ProgrammeView from './ProgrammeView';
 import {

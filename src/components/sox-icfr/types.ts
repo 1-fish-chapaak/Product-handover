@@ -52,6 +52,23 @@ export type DesignDocKind =
   // an element the auditor named themselves — its title is `name`, not the kind
   | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+
+/** Why a required design element will never arrive. Three things actually happen
+ *  in the field: the audit team writes the narrative and flowchart itself off the
+ *  walkthrough call, the client holds the document and it was read on their screen,
+ *  or there is no document at all and the design is tested off the control
+ *  description. None of those is a gap, so none of them should hold the conclusion
+ *  hostage — but each is a judgement, so each is recorded with a reason. */
+export type DesignWaiverReason =
+  | 'Prepared by the audit team'
+  | 'Held by the client — inspected in situ'
+  | 'Not applicable — design tested off the control description';
+export const DESIGN_WAIVER_REASONS: DesignWaiverReason[] = [
+  'Prepared by the audit team',
+  'Held by the client — inspected in situ',
+  'Not applicable — design tested off the control description',
+];
+
 /** One design element — a completeness requirement evidenced by attached files. */
 export interface DesignDoc {
   id: string;
@@ -62,6 +79,10 @@ export interface DesignDoc {
   status: DocStatus;
   /** Required elements gate the design conclusion; optional ones don't. Default true. */
   required?: boolean;
+  /** Waived rather than received: the element is accounted for without a file, so
+   *  it stops gating the conclusion. The working paper prints the reason beside
+   *  the element — a waiver the paper doesn't show is an unexplained hole. */
+  waiver?: { reason: DesignWaiverReason; note: string; by: string; at: string };
   files?: EvidenceFile[];
   uploadedBy?: string;
   at?: string;
@@ -90,9 +111,78 @@ export interface DesignPoint {
   result: TestResult;
   override?: Override;
 }
+/** The walkthrough — the design tested against ONE live transaction.
+ *
+ *  Design and operating effectiveness test the SAME attributes; what differs is
+ *  the sample behind them. Design walks one transaction with the client and asks
+ *  whether the control, as built, did what it claims. Operating asks the same
+ *  questions across a frequency-driven sample. So the attributes are defined once
+ *  (`OperatingTrack.steps`) and proven twice — here against `sampleRef`, there
+ *  against the drawn sample. Without attributes there is no SOX test of design,
+ *  only an opinion about paperwork.
+ *
+ *  Who sat in the walkthrough and who performed it are captured here because this
+ *  is where they are known, and the working paper prints them from here. */
+export interface Walkthrough {
+  /** The transaction walked — drawn from the same generator the real sample uses. */
+  sampleRef: string;
+  date: string;
+  /** Who from the audit team performed the walkthrough. */
+  tester: string;
+  /** Who from the client attended — the paper names them. */
+  attendees: string[];
+  /** Result per attribute, keyed by `OperatingStep.id`. */
+  attributeResults: Record<string, TestResult>;
+  notes?: string;
+  evidence?: EvidenceFile[];
+  startedBy: string;
+  startedAt: string;
+}
+
+/** The six questions a control description has to answer before its design can be
+ *  called adequate: who performs it, what the check is, when it runs, where it is
+ *  evidenced, why it addresses the risk, how it is performed. A description that
+ *  misses one fails design however good the evidence behind it looks. One
+ *  definition, shared with the V2 test bench, so both surfaces ask the same six
+ *  questions in the same words. */
+export const FIVE_W_1H = [
+  { k: 'Who', q: 'Performer and approver are named — and the right person signed' },
+  { k: 'What', q: 'The check itself is stated, and it happened as described' },
+  { k: 'When', q: 'Frequency is stated — and was met on the walkthrough sample' },
+  { k: 'Where', q: 'Evidenced somewhere inspectable — system, report or document' },
+  { k: 'Why', q: 'The risk it mitigates is addressed — no open or unexplained items' },
+  { k: 'How', q: 'Method of performance is clear — signature, approval, tie-out' },
+] as const;
+export type FiveWOneH = (typeof FIVE_W_1H)[number]['k'];
+
+/** The judgements the working paper has to state about the DESIGN itself, as
+ *  against the evidence behind it. The reviewer walked their own workbook and
+ *  these were the questions on it that this tool never asked: does the control
+ *  description cover the six, is there a compensating control if this one fails,
+ *  is the frequency appropriate to the risk, and is the type — preventive or
+ *  detective — the right one. A paper that doesn't answer them leaves the reader
+ *  to guess whether they were considered. */
+export interface DesignJudgements {
+  /** 5W+1H coverage of the control description — present or missing per question. */
+  coverage?: Partial<Record<FiveWOneH, boolean>>;
+  /** A control elsewhere that would catch the same failure. Empty = none identified. */
+  compensatingControlId?: string;
+  frequencyAppropriate?: boolean;
+  typeAppropriate?: boolean;
+  note?: string;
+  by?: string;
+  at?: string;
+}
+
 export interface DesignTrack {
   documents: DesignDoc[];
   points: DesignPoint[];
+  /** The design judgements above — printed in the working paper. */
+  judgements?: DesignJudgements;
+  /** The one-transaction walkthrough behind the design conclusion. Absent until
+   *  the auditor starts it; once started, an untested attribute holds the
+   *  conclusion, because a half-walked transaction proves nothing. */
+  walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
   override?: Override;
   testedBy: string | null;
@@ -150,12 +240,56 @@ export interface Population {
   count: number;
   tieOut: string;
   evidence: EvidenceFile[];
-  // IPE check — a system report must itself be validated (completeness against
-  // the GL tie-out, accuracy spot-check) before anything is sampled from it.
-  ipeValidated?: { by: string; at: string };
 }
+
+// ─── IPE — Information Produced by the Entity ────────────────────────────────────
+// A report the CLIENT generated can't be trusted just because it landed in the
+// inbox. Before a single item is sampled out of it, the report itself is the thing
+// under test: was it run with the right parameters, does it hold every record it
+// should, and is what it says true? Reliance without that is reliance on nothing —
+// so a report that isn't concluded Reliable locks the sample step behind it.
+export type IpeDimension = 'Source & parameters' | 'Completeness' | 'Accuracy';
+export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Completeness', 'Accuracy'];
+/** One dimension's proof — what is claimed, how it was proven, what was found. */
+export interface IpeCheck {
+  id: string;
+  dimension: IpeDimension;
+  description: string;          // the assertion being proven
+  method: string;               // how it was proven — the procedure
+  result: TestResult;
+  /** The tester's finding — the tie-out numbers, the variance, the exception. */
+  note?: string;
+  evidence?: EvidenceFile[];
+}
+export type IpeConclusion = 'Reliable' | 'Not reliable' | 'Not tested';
+export interface IpeTest {
+  /** What the report is called in the source system — e.g. 'PO release log'. */
+  reportName: string;
+  system: string;               // 'SAP S/4HANA'
+  /** Transaction code / report identifier — how anyone re-runs it. */
+  reportRef: string;
+  /** Exactly how it was run: company code, date range, document types. A report
+   *  run over the wrong window is a wrong population, however clean it looks. */
+  parameters: string;
+  /** Who at the client ran it — the fact that makes it *entity*-produced. */
+  generatedBy: string;
+  generatedAt: string;
+  recordCount: number;
+  /** The number the report totals to, and what it was agreed against. */
+  controlTotal: string;
+  file?: EvidenceFile;
+  checks: IpeCheck[];
+  conclusion: IpeConclusion;
+  override?: Override;
+  testedBy: string | null;
+  testedAt: string | null;
+}
+
 export interface OperatingTrack {
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
+  /** The report the population is drawn from, and its validation. Tested BEFORE
+   *  the population exists — hence here rather than inside Population. */
+  ipe?: IpeTest;
   population?: Population;
   sampling?: Sampling;
   steps: OperatingStep[];
@@ -175,6 +309,21 @@ export interface RacmReview {
   at: string;
 }
 
+// ─── Risk rating — how bad it is if this control fails ───────────────────────────
+// Agreed with management at scoping; it can never be read off an SOP. It sets how
+// deep the sample goes, because frequency on its own cannot: a quarterly control
+// whose risk is Low is one occurrence a year, the same control rated High is every
+// quarter. See `sampleSizeGuide`.
+export type RiskRating = 'High' | 'Medium' | 'Low';
+export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+
+// ─── Control classification ──────────────────────────────────────────────────────
+// The RACM's own classification column. Same three words the V2 dataset uses
+// (`sox-testing/v2/v2Data.ts`) — deliberately the same vocabulary, so a control
+// classified in one place reads identically in the other.
+export type ControlClass = 'Financial' | 'Operational' | 'Compliance';
+export const CONTROL_CLASSES: ControlClass[] = ['Financial', 'Operational', 'Compliance'];
+
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
 export interface Control {
@@ -187,6 +336,13 @@ export interface Control {
   type: ControlType;
   frequency: Frequency;
   isKey: boolean;
+  /** WHAT THE CONTROL IS FOR — the outcome management is securing, as against the
+   *  work that secures it (`controlActivity`) and the one-line label the register
+   *  shows (`description`). The reviewer reads the objective first, and it was the
+   *  field they asked for by name. */
+  objective?: string;
+  /** Financial / Operational / Compliance — the RACM's classification column. */
+  clazz?: ControlClass;
   /** The RACM's Control Activity column — who does what, to which record, when,
    *  and how, spelled out in full. `description` is the one-line control
    *  statement the matrix and the register show; this is the narrative the
@@ -200,6 +356,25 @@ export interface Control {
   owner: string;
   riskId: string;
   riskDescription: string;
+  /** WHY the risk exists — the condition underneath it. The source RACM carries
+   *  this beside the risk, because a control aimed at the symptom rather than the
+   *  cause is the commonest design gap there is. */
+  rootCause?: string;
+  /** The risk's agreed rating. Drives how deep the sample goes — see
+   *  `sampleSizeGuide` — and is argued with management, not derived. */
+  riskRating?: RiskRating;
+  /** The programme the auditor actually walks — obtain X, check Y, verify Z.
+   *  Distinct from the design considerations (what must be true) and the test
+   *  attributes (what each sample proves): these are the field instructions. */
+  auditSteps?: string[];
+  /** Who on the audit team performed the work — the source RACM's initials column. */
+  performedBy?: string;
+  /** Where the evidence physically lives: the hard-copy file reference and the
+   *  soft-copy path. Both survive the engagement; the working paper cites them. */
+  wpRefHard?: string;
+  wpRefSoft?: string;
+  /** The paragraph in the issued report this row lands in, once it has a finding. */
+  reportRef?: string;
   assertions: Assertion[];
   /** Days until the next scheduled test — 0 = due today, negative = overdue.
    *  Optional: when absent it is derived from the control's frequency. */
@@ -269,10 +444,56 @@ export interface HandoffTask {
   status: TaskStatus;
 }
 
+// ─── Gap taxonomy — the source RACM's own vocabulary ─────────────────────────────
+// A finding is named by where it was found and what kind of thing broke. The
+// walkthrough finds DESIGN gaps: the control as built can't do the job (MDG), or
+// the system doesn't enforce what the narrative claims (ITDG). Sampling finds
+// TESTING gaps: the control is designed fine but didn't operate (TG). The
+// distinction drives the fix — a design gap needs a redesign, a testing gap needs
+// discipline — so it is recorded on the exception, not inferred later.
+export type GapType = 'MDG' | 'ITDG' | 'TG';
+export const GAP_LABEL: Record<GapType, string> = {
+  MDG: 'Manual design gap',
+  ITDG: 'IT design gap',
+  TG: 'Testing gap',
+};
+export const GAP_HINT: Record<GapType, string> = {
+  MDG: 'Found in the walkthrough — the manual control as designed cannot prevent or detect the risk.',
+  ITDG: 'Found in the walkthrough — the system does not enforce what the control claims.',
+  TG: 'Found in sampling — the control is designed adequately but did not operate as designed.',
+};
+
+/** What the gap is worth in rupees, split the way the source RACM splits it.
+ *  Quantifying is what turns a finding into something a CFO acts on. */
+export interface Exposure {
+  /** Recoverable from a counterparty — raise a debit note and get it back. */
+  recovery: number;
+  /** Cash sitting trapped that the fix releases — not a loss, a timing gain. */
+  workingCapital: number;
+  /** Gone. Value that left the business and isn't coming back. */
+  leakage: number;
+  /** How the numbers were arrived at — the arithmetic behind the claim. */
+  basis?: string;
+}
+export const EXPOSURE_LABEL: Record<Exclude<keyof Exposure, 'basis'>, string> = {
+  recovery: 'Recovery / debit note',
+  workingCapital: 'Working-capital unblock',
+  leakage: 'Leakage',
+};
+export const exposureTotal = (e?: Exposure): number =>
+  e ? e.recovery + e.workingCapital + e.leakage : 0;
+
 export interface Deficiency {
   id: string;
   controlId: string;
   track: 'design' | 'operating';
+  /** MDG / ITDG / TG. Defaults from the track and the control's nature when the
+   *  exception is raised; the auditor can re-type it on the exception card. */
+  gapType?: GapType;
+  /** What the gap is worth — priced by the auditor, argued by the owner. */
+  exposure?: Exposure;
+  /** Where this lands in the report — the source RACM's report reference number. */
+  reportRef?: string;
   description: string;
   rootCause: string;
   likelihood: Likelihood;
@@ -344,7 +565,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -461,3 +682,42 @@ export interface IcfrEngagement {
 }
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
+
+/** Where a fresh exception starts on the gap taxonomy. Sampling finds testing
+ *  gaps; the walkthrough finds design gaps — IT-flavoured when the control leans
+ *  on the system to work, manual when a person is the control. */
+export const defaultGapType = (track: 'design' | 'operating', nature: Nature): GapType =>
+  (track === 'operating' ? 'TG' : nature === 'Manual' ? 'MDG' : 'ITDG');
+
+/** The three checks every entity-produced report answers before it is relied on.
+ *  Seeded when the report is registered so the auditor tests, never authors. */
+export const ipeChecklist = (reportLabel: string): Omit<IpeCheck, 'id'>[] => [
+  {
+    dimension: 'Source & parameters',
+    description: `${reportLabel} was run from the live system over the audit period, with the scoping filters the test assumes.`,
+    method: 'Inspect the parameter screen capture — system, company code, date range and document types — and agree each to the test scope.',
+    result: 'Not tested',
+  },
+  {
+    dimension: 'Completeness',
+    description: 'Every record that should be in the report is in it — nothing was filtered, truncated or paged away.',
+    method: 'Agree the report record count and control total to the system total or the GL control account; re-run over a narrower window and confirm the subset ties.',
+    result: 'Not tested',
+  },
+  {
+    dimension: 'Accuracy',
+    description: 'What the report says about each record is true.',
+    method: 'Vouch a spot-check of records back to source documents, field by field, and re-perform any calculated column.',
+    result: 'Not tested',
+  },
+];
+
+/** What the three checks add up to. A single failure sinks the report — an
+ *  incomplete population is the wrong population, not a slightly worse one. */
+export const ipeSuggestion = (t: IpeTest): IpeConclusion =>
+  t.checks.some(c => c.result === 'Fail') ? 'Not reliable'
+    : t.checks.length > 0 && t.checks.every(c => c.result === 'Pass') ? 'Reliable'
+    : 'Not tested';
+
+/** The gate the sample step sits behind: no reliable report, nothing to sample. */
+export const ipeReliable = (o: OperatingTrack): boolean => o.ipe?.conclusion === 'Reliable';

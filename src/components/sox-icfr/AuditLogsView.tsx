@@ -1,24 +1,64 @@
-import { ArrowRight, Building2, Grid3x3, Paperclip, Plus, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import { ArrowRight, Building2, Grid3x3, Paperclip, Plus, RefreshCw, ScrollText } from 'lucide-react';
 import type { AuditRecord } from './types';
 import { useIcfr } from './store';
+import EmptyState from '../shared/EmptyState';
+import NewAuditWizard from './NewAuditWizard';
+import RollForwardSheet from './RollForwardSheet';
 
 /**
- * Audit logs — one of the engagement's two tabs, beside Dashboard.
+ * SOX audit — the engagement's audit register, and the tab an audit lands on
+ * once created (user ask).
  *
- * Lists every audit on the engagement, newest first. A row is a way in: opening
- * one drills to that audit's own Overview / RACM / Control Library /
- * Configuration. Editing an audit happens there, on its Configuration tab, not
- * inline here — this list is the register, not the form.
+ * Lists every audit, newest first: period, what it covers, the materiality it is
+ * measured against and the trial balances / GL attached. A row is a way IN —
+ * opening one swaps in that audit's own four tabs (Dashboard, Control Library,
+ * Deficiency management, Configuration); see AUDIT_TABS in SoxIcfrApp. Creating an
+ * audit opens it straight away, so this list is how you get back to one. Roll
+ * forward starts the next cycle from this one instead of from a blank wizard.
  *
- * The wizard itself is owned by SoxIcfrApp so the empty-engagement screen and
- * the Dashboard can open the same one.
+ * Self-contained on purpose. Both openers of the New audit sheet — this tab and
+ * the Overview — own their own copy rather than having the shell thread it down,
+ * so the two shells render this with no props.
  */
-export default function AuditLogsView({ onNewAudit, onOpenAudit, onRollForward }: {
-  onNewAudit: () => void;
-  onOpenAudit: (auditId: string) => void;
-  onRollForward: (audit: AuditRecord) => void;
-}) {
-  const { eng } = useIcfr();
+export default function AuditLogsView() {
+  const { eng, role, openAudit } = useIcfr();
+  const [creating, setCreating] = useState(false);
+  // The audit being rolled forward — its sheet prefills from it.
+  const [rolling, setRolling] = useState<AuditRecord | null>(null);
+  // Starting a cycle is not the first line's call.
+  const canCreate = role !== 'risk-owner';
+
+  const sheets = (
+    <AnimatePresence>
+      {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
+      {rolling && <RollForwardSheet prior={rolling} onClose={() => setRolling(null)} />}
+    </AnimatePresence>
+  );
+
+  // Nothing created yet — say what an audit is for rather than showing an empty
+  // count and a bare list.
+  if (eng.audits.length === 0) {
+    return (
+      <div>
+        <EmptyState
+          icon={ScrollText}
+          title="No audits yet"
+          body="An audit sets the period, what it covers and the materiality it is measured against. Start one to begin testing."
+          action={canCreate ? (
+            <button
+              onClick={() => setCreating(true)}
+              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+            >
+              <Plus size={15} /> New audit
+            </button>
+          ) : undefined}
+        />
+        {sheets}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -30,12 +70,14 @@ export default function AuditLogsView({ onNewAudit, onOpenAudit, onRollForward }
           {eng.audits.length} audit{eng.audits.length === 1 ? '' : 's'}
         </span>
         <div className="flex-1" />
-        <button
-          onClick={onNewAudit}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-        >
-          <Plus size={15} /> New audit
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setCreating(true)}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+          >
+            <Plus size={15} /> New audit
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -51,15 +93,17 @@ export default function AuditLogsView({ onNewAudit, onOpenAudit, onRollForward }
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-[11px] text-ink-400 text-right mr-1">{a.by} · {a.at}</div>
+                  {canCreate && (
+                    <button
+                      onClick={() => setRolling(a)}
+                      title={`Carry ${a.period} into the next cycle`}
+                      className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={13} /> Roll forward
+                    </button>
+                  )}
                   <button
-                    onClick={() => onRollForward(a)}
-                    title={`Carry ${a.period} into the next cycle`}
-                    className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw size={13} /> Roll forward
-                  </button>
-                  <button
-                    onClick={() => onOpenAudit(a.id)}
+                    onClick={() => openAudit(a.id)}
                     className="h-8 px-3 inline-flex items-center gap-1 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
                   >
                     Open <ArrowRight size={13} />
@@ -87,6 +131,7 @@ export default function AuditLogsView({ onNewAudit, onOpenAudit, onRollForward }
             </div>
           ))}
       </div>
+      {sheets}
     </div>
   );
 }

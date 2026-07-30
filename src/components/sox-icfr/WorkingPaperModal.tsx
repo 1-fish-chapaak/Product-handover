@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
 import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
+import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
@@ -171,7 +172,12 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   );
 }
 
-export default function WorkingPaperModal({ eng, control, controls, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[]; onClose: () => void; onDownload?: () => void }) {
+export default function WorkingPaperModal({ eng, control, controls, report, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[];
+  /** Preview the AUDIT REPORT instead of the working paper. Same renderer, same
+   *  block union, same sheet tabs — it is a different document, not a different
+   *  viewer, so nothing here changes except which builder is read and what the
+   *  download writes. */
+  report?: boolean; onClose: () => void; onDownload?: () => void }) {
   // an irreversible sign-off waits behind this attest confirm before it commits
   const [attest, setAttest] = useState<AttestReq | null>(null);
   // the engagement paper reads sheet by sheet, like the workbook it exports to
@@ -193,8 +199,12 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
   // the engagement paper follows the register's visible controls — a filtered
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
-  const fileName = control ? `Working_Paper_${control.id}.xlsx` : `Working_Paper_ICFR_${eng.code}.xlsx`;
-  const sheets = control ? controlPaperSections(eng, control) : buildIcfrPaper(eng, included);
+  const fileName = report ? `Audit_Report_ICFR_${eng.code}.xlsx`
+    : control ? `Working_Paper_${control.id}.xlsx`
+    : `Working_Paper_ICFR_${eng.code}.xlsx`;
+  const sheets = report ? buildAuditReport(eng, included)
+    : control ? controlPaperSections(eng, control)
+    : buildIcfrPaper(eng, included);
 
   return createPortal(
     <>
@@ -203,7 +213,7 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
-          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> Working paper — preview</h3>
+          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> {report ? 'Audit report — preview' : 'Working paper — preview'}</h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
 
@@ -241,10 +251,10 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
-          <span className="text-[11px] text-ink-400 truncate">{fileName}{control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
+          <span className="text-[11px] text-ink-400 truncate">{fileName}{report ? ` · the deliverable — evidence stays in the working paper · ${included.length} controls` : control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
+            <button onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
               className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
           </div>
         </div>

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Database, FileSpreadsheet, FlaskConical,
+  Check, CheckCircle2, ChevronLeft, ChevronRight, Database, FileSpreadsheet, FlaskConical,
   Loader2, Paperclip, Square, Star, UploadCloud, X, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { isNewFlow } from './flow';
 import { useToast } from '../shared/Toast';
 import { requiredDatasetsFor, type RequiredDataset } from './mockData';
 import { isControlLocked } from './helpers';
@@ -47,8 +46,7 @@ const FORMAT_TONE: Record<RequiredDataset['format'], string> = {
 };
 
 export default function BulkTestModal({ controlIds, onClose }: { controlIds: string[]; onClose: () => void }) {
-  const { eng, bulkTestControls, setTab } = useIcfr();
-  const newFlow = isNewFlow(eng.id);
+  const { eng, bulkTestControls } = useIcfr();
   const { addToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
@@ -397,26 +395,16 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               <FlaskConical size={14} /> Test {active.length} control{active.length === 1 ? '' : 's'}
             </button>
           )}
-          {/* "View run" needs somewhere to land. The new flow parked the Test
-              runs tab (see SOX_TABS in SoxIcfrApp), so there it would drop the
-              user on Overview — and closing already returns to the Control
-              Library or RACM matrix the run was launched from, both of which
-              show the new results. Classic engagements still have the tab, so
-              they keep the button. */}
-          {finished && (newFlow ? (
+          {/* No "View run": the run registry is parked (the SOX audit tab holds
+              the audit register now), so there is nowhere for it to land.
+              Closing returns to the Control Library or RACM matrix the run was
+              launched from, both of which already show the new results, and the
+              per-control history survives on each control page. */}
+          {finished && (
             <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
               Done
             </button>
-          ) : (
-            <>
-              <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer">
-                Done
-              </button>
-              <button onClick={() => { onClose(); setTab('runs'); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-                View run <ArrowRight size={14} />
-              </button>
-            </>
-          ))}
+          )}
         </div>
       </div>
     </div>

@@ -685,9 +685,10 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                       <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Managed in the engagement workspace" />
                       <div className="rounded-lg border border-border-light bg-canvas/60 p-3.5 text-[0.75rem] text-ink-600 leading-relaxed">
                         Materiality and scoping for a SOX engagement live in the workspace — the
-                        Configuration tab and the Materiality &amp; scope page are the source of
-                        truth. Open the engagement to change them; editing here only touches
-                        basics, team and timeline.
+                        RACM tab holds the matrix, and each audit carries its own period, scope,
+                        trial balance and materiality on its Configuration tab. Open the
+                        engagement to change them; editing here only touches basics, team and
+                        timeline.
                       </div>
                     </>
                   )}
