@@ -20,15 +20,17 @@ import { REPORT_TEMPLATES } from '../../data/mockData';
 import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
-  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH, TEMPLATE_THEME_ACCENT,
+  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
   sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
+  collectBlockLibrary,
   type EditableTemplate, type WatermarkConfig,
-  type TemplateSection, type SignatorySlot,
+  type TemplateSection, type SignatorySlot, type TemplateBlock,
 } from './reportShared';
-import { extractReportStructure, type ReportStructure } from './extractPdfHeaderFooter';
+import { extractTemplateFromReport, type ExtractedTemplate, type ExtractOutcome } from './byotExtraction';
 import SectionReviewCanvas from './SectionReviewCanvas';
 import { RowDeleteButton } from './RowDeleteButton';
-import { type CanvasSection } from './sectionReviewShared';
+import { renderSectionShape, sectionTypeLabel } from './templateSectionShape';
+import { type CanvasSection, type CanvasBlock } from './sectionReviewShared';
 import { useAuditLog } from '../../context/AdminDataContext';
 
 // Soft length guide for letterhead header/footer text — past this the counter
@@ -102,20 +104,18 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-// "Import from a report" scan theatre — staged status while the file is read.
-// The scan runs for a deliberate ~10s so the document-scanner animation plays out
-// in full and each status stage stays legible; the real parse (usually much
-// faster) resolves behind it, and its sections apply when the scan finishes.
+// "Import from a report" scan theatre — the six passes, narrated while the PDF is
+// read. The scan runs for a deliberate ~10s so the document-scanner animation
+// plays out in full and each pass stays legible; the real parse (usually much
+// faster) resolves behind it, and its sections land in the outline when the scan
+// finishes (optimistic apply).
 const IMPORT_SCAN_MESSAGES = [
-  'Reading the document…',
-  'Detecting structure…',
-  'Extracting sections…',
-];
-// Word/PowerPoint aren't parsed, so their scan copy doesn't claim extraction —
-// it says what actually happens: a suggested outline is prepared.
-const SEED_SCAN_MESSAGES = [
-  'Reading the document…',
-  'Preparing a suggested outline…',
+  'Unpacking the document…',
+  'Setting aside headers and footers…',
+  'Finding the sections…',
+  'Classifying tables, stats and callouts…',
+  'Spotting repeating finding cards…',
+  'Labelling the structure…',
 ];
 // Deliberate on-screen scan duration — the parse resolves behind it, but the
 // theatre always plays for this long so the animation reads as a real scan.
@@ -124,12 +124,11 @@ const SCAN_DURATION_MS = 10000;
 // Kept above SCAN_DURATION_MS so a slow-but-fine parse still lands.
 const EXTRACT_TIMEOUT_MS = 30000;
 
-// Accepted source formats for "Import from a report". A PDF's structure (section
-// headings) and letterhead are read for real and land in the review canvas. Word
-// and PowerPoint layout detection isn't built yet, so those don't get parsed —
-// they seed a suggested outline instead, and the UI says so plainly rather than
-// pretending it read sections from the file (no false promise).
-const IMPORT_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx';
+// V1 reads one format, done well: digital PDF. Everything else converts to PDF
+// in one click — nothing converts the other way — so the picker accepts .pdf
+// only and stops advertising what we can't read. Word/PowerPoint drops get an
+// honest "save it as PDF" message instead of a fabricated outline.
+const IMPORT_ACCEPT = '.pdf';
 type ImportKind = 'pdf' | 'word' | 'ppt';
 const IMPORT_KIND_LABEL: Record<ImportKind, string> = { pdf: 'PDF', word: 'Word', ppt: 'PowerPoint' };
 function classifyImport(name: string): ImportKind | null {
@@ -322,7 +321,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 // direction — on release it snaps to the slot nearest the drop point), and a
 // hover control removes it. Reordering drives the same `sections` state.
 
-function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe }: {
+function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe, blockLibrary }: {
   section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
@@ -330,10 +329,12 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   onDelete: () => void;
   onRename: (name: string) => void;
   onDescribe: (description: string) => void;
+  /** Blocks the template stores by id, so a placement resolves to its shape. */
+  blockLibrary?: Record<string, TemplateBlock>;
 }) {
-  const kind = section.kind ?? 'text';
-  const metric = section.metric?.trim();
-  const typeLabel = kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : kind === 'chart' ? 'Chart' : null;
+  // BYOT sections carry typed blocks — their body renders through the shared
+  // shape renderer, and the chip says where the content comes from (fill case).
+  const typeLabel = sectionTypeLabel(section);
   const controls = useDragControls();
   // Inline rename — a local draft keeps the field stable while typing (the parent
   // only hears the new name on commit), then Enter/blur saves and Escape reverts.
@@ -371,6 +372,9 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
     setEditingDesc(true);
     startEdit();
   };
+  // The body placeholder — null for a plain prose section, where the editable
+  // description takes its place.
+  const shape = renderSectionShape(section, blockLibrary, shownDesc);
   return (
     <motion.div
       layout
@@ -456,35 +460,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
 
       {/* Body placeholder — the shape of the content this section will hold. */}
       <div className="mt-4 pl-[1.9rem]">
-        {kind === 'kpi' ? (
-          <div className="flex items-center gap-4">
-            <div className="shrink-0">
-              <div className="text-[1.75rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
-              <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1.5">{metric || 'Metric'}</div>
-            </div>
-            <p className="text-[0.75rem] text-ink-400 leading-relaxed">KPI filled from query data at generation.</p>
-          </div>
-        ) : kind === 'chart' ? (
-          <div className="max-w-[75%]">
-            <div className="flex items-end gap-1.5 h-14">
-              {(section.chartType ?? 'bar') === 'bar'
-                ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-xs bg-canvas-border" style={{ height: `${h}%` }} />)
-                : <svg viewBox="0 0 120 40" className="w-full h-full text-canvas-border" preserveAspectRatio="none"><polyline points="0,32 24,20 48,26 72,10 96,16 120,6" fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
-            </div>
-            <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart</p>
-          </div>
-        ) : kind === 'table' ? (
-          <div className="max-w-[90%] rounded-sm overflow-hidden border border-canvas-border">
-            <div className="grid grid-cols-4 bg-canvas">
-              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
-            </div>
-            {Array.from({ length: 3 }).map((_, r) => (
-              <div key={r} className="grid grid-cols-4 border-t border-canvas-border">
-                {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
-              </div>
-            ))}
-          </div>
-        ) : editingDesc ? (
+        {shape ?? (editingDesc ? (
           <textarea
             ref={descRef}
             value={descDraft}
@@ -507,7 +483,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           >
             {shownDesc}
           </p>
-        )}
+        ))}
       </div>
     </motion.div>
   );
@@ -547,9 +523,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
   // Custom brand colour (hex). Empty = use the named theme. When set (and valid)
   // it drives the cover gradient + body accent everywhere the report renders.
-  // Cover gradient + accent for the live preview, driven by the named theme.
-  const coverGradient = reportGradient(theme, '') ?? TEMPLATE_THEME_GRADIENT['Purple & White'];
-  const coverAccent = reportAccent(theme, '');
+  // Importing a report samples this from the uploaded cover (the brand kit).
+  const [brandColor, setBrandColor] = useState(template.brandColor ?? '');
+  // The document's own rating language, captured at import (template settings).
+  const [findingScale, setFindingScale] = useState<string[] | undefined>(template.findingScale);
+  const [opinionScale, setOpinionScale] = useState<string[] | undefined>(template.opinionScale);
+  // Cover gradient + accent for the live preview — the named theme, overridden
+  // by the captured brand colour when present.
+  const coverGradient = reportGradient(theme, brandColor) ?? TEMPLATE_THEME_GRADIENT['Purple & White'];
+  const coverAccent = reportAccent(theme, brandColor);
   const [headerText, setHeaderText] = useState(template.headerText ?? 'Confidential — For Internal Use Only');
   // Footer auto-tracks the brand ("Generated by <brand>") until the author edits it
   // directly; an existing saved footer or an imported one counts as customised.
@@ -620,16 +602,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [scanningName, setScanningName] = useState<string | null>(null);
-  // Whether the in-progress scan is a Word/PowerPoint seed (vs a real PDF parse) —
-  // drives the honest overlay copy.
-  const [scanSeed, setScanSeed] = useState(false);
   // Minimize-and-continue: when true the editor collapses to the bottom-right
   // extraction card and the full modal isn't rendered, so extraction keeps
   // running (this component stays mounted) with the app fully usable behind it.
   const [minimized, setMinimized] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importMsgIdx, setImportMsgIdx] = useState(0);
-  const scanMessages = scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES;
   const reduceMotion = useReducedMotion();
   // Drive the extraction progress + status message here (not in the card) so the
   // same run feeds both the full-modal overlay and the minimized corner card —
@@ -639,7 +617,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // shy of 100% if the real parse outlasts the scan window.
   useEffect(() => {
     if (!importing) { setImportProgress(0); setImportMsgIdx(0); return; }
-    const msgs = scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES;
+    const msgs = IMPORT_SCAN_MESSAGES;
     const start = performance.now();
     let raf = 0;
     const loop = (now: number) => {
@@ -651,7 +629,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [importing, scanSeed]);
+  }, [importing]);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
   // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
   // counter avoids the flicker that dragenter/dragleave cause over child nodes.
@@ -664,15 +642,18 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // The curation canvas is now opt-in (opened from the post-import banner's
   // "Review"), not a required gate. pendingImport drives that on-demand canvas;
   // reviewSections is its working copy while open.
-  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: ImportKind; result: ReportStructure | null } | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: ImportKind; result: ExtractedTemplate | null } | null>(null);
   const [reviewSections, setReviewSections] = useState<CanvasSection[]>([]);
   // Optimistic apply: detected sections + letterhead land in the outline the
   // moment the parse finishes. This banner then offers Undo (revert the whole
   // import in one tap) and Review (open the curation canvas). Curation is a
   // choice, not a step — the common path is one gesture: pick file → done.
-  type ImportSnapshot = { sections: typeof sections; headerText: string; footerText: string; brand: string; copyName: string; importedFrom: string | null };
+  type ImportSnapshot = {
+    sections: typeof sections; headerText: string; footerText: string; brand: string; copyName: string; importedFrom: string | null;
+    brandColor: string; findingScale?: string[]; opinionScale?: string[]; signoffEnabled: boolean; signatories: SignatorySlot[];
+  };
   const [importBanner, setImportBanner] = useState<
-    { fileName: string; kind: ImportKind; result: ReportStructure | null; detected: CanvasSection[]; count: number; gotLetterhead: boolean } | null
+    { fileName: string; kind: ImportKind; result: ExtractedTemplate | null; detected: CanvasSection[]; count: number; gotLetterhead: boolean; captured: string[] } | null
   >(null);
   // The state as it was just before the import applied, so Undo is exact.
   const preImportRef = useRef<ImportSnapshot | null>(null);
@@ -694,15 +675,35 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   };
 
   const applyToOutline = (
-    secs: CanvasSection[], result: ReportStructure | null, fileName: string,
-  ): { count: number; gotLetterhead: boolean } => {
-    const hf = result?.headerFooter;
+    secs: CanvasSection[], result: ExtractedTemplate | null, fileName: string,
+  ): { count: number; gotLetterhead: boolean; captured: string[] } => {
+    // Pass 2's furniture lands as pre-filled template settings — the user
+    // verifies them here instead of typing them in.
+    const hf = result?.furniture;
     if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
     // Apply the PDF's own footer when it has one, and mark it customised so the
     // "footer follows brand" effect doesn't immediately overwrite it back to
     // "Generated by <brand>".
     if (hf?.footer.length) { setFooterText(hf.footer.join('  ·  ')); setFooterCustom(true); }
     if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
+    // Brand kit: the dominant colour sampled from the uploaded cover drives the
+    // template's cover gradient + accent (clearable in Branding).
+    const captured: string[] = [];
+    if (result?.coverColor) { setBrandColor(result.coverColor); captured.push('brand colour'); }
+    // The document's own rating language becomes a template setting — generated
+    // reports speak these words, not ours.
+    if (result?.findingScale) { setFindingScale(result.findingScale); captured.push('rating scale'); }
+    if (result?.opinionScale) { setOpinionScale(result.opinionScale); captured.push('opinion scale'); }
+    // A detected sign-off block (signature slots) turns on the template's
+    // existing signature block, seeded with the document's own roles — it isn't
+    // duplicated as a prose section.
+    const signRolesOf = (s: CanvasSection) => (s.blocks ?? []).find(b => b.kind === 'signoff' && (b.signRoles?.length ?? 0) > 0)?.signRoles;
+    const signRoles = secs.map(signRolesOf).find(Boolean);
+    if (signRoles) {
+      setSignoffEnabled(true);
+      setSignatories(signRoles.map((role, i) => ({ id: `sig-imp-${i}`, role })));
+      captured.push(`${signRoles.length} signature slot${signRoles.length === 1 ? '' : 's'}`);
+    }
     // Name: only fill if still the untouched default, and never fill a name that
     // already exists — a fresh import landing on an instant "already exists" error
     // reads as a failure. Suffix "(2)", "(3)"… until unique.
@@ -711,96 +712,110 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       const candidate = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
       setCopyName(uniqueTemplateName(candidate).slice(0, TEMPLATE_NAME_MAX));
     }
-    const kept = secs.filter(s => s.name.trim());
+    // Sections that are ONLY a sign-off block moved into the signature block
+    // above; wrapper paperwork the user didn't keep is excluded here too —
+    // with the review row's confirmation, never silently.
+    const kept = secs.filter(s =>
+      s.name.trim() &&
+      !s.wrapper &&
+      !((s.blocks ?? []).length > 0 && (s.blocks ?? []).every(b => b.kind === 'signoff')));
+    const toTemplateBlock = (b: CanvasBlock): TemplateBlock => {
+      // Strip the review-only detection facts; the persisted skeleton keeps
+      // shape + labels only.
+      const { id, confidence, page, preview, ...block } = b;
+      void id; void confidence; void page; void preview;
+      return block;
+    };
     setSections(kept.map(s => ({
       name: s.name.trim(),
       icon: 'file-text',
       ...(s.description ? { description: s.description } : {}),
-      ...(s.kind && s.kind !== 'text' ? { kind: s.kind } : {}),
-      ...(s.metric ? { metric: s.metric } : {}),
+      ...(s.fill ? { fill: s.fill } : {}),
+      ...(s.binding ? { binding: s.binding } : {}),
+      ...(s.blocks?.length ? { blocks: s.blocks.map(toTemplateBlock) } : {}),
     })));
     setImportedFrom(fileName);
-    return { count: kept.length, gotLetterhead: !!hf };
+    return { count: kept.length, gotLetterhead: !!hf, captured };
   };
 
   const handleImportFile = async (file: File) => {
     const kind = classifyImport(file.name);
-    if (!kind) {
-      addToast({ type: 'error', message: 'Import reads PDF, Word or PowerPoint files.' });
+    // V1 is PDF-only, said honestly: Word gets the one-click conversion path
+    // (phase 2 is coming), PowerPoint and everything else a plain "not
+    // supported" — never a fabricated outline.
+    if (kind === 'word') {
+      addToast({ type: 'info', message: 'Word support is coming. Save it as a PDF (File → Save as PDF) and upload that.' });
       return;
     }
-
-    // Word / PowerPoint: their layout can't be read yet, so we don't fabricate
-    // "detected" sections from the file. We seed the suggested outline, capture
-    // no letterhead, and the banner + toast say plainly that it's a starting
-    // point, not an extraction. Refine inline from there. It still runs through
-    // the same scan theatre (min on-screen time) so the upload feels consistent
-    // with the PDF path rather than snapping in instantly.
-    if (kind !== 'pdf') {
-      setScanSeed(true);
-      setImporting(true);
-      setScanningName(file.name);
-      await new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS));
-      setImporting(false);
-      setScanningName(null);
-      const seeded: CanvasSection[] = SUGGESTED_SECTIONS.map((s, i) => ({
-        id: `seed-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
-        name: s.name,
-        evidence: 'added',
-      }));
-      preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom };
-      const { count } = applyToOutline(seeded, null, file.name);
-      setImportBanner({ fileName: file.name, kind, result: null, detected: seeded, count, gotLetterhead: false });
-      addToast({ type: 'info', message: `${IMPORT_KIND_LABEL[kind]} layout can’t be read yet, so we started you with a suggested outline. Refine it below.` });
+    if (kind === 'ppt') {
+      addToast({ type: 'info', message: 'PowerPoint isn’t supported. Export the report as a PDF and upload that.' });
+      return;
+    }
+    if (!kind) {
+      addToast({ type: 'error', message: 'Upload a past report as a PDF. That’s the one format we can read today.' });
       return;
     }
 
     // Read the PDF for real — structure preserved with evidence + source lines.
-    setScanSeed(false);
     setImporting(true);
     setScanningName(file.name);
-    // Guard the parse with a timeout so a hung read (e.g. the pdf.js worker
-    // failing to load) can't leave the progress card stuck forever — after
-    // EXTRACT_TIMEOUT_MS it falls through to the error path below.
-    let result: ReportStructure | null = null;
+    // The scan theatre plays in full; the parse resolves behind it. A timeout
+    // guards a hung read (e.g. the pdf.js worker failing to load) so the
+    // progress card can't stick forever — it falls through to the decline path.
+    let outcome: ExtractOutcome;
     try {
       const [res] = await Promise.all([
-        Promise.race([
-          extractReportStructure(file),
-          new Promise<ReportStructure | null>((_, reject) =>
+        Promise.race<ExtractOutcome>([
+          extractTemplateFromReport(file),
+          new Promise<ExtractOutcome>((_, reject) =>
             setTimeout(() => reject(new Error('extract-timeout')), EXTRACT_TIMEOUT_MS)),
         ]),
         new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS)),
       ]);
-      result = res;
+      outcome = res;
     } catch {
-      result = null;
+      outcome = { ok: false, reason: 'unreadable' };
     } finally {
       setImporting(false);
       setScanningName(null);
     }
-    if (!result) {
+    if (!outcome.ok) {
       // Restore the editor if it was minimized, so the failure isn't hidden
-      // behind a card that would otherwise read as "complete".
+      // behind a card that would otherwise read as "complete". Each decline
+      // reason gets its own honest message — never a silent failure.
       setMinimized(false);
-      addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned, image-only, or too large.` });
+      const message =
+        outcome.reason === 'password' ? `“${file.name}” is password-protected. Remove the password and upload it again.`
+        : outcome.reason === 'scanned' ? 'This looks like a scanned copy, so there’s no text inside to read. Please upload the original digital PDF.'
+        : outcome.reason === 'too-long' ? `This report is ${outcome.pageCount} pages. Upload a representative report of 50 pages or fewer. One typical report is enough.`
+        : outcome.reason === 'too-large' ? `“${file.name}” is too big to read here. Keep it under 30 MB.`
+        : `Couldn’t read “${file.name}”. Try re-exporting it as a PDF and uploading again.`;
+      addToast({ type: 'error', message });
       return;
     }
+    const result = outcome.template;
+    // The engine's hierarchical output → review rows: a section with its typed
+    // blocks, pre-filled description, and guessed fill case intact.
     const detected: CanvasSection[] = result.sections.map((s, i) => ({
       id: `imp-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
       name: stripLeadingEnumerator(s.name),
+      description: s.description,
       evidence: s.evidence,
-      kind: s.kind,
-      metric: s.metric,
-      // Only text sections carry a source preview; kpi/chart/table are empty
-      // placeholders, so they show on the right with a type chip, not the left.
-      source: s.kind === 'text' ? s.body : undefined,
+      fill: s.fill,
+      fillReason: s.fillReason,
+      binding: s.binding,
+      blocks: s.blocks.map((b, bi) => ({ ...b, id: `imp-${i}-b${bi}` })),
+      confidence: s.confidence,
+      page: s.page,
+      appendix: s.appendix,
+      wrapper: s.wrapper,
+      source: s.source,
     }));
 
     // Snapshot pre-import state, then apply optimistically and raise the banner.
-    preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom };
-    const { count, gotLetterhead } = applyToOutline(detected, result, file.name);
-    setImportBanner({ fileName: file.name, kind, result, detected, count, gotLetterhead });
+    preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom, brandColor, findingScale, opinionScale, signoffEnabled, signatories };
+    const { count, gotLetterhead, captured } = applyToOutline(detected, result, file.name);
+    setImportBanner({ fileName: file.name, kind, result, detected, count, gotLetterhead, captured });
 
     // §4.5 — headings with no content beneath aren't auto-added, but never silently
     // dropped: tell the user and offer a one-tap add-back.
@@ -832,6 +847,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       setBrand(snap.brand);
       setCopyName(snap.copyName);
       setImportedFrom(snap.importedFrom);
+      setBrandColor(snap.brandColor);
+      setFindingScale(snap.findingScale);
+      setOpinionScale(snap.opinionScale);
+      setSignoffEnabled(snap.signoffEnabled);
+      setSignatories(snap.signatories);
     }
     preImportRef.current = null;
     setImportBanner(null);
@@ -851,10 +871,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // its one-tap Undo, still pointing at the pre-import snapshot) in sync.
   const applyImport = () => {
     if (!pendingImport) return;
-    const { count, gotLetterhead } = applyToOutline(reviewSections, pendingImport.result, pendingImport.fileName);
-    setImportBanner(b => (b ? { ...b, detected: reviewSections, count, gotLetterhead } : b));
+    const { count, gotLetterhead, captured } = applyToOutline(reviewSections, pendingImport.result, pendingImport.fileName);
+    setImportBanner(b => (b ? { ...b, detected: reviewSections, count, gotLetterhead, captured } : b));
     setPendingImport(null);
   };
+
+  // One block printed in two places is stored once; every other placement
+  // points at it, so the preview resolves both to the same shape.
+  const blockLibrary = collectBlockLibrary(sections);
 
   const [newSectionName, setNewSectionName] = useState('');
   const addSection = () => {
@@ -947,6 +971,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     copyName: defaultName,
     brand: template.brand ?? 'Irame',
     theme: template.theme ?? 'Purple & White',
+    brandColor: template.brandColor ?? '',
+    findingScale: template.findingScale,
+    opinionScale: template.opinionScale,
     headerText: template.headerText ?? 'Confidential — For Internal Use Only',
     footerText: template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`,
     sections: seededSections,
@@ -959,6 +986,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     copyName !== initial.copyName ||
     brand !== initial.brand ||
     theme !== initial.theme ||
+    brandColor !== initial.brandColor ||
+    findingScale !== initial.findingScale ||
+    opinionScale !== initial.opinionScale ||
     headerText !== initial.headerText ||
     footerText !== initial.footerText ||
     sections !== initial.sections ||
@@ -1025,8 +1055,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       return;
     }
     // Missing suggested sections (non-blocking): warn once, then proceed on confirm.
-    // New templates only, and only when some suggested sections are still absent.
-    if (isNew && !skipSuggested && recommendations.length > 0) {
+    // New templates built from scratch only — an imported report's own format is
+    // authoritative, so it's never audited against our generic section list.
+    if (isNew && !skipSuggested && !importedFrom && recommendations.length > 0) {
       setSuggestedConfirm(recommendations.map(r => r.name));
       return;
     }
@@ -1055,6 +1086,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           sections,
           brand: brand.trim(),
           theme,
+          brandColor: brandColor || undefined,
+          findingScale,
+          opinionScale,
           headerText: headerText.trim(),
           footerText: footerText.trim(),
           watermark,
@@ -1083,7 +1117,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             sections,
             brand: brand.trim(),
             theme,
-              headerText: headerText.trim(),
+            brandColor: brandColor || undefined,
+            findingScale,
+            opinionScale,
+            headerText: headerText.trim(),
             footerText: footerText.trim(),
             watermark,
             pageNumbers,
@@ -1111,7 +1148,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     return (
       <ExtractionCard
         filename={scanningName ?? importedFrom ?? 'your report'}
-        messages={scanMessages}
+        messages={IMPORT_SCAN_MESSAGES}
         done={!importing}
         sectionCount={!importing ? importBanner?.count : undefined}
         progress={importProgress}
@@ -1292,6 +1329,43 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     </div>
                   </div>
                 </div>
+
+                {/* Rating language — the words the uploaded report rates things
+                    in, captured at import. Generated reports speak these words. */}
+                {(findingScale || opinionScale) && (
+                  <div className="mt-5 pt-4 border-t border-canvas-border">
+                    <GroupEyebrow hint="captured from your report">Rating language</GroupEyebrow>
+                    <div className="space-y-2.5">
+                      {findingScale && (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Finding ratings</span>
+                            <div className="flex flex-wrap gap-1">
+                              {findingScale.map(w => (
+                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => setFindingScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                        </div>
+                      )}
+                      {opinionScale && (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Overall opinion</span>
+                            <div className="flex flex-wrap gap-1">
+                              {opinionScale.map(w => (
+                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => setOpinionScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                        </div>
+                      )}
+                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">Generated reports rate findings in these words, not ours.</p>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             ) : (
               <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-6">
@@ -1334,6 +1408,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       );
                     })}
                   </div>
+                  {/* Brand colour sampled from the uploaded report's cover — it
+                      overrides the named theme until cleared. */}
+                  {brandColor && (
+                    <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-canvas-border bg-white px-3 py-2">
+                      <span className="w-5 h-5 rounded-full shrink-0" style={{ background: brandColor, boxShadow: '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)' }} />
+                      <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-700 truncate">Brand colour from your report’s cover</span>
+                      <button type="button" onClick={() => setBrandColor('')} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Clear</button>
+                    </div>
+                  )}
                 </div>
 
 
@@ -1349,7 +1432,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     each signatory gets a manual Sign / Sign-off in the reader. */}
                 <div className="mt-4 pt-3.5 border-t border-canvas-border">
                   <div className="flex items-center justify-between">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· sign-off section on the report</span></span>
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· job titles, signature lines and a date on every report</span></span>
                     <Toggle checked={signoffEnabled} onChange={toggleSignoff} label="Enable signature block" />
                   </div>
                   {signoffEnabled && (
@@ -1357,6 +1440,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       {signatories.length === 0 && (
                         <p className="text-[0.6875rem] text-ink-400">Add the roles that sign this report (e.g. Prepared by, Approved by).</p>
                       )}
+                      {/* Say exactly what this does, or it reads as e-signing. */}
+                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+                        Prints the page and nothing more. Names are optional and are kept for next time. No sending, no notifying, no signing online.
+                      </p>
                       {signatories.map(s => (
                         <div key={s.id} className="flex items-center gap-2">
                           <input
@@ -1474,14 +1561,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     <span className="w-7 h-7 rounded-full bg-compliant-500 text-white flex items-center justify-center shrink-0"><Check size={15} strokeWidth={2.5} /></span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
-                        {importBanner.kind === 'pdf'
-                          ? <>Imported {importBanner.count} section{importBanner.count === 1 ? '' : 's'}{importBanner.gotLetterhead ? ' + letterhead' : ''}</>
-                          : <>Started a suggested outline ({importBanner.count} section{importBanner.count === 1 ? '' : 's'})</>}
+                        Imported {importBanner.count} section{importBanner.count === 1 ? '' : 's'}{importBanner.gotLetterhead ? ' + letterhead' : ''}
                       </p>
                       <p className="text-[0.75rem] text-ink-500 leading-tight truncate">
-                        {importBanner.kind === 'pdf'
-                          ? <>from {importBanner.fileName} · edit inline below</>
-                          : <>{importBanner.fileName} · {IMPORT_KIND_LABEL[importBanner.kind]} layout isn’t read yet · edit inline below</>}
+                        from {importBanner.fileName}
+                        {importBanner.captured.length > 0 && <> · captured {importBanner.captured.join(', ')}</>}
+                        {' '}· edit inline below
                       </p>
                     </div>
                     <button
@@ -1542,6 +1627,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           onDelete={() => removeSection(i)}
                           onRename={name => renameSection(i, name)}
                           onDescribe={description => describeSection(i, description)}
+                          blockLibrary={blockLibrary}
                         />
                       ))}
                     </AnimatePresence>
@@ -1667,9 +1753,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         </div>
 
         <div className="px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2 shrink-0">
-          {/* Left — import from a report (the merged "Upload template" path). A PDF
-              is read for its outline + letterhead; Word/PowerPoint seed a suggested
-              outline. Drop a file anywhere on the editor, or click to browse. */}
+          {/* Left — import from a past report (PDF only, said honestly). The
+              shape is read — sections, tables, repeating cards, letterhead —
+              and the content thrown away. Drop a file anywhere, or browse. */}
           <div className="min-w-0 flex items-center gap-2.5">
             <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
@@ -1679,7 +1765,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               disabled={isSaving || importing}
               whileTap={isSaving || importing ? undefined : { scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              title="Start from an existing report — a PDF's outline + letterhead are detected; Word/PowerPoint seed a suggested outline"
+              title="Upload a past report as a PDF. Its sections, tables, cards and letterhead are detected; its words and numbers are thrown away"
               className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
             >
               {importing
@@ -1689,7 +1775,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   : <><Upload size={15} className="shrink-0" /> Import from a report</>}
             </motion.button>
             {!importing && !importedFrom && (
-              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Word &amp; PowerPoint seed an outline.</span>
+              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Using Word? Save it as PDF first.</span>
             )}
           </div>
           {/* Right — primary actions. */}
@@ -1743,8 +1829,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <Upload size={24} />
                 </motion.span>
                 <div>
-                  <div className="text-[0.9375rem] font-semibold text-ink-900">Drop a PDF, Word or PowerPoint file to import</div>
-                  <div className="mt-1 text-[0.8125rem] text-ink-500">A PDF's outline + letterhead are detected; Word/PowerPoint start a suggested outline</div>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900">Drop a past report (PDF) to import</div>
+                  <div className="mt-1 text-[0.8125rem] text-ink-500">We read its shape (sections, tables, cards, letterhead) and throw away its words and numbers</div>
                 </div>
               </div>
             </motion.div>
@@ -1850,7 +1936,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <p className="mt-3 h-4 text-[0.8125rem] text-ink-500">
                     <AnimatePresence mode="wait">
                       <motion.span key={importMsgIdx} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.2 }} className="inline-block">
-                        {scanMessages[importMsgIdx]}
+                        {IMPORT_SCAN_MESSAGES[importMsgIdx]}
                       </motion.span>
                     </AnimatePresence>
                   </p>
@@ -1900,7 +1986,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         <AnimatePresence>
           {pendingImport && (() => {
             const namedCount = reviewSections.filter(s => s.name.trim()).length;
-            const hasLetterhead = !!pendingImport.result?.headerFooter;
+            const hasLetterhead = !!pendingImport.result?.furniture;
             const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
             return (
               <motion.div
@@ -1916,8 +2002,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
                         <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 text-ink-500 text-[0.625rem] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5">{kindLabel}</span>
                       </div>
+                      {/* Layer 1: don't make them choose — every dropdown is
+                          pre-set; the user's job is verify, not choose. */}
                       <p className="text-[0.75rem] text-ink-500 leading-snug truncate">
-                        From {pendingImport.fileName} — already in your outline. Refine here, then apply.
+                        From {pendingImport.fileName} — we’ve set up each section. Just confirm, or change anything that looks wrong.
                       </p>
                     </div>
                   </div>
@@ -1927,14 +2015,17 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <SectionReviewCanvas
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
+                    pages={pendingImport.result?.pages}
+                    pageCount={pendingImport.result?.pageCount}
+                    toc={pendingImport.result?.toc}
                     reportChrome={{
                       title: copyName || 'Untitled Template',
                       desc: template.desc,
                       brand,
                       headerText,
                       footerText,
-                      gradient: TEMPLATE_THEME_GRADIENT[theme],
-                      accent: TEMPLATE_THEME_ACCENT[theme],
+                      gradient: coverGradient,
+                      accent: coverAccent,
                     }}
                   />
                 </div>

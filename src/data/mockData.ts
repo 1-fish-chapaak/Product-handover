@@ -321,13 +321,13 @@ export const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v10';
 export const GENERATED_REPORTS = [
   // ── Last 30 days ──
   { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 Financial Reporting Controls Review", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 18, 2026", pages: 24, queries: 6 },
-  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — April 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Apr 13, 2026", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
+  { id: "gr-002", templateId: "rt-internal-audit", name: "P2P Risk Assessment — April 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Apr 13, 2026", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
   { id: "gr-005", templateId: "rt-001", name: "Quarter-End Reconciliation Variance Review — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 9, 2026", pages: 16, queries: 5 },
   { id: "gr-006", templateId: "rt-001", name: "Segregation of Duties Assessment — Finance", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 5, 2026", pages: 11, queries: 4 },
   { id: "gr-007", templateId: "rt-001", name: "IT General Controls Effectiveness — FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 1, 2026", pages: 19, queries: 7 },
   { id: "gr-008", templateId: "rt-internal-audit", name: "Procure-to-Pay Process Audit — March 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 26, 2026", pages: 14, queries: 5 },
   // ── 30–60 days ──
-  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 19, 2026", pages: 8, queries: 3 },
+  { id: "gr-003", templateId: "rt-internal-audit", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 19, 2026", pages: 8, queries: 3 },
   { id: "gr-009", templateId: "rt-internal-audit", name: "Vendor Master Data Integrity Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 8, 2026", pages: 9, queries: 3 },
   { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 2, 2026", pages: 41, queries: 12 },
   { id: "gr-010", templateId: "rt-internal-audit", name: "Order-to-Cash Revenue Audit — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", pages: 22, queries: 8 },
@@ -340,7 +340,7 @@ export const GENERATED_REPORTS = [
   { id: "gr-015", templateId: "rt-001", name: "FY25 Year-End Close Controls Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Jan 7, 2026", pages: 28, queries: 9 },
   { id: "gr-016", templateId: "rt-internal-audit", name: "Vendor Onboarding Compliance Check", tag: "Internal Audit", generatedBy: "Ayushi Narang", generatedAt: "Dec 30, 2025", pages: 9, queries: 3 },
   { id: "gr-017", templateId: "rt-001", name: "Aging Receivables Exposure Review", tag: "Internal Audit", generatedBy: "Abhinav Sharma", generatedAt: "Dec 22, 2025", pages: 12, queries: 4 },
-  { id: "gr-018", templateId: "ct-custom-02", name: "Duplicate Payment Forensics — Q3 FY26", tag: "Bulk Audit", generatedBy: "Aditya Thakur", generatedAt: "Dec 15, 2025", pages: 20, queries: 7 },
+  { id: "gr-018", templateId: "rt-internal-audit", name: "Duplicate Payment Forensics — Q3 FY26", tag: "Bulk Audit", generatedBy: "Aditya Thakur", generatedAt: "Dec 15, 2025", pages: 20, queries: 7 },
   { id: "gr-019", templateId: "rt-internal-audit", name: "GL Reconciliation Controls — November", tag: "Internal Audit", generatedBy: "You", generatedAt: "Dec 5, 2025", pages: 11, queries: 4 },
   { id: "gr-020", templateId: "rt-001", name: "Purchase Order Approval Threshold Audit", tag: "Internal Audit", generatedBy: "Ayushi Narang", generatedAt: "Nov 26, 2025", pages: 14, queries: 5 },
   { id: "gr-021", templateId: "rt-internal-audit", name: "Contract Lifecycle Controls Review", tag: "Internal Audit", generatedBy: "Abhinav Sharma", generatedAt: "Nov 17, 2025", pages: 16, queries: 5 },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Check, ArrowLeft, X, CloudUpload, Loader2, Maximize2 } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { seedSession, seedEmptySession, PROCESSING_MESSAGES, PROCESSING_DURATION_MS } from './mockExtraction';
@@ -7,7 +7,10 @@ import { saveAtrDraft } from '../atrDraft';
 import { toAtrReportData } from './toAtrReportData';
 import { useAuditLog } from '../../../context/AdminDataContext';
 import { FooterSlotContext } from './footerSlot';
+import { AtrModalHostContext, type AtrModalHost } from './atrModalHost';
+import EscalationMatrixEditor from './components/EscalationMatrixEditor';
 import type { WizardStage, UploadedFile, UploadMethod, ReportMeta } from './types';
+import type { EscalationMatrixConfig } from './escalationMatrix';
 import type { AtrReportData } from '../atrTypes';
 import Step1MethodSelect from './screens/Step1MethodSelect';
 import Step2aTemplateDownload from './screens/Step2aTemplateDownload';
@@ -146,6 +149,14 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
   // The sticky footer DOM node — steps portal their primary CTA into it.
   const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
 
+  // Escalation-matrix editor swap: the card asks the host to open it, and it
+  // renders full-frame over the wizard (no nested modal) while the wizard stays
+  // mounted underneath so all step state is preserved.
+  const [escEditor, setEscEditor] = useState<{ config: EscalationMatrixConfig; onChange: (c: EscalationMatrixConfig) => void } | null>(null);
+  const modalHost = useMemo<AtrModalHost>(() => ({
+    openEscalationEditor: (config, onChange) => setEscEditor({ config, onChange }),
+  }), []);
+
   // Extraction runs HERE (not in Step3Processing) so it keeps advancing while the
   // wizard is minimized to a floating toast. Progress/step drive both the full
   // processing screen and the toast.
@@ -199,7 +210,7 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
   // resumable, and the mock extraction only needs the filename anyway.
   // Filenames drive the demoable edge cases: *fail*/*corrupt* → upload error,
   // *empty*/*blank* → zero-observations extraction.
-  const beginExtraction = (file: File, method: UploadMethod, annexures: File[] = [], meta?: Partial<ReportMeta>) => {
+  const beginExtraction = (file: File, method: UploadMethod, annexures: File[] = [], meta?: Partial<ReportMeta>, escalation?: EscalationMatrixConfig) => {
     const name = file.name.toLowerCase();
     if (/fail|corrupt|error/.test(name)) {
       addToast({ type: 'error', message: `"${file.name}" could not be read. Try again or use a different format.` });
@@ -207,8 +218,8 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
     }
     const empty = /empty|blank/.test(name);
     const session = empty
-      ? seedEmptySession(toUploadedFile(file), method, meta)
-      : seedSession(toUploadedFile(file), method, annexures.map(toUploadedFile), meta);
+      ? seedEmptySession(toUploadedFile(file), method, meta, escalation)
+      : seedSession(toUploadedFile(file), method, annexures.map(toUploadedFile), meta, escalation);
     setSession(session);
     logEvent({
       action: 'Create',
@@ -295,6 +306,7 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
   }
 
   return (
+    <AtrModalHostContext.Provider value={modalHost}>
     <FooterSlotContext.Provider value={footerEl}>
       <div className="relative flex flex-col h-full min-h-0">
         {/* Modal chrome — title + clickable step rail (mirrors the ATR-builder modal) */}
@@ -319,10 +331,10 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
         <div className={`flex-1 min-h-0 ${state.stage === 'summary' ? 'overflow-hidden' : 'overflow-y-auto px-6 py-5'}`}>
           {state.stage === 'method' && <Step1MethodSelect onPick={pickMethod} />}
           {state.stage === 'template' && (
-            <Step2aTemplateDownload onUpload={(file, annexures) => beginExtraction(file, 'template', annexures)} />
+            <Step2aTemplateDownload onUpload={(file, annexures, escalation) => beginExtraction(file, 'template', annexures, undefined, escalation)} />
           )}
           {state.stage === 'upload' && (
-            <Step2bReportUpload onExtract={(report, annexures, meta) => beginExtraction(report, 'report', annexures, meta)} />
+            <Step2bReportUpload onExtract={(report, annexures, meta, escalation) => beginExtraction(report, 'report', annexures, meta, escalation)} />
           )}
           {state.stage === 'processing' && <Step3Processing progress={progress} step={step} />}
           {state.stage === 'summary' && <Step4ExtractionSummary onContinue={() => goTo('annexures')} />}
@@ -346,8 +358,21 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
           onConfirm={() => { setConfirmClose(false); onClose?.(); }}
           onCancel={() => setConfirmClose(false)}
         />
+
+        {/* Escalation Matrix editor — swaps in full-frame over the wizard (which
+            stays mounted underneath, preserving all step state). */}
+        {escEditor && (
+          <div className="absolute inset-0 z-30 bg-canvas-elevated flex flex-col print:hidden">
+            <EscalationMatrixEditor
+              config={escEditor.config}
+              onApply={next => { escEditor.onChange(next); setEscEditor(null); }}
+              onCancel={() => setEscEditor(null)}
+            />
+          </div>
+        )}
       </div>
     </FooterSlotContext.Provider>
+    </AtrModalHostContext.Provider>
   );
 }
 

@@ -5,6 +5,7 @@
 // renderer can draw Screen 7 unchanged.
 
 import type { AtrObservation, AtrReportData } from '../atrTypes';
+import type { EscalationMatrixConfig } from './escalationMatrix';
 
 /** The seven wizard stages, in order. Drives the stepper + screen router. */
 export type WizardStage =
@@ -103,6 +104,10 @@ export interface ExtractionSession {
   /** Set when the user chooses "Skip Annexures & Proceed" — disables the
    *  Manage-Exceptions path on the decision screen. */
   annexuresSkipped?: boolean;
+  /** Escalation matrix configured on the Upload step — governs the reminder /
+   *  escalation mailer cadence for every open exception in this report. Defaults
+   *  to the standard preset when the user leaves it untouched. */
+  escalationMatrix?: EscalationMatrixConfig;
   /** The editable ATR working copy on Screen 7 (persisted so inline edits survive
    *  refresh). Derived from the session on first render if absent. */
   atrDraft?: AtrReportData;

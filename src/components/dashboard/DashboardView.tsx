@@ -33,6 +33,9 @@ import ModelChart from './model/ModelChart';
 import { AddDataModal } from './AddDataModal';
 import { WhiteDropdown } from './add-widget/WhiteDropdown';
 import { ConfigurableChart } from './add-widget/ConfigurableChart';
+import SlicerWidget, { type SlicerMode } from './add-widget/SlicerWidget';
+import DashboardAssistant from './assistant/DashboardAssistant';
+import { runAssistant, type AssistantResult, type UserWidget as AssistantWidget } from './assistant/assistantEngine';
 import LegendSection from './add-widget/imports/LegendSection';
 import TypographySection from './add-widget/imports/TypographySection-1760-98';
 import ConditionalFormattingSection from './add-widget/imports/ConditionalFormattingSection';
@@ -3039,6 +3042,7 @@ function WidgetCard({
   children,
   onExpand,
   onEdit,
+  onAskAI,
   onDelete,
   onFilter,
   addToast,
@@ -3074,6 +3078,7 @@ function WidgetCard({
   onChangeSize?: (span: 1 | 2) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onAskAI?: () => void;
   loading?: boolean;
   isFirstLoad?: boolean;
   chartType?: string;
@@ -3455,6 +3460,15 @@ function WidgetCard({
               <>
                 <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div className="absolute top-full right-0 z-40 mt-1 w-[160px] bg-canvas-elevated border border-canvas-border rounded-lg shadow-xl py-1">
+                  {onAskAI && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowMenu(false); onAskAI(); }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] text-brand-700 hover:bg-brand-50 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <Sparkles size={13} className="text-brand-600" />
+                      Ask Irame
+                    </button>
+                  )}
                   {onEdit && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit(); }}
@@ -4031,9 +4045,11 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setExpandYField(yLabel);
     setExpandLegendField('');
   }, [expandedWidget]);
-  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig } } | null>(null);
+  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig; slicerMode?: string } } | null>(null);
   const [customFields] = useState<string[] | null>(initialCustomFields || null);
-  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig }>>(savedWidgets);
+  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig; slicerMode?: string }>>(savedWidgets);
+  // Per-slicer single/multi-select toggle (tile-local, keyed by widget index).
+  const [slicerSingle, setSlicerSingle] = useState<Record<number, boolean>>({});
   // Data-model relationships (table joins). Combined widgets are built directly
   // in the Add Widget modal (no separate builder).
   const [relationships, setRelationships] = useState<Relationship[]>(DEFAULT_RELATIONSHIPS);
@@ -4059,11 +4075,18 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const crossModelFilter: ModelFilter | null = crossFilter
     ? { table: crossFilter.table, column: crossFilter.column, values: [crossFilter.value] }
     : null;
+  // Slicer widgets are page-level filter producers: each writes its selected
+  // values into pageFilterValues keyed by `table::column`, and here we turn any
+  // active slicer selection into a ModelFilter applied to every related widget.
+  const slicerModelFilters: ModelFilter[] = userWidgets
+    .filter(w => w.chartType === 'Slicer' && w.model?.fields?.[0])
+    .map(w => { const f = w.model!.fields[0]; const id = `${f.table}::${f.column}`; return { table: f.table, column: f.column, values: pageFilterValues[id] ?? [] }; })
+    .filter(f => f.values.length > 0);
   // Filters applied to widget `index`. The cross-filter SOURCE keeps its own
   // data (every category stays clickable, the selection is highlighted) — only
   // page slicers apply to it; every other widget also gets the cross-filter.
   const filtersForWidget = (index: number): ModelFilter[] => {
-    const out = [...pageModelFilters];
+    const out = [...pageModelFilters, ...slicerModelFilters];
     if (crossModelFilter && crossFilter && crossFilter.source !== index) out.push(crossModelFilter);
     return out;
   };
@@ -4082,6 +4105,43 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   };
   const clearAllFilters = () => { setPageFilterFields([]); setPageFilterValues({}); setCrossFilter(null); };
   const totalActiveFilterCount = pageModelFilters.length + (crossFilter ? 1 : 0);
+
+  // ── Ira, the dashboard AI assistant ──
+  const [assistantFocus, setAssistantFocus] = useState<AssistantWidget | null>(null);
+  const [assistantSeed, setAssistantSeed] = useState<{ prompt: string; nonce: number } | null>(null);
+  const seedNonce = useRef(0);
+  // Every filter currently shaping the page, so Ira's numbers match the screen.
+  const assistantFilters: ModelFilter[] = [...pageModelFilters, ...slicerModelFilters, ...(crossModelFilter ? [crossModelFilter] : [])];
+  // Runs the pure engine, then executes its action against real dashboard state.
+  const handleAssistantSubmit = (prompt: string): AssistantResult => {
+    const result = runAssistant(prompt, {
+      tables: MODEL_TABLES,
+      relationships,
+      filters: assistantFilters,
+      focusedWidget: assistantFocus,
+      widgetTitles: userWidgets.map(w => w.title),
+    });
+    const a = result.action;
+    if (a?.kind === 'createWidget') {
+      const next = [...userWidgets, a.widget];
+      setUserWidgets(next); onSaveWidgets?.(next);
+    } else if (a?.kind === 'setFilter') {
+      const id = `${a.table}::${a.column}`;
+      setPageFilterFields(prev => (prev.includes(id) ? prev : [...prev, id]));
+      setPageFilterValues(prev => ({ ...prev, [id]: a.values }));
+    } else if (a?.kind === 'clearFilters') {
+      clearAllFilters();
+    }
+    return result;
+  };
+  // Stable identity so the panel's send() callback doesn't churn each render.
+  const submitRef = useRef(handleAssistantSubmit);
+  submitRef.current = handleAssistantSubmit;
+  const assistantSubmit = useCallback((p: string) => submitRef.current(p), []);
+  const askIraAboutWidget = (w: AssistantWidget) => {
+    setAssistantFocus(w);
+    setAssistantSeed({ prompt: `Explain "${w.title}"`, nonce: ++seedNonce.current });
+  };
 
   const handleEditDefaultWidget = (widgetTitle: string, _chartType: string, subtitle?: string) => {
     setOpenEditSidebarOnExpand(true);
@@ -4556,7 +4616,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <WidgetCard
                     key={i}
                     title={w.title}
-                    subtitle={w.yField && w.xField ? `${w.yField} by ${w.xField}` : 'Custom widget'}
+                    subtitle={w.chartType === 'Slicer' ? 'Slicer · filters this page' : w.yField && w.xField ? `${w.yField} by ${w.xField}` : 'Custom widget'}
                     addToast={addToast}
                     loading={widgetLoadingStates[`user-${i}`] === 'loading'}
                     isFirstLoad={!hasLoadedOnce}
@@ -4580,6 +4640,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     } : undefined}
                     onExpand={() => setExpandedWidget({ title: w.title, subtitle: w.yField ? `${w.yField} by ${w.xField}` : '' })}
                     onEdit={() => { setEditingWidget({ index: i, data: w }); setAddWidgetOpen(true); }}
+                    onAskAI={() => askIraAboutWidget(w)}
                     onDelete={() => { const next = userWidgets.filter((_, j) => j !== i); setUserWidgets(next); onSaveWidgets?.(next); addToast({ message: 'Widget removed', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${w.title}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                     onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                     pageFilterFields={pageFilterFields}
@@ -4590,6 +4651,27 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   >
                     {/* Render chart based on type */}
                     {(() => {
+                      // Slicer widget — a Power BI-style filter tile. Its selection
+                      // writes into pageFilterValues, which flows through
+                      // filtersForWidget() into every related widget.
+                      if (w.chartType === 'Slicer' && w.model?.fields?.[0]) {
+                        const sf = w.model.fields[0];
+                        const sid = `${sf.table}::${sf.column}`;
+                        const scol = colByName(tableById(MODEL_TABLES, sf.table), sf.column);
+                        return (
+                          <SlicerWidget
+                            colLabel={scol?.label ?? sf.column}
+                            colType={scol?.type ?? 'string'}
+                            values={distinctValues(MODEL_TABLES, sf.table, sf.column)}
+                            mode={(w.slicerMode as SlicerMode) ?? 'list'}
+                            onModeChange={(m) => { const next = userWidgets.map((x, j) => j === i ? { ...x, slicerMode: m } : x); setUserWidgets(next); onSaveWidgets?.(next); }}
+                            single={slicerSingle[i] ?? false}
+                            onSingleChange={(v) => setSlicerSingle(prev => ({ ...prev, [i]: v }))}
+                            selected={pageFilterValues[sid] ?? []}
+                            onChange={(vv) => setPageFilterValues(prev => ({ ...prev, [sid]: vv }))}
+                          />
+                        );
+                      }
                       // Multi-table (model) widgets render real joined+aggregated data,
                       // filtered by global page slicers + chart-click cross-filter.
                       if (w.model) {
@@ -5154,6 +5236,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             fontFamily: config?.fontFamily,
             seriesColors: config?.seriesColors,
             model: config?.model,
+            slicerMode: config?.slicerMode,
           };
           if (editingWidget !== null && editingWidget.index >= 0) {
             const next = userWidgets.map((w, i) => i === editingWidget.index ? widget : w);
@@ -5222,6 +5305,15 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
           onUpdateDashboardSource?.({ dataSource: nextType, sourceId: src.id, dataSourceNames });
           addToast({ message: `Primary source set to ${src.name}`, type: 'success' });
         }}
+      />
+
+      {/* Ira — the dashboard AI assistant (floating, bottom-right) */}
+      <DashboardAssistant
+        onSubmit={assistantSubmit}
+        focusedWidgetTitle={assistantFocus?.title ?? null}
+        onClearFocus={() => setAssistantFocus(null)}
+        onOpenBuilder={() => { setEditingWidget(null); setAddWidgetOpen(true); }}
+        seed={assistantSeed}
       />
     </div>
   );

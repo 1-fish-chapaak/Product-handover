@@ -24,7 +24,8 @@ import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
-import ReportsView, { CUSTOM_TEMPLATES } from './components/reports/ReportsView';
+import ReportsView from './components/reports/ReportsView';
+import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -37,6 +38,7 @@ import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
 import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
+import SoxTestingView from './components/audit/sox-testing/SoxTestingView';
 import ComplianceEngagementApp from './components/engagement-configurable/ComplianceEngagementApp';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
@@ -288,7 +290,7 @@ function AppInner() {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
-  type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
+  type CustomTemplate = EditableTemplate;
   // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
   // dozens of test copies); new templates persist here going forward.
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
@@ -313,6 +315,25 @@ function AppInner() {
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
   const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
+
+  // "Remember for future reports" — a report reader saved a hand-typed section
+  // back onto its custom template as a default (setup that never changes:
+  // distribution lists, intro paragraphs). Future reports pre-fill it; the
+  // template's shape never moves, only the section's saved default.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ templateId?: string; sectionName?: string; content?: string }>).detail;
+      if (!detail?.templateId || !detail.sectionName) return;
+      setCustomTemplates(prev => prev.map(t => (t.id !== detail.templateId ? t : {
+        ...t,
+        sections: (t.sections ?? []).map((s: TemplateSection) =>
+          s.name === detail.sectionName ? { ...s, savedContent: detail.content || undefined } : s,
+        ) as typeof t.sections,
+      })));
+    };
+    window.addEventListener('irame:template-remember-content', handler);
+    return () => window.removeEventListener('irame:template-remember-content', handler);
+  }, []);
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -343,6 +364,13 @@ function AppInner() {
   // One-shot: open the Engagements view directly on its Approval Flow tab (e.g. from
   // the report "Create new approval flow" action).
   const [engApprovalFlow, setEngApprovalFlow] = useState(false);
+  // One-shot: backing out of an engagement workspace lands on the All Engagements
+  // list (not the portfolio overview) — the list is where the user came from.
+  const [engBackToList, setEngBackToList] = useState(false);
+  const backToEngagementList = () => { setEngBackToList(true); setView('engagements'); };
+  // A SOX workspace opened from the SOX Testing section backs out to that
+  // section, not to the Engagement Library.
+  const [soxFromTesting, setSoxFromTesting] = useState(false);
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -913,21 +941,32 @@ function AppInner() {
           />
         );
 
+      case 'sox-testing':
+        return <SoxTestingView onOpenEngagement={(id) => { setSoxFromTesting(true); openEngagement(id); }} />;
+
       case 'sox-icfr':
-        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return (
+          <SoxIcfrApp
+            engagementId={state.selectedEngagementId ?? undefined}
+            onBack={soxFromTesting ? () => setView('sox-testing') : backToEngagementList}
+            backLabel={soxFromTesting ? 'Back to SOX Testing' : undefined}
+          />
+        );
 
       case 'compliance-engagement':
-        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
         return (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
-            onOpenEngagement={openEngagement}
+            onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
             initialTypeFilter={engagementsSoxFilter ? 'Compliance' : undefined}
             onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
             initialApprovalFlow={engApprovalFlow}
             onApprovalFlowConsumed={() => setEngApprovalFlow(false)}
+            initialList={engBackToList}
+            onInitialListConsumed={() => setEngBackToList(false)}
           />
         );
 
@@ -935,7 +974,7 @@ function AppInner() {
         return (
           <EngagementOverviewView
             engagementId={state.selectedEngagementId ?? ''}
-            onBack={() => setView('engagements')}
+            onBack={backToEngagementList}
             onOpenExecution={(engId) => {
               setEngagementBackView('audit-planning');
               openAuditExecution(engId);

@@ -1,6 +1,6 @@
 import type {
-  Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, Role, Severity, TrackConclusion,
+  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
+  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -18,6 +18,107 @@ export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): bo
 }
 export function severityOf(d: Deficiency, materiality: number, rules?: MaterialityRules): Severity {
   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
+}
+
+// ─── Assessed severity — the raw grade plus the compensating-control cap ─────────
+// The cap only rescues the magnitude-driven MW line (MW → SD). It applies only
+// when the chosen compensating control is itself concluded effective in this
+// engagement, never when an MW indicator is present, and it never clears the
+// exception — capBlocked says why a chosen control had no effect.
+export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
+export interface SeverityAssessment {
+  raw: Severity;
+  final: Severity;
+  capped: boolean;
+  capBlocked?: 'not-effective' | 'mw-indicator';
+  bumped?: boolean;   // prudent-official judgment raised the grade above the math
+}
+export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
+  const raw = severityOf(d, eng.materiality, eng.rules);
+  let out: SeverityAssessment;
+  if (!d.compensatingControlId) out = { raw, final: raw, capped: false };
+  else if (d.mwIndicators.length > 0) out = { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
+  else {
+    const cc = eng.controls.find(c => c.id === d.compensatingControlId);
+    if (!cc || controlConclusion(cc) !== 'Effective') out = { raw, final: raw, capped: false, capBlocked: 'not-effective' };
+    else if (raw === 'Material Weakness') out = { raw, final: 'Significant Deficiency', capped: true };
+    else out = { raw, final: raw, capped: false };
+  }
+  // prudent-official: judgment argues UP only — applied after the cap, never below it
+  if (d.prudentOverride && SEVERITY_RANK[d.prudentOverride.to] > SEVERITY_RANK[out.final]) {
+    out = { ...out, final: d.prudentOverride.to, bumped: true };
+  }
+  return out;
+}
+
+// ─── Ground-rules change preview ──────────────────────────────────────────────────
+// What would re-grade if the materiality rule set changed? Used by the review
+// modal before applying, and by the store to record the actual re-grades.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
+  const next: IcfrEngagement = {
+    ...eng,
+    materiality: patch.materiality ?? eng.materiality,
+    performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+  };
+  return eng.deficiencies
+    .filter(d => d.status !== 'Closed')
+    .map(d => ({ defId: d.id, from: assessSeverity(d, eng).final, to: assessSeverity(d, next).final }))
+    .filter(x => x.from !== x.to);
+}
+
+// ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
+// An open material weakness at period end forces "not effective" — sign-off stays
+// possible, but the conclusion recorded is adverse (handbook: open MW ⇒ disclosure).
+// Uses the assessed (capped) severity: a validly-capped MW is an SD, not an MW.
+export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
+  return eng.deficiencies.filter(d => d.status !== 'Closed' && assessSeverity(d, eng).final === 'Material Weakness');
+}
+export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
+  return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
+}
+
+// ─── ITGC cascade — a failed ITGC invalidates "test of one" downstream ───────────
+// Any IT General Controls control concluded ineffective puts every automated /
+// IT-dependent control in the other processes on notice: one instance no longer
+// proves the rule, and benchmarking is off the table.
+export function failedItgcs(eng: IcfrEngagement): Control[] {
+  return eng.controls.filter(c => c.process === 'IT General Controls' && controlConclusion(c) === 'Ineffective');
+}
+export function isItgcDependent(c: Control): boolean {
+  return c.nature !== 'Manual' && c.process !== 'IT General Controls';
+}
+
+// ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────
+// Annual 1 · Quarterly 1–4 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
+// (per-transaction) 25–60 · Automated nature = test of one, valid only while ITGCs hold.
+//
+// Frequency alone doesn't settle the size — the RATING moves it inside the band,
+// and at the bottom it drops the count outright: a quarterly control whose risk is
+// Low is one occurrence a year, not two quarters. Where no rating has been agreed
+// the middle of the band stands, which is what this sized at before.
+const SIZE_BANDS: Record<Frequency, { low: number; mid: number; high: number; range: string; note: string }> = {
+  Annual: { low: 1, mid: 1, high: 1, range: '1', note: 'Runs once a year — test the occurrence.' },
+  Quarterly: { low: 1, mid: 2, high: 4, range: '1–4', note: 'Test the quarters that carry the risk.' },
+  Monthly: { low: 2, mid: 4, high: 5, range: '2–5', note: 'A handful of months.' },
+  Weekly: { low: 5, mid: 10, high: 15, range: '5–15', note: 'Spread across the period.' },
+  Daily: { low: 15, mid: 25, high: 40, range: '15–40', note: 'A meaningful spread of days.' },
+  Recurring: { low: 25, mid: 40, high: 60, range: '25–60', note: 'Runs many times a day — the deepest samples.' },
+  'Ad-hoc': { low: 5, mid: 10, high: 15, range: 'judgment', note: 'Size by how often it actually ran.' },
+};
+const RATING_NOTE: Record<RiskRating, string> = {
+  High: 'Rated high risk — sized at the top of the band.',
+  Medium: 'Rated medium risk — the middle of the band.',
+  Low: 'Rated low risk — the lightest test that still holds.',
+};
+export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
+  if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
+  if (c.nature === 'Automated' && !itgcHolds) return { suggested: 25, range: '25–60', note: 'ITGC failure in force — test of one is invalid; size like a manual control.' };
+  const band = SIZE_BANDS[c.frequency];
+  const rating = c.riskRating;
+  const suggested = rating === 'High' ? band.high : rating === 'Low' ? band.low : band.mid;
+  return { suggested, range: band.range, note: rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note };
 }
 
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
@@ -39,6 +140,35 @@ export function controlConclusion(c: Control): Conclusion {
   if (d === 'Ineffective' || o === 'Ineffective') return 'Ineffective';
   if (d === 'Effective' && o === 'Effective') return 'Effective';
   return designStarted(c) || operatingStarted(c) ? 'In progress' : 'Not started';
+}
+
+// ─── Locks — a concluded control is frozen until reopened with a reason ──────────
+export function isControlLocked(c: Control): boolean {
+  const concl = controlConclusion(c);
+  return concl === 'Effective' || concl === 'Ineffective';
+}
+// A countersigned engagement is locked for good — no edits, no reopen.
+export function isEngagementLocked(eng: IcfrEngagement): boolean {
+  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+}
+
+// ─── Review gate — concluded is not final until the reviewer countersigns ────────
+// The paper travels: conclude → preparer signs (auditor) → reviewer countersigns.
+export function isControlFinal(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.reviewer;
+}
+/** Concluded and preparer-signed — sitting in the reviewer's court. */
+export function isAwaitingReview(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
+}
+
+// ─── Review notes — the formal raise → resolve → verify channel ──────────────────
+export function reviewNotesFor(eng: IcfrEngagement, controlId: string): ReviewNote[] {
+  return eng.reviewNotes.filter(n => n.controlId === controlId);
+}
+/** Notes that still block this paper's countersign (anything not Closed). */
+export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): number {
+  return eng.reviewNotes.filter(n => n.controlId === controlId && n.status !== 'Closed').length;
 }
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
@@ -77,9 +207,11 @@ export function wfRunRef(key: string, fail: boolean): string {
 }
 
 /** Plain-language summary the AI returns after checking the uploaded file. */
-export function validationSummary(text: string, fail: boolean, key = text): string {
+export function validationSummary(text: string, fail: boolean, key = text, sampleCount?: number): string {
   const h = hnum(key);
-  const n = [15, 25, 25, 40][h % 4]!;
+  // the real drawn-sample count when there is one — the summary sits directly
+  // above the per-sample table, so an invented number would contradict it
+  const n = sampleCount || [15, 25, 25, 40][h % 4]!;
   const ex = 1 + ((h >>> 5) % 3);
   const po = `45000${12840 + (h % 25) * 7}`;
   const vendor = SAMPLE_VENDORS[h % SAMPLE_VENDORS.length]!;
@@ -105,6 +237,41 @@ export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
   return { columns: ['Document', 'Vendor', 'Approval', 'Amount', 'Result'], rows };
 }
 
+/** TOD completeness — the share of REQUIRED design elements that carry evidence.
+ *  Concluding design effective is gated on this reaching 100%. */
+export function designCompleteness(c: Control): { done: number; total: number; pct: number } {
+  const req = c.design.documents.filter(d => d.required !== false);
+  // A waived element is accounted for, not outstanding — the audit team wrote it,
+  // the client holds it, or there is nothing to hold. Either way the auditor has
+  // recorded why, and a recorded judgement shouldn't read as a missing file.
+  const done = req.filter(d => d.status === 'Received' || d.waiver).length;
+  return { done, total: req.length, pct: req.length ? Math.round((done / req.length) * 100) : 0 };
+}
+/** Elements still genuinely outstanding — neither evidenced nor waived. */
+export function designOutstanding(c: Control): DesignDoc[] {
+  return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+}
+/** Attributes the walkthrough hasn't settled yet. Empty when it hasn't started —
+ *  the gate is soft until the auditor commits to walking a transaction. */
+export function walkthroughUntested(c: Control): OperatingStep[] {
+  const w = c.design.walkthrough;
+  if (!w) return [];
+  return c.operating.steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') === 'Not tested');
+}
+
+// ─── Materiality worksheet math ──────────────────────────────────────────────────
+import type { BenchmarkKey, MaterialityBasis } from './types';
+export const BENCHMARK_META: Record<BenchmarkKey, { label: string; range: [number, number]; note: string }> = {
+  assets: { label: 'Total assets', range: [0.5, 2], note: 'Asset-intensive entities (fleet, infrastructure)' },
+  revenue: { label: 'Revenue', range: [0.5, 1], note: 'Stable top-line, thin or volatile margins' },
+  pbt: { label: 'Profit before tax', range: [5, 10], note: 'Profit-oriented listed entities' },
+  cash: { label: 'Cash & equivalents', range: [1, 3], note: 'Liquidity-driven / custodial operations' },
+  equity: { label: 'Net assets / equity', range: [1, 2], note: 'Holding and investment entities' },
+};
+export function overallMateriality(b: MaterialityBasis): number { return Math.round(b.amounts[b.benchmark] * b.pct / 100); }
+export function performanceMaterialityOf(b: MaterialityBasis): number { return Math.round(overallMateriality(b) * b.pmPct / 100); }
+export function clearlyTrivialOf(b: MaterialityBasis): number { return Math.round(overallMateriality(b) * b.ctPct / 100); }
+
 export function designProgress(c: Control) {
   const docs = c.design.documents;
   return {
@@ -127,11 +294,19 @@ export function operatingProgress(c: Control) {
 
 // ─── Baton — whose court ─────────────────────────────────────────────────────────
 
-export function courtFor(c: Control, tasks: HandoffTask[]): Court {
+export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] = []): Court {
   if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
+  // Review notes move the baton with them: an open note waits on the auditor's
+  // resolution; a resolved one waits on the reviewer's verification.
+  if (notes.some(n => n.controlId === c.id && n.status === 'Open')) return 'auditor';
+  if (notes.some(n => n.controlId === c.id && n.status === 'Resolved')) return 'reviewer';
   const concl = controlConclusion(c);
-  // A concluded control is closed out (no separate reviewer court on this platform).
-  if (concl === 'Effective' || concl === 'Ineffective') return 'none';
+  // Concluded isn't closed: the paper still travels auditor (sign) → reviewer
+  // (countersign). Only a countersigned paper leaves every court.
+  if (concl === 'Effective' || concl === 'Ineffective') {
+    if (c.wpSignoff?.reviewer) return 'none';
+    return c.wpSignoff?.preparer ? 'reviewer' : 'auditor';
+  }
   return 'auditor';
 }
 
@@ -185,8 +360,12 @@ export function testsDueNow(controls: Control[]): Control[] {
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────
 
-export function engagementProgress(eng: IcfrEngagement) {
-  const cs = eng.controls;
+export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
+  // `controls` narrows the count to a subset — the open audit's scope, so the
+  // audit Dashboard reports its own six rather than the engagement's thirty-two.
+  // Omitted, it counts the whole engagement, which is what every other caller
+  // wants.
+  const cs = controls ?? eng.controls;
   const concl = cs.map(controlConclusion);
   return {
     total: cs.length,
@@ -195,12 +374,19 @@ export function engagementProgress(eng: IcfrEngagement) {
     effective: concl.filter(x => x === 'Effective').length,
     ineffective: concl.filter(x => x === 'Ineffective').length,
     inProgress: concl.filter(x => x === 'In progress').length,
-    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks) === 'risk-owner').length,
+    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
+    awaitingReview: cs.filter(isAwaitingReview).length,
+    reviewed: cs.filter(isControlFinal).length,
   };
 }
 
 export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
+}
+/** Person-lane match: a task is this owner's if it names them, or rides a control they own. */
+export function isOwnerTask(eng: IcfrEngagement, t: HandoffTask, owner: string): boolean {
+  return t.assigneeRole === 'risk-owner'
+    && (t.assignee === owner || eng.controls.find(c => c.id === t.controlId)?.owner === owner);
 }
 export function discussionsFor(eng: IcfrEngagement, controlId: string) {
   return eng.discussions.filter(d => d.controlId === controlId);
@@ -209,9 +395,27 @@ export function openDiscussionCount(eng: IcfrEngagement, controlId: string): num
   return discussionsFor(eng, controlId).filter(d => !d.resolved).length;
 }
 
+// Parse a period-end label like 'Mar 2026' to the last moment of that month.
+export function periodEndDate(label: string): Date | null {
+  const parsed = Date.parse(`1 ${label}`);
+  if (Number.isNaN(parsed)) return null;
+  const d = new Date(parsed);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+}
+
 export function formatINR(n: number): string {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)}Cr`;
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
   if (n >= 1e3) return `₹${(n / 1e3).toFixed(0)}K`;
   return `₹${n}`;
+}
+
+// A remediation due date is stored as a string — ISO 'YYYY-MM-DD' (the date picker) or a
+// legacy '30 Jun' seed label. Format both to a human '30 Jun 2026' ('—' when unset) so the
+// working-paper preview and the .xlsx export read the same as the on-screen view.
+export function formatDueDate(date: string | null | undefined): string {
+  if (!date) return '—';
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return s;
 }

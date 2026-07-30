@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronLeft, ChevronRight, ShieldCheck, ClipboardList, Zap,
   Check, AlertCircle, Edit3, Users, Sparkles, ChevronDown, ChevronUp,
-  Plus, Trash2, FileText, Loader2, CalendarClock,
+  Plus, Trash2, FileText, Loader2, CalendarClock, Landmark, Building2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import type {
   Engagement, EngType, AutomationSubtype, ProcessCode, EngagementMilestone,
+  EngagementEntity,
 } from '../../data/engagements';
 import { OWNER_NAMES, SUB_PROCESSES } from '../../data/grc-domain';
 
@@ -86,22 +87,39 @@ interface Props {
   onCreated: (eng: Engagement) => void;
   /** When set, the wizard opens prefilled in edit mode and preserves id / status / metrics. */
   initial?: Engagement;
+  /** SOX / ICFR is scoped, not configured — entities, processes and RACMs are
+   *  derived from uploaded trial balances rather than typed in here. When this
+   *  is supplied, choosing that type hands off to the SOX scoping journey
+   *  instead of continuing through these steps. Absent (or in edit mode) the
+   *  classic SOX steps still run. */
+  onPickSox?: () => void;
+  /** Preselects the engagement type on open — used when the SOX scoping sheet's
+   *  Back returns here, so the Type step shows the earlier pick intact. */
+  initialType?: EngType;
+  /** Render the sheet already in place (no slide-in) — used when the SOX
+   *  scoping sheet hands back to this one, so the swap reads as a step change
+   *  rather than one sheet leaving and another arriving. The matching instant
+   *  exit is driven by AnimatePresence `custom` in EngagementsView. */
+  enterInstant?: boolean;
 }
 
-type Step = 1 | 2 | 3 | 4;
-const STEP_LABELS = ['Type & basics', 'Scope', 'Team & timeline', 'Review'] as const;
+type Step = 1 | 2 | 3 | 4 | 5;
+const STEP_LABELS = ['Type', 'Basics', 'Scope', 'Team & timeline', 'Review'] as const;
 
-export default function CreateEngagementWizard({ onClose, onCreated, initial }: Props): JSX.Element {
+export default function CreateEngagementWizard({ onClose, onCreated, initial, onPickSox, initialType, enterInstant }: Props): JSX.Element {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const isEdit = Boolean(initial);
   const [step, setStep] = useState<Step>(1);
 
-  // ── Step 1 — Type & basics ──
-  const [type, setType] = useState<EngType | null>(initial?.type ?? null);
+  // ── Steps 1–2 — Type, then Basics ──
+  const [type, setType] = useState<EngType | null>(initial?.type ?? initialType ?? null);
   const [name, setName] = useState(initial?.name ?? '');
   const [code, setCode] = useState(initial?.code ?? genCode());
+  // `entity` is the group (listed / holding) company — the one name the
+  // engagement card shows. The legal entities under it live in groupEntities.
   const [entity, setEntity] = useState(initial?.entity ?? '');
+  const [groupEntities, setGroupEntities] = useState<EngagementEntity[]>(initial?.groupEntities ?? []);
   const [description, setDescription] = useState(initial?.description ?? '');
   const [process, setProcess] = useState<UIProcess>(initial?.process ?? 'P2P');
   const [periodStart, setPeriodStart] = useState(initial?.startDate ?? '');
@@ -113,20 +131,20 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
     [initial?.owner],
   );
 
-  // ── Step 2 — Compliance scope ──
+  // ── Step 3 — Compliance scope ──
   const [framework, setFramework] = useState(initial?.type === 'Compliance' && FRAMEWORKS.includes(initial.framework) ? initial.framework : FRAMEWORKS[0]);
   const [racmVersion, setRacmVersion] = useState(initial?.complianceConfig?.racmVersion ?? RACM_VERSIONS[0]);
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>((initial?.complianceConfig?.samplingMethod as SamplingMethod) ?? 'Random');
   const [sampleSize, setSampleSize] = useState(initial?.complianceConfig?.sampleSize ?? 25);
   const [materiality, setMateriality] = useState(initial?.complianceConfig?.materiality ?? 500000);
 
-  // ── Step 2 — SOX / ICFR scope (materiality ground rules; full rule set is managed in-engagement) ──
+  // ── Step 3 — SOX / ICFR scope (materiality ground rules; full rule set is managed in-engagement) ──
   const [overallMateriality, setOverallMateriality] = useState(initial?.soxConfig?.overallMateriality ?? 5_000_000);
   const [pmPct, setPmPct] = useState(initial?.soxConfig ? Math.round(initial.soxConfig.performanceMateriality / initial.soxConfig.overallMateriality * 100) : 75);
   const [cttPct, setCttPct] = useState(initial?.soxConfig ? Math.round(initial.soxConfig.clearlyTrivial / initial.soxConfig.overallMateriality * 100) : 5);
   const [keyOnly, setKeyOnly] = useState(initial?.soxConfig?.keyOnly ?? true);
 
-  // ── Step 2 — Internal Audit scope ──
+  // ── Step 3 — Internal Audit scope ──
   const [scopeLevel, setScopeLevel] = useState<ScopeLevel>((initial?.auditConfig?.scopeLevel as ScopeLevel) ?? 'Full process');
   const [subProcessSel, setSubProcessSel] = useState<string[]>(initial?.auditConfig?.subProcesses ?? []);
   const [linkedRacms, setLinkedRacms] = useState<string[]>(initial?.auditConfig?.linkedRacms ?? [RACM_VERSIONS[0]]);
@@ -135,7 +153,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   const [idrTemplate, setIdrTemplate] = useState(initial?.auditConfig?.idrTemplate ?? IDR_TEMPLATES[0]);
   const [cadence, setCadence] = useState<Cadence>((initial?.auditConfig?.cadence as Cadence) ?? 'Biweekly');
 
-  // ── Step 2 — Automation scope ──
+  // ── Step 3 — Automation scope ──
   const [autoSubtype, setAutoSubtype] = useState<AutomationSubtype>(initial?.subtype ?? 'CCM');
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>(initial?.automationConfig?.templates ?? []);
   const [inputSources, setInputSources] = useState<InputSource[]>((initial?.automationConfig?.inputSources as InputSource[]) ?? ['Excel']);
@@ -143,14 +161,14 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   const [threshold, setThreshold] = useState(initial?.automationConfig?.threshold ?? 0.85);
   const [alertRecipients, setAlertRecipients] = useState<string[]>(initial?.automationConfig?.alertRecipients ?? [OWNER_NAMES[0]]);
 
-  // ── Step 2 — AI draft affordance ──
+  // ── Step 3 — AI draft affordance ──
   const [aiDrafting, setAiDrafting] = useState(false);
   const [aiBanner, setAiBanner] = useState(false);
   const [aiFileName, setAiFileName] = useState('');
   const draftTimer = useRef<number | null>(null);
   useEffect(() => () => { if (draftTimer.current !== null) window.clearTimeout(draftTimer.current); }, []);
 
-  // ── Step 3 — Team & timeline ──
+  // ── Step 4 — Team & timeline ──
   const [reviewer, setReviewer] = useState(initial?.team?.reviewer ?? '');
   const [auditors, setAuditors] = useState<string[]>(initial?.team?.auditors ?? []);
   const [riskOwners, setRiskOwners] = useState<string[]>(initial?.team?.riskOwners ?? []);
@@ -236,29 +254,37 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
   };
 
   // ── Validation — every step gates for real, no silent skips ──
-  const step1Valid = type !== null
-    && name.trim().length > 0
+  const typeValid = type !== null;
+  const basicsValid = name.trim().length > 0
     && code.trim().length > 0
     && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd;
 
-  let step2Valid = false;
-  if (type === 'Compliance')          step2Valid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
-  else if (type === 'SOX / ICFR')     step2Valid = overallMateriality > 0 && pmPct > 0 && pmPct <= 100 && cttPct >= 0 && cttPct < 100;
-  else if (type === 'Internal Audit') step2Valid = linkedRacms.length > 0 && tatDays > 0 && (scopeLevel !== 'Sub-process' || subProcessSel.length > 0);
-  else if (type === 'Automation')     step2Valid = inputSources.length > 0 && alertRecipients.length > 0;
+  let scopeValid = false;
+  if (type === 'Compliance')          scopeValid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
+  else if (type === 'SOX / ICFR')     scopeValid = true; // workspace-owned — nothing to validate here
+  else if (type === 'Internal Audit') scopeValid = linkedRacms.length > 0 && tatDays > 0 && (scopeLevel !== 'Sub-process' || subProcessSel.length > 0);
+  else if (type === 'Automation')     scopeValid = inputSources.length > 0 && alertRecipients.length > 0;
 
   const reviewerInvalid = reviewer !== '' && reviewer === owner;
   const milestonesValid = milestones.length >= 2 && milestones.every(m => m.label.trim() !== '' && m.date !== '');
-  const step3Valid = reviewer !== '' && !reviewerInvalid && milestonesValid;
+  const teamValid = reviewer !== '' && !reviewerInvalid && milestonesValid;
 
-  const canAdvanceFrom: Record<Step, boolean> = { 1: step1Valid, 2: step2Valid, 3: step3Valid, 4: true };
+  const canAdvanceFrom: Record<Step, boolean> = { 1: typeValid, 2: basicsValid, 3: scopeValid, 4: teamValid, 5: true };
 
+  // Leaving the Type step having chosen SOX hands the journey over — the rest
+  // of this wizard asks for a period and materiality that SOX derives instead.
+  const handsOffToSox = !isEdit && !!onPickSox && type === 'SOX / ICFR';
   const goToStep = (target: Step) => {
     if (target <= step) { setStep(target); return; }
+    if (step === 1 && handsOffToSox) { onPickSox!(); return; }
     for (let i = step; i < target; i++) if (!canAdvanceFrom[i as Step]) return;
     setStep(target);
   };
-  const nextStep = () => { if (canAdvanceFrom[step] && step < 4) setStep((step + 1) as Step); };
+  const nextStep = () => {
+    if (!canAdvanceFrom[step]) return;
+    if (step === 1 && handsOffToSox) { onPickSox!(); return; }
+    if (step < 5) setStep((step + 1) as Step);
+  };
   const prevStep = () => { if (step > 1) setStep((step - 1) as Step); };
 
   // ── Build the complete engagement — everything captured above is carried ──
@@ -268,6 +294,9 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
       .map(m => ({ label: m.label.trim(), date: m.date }))
       .sort((a, b) => a.date.localeCompare(b.date));
     const next = cleanMilestones.find(m => m.date >= todayIso()) ?? cleanMilestones[cleanMilestones.length - 1];
+    const cleanEntities = groupEntities
+      .filter(e => e.name.trim())
+      .map(e => ({ ...e, name: e.name.trim() }));
     return {
       id: initial?.id ?? `eng-new-${Date.now()}`,
       code: code.trim().toUpperCase(),
@@ -277,12 +306,14 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
       subtype: type === 'Automation' ? autoSubtype : undefined,
       process: (process === 'Cross' ? 'P2P' : process) as ProcessCode,
       framework: type === 'SOX / ICFR' ? 'COSO 2013 / SOX 404' : type === 'Compliance' ? framework : 'Internal Policy',
-      soxConfig: type === 'SOX / ICFR' ? {
+      // SOX materiality is workspace-owned — edit mode carries the existing
+      // config through untouched; the state fallback only covers legacy paths.
+      soxConfig: type === 'SOX / ICFR' ? (initial?.soxConfig ?? {
         overallMateriality,
         performanceMateriality: Math.round(overallMateriality * pmPct / 100),
         clearlyTrivial: Math.round(overallMateriality * cttPct / 100),
         sdBandPct: 20, aggregate: true, keyOnly,
-      } : undefined,
+      }) : undefined,
       complianceConfig: type === 'Compliance' ? {
         racmVersion, samplingMethod,
         sampleSize: samplingMethod === 'Manual upload' ? undefined : sampleSize,
@@ -301,6 +332,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
       startDate: periodStart,
       endDate: periodEnd,
       entity: entity.trim() || undefined,
+      // Half-typed rows are dropped rather than saved blank.
+      groupEntities: cleanEntities.length ? cleanEntities : undefined,
       team: { reviewer, auditors, riskOwners },
       milestones: cleanMilestones,
       controls: initial?.controls ?? 0,
@@ -327,17 +360,44 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
   const fmtR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
+  // ─── Close guard ────────────────────────────────────────────────────────
+  // The wizard is dirty once any data field moves off its opening value (edit
+  // mode opens prefilled, so compare — never truthy-check). While dirty, the
+  // backdrop goes inert (a stray click is the #1 accident) and X/Cancel ask.
+  const dataSnap = JSON.stringify([type, name, entity, groupEntities, description, process, periodStart, periodEnd, owner,
+    framework, racmVersion, samplingMethod, sampleSize, materiality,
+    overallMateriality, pmPct, cttPct, keyOnly, scopeLevel, subProcessSel, linkedRacms]);
+  const initialSnapRef = useRef<string | null>(null);
+  if (initialSnapRef.current === null) initialSnapRef.current = dataSnap;
+  const dirty = dataSnap !== initialSnapRef.current;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const attemptClose = () => { if (dirty) setConfirmDiscard(true); else onClose(); };
+
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <>
+      {/* AnimatePresence `custom` (EngagementsView) is true while the SOX
+          scoping sheet is taking over — the dynamic exit variants then drop
+          the slide/fade so the handoff reads as an in-sheet step change. */}
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        variants={{
+          show: { opacity: 1 },
+          out: (handoff?: boolean) => handoff ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0 },
+        }}
+        initial={enterInstant ? false : { opacity: 0 }}
+        animate="show" exit="out"
         transition={{ duration: 0.15 }}
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
-        onClick={onClose}
+        onClick={dirty ? undefined : onClose}
       />
       <motion.aside
-        initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
+        variants={{
+          hidden: { x: 24, opacity: 0 },
+          show: { x: 0, opacity: 1 },
+          out: (handoff?: boolean) => handoff ? { x: 0, opacity: 1, transition: { duration: 0 } } : { x: 24, opacity: 0 },
+        }}
+        initial={enterInstant ? false : 'hidden'}
+        animate="show" exit="out"
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label={isEdit ? 'Edit Engagement' : 'Create Engagement'}
@@ -350,12 +410,12 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
                 <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">{isEdit ? 'Edit Engagement' : 'Create Engagement'}</h2>
               </div>
-              <p className="text-[0.75rem] text-ink-500">Step {step} of 4 — {STEP_LABELS[step - 1]}</p>
+              <p className="text-[0.75rem] text-ink-500">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
+            <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4].map(n => (
+            {[1, 2, 3, 4, 5].map(n => (
               <button
                 key={n}
                 onClick={() => goToStep(n as Step)}
@@ -379,7 +439,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
               initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             >
-              {/* ═══ STEP 1: TYPE & BASICS ═══ */}
+              {/* ═══ STEP 1: TYPE ═══ */}
               {step === 1 && (
                 <div className="space-y-4">
                   <div>
@@ -406,6 +466,12 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ═══ STEP 2: BASICS ═══ */}
+              {step === 2 && (
+                <div className="space-y-4">
                   <div>
                     <label className={labelCls}>Engagement name <span className="text-risk-700">*</span></label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. P2P — SOX Q3 Testing" className={inputCls} />
@@ -419,8 +485,10 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                       {code.trim().length === 0 && <Hint text="Code is required" />}
                     </div>
                     <div>
-                      <label className={labelCls}>Entity</label>
-                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
+                      <label className={labelCls}>Owner <span className="text-risk-700">*</span></label>
+                      <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
+                        {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
                     </div>
                   </div>
                   <div>
@@ -444,22 +512,83 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                   </div>
                   {periodStart && periodEnd && periodStart > periodEnd && <Hint text="End must be after start" />}
                   <div>
-                    <label className={labelCls}>Owner <span className="text-risk-700">*</span></label>
-                    <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
-                      {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div>
                     <label className={labelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
                     <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                  </div>
+
+                  {/* ── Group & entities ─────────────────────────────────────
+                      Who the engagement runs for: the listed / holding company
+                      on top, and the legal entities under it that the work
+                      actually covers. Both optional — an engagement scoped to a
+                      single company just names the group and adds no rows.
+                      The SOX / ICFR sheet asks the same pair on its Basics
+                      step, where each entity also carries its own RACM. */}
+                  <div className="pt-4 border-t border-canvas-border space-y-3">
+                    <SectionTitle title="Group & entities" subtitle="The company the engagement runs for, and the legal entities it covers" />
+                    <div>
+                      <label className={labelCls}>Group (listed / holding)</label>
+                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Entities in scope</label>
+                      <div className="border border-canvas-border rounded-xl bg-white overflow-hidden">
+                        <div className="grid grid-cols-[2fr_0.9fr_40px] gap-3 px-3.5 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-400 border-b border-canvas-border bg-canvas/60">
+                          <div>Entity</div><div>Type</div><div />
+                        </div>
+                        {groupEntities.length === 0 && (
+                          <div className="px-3.5 py-5 text-center text-[0.75rem] text-ink-500 border-b border-canvas-border">
+                            No entities yet — add the legal entities this engagement covers.
+                          </div>
+                        )}
+                        {groupEntities.map((ent, i) => (
+                          <div key={ent.id} className="grid grid-cols-[2fr_0.9fr_40px] gap-3 px-3.5 py-2 items-center border-b border-canvas-border last:border-b-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {ent.type === 'Holding'
+                                ? <Landmark size={14} className="text-brand-700 shrink-0" />
+                                : <Building2 size={14} className="text-ink-400 shrink-0" />}
+                              <input
+                                value={ent.name}
+                                onChange={e => setGroupEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                                aria-label={`Entity ${i + 1} name`}
+                                placeholder="Legal entity name"
+                                className="w-full text-[0.8125rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                              />
+                            </div>
+                            <select
+                              value={ent.type}
+                              onChange={e => setGroupEntities(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as EngagementEntity['type'] } : x))}
+                              aria-label={`Entity ${i + 1} type`}
+                              className="text-[0.75rem] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                            >
+                              <option>Holding</option>
+                              <option>Subsidiary</option>
+                            </select>
+                            <button
+                              onClick={() => setGroupEntities(prev => prev.filter((_, j) => j !== i))}
+                              aria-label={`Remove ${ent.name || `entity ${i + 1}`}`}
+                              className="p-1.5 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer justify-self-end"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setGroupEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: prev.length === 0 ? 'Holding' : 'Subsidiary' }])}
+                          className="flex items-center gap-1.5 px-3.5 py-2.5 text-[0.75rem] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
+                        >
+                          <Plus size={13} /> Add entity
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* ═══ STEP 2: SCOPE ═══ */}
-              {step === 2 && (
+              {/* ═══ STEP 3: SCOPE ═══ */}
+              {step === 3 && (
                 <div className="space-y-4">
-                  {/* AI draft affordance */}
+                  {/* AI draft affordance — hidden for SOX, whose scope fields live in the workspace */}
+                  {type !== 'SOX / ICFR' && (
                   <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50/40 p-3.5">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0"><Sparkles size={14} /></div>
@@ -495,6 +624,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                       </button>
                     </div>
                   </div>
+                  )}
 
                   <AnimatePresence>
                     {aiBanner && (
@@ -545,51 +675,23 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     </>
                   )}
 
-                  {type === 'SOX / ICFR' && (() => {
-                    const pm = overallMateriality * pmPct / 100;
-                    const ctt = overallMateriality * cttPct / 100;
-                    const sd = overallMateriality * 0.20;
-                    return (
-                      <>
-                        <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Ground rules that drive how exceptions are evaluated" />
-                        <Field label="Framework">
-                          <div className="px-3 py-2.5 border border-border-light bg-canvas/60 rounded-lg text-[0.8125rem] text-ink-700 font-medium">COSO 2013 / SOX 404(b)</div>
-                        </Field>
-                        <Field label="Control scope">
-                          <button type="button" onClick={() => setKeyOnly(k => !k)} className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg text-[0.8125rem] transition-all cursor-pointer ${keyOnly ? segActiveCls : segIdleCls}`}>
-                            <span className="font-medium">Key controls only</span>
-                            <span className={`w-9 h-5 rounded-full relative transition-colors ${keyOnly ? 'bg-brand-600' : 'bg-ink-200'}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${keyOnly ? 'left-[1.125rem]' : 'left-0.5'}`} /></span>
-                          </button>
-                        </Field>
-                        <Field label="Overall materiality">
-                          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-500 pointer-events-none">{'₹'}</span><input type="number" min={0} value={overallMateriality} onChange={e => setOverallMateriality(parseInt(e.target.value) || 0)} className={inputCls + ' pl-7'} /></div>
-                          {overallMateriality <= 0 && <Hint text="Overall materiality must be greater than zero" />}
-                        </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="Performance materiality (% of overall)">
-                            <input type="number" min={1} max={100} value={pmPct} onChange={e => setPmPct(parseInt(e.target.value) || 0)} className={inputCls} />
-                            <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(pm)}</div>
-                          </Field>
-                          <Field label="Clearly-trivial threshold (% of overall)">
-                            <input type="number" min={0} max={99} value={cttPct} onChange={e => setCttPct(parseInt(e.target.value) || 0)} className={inputCls} />
-                            <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(ctt)}</div>
-                          </Field>
-                        </div>
-                        <div className="rounded-lg border border-border-light bg-canvas/60 p-3 space-y-1.5">
-                          <div className={labelCls + ' mb-0.5'}>Exception severity — computed automatically</div>
-                          {[
-                            [`≤ ${fmtR(ctt)}`, 'Clearly trivial — logged, not aggregated', 'text-ink-500'],
-                            [`> ${fmtR(ctt)} and < ${fmtR(sd)}`, 'Deficiency', 'text-mitigated-700'],
-                            [`≥ ${fmtR(sd)} (20% of materiality)`, 'Significant deficiency', 'text-high-700'],
-                            [`≥ ${fmtR(overallMateriality)} or an MW indicator`, 'Material weakness', 'text-risk-700'],
-                          ].map(([band, label, cls]) => (
-                            <div key={band} className="flex items-center justify-between text-[0.75rem]"><span className="text-ink-600 tabular-nums">{band}</span><span className={`font-semibold ${cls}`}>{label}</span></div>
-                          ))}
-                          <div className="text-[0.7rem] text-ink-500 pt-1 border-t border-border-light mt-1">Full rule set — bands, aggregation, compensating controls, auto-routing — is managed in the engagement's Materiality workspace.</div>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  {/* SOX / ICFR — reachable only in EDIT mode now (new SOX
+                      creations hand off to the scoping journey at step 1).
+                      Materiality & scoping are workspace-owned (user ask), so
+                      this step just points there; soxConfig is preserved
+                      untouched on save. */}
+                  {type === 'SOX / ICFR' && (
+                    <>
+                      <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Managed in the engagement workspace" />
+                      <div className="rounded-lg border border-border-light bg-canvas/60 p-3.5 text-[0.75rem] text-ink-600 leading-relaxed">
+                        Materiality and scoping for a SOX engagement live in the workspace — the
+                        RACM tab holds the matrix, and each audit carries its own period, scope,
+                        trial balance and materiality on its Configuration tab. Open the
+                        engagement to change them; editing here only touches basics, team and
+                        timeline.
+                      </div>
+                    </>
+                  )}
 
                   {type === 'Internal Audit' && (
                     <>
@@ -713,17 +815,17 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 </div>
               )}
 
-              {/* ═══ STEP 3: TEAM & TIMELINE ═══ */}
-              {step === 3 && (
+              {/* ═══ STEP 4: TEAM & TIMELINE ═══ */}
+              {step === 4 && (
                 <div className="space-y-4">
                   <SectionTitle title="Team & timeline" subtitle="Who runs the engagement, and its key dates" />
-                  <Field label="Owner (from step 1)">
+                  <Field label="Owner (from step 2)">
                     <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas/60">
                       <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-800">
                         <Users size={14} className="text-brand-600" />
                         {owner}
                       </div>
-                      <button onClick={() => setStep(1)} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
+                      <button onClick={() => setStep(2)} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
                         <Edit3 size={11} /> Edit
                       </button>
                     </div>
@@ -781,15 +883,16 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                 </div>
               )}
 
-              {/* ═══ STEP 4: REVIEW & CREATE ═══ */}
-              {step === 4 && (
+              {/* ═══ STEP 5: REVIEW & CREATE ═══ */}
+              {step === 5 && (
                 <div className="space-y-3">
                   <SectionTitle title={isEdit ? 'Review & save' : 'Review & create'} subtitle="Everything below is carried onto the engagement" />
                   <ReviewSection title="Type & basics" open={openSections.basics} onToggle={() => toggleSection('basics')}>
                     <ReviewRow k="Type" v={type ?? '—'} />
                     <ReviewRow k="Name" v={name || '—'} />
                     <ReviewRow k="Code" v={<span className="font-mono">{code.toUpperCase()}</span>} />
-                    <ReviewRow k="Entity" v={entity.trim() || '—'} />
+                    <ReviewRow k="Group" v={entity.trim() || '—'} />
+                    <ReviewRow k="Entities" v={groupEntities.filter(e => e.name.trim()).map(e => e.name.trim()).join(', ') || '—'} />
                     <ReviewRow k="Process" v={process} />
                     <ReviewRow k="Period" v={`${periodStart || '—'} → ${periodEnd || '—'}`} />
                     <ReviewRow k="Owner" v={owner} />
@@ -808,10 +911,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     {type === 'SOX / ICFR' && (
                       <>
                         <ReviewRow k="Framework" v="COSO 2013 / SOX 404(b)" />
-                        <ReviewRow k="Control scope" v={keyOnly ? 'Key controls only' : 'All controls'} />
-                        <ReviewRow k="Overall materiality" v={fmtR(overallMateriality)} />
-                        <ReviewRow k="Performance materiality" v={`${pmPct}% = ${fmtR(overallMateriality * pmPct / 100)}`} />
-                        <ReviewRow k="Clearly trivial" v={`${cttPct}% = ${fmtR(overallMateriality * cttPct / 100)}`} />
+                        <ReviewRow k="Materiality & scoping" v="Managed in the engagement workspace" />
                       </>
                     )}
                     {type === 'Internal Audit' && (
@@ -853,20 +953,20 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={attemptClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <div className="flex items-center gap-2">
             {step > 1 && (
               <button onClick={prevStep} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
                 <ChevronLeft size={14} /> Back
               </button>
             )}
-            {step < 4 && (
+            {step < 5 && (
               <button onClick={nextStep} disabled={!canAdvanceFrom[step]}
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 Next <ChevronRight size={14} />
               </button>
             )}
-            {step === 4 && (isEdit ? (
+            {step === 5 && (isEdit ? (
               <button onClick={() => submit(initial?.status ?? 'Draft')} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">Save changes</button>
             ) : (
               <>
@@ -877,6 +977,24 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
           </div>
         </footer>
       </motion.aside>
+
+      {/* discard guard — typed input never dies on one click */}
+      {confirmDiscard && (
+        <div className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-start justify-center pt-[18vh] px-5" onClick={() => setConfirmDiscard(false)}>
+          <div className="w-full max-w-[420px] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <h2 className="text-[15px] font-semibold text-ink-900">{isEdit ? 'Discard your changes?' : 'Discard this engagement?'}</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">{isEdit ? 'Edits you made here will be lost.' : 'The details you typed will be lost.'}</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmDiscard(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setConfirmDiscard(false); onClose(); }} className="h-9 px-3.5 rounded-lg bg-risk-600 text-white text-[12.5px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Discard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

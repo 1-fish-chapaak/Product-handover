@@ -1,11 +1,13 @@
 import { test, expect } from './_helpers';
 
 /**
- * SOX / ICFR — the engagement RACM is a single matrix (one RACM per engagement)
- * with a clear auditor approval / remark status per row, plus bulk test of
- * controls and bulk approval from the selection bar.
+ * SOX / ICFR — the RACM tab lands on one RACM document card per business
+ * process; opening a card shows that process's risks & controls matrix with a
+ * clear auditor approval / remark status per row, plus bulk test of controls
+ * and bulk approval from the selection bar. The finished bulk run hands off to
+ * the Runs tab registry.
  */
-test('Airline Group engagement RACM shows single matrix with approvals + bulk test', async ({ page }) => {
+test('Airline Group engagement RACM shows per-process matrix with approvals + bulk test', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
   // open Engagements from nav (collapsed sidebar → title attr)
@@ -14,14 +16,17 @@ test('Airline Group engagement RACM shows single matrix with approvals + bulk te
   // open the Airline Group ICFR engagement
   await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
-  // RACM tab — the matrix is shown directly, no list of RACMs in between
+  // RACM tab — lands on one RACM document card per business process
   await page.getByRole('button', { name: 'RACM', exact: true }).first().click().catch(async () => {
     await page.getByText('RACM', { exact: true }).first().click();
   });
   await page.waitForTimeout(800);
-  await expect(page.getByText('Risk & Control Matrix')).toBeVisible();
-  await expect(page.getByText('one RACM for this engagement')).toBeVisible();
-  await expect(page.getByText('Auditor review').first()).toBeVisible();
+  await expect(page.getByText('Procure to Pay — RACM')).toBeVisible();
+  // open the P2P card → that process's risks & controls matrix
+  await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('heading', { name: /Procure to Pay — Risk & Control Matrix/ })).toBeVisible();
+  await expect(page.getByText('Pre-testing review').first()).toBeVisible();
 
   // select two rows and bulk test — the knitted flow:
   // scope → compile required files → attach unique datasets → execute
@@ -38,8 +43,9 @@ test('Airline Group engagement RACM shows single matrix with approvals + bulk te
   await page.getByRole('button', { name: /Review & execute/ }).click();
   await expect(page.getByText('Checks to run')).toBeVisible();
   await page.getByRole('button', { name: /Test 2 controls/ }).click();
-  await expect(page.getByRole('button', { name: 'Done' })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: 'Done' }).click();
+  // finished run offers the Runs-tab hand-off; Done stays on the matrix
+  await expect(page.getByRole('button', { name: /View run/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
 
   // approve a pending row via the row action
   await page.locator('button[aria-label^="Approve "]').first().click();
