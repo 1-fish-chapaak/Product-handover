@@ -280,6 +280,13 @@ export interface RacmReview {
 export type RiskRating = 'High' | 'Medium' | 'Low';
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
 
+// ─── Control classification ──────────────────────────────────────────────────────
+// The RACM's own classification column. Same three words the V2 dataset uses
+// (`sox-testing/v2/v2Data.ts`) — deliberately the same vocabulary, so a control
+// classified in one place reads identically in the other.
+export type ControlClass = 'Financial' | 'Operational' | 'Compliance';
+export const CONTROL_CLASSES: ControlClass[] = ['Financial', 'Operational', 'Compliance'];
+
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
 export interface Control {
@@ -292,6 +299,13 @@ export interface Control {
   type: ControlType;
   frequency: Frequency;
   isKey: boolean;
+  /** WHAT THE CONTROL IS FOR — the outcome management is securing, as against the
+   *  work that secures it (`controlActivity`) and the one-line label the register
+   *  shows (`description`). The reviewer reads the objective first, and it was the
+   *  field they asked for by name. */
+  objective?: string;
+  /** Financial / Operational / Compliance — the RACM's classification column. */
+  clazz?: ControlClass;
   /** The RACM's Control Activity column — who does what, to which record, when,
    *  and how, spelled out in full. `description` is the one-line control
    *  statement the matrix and the register show; this is the narrative the

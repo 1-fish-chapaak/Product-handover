@@ -3,7 +3,7 @@ import { ipeChecklist } from './types';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -15,6 +15,17 @@ const OPTIONAL_KINDS: DesignDoc['kind'][] = ['Flowchart', 'Policy / SOP'];
  *  conclusion, and the reason is what the working paper prints. */
 const waivedDoc = (kind: DesignDoc['kind'], reason: DesignWaiverReason, note: string, by = 'A. Mehta · Auditor'): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name: `${kind} — not provided`, status: 'Missing', required: true, waiver: { reason, note, by, at: '11 Apr' } });
+
+/** Classification is derivable from the cycle — the transaction cycles are
+ *  financial, IT general controls answer to compliance, the rest are operational.
+ *  The OBJECTIVE is not derivable: it is what the control is for, in the client's
+ *  words, so generated rows carry none and the UI falls back to the control
+ *  statement rather than printing a mechanical restatement of the title. */
+const CLASS_BY_PROCESS: Record<string, ControlClass> = {
+  'Procure to Pay': 'Financial', 'Order to Cash': 'Financial', 'Record to Report': 'Financial',
+  'Treasury': 'Financial', 'Tax': 'Compliance', 'IT General Controls': 'Compliance',
+};
+const classOf = (process: string): ControlClass => CLASS_BY_PROCESS[process] ?? 'Operational';
 
 const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: string): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name, status, required: !OPTIONAL_KINDS.includes(kind),
@@ -240,6 +251,7 @@ const DETAILED: Control[] = [
       'Attempt a bank-detail change as the requester in the QA client and confirm the activation block holds.',
       'Confirm the change log is retained and cannot be edited by the master-data team.',
     ],
+    objective: 'Payments reach only the vendor the business actually contracted with.', clazz: 'Financial' as const,
     riskRating: 'High',
     performedBy: 'AM', wpRefHard: 'P2P/01', wpRefSoft: '/FY26/ICFR/P2P/P-01 vendor master/', reportRef: '4.1',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
@@ -275,6 +287,7 @@ const DETAILED: Control[] = [
       'Confirm from the delegation register that the approver held that authority on the approval date.',
       'Re-perform the release-timing check to confirm no order released before its approval timestamp.',
     ],
+    objective: 'The group commits money only at the authority level the delegation matrix allows.', clazz: 'Financial' as const,
     riskRating: 'High',
     performedBy: 'AM', wpRefHard: 'P2P/02', wpRefSoft: '/FY26/ICFR/P2P/P-02 purchasing/', reportRef: '4.2',
     assertions: ['Existence / Occurrence', 'Accuracy'],
@@ -329,6 +342,7 @@ const DETAILED: Control[] = [
       'Obtain the blocked-invoice report and confirm every held line was cleared or rejected by the buyer with evidence.',
       'Confirm no held invoice was paid before clearance by agreeing the payment date to the clearance date.',
     ],
+    objective: 'The group pays only for goods it ordered and received, at the price it agreed.', clazz: 'Financial' as const,
     riskRating: 'Medium',
     performedBy: 'RS', wpRefHard: 'P2P/03', wpRefSoft: '/FY26/ICFR/P2P/P-03 invoice processing/', reportRef: '4.3',
     assertions: ['Accuracy', 'Existence / Occurrence'],
@@ -361,6 +375,7 @@ const DETAILED: Control[] = [
       'Re-perform the test on reference variants — leading zeros, trailing spaces, case differences — and quantify anything that posted.',
       'For each variant duplicate found, trace to the payment run and establish whether cash left the business.',
     ],
+    objective: 'No invoice is paid twice.', clazz: 'Financial' as const,
     riskRating: 'Medium',
     performedBy: 'AM', wpRefHard: 'P2P/04', wpRefSoft: '/FY26/ICFR/P2P/P-04 duplicate block/', reportRef: '4.4',
     assertions: ['Existence / Occurrence', 'Accuracy'],
@@ -395,6 +410,7 @@ const DETAILED: Control[] = [
       'Confirm the reviewer is independent of the preparer on every sampled journal.',
       'Agree the journal population to the ledger to establish whether the review covered all of it.',
     ],
+    objective: 'Manual journals reach the ledger only once someone independent of the preparer has agreed them.', clazz: 'Financial' as const,
     riskRating: 'High',
     performedBy: 'RS', wpRefHard: 'P2P/05', wpRefSoft: '/FY26/ICFR/P2P/P-05 manual journals/', reportRef: '4.5',
     assertions: ['Accuracy', 'Completeness'],
@@ -426,6 +442,7 @@ const DETAILED: Control[] = [
       'Agree each sampled line to the GRN date and the carrier documentation.',
       'Confirm anything recorded in the wrong period was reclassified before close.',
     ],
+    objective: 'Goods received before the period ends are recorded in that period.', clazz: 'Financial' as const,
     riskRating: 'Medium',
     performedBy: 'RS', wpRefHard: 'P2P/06', wpRefSoft: '/FY26/ICFR/P2P/P-06 GR cut-off/', reportRef: '4.6',
     assertions: ['Cut-off', 'Completeness'],
@@ -449,6 +466,7 @@ const DETAILED: Control[] = [
     controlActivity: 'M. Nair (Accounts Payable) reviews the aged GR/IR report from SAP S/4HANA each month and investigates every entry open beyond 60 days with the buyer and the receiving site. Each item is cleared, accrued or written back with a documented reason; the annotated report is retained as evidence and the closing balance is agreed to the ledger.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
     rootCause: 'Ageing the GR/IR account is a month-end housekeeping task with no owner named in the close calendar, so it slips whenever close is compressed.',
+    objective: 'The GR/IR account holds only genuine in-transit items, and they are cleared within policy.', clazz: 'Operational' as const,
     riskRating: 'Low',
     performedBy: 'RS', wpRefHard: 'P2P/07', wpRefSoft: '/FY26/ICFR/P2P/P-07 GR-IR ageing/', reportRef: '4.7',
     assertions: ['Completeness', 'Accuracy'],
@@ -597,7 +615,7 @@ function generate(): Control[] {
         id: `${sp.prefix}-C-${String(idx + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(idx + 1).padStart(2, '0')}`,
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
-        isKey: i % 4 !== 0, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
+        isKey: i % 4 !== 0, clazz: classOf(sp.process), precision: `${title} — operates to prevent or detect the risk at transaction level.`,
         // The rating tracks the key judgement: the row that isn't key is the one
         // whose failure the group can absorb, so it sizes at the bottom of the band.
         riskRating: (i % 4 === 0 ? 'Low' : i % 3 === 0 ? 'Medium' : 'High') as RiskRating,
@@ -871,8 +889,8 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         ]).map((title, i) => ({
           id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
           process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-          isKey: true, precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
-          riskRating: (i % 3 === 0 ? 'High' : i % 3 === 1 ? 'Medium' : 'Low') as RiskRating,
+          isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
+          riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
           owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
           riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
           assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
@@ -926,8 +944,8 @@ export function racmTemplate(process: string): Control[] {
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-    isKey: true, precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
-    riskRating: (i % 3 === 0 ? 'High' : i % 3 === 1 ? 'Medium' : 'Low') as RiskRating,
+    isKey: i % 4 !== 3, clazz: classOf(sp.process), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
+    riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
     owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),

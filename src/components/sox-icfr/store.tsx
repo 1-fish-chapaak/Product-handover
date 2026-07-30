@@ -161,6 +161,10 @@ interface IcfrCtx {
    *  stops gating the conclusion. */
   waiveDesignDoc: (controlId: string, docId: string, reason: DesignWaiverReason, note: string) => void;
   clearDesignWaiver: (controlId: string, docId: string) => void;
+  /** Edit the control's own identity — objective, classification, key judgement,
+   *  risk rating. Key/non-key and the rating are agreed with management, never
+   *  read off an SOP, so they have to be editable rather than displayed. */
+  updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating'>) => void;
   /** The walkthrough — design tested against one transaction, on the same
    *  attributes the sample will test. */
   startWalkthrough: (controlId: string) => void;
@@ -476,6 +480,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const clearDesignWaiver = useCallback<IcfrCtx['clearDesignWaiver']>((controlId, docId) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId ? { ...d, waiver: undefined } : d) } }));
+  }, [patchControl, role]);
+
+  // The control's identity, not its results. `patchControl` refuses on a concluded
+  // control, which is right — reclassifying a row under a signed conclusion would
+  // rewrite what was signed — so the UI renders these disabled with the reopen
+  // affordance rather than letting the click land nowhere.
+  const updateControlMeta = useCallback<IcfrCtx['updateControlMeta']>((controlId, patch) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, ...patch }));
   }, [patchControl, role]);
 
   // ── Walkthrough — the design tested on one transaction ────────────────────────
@@ -1417,7 +1430,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
@@ -1427,7 +1440,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

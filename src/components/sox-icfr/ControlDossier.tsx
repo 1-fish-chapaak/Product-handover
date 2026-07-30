@@ -5,7 +5,7 @@ import {
   FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -413,6 +413,33 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
           ]} />)}
       <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
+  );
+}
+
+// ── key control — a judgement, so it is set here rather than displayed ────────────
+// Key/non-key cannot come from an SOP; it is agreed with management. The reviewer
+// asked for it to be editable at every control level. Only the auditor sets it,
+// and a concluded control refuses the patch — so the switch shows itself shut
+// rather than accepting a click that changes nothing.
+function KeyControlChip({ control, canEdit }: { control: Control; canEdit: boolean }) {
+  const { role, updateControlMeta } = useIcfr();
+  const logEvent = useAuditLog();
+  const locked = isControlLocked(control);
+  const settable = canEdit && role === 'auditor';
+  if (!settable) return control.isKey ? <Pill tone="mitigated">Key control</Pill> : null;
+  return (
+    <button disabled={locked}
+      title={locked ? 'The control is concluded — reopen it to change the key judgement'
+        : control.isKey ? 'Key control, agreed with management — click to make it non-key'
+        : 'Non-key control — click to mark it key'}
+      onClick={() => { updateControlMeta(control.id, { isKey: !control.isKey }); logEvent({ action: 'Update', description: `${control.isKey ? 'Unmarked' : 'Marked'} ${control.id} as a key control`, module: 'SOX ICFR', entity: 'Control' }); }}
+      className={cn('inline-flex items-center gap-1 h-[22px] px-2 rounded-full border text-[0.6875rem] font-semibold transition-colors',
+        control.isKey ? 'border-mitigated-200 bg-mitigated-50 text-mitigated-700' : 'border-canvas-border bg-canvas-elevated text-ink-500',
+        locked ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-mitigated-300')}>
+      <Star size={10} className={control.isKey ? 'fill-mitigated-300' : ''} />
+      {control.isKey ? 'Key control' : 'Non-key'}
+      {locked && <Lock size={9} />}
+    </button>
   );
 }
 
@@ -1948,16 +1975,26 @@ export default function ControlDossier() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                {control.isKey && <Pill tone="mitigated">Key control</Pill>}
+                {/* Key/non-key is agreed with management — it can never be read off
+                    an SOP — so the auditor sets it here rather than reading it. */}
+                <KeyControlChip control={control} canEdit={canEdit} />
+                {control.clazz && <Pill tone="draft">{control.clazz}</Pill>}
                 <NatureChip nature={control.nature} /><Pill tone="draft">{control.type}</Pill><Pill tone="draft">{control.frequency}</Pill>
+                {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
                 <span className="text-[0.6875rem] text-ink-400 font-mono">{control.id}</span>
               </div>
-              {/* Heading = the one-line control statement, same text the RACM
-                  and register show. Under it the RACM's Control Activity — who
-                  performs it, on what, when and how. Precision used to sit here
-                  and was a restatement of the heading, so it read as the title
+              {/* Heading = the control OBJECTIVE where the RACM carries one: what
+                  the control is for, which is what the reviewer reads first. The
+                  one-line statement follows it, then the Control Activity — who
+                  performs it, on what, when and how. Precision used to head this
+                  block and was a restatement of the title, so it read as the title
                   printed twice; it still carries into the working paper. */}
-              <h1 className="leadsheet-title text-[1.25rem] text-ink-900 leading-snug max-w-[640px]">{control.description}</h1>
+              <h1 className="leadsheet-title text-[1.25rem] text-ink-900 leading-snug max-w-[640px]">{control.objective ?? control.description}</h1>
+              {control.objective && (
+                <p className="text-[0.78125rem] text-ink-500 mt-1.5 max-w-[680px] leading-relaxed">
+                  <b className="text-ink-700 font-semibold">Control —</b> {control.description}
+                </p>
+              )}
               {control.controlActivity && (
                 <p className="text-[0.78125rem] text-ink-500 mt-1.5 max-w-[680px] leading-relaxed">
                   <b className="text-ink-700 font-semibold">Control activity —</b> {control.controlActivity}
