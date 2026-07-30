@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
+import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, PenLine, X } from 'lucide-react';
+import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { useIcfr } from './store';
@@ -185,6 +185,16 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
    *  viewer, so nothing here changes except which builder is read and what the
    *  download writes. */
   report?: boolean; onClose: () => void; onDownload?: () => void }) {
+  // A control's paper is view-only until BOTH tracks have concluded. Not a
+  // permission — a readiness gate: the document does not yet say anything, and a
+  // downloaded file gets treated as final by whoever opens it next.
+  const designDone = control ? trackResult(control.design) !== 'Not tested' : true;
+  const operatingDone = control ? trackResult(control.operating) !== 'Not tested' : true;
+  const downloadBlocked = !!control && (!designDone || !operatingDone);
+  const blockedWhy = !designDone && !operatingDone ? 'design and operating not concluded'
+    : !designDone ? 'test of design not concluded'
+    : 'test of operating effectiveness not concluded';
+
   // an irreversible sign-off waits behind this attest confirm before it commits
   const [attest, setAttest] = useState<AttestReq | null>(null);
   // the engagement paper reads sheet by sheet, like the workbook it exports to
@@ -260,9 +270,20 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
           <span className="text-[11px] text-ink-400 truncate">{fileName}{report ? ` · the deliverable — evidence stays in the working paper · ${included.length} controls` : control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
           <div className="flex items-center gap-2 shrink-0">
+            {/* A half-tested control's paper is a document that states nothing yet.
+                It stays readable — the auditor works from it while testing — but it
+                cannot leave the tool until both tracks have concluded, because a
+                file that goes out is a file somebody will treat as final. */}
+            {downloadBlocked && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mitigated-800 bg-mitigated-50/70 border border-mitigated-200 rounded-lg px-2.5 h-9">
+                <Eye size={12} /> View only — {blockedWhy}
+              </span>
+            )}
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
-              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            <button disabled={downloadBlocked}
+              title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
+              onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
+              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
           </div>
         </div>
       </div>

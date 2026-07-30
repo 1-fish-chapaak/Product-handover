@@ -1,6 +1,7 @@
+import { isInquiryOnly } from './types';
 import type {
   Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
+  Likelihood, MaterialityRules, OperatingTrack, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -88,6 +89,295 @@ export function failedItgcs(eng: IcfrEngagement): Control[] {
 }
 export function isItgcDependent(c: Control): boolean {
   return c.nature !== 'Manual' && c.process !== 'IT General Controls';
+}
+
+/** Does test-of-one still stand for this control? An automated control earns a
+ *  sample of one from the fact that the machine does the same thing every time —
+ *  which is only true while the ITGCs around it hold. One failed IT General
+ *  Controls control anywhere in the engagement withdraws that reliance from every
+ *  automated and IT-dependent control in it. */
+export function itgcHolds(eng: IcfrEngagement, c: Control): boolean {
+  return !isItgcDependent(c) || failedItgcs(eng).length === 0;
+}
+
+// ─── Population — what is being sampled, before anything is pulled into it ────────
+/** How many times a control at this frequency runs across a year. The population
+ *  of an occurrence-based control is this, not its row count: a monthly
+ *  reconciliation is twelve occurrences whatever the lines inside it total. */
+export function expectedOccurrences(f: Frequency): number {
+  switch (f) {
+    case 'Annual': return 1;
+    case 'Quarterly': return 4;
+    case 'Monthly': return 12;
+    case 'Weekly': return 52;
+    case 'Daily': return 250;          // working days, not calendar days
+    default: return 0;                 // Recurring / Ad-hoc — count it, don't derive it
+  }
+}
+/** A control whose work is counted in occurrences rather than rows. Recurring and
+ *  ad-hoc controls are transaction-based by nature; everything else has a
+ *  countable rhythm the auditor can start from. */
+export function defaultBasis(c: Control): PopulationBasis {
+  return c.frequency === 'Recurring' || c.frequency === 'Ad-hoc' ? 'Transaction-based' : 'Occurrence-based';
+}
+/** Locked — the checks resolved and the auditor locked it. Until this is true
+ *  nothing downstream may be drawn from it. */
+export function populationLocked(c: Control): boolean {
+  return !!c.operating.population?.locked;
+}
+
+// ─── What the application can work out for itself ────────────────────────────────
+/** How seriously the application disagrees with the population.
+ *
+ *  `warn` and `fail` both hold the lock, but they are not the same finding and
+ *  are not written the same way — see `countVerdict` for why an overshoot and a
+ *  shortfall are different problems. */
+export type VerdictLevel = 'pass' | 'warn' | 'fail';
+
+/** A computed check. Anything other than `pass` is the machine disagreeing with
+ *  the population, not a box left unticked — which is why it carries its own
+ *  reasoning, and where it can, the evidence for it. */
+export interface PopVerdict {
+  level: VerdictLevel;
+  headline: string;
+  detail: string;
+  /** Whether the population may be locked without an answer to this. */
+  blocks: boolean;
+  /** Where the extra rows sit. Only ever present on an overshoot: surplus rows
+   *  are in the extract and can be grouped, while missing rows are by
+   *  definition not there to count. */
+  breakdown?: { label: string; n: number }[];
+  /** What usually causes this, so the reader is not left guessing. */
+  causes?: string;
+}
+
+/** Whole months between two ISO dates, rounded to the nearest month and never
+ *  below one. Good enough to scale a yearly run-rate onto an interim window. */
+export function windowMonths(from?: string, to?: string): number {
+  if (!from || !to) return 12;
+  const a = new Date(from), b = new Date(to);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return 12;
+  const m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + (b.getDate() >= a.getDate() ? 1 : 0);
+  return Math.max(1, m);
+}
+
+/** How many times the control runs across the window — derived from its
+ *  frequency, so nobody has to be asked. Null for Recurring and Ad-hoc: those
+ *  have no rhythm to scale, and a number the machine cannot reach is a number it
+ *  has to ask for rather than invent. */
+export function derivedRunCount(c: Control, from?: string, to?: string): number | null {
+  const perYear = expectedOccurrences(c.frequency);
+  if (perYear === 0) return null;
+  return Math.max(1, Math.round((perYear * windowMonths(from, to)) / 12));
+}
+
+const fmtDate = (iso?: string) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const dayGap = (a?: string, b?: string) => {
+  if (!a || !b) return 0;
+  const x = new Date(a).getTime(), y = new Date(b).getTime();
+  if (isNaN(x) || isNaN(y)) return 0;
+  return Math.round((y - x) / 86_400_000);
+};
+
+/** An overshoot inside this band is noise on an estimate, not a finding. The
+ *  expected figure is a judgement made before the data was seen, and holding it
+ *  to the row is false precision. */
+const OVER_BAND = 0.05;
+/** A shortfall is held tighter, and deliberately so. See `countVerdict`. */
+const UNDER_BAND = 0.02;
+
+/** Where the surplus rows sit, as a hypothesis worth checking.
+ *
+ *  Grouped rather than listed because the question an over-inclusive filter
+ *  raises is "what did I sweep in", and three named buckets answer that faster
+ *  than a thousand rows. Deterministic from the control id — a diagnosis that
+ *  reshuffles on every render is not a diagnosis. */
+function overBreakdown(c: Control, excess: number): { label: string; n: number }[] {
+  if (excess < 3) return [];
+  let s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+  const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const labels = ['Reversals and cancellations', 'Duplicate references', 'Transaction type not in scope', 'Outside the date window', 'A second entity in the file'];
+  const picked = [labels[Math.floor(next() * 2)], labels[2], labels[3 + Math.floor(next() * 2)]];
+  const w = picked.map(() => next() + 0.25);
+  const total = w.reduce((a, b) => a + b, 0);
+  // Every bucket but the last is rounded off the weights; the last takes the
+  // remainder so the buckets always add to the surplus exactly. A breakdown
+  // that doesn't reconcile is worse than no breakdown at all — so where the
+  // remainder won't cover a bucket, that bucket is dropped rather than fudged.
+  const out: { label: string; n: number }[] = [];
+  let left = excess;
+  picked.forEach((label, i) => {
+    if (i === picked.length - 1) { if (left > 0) out.push({ label, n: left }); return; }
+    const n = Math.max(1, Math.round((excess * w[i]) / total));
+    if (n < left) { out.push({ label, n }); left -= n; }
+  });
+  return out;
+}
+
+/** Does the count hold up?
+ *
+ *  Measured against the figure the auditor wrote down BEFORE the extract ran —
+ *  the only number in this step nobody could have fitted to the answer.
+ *
+ *  The two directions are not the same problem and are not treated the same.
+ *
+ *  OVER — the filter swept too wide. The rows are all there to look at, so it is
+ *  diagnosable, and the risk it carries is that the sample picks up an item this
+ *  control never touched, which surfaces later as an exception that was never
+ *  real. Serious enough to hold the lock until it is resolved; not serious
+ *  enough to be called a failure.
+ *
+ *  UNDER — instances are missing from the population, and an instance that is
+ *  not in the population can never be sampled. That is a completeness gap, it
+ *  cannot be diagnosed from the extract (the rows aren't there to group), and it
+ *  is the thing an external auditor goes looking for. Held to a tighter band and
+ *  written as a failure.
+ *
+ *  Where no expectation was recorded it falls back to the derived run count, and
+ *  there only a shortfall counts — most populations are transaction-grained
+ *  while a run count never is. */
+export function countVerdict(c: Control): PopVerdict | null {
+  const pop = c.operating.population;
+  if (!pop) return null;
+  const runs = derivedRunCount(c, pop.filterFrom, pop.filterTo);
+  const months = windowMonths(pop.filterFrom, pop.filterTo);
+  const span = `${months} month${months === 1 ? '' : 's'}`;
+  const runNote = runs != null ? ` The control itself runs ${runs.toLocaleString()} times over ${span}.` : '';
+
+  if (pop.expectedCount != null) {
+    const exp = pop.expectedCount;
+    const diff = pop.count - exp;
+    const off = Math.abs(diff) / Math.max(1, exp);
+    const pct = Math.round(off * 100);
+    const headline = `${pop.count.toLocaleString()} extracted against ${exp.toLocaleString()} expected`;
+
+    if (diff === 0) return { level: 'pass', blocks: false, headline, detail: `Exactly the figure recorded before the extract ran.${runNote}` };
+
+    if (diff > 0) {
+      if (off <= OVER_BAND) {
+        return { level: 'pass', blocks: false, headline, detail: `${diff.toLocaleString()} over, ${pct}% — inside the 5% band. Variance on an estimate, not a finding.${runNote}` };
+      }
+      return {
+        level: 'warn', blocks: true, headline,
+        detail: `${diff.toLocaleString()} more than expected, ${pct}% over. Extra rows are not a hole in the test — the risk is sampling an item this control never touched, which turns up later as an exception that was never real.`,
+        breakdown: overBreakdown(c, diff),
+        causes: 'Commonly duplicates, reversals, a transaction type outside the scope, one month too many in the window, or a second entity sitting in the same file.',
+      };
+    }
+
+    // Short. Tighter band, and a different kind of problem.
+    if (off <= UNDER_BAND) {
+      return { level: 'pass', blocks: false, headline, detail: `${Math.abs(diff).toLocaleString()} under, ${pct}% — inside the 2% band held for shortfalls.${runNote}` };
+    }
+    return {
+      level: 'fail', blocks: true, headline,
+      detail: `${Math.abs(diff).toLocaleString()} fewer than expected, ${pct}% short. An instance that is not in the population can never be sampled, so this is a completeness gap rather than a filter that swept too wide — which is why a shortfall is held to a tighter band than an overshoot.`,
+      causes: 'Commonly a month missing from the window, a transaction type the filter excluded, or an extract taken before the period closed.',
+    };
+  }
+
+  if (runs == null) {
+    // Recurring / Ad-hoc, and nothing was recorded up front.
+    return { level: 'fail', blocks: true, headline: 'How many should there have been?', detail: `A ${c.frequency.toLowerCase()} control has no fixed rhythm, so the number cannot be worked out from the frequency. It has to come from you.` };
+  }
+  if (pop.count < runs) {
+    return { level: 'fail', blocks: true, headline: `${pop.count.toLocaleString()} instances for ${runs.toLocaleString()} runs`, detail: `A ${c.frequency.toLowerCase()} control runs ${runs.toLocaleString()} times over ${span}, but the filter returned fewer instances than that — some runs are not in here.` };
+  }
+  const per = Math.round(pop.count / runs);
+  return {
+    level: 'pass', blocks: false,
+    headline: `${pop.count.toLocaleString()} instances across ${runs.toLocaleString()} runs`,
+    detail: `A ${c.frequency.toLowerCase()} control runs ${runs.toLocaleString()} times over ${span}${per > 1 ? ` — around ${per.toLocaleString()} instances a run` : ''}.`,
+  };
+}
+
+/** Does the filter window cover the window the audit is testing?
+ *
+ *  Both dates are held, so this is subtraction. A window that opens late or
+ *  closes early leaves a stretch of the period untested, and the gap is stated
+ *  in days rather than left for someone to notice. */
+export function coverageVerdict(c: Control, windowFrom?: string, windowTo?: string): PopVerdict | null {
+  const pop = c.operating.population;
+  if (!pop) return null;
+  if (!pop.filterFrom || !pop.filterTo || !windowFrom || !windowTo) {
+    return { level: 'fail', blocks: true, headline: 'Window not recorded', detail: 'The filter was saved without dates, so the coverage cannot be measured. Refilter with a date range.' };
+  }
+  const late = dayGap(windowFrom, pop.filterFrom);
+  const early = dayGap(pop.filterTo, windowTo);
+  const gaps = [
+    late > 0 && `opens ${late} day${late === 1 ? '' : 's'} after the period starts`,
+    early > 0 && `closes ${early} day${early === 1 ? '' : 's'} before it ends`,
+  ].filter(Boolean) as string[];
+
+  if (gaps.length > 0) {
+    // A short window is the same completeness problem as a short count: the
+    // untested stretch can never be sampled out of.
+    return { level: 'fail', blocks: true, headline: `${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}`, detail: `The audit period runs ${fmtDate(windowFrom)} – ${fmtDate(windowTo)}. This filter ${gaps.join(' and ')} — that stretch goes untested.`, causes: 'Commonly a window copied from the prior round, or an extract taken before the period closed.' };
+  }
+  return { level: 'pass', blocks: false, headline: `${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}`, detail: `Covers the whole audit period, ${fmtDate(windowFrom)} – ${fmtDate(windowTo)}.` };
+}
+
+/** Everything that has to be settled before the population can be locked: every
+ *  blocking check answered, and the three source facts in.
+ *
+ *  Not every disagreement blocks. A variance inside its band is shown and passed
+ *  over; only the ones that hold the lock need an answer, and either answer will
+ *  do — a refilter that removes the disagreement, or a reason recorded against
+ *  it, because sometimes the filter is wrong and sometimes the expectation is. */
+export function populationReady(c: Control, windowFrom?: string, windowTo?: string): boolean {
+  const pop = c.operating.population;
+  if (!pop) return false;
+  const cv = countVerdict(c);
+  const gv = coverageVerdict(c, windowFrom, windowTo);
+  if (cv?.blocks && !pop.countNote?.trim()) return false;
+  if (gv?.blocks && !pop.coverageNote?.trim()) return false;
+  const p = pop.provenance;
+  return !!p?.system.trim() && !!p.extractedBy.trim() && !!p.extractedOn.trim();
+}
+
+// ─── Exceptions — every failure, at the grain the auditor has to judge it ─────────
+/** One failed attribute on one sampled item. Where no sample has been drawn the
+ *  attribute's own result stands in, so a failure is never invisible just because
+ *  the testing hasn't reached per-item grain yet. */
+export interface ExceptionRow { sampleId: string; stepId: string; ref: string; code: string; description: string; }
+export function sampleExceptions(c: Control): ExceptionRow[] {
+  const samples = c.operating.sampling?.samples ?? [];
+  const out: ExceptionRow[] = [];
+  for (const s of c.operating.steps) {
+    if (samples.length && s.sampleResults) {
+      for (const smp of samples) {
+        if (s.sampleResults[smp.id] === 'Fail') out.push({ sampleId: smp.id, stepId: s.id, ref: smp.ref, code: s.code, description: s.description });
+      }
+    } else if (stepResult(s) === 'Fail') {
+      out.push({ sampleId: '—', stepId: s.id, ref: 'attribute level', code: s.code, description: s.description });
+    }
+  }
+  return out;
+}
+/** Has this failure been judged a deviation or an isolated anomaly yet? */
+export function exceptionJudgement(c: Control, sampleId: string, stepId: string) {
+  return (c.operating.exceptions ?? []).find(x => x.sampleId === sampleId && x.stepId === stepId);
+}
+/** The original draw and the extension round, counted separately and together —
+ *  the combined evaluation is what the conclusion actually rests on. */
+export function combinedSample(c: Control): { orig: number; ext: number; total: number; fails: number; deviations: number; anomalies: number } {
+  const samples = c.operating.sampling?.samples ?? [];
+  const ex = sampleExceptions(c);
+  const judged = c.operating.exceptions ?? [];
+  const ext = samples.filter(s => s.extension).length;
+  return {
+    orig: samples.length - ext, ext, total: samples.length, fails: ex.length,
+    deviations: judged.filter(j => j.kind === 'Deviation' && ex.some(e => e.sampleId === j.sampleId && e.stepId === j.stepId)).length,
+    anomalies: judged.filter(j => j.kind === 'Anomaly' && ex.some(e => e.sampleId === j.sampleId && e.stepId === j.stepId)).length,
+  };
+}
+/** An attribute concluded on nothing but somebody's word. Operating refuses these. */
+export function inquiryOnlyAttributes(c: Control): OperatingStep[] {
+  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType));
 }
 
 // ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────

@@ -4,7 +4,7 @@ import { assessSeverity, controlConclusion, formatINR, icfrConclusion, isControl
 import type {
   Assertion, Attestation, AuditArchive, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
-  IpeConclusion, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
+  DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, SignificantAccount, TestResult, TrackConclusion,
 } from './types';
 
@@ -180,6 +180,38 @@ interface IcfrCtx {
   requestDataByEmail: (controlId: string, docIds: string[], emails: string[]) => void;
   // operating track
   setPopulation: (controlId: string, population: Population) => void;
+  /** How a design consideration or an attribute was proven — inquiry through to
+   *  reperformance. Design warns on inquiry alone; operating refuses to pass. */
+  setPointEvidenceType: (controlId: string, pointId: string, type: EvidenceType) => void;
+  setStepEvidenceType: (controlId: string, stepId: string, type: EvidenceType) => void;
+  /** The two facts the design conclusion has to state beyond effective/not:
+   *  whether the control is actually in operation, and what the conclusion rests on. */
+  setDesignBasis: (controlId: string, patch: { implemented?: boolean; basis?: DesignBasis }) => void;
+  /** Step ① — what the population is, before anything is pulled into it. */
+  setPopulationDefinition: (controlId: string, def: Omit<PopulationDefinition, 'by' | 'at'>) => void;
+  /** Withdraw the population and everything drawn from it — a different extract
+   *  is a different population, and the sample off the old one means nothing. */
+  clearPopulation: (controlId: string) => void;
+  /** PARKED — tick one of the three pre-lock checks. */
+  setPopulationCheck: (controlId: string, key: keyof PopulationChecks, value: boolean) => void;
+  /** Record what the application cannot derive: where the extract came from, the
+   *  expected count where the frequency gives none, and the reason a computed
+   *  check was overridden. */
+  setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'expectedCount' | 'countNote' | 'coverageNote'>>) => void;
+  /** Lock it. Nothing downstream runs until this has happened. */
+  lockPopulation: (controlId: string) => void;
+  /** Step ③ — freeze the attributes the sample will be tested against, or reopen
+   *  them. What each item proves cannot keep moving once testing starts. */
+  lockAttributes: (controlId: string, locked: boolean) => void;
+  /** IPE gate 2 — the drawn items trace to the locked population, and the method
+   *  and seed are on the paper. */
+  confirmExtraction: (controlId: string) => void;
+  /** Judge one failure: the control didn't work, or a one-off that can't recur. */
+  recordException: (controlId: string, sampleId: string, stepId: string, kind: ExceptionKind, reason: string) => void;
+  /** IPE gate 3 — prove one report standing behind the evidence. */
+  proveEvidenceReport: (controlId: string, reportId: string, note?: string) => void;
+  addEvidenceReport: (controlId: string, name: string, usedFor: string, insideControl?: boolean) => void;
+  removeEvidenceReport: (controlId: string, reportId: string) => void;
   // IPE — the entity-produced report is registered, its three checks are worked,
   // then it is concluded. Until it concludes Reliable there is nothing to sample.
   registerIpe: (controlId: string, meta: Omit<IpeTest, 'checks' | 'conclusion' | 'testedBy' | 'testedAt'>) => void;
@@ -582,11 +614,138 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     pushExec(() => ({ controlId, track: 'design', kind: 'request-docs', verb: `requested ${docIds.length} design document${docIds.length === 1 ? '' : 's'}` }));
   }, [me, pushExec, role]);
 
-  // ── operating track ───────────────────────────────────────────────────────────
-  const setPopulation = useCallback<IcfrCtx['setPopulation']>((controlId, population) => {
-    if (role !== 'auditor') return;
-    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, population } }));
+  // ── evidence hierarchy + the design conclusion's two facts ────────────────────
+  // Both roles tag evidence, because both produce it: the owner attests, the
+  // auditor inspects and reperforms. Only a reviewer is out.
+  const setPointEvidenceType = useCallback<IcfrCtx['setPointEvidenceType']>((controlId, pointId, type) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, evidenceType: type } : p) } }));
   }, [patchControl, role]);
+
+  const setStepEvidenceType = useCallback<IcfrCtx['setStepEvidenceType']>((controlId, stepId, type) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? { ...s, evidenceType: type } : s) } }));
+  }, [patchControl, role]);
+
+  const setDesignBasis = useCallback<IcfrCtx['setDesignBasis']>((controlId, patch) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, ...patch } }));
+    if (patch.basis) pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: 'recorded what the design conclusion rests on', target: patch.basis }));
+  }, [patchControl, pushExec, role]);
+
+  // ── operating track ───────────────────────────────────────────────────────────
+  // Inserting the population is the one step here the control's owner does as
+  // often as the auditor: a population that isn't in a system to be queried can
+  // only arrive as a file from the person who holds it. Judging it is still the
+  // auditor's — see the gate below.
+  const setPopulation = useCallback<IcfrCtx['setPopulation']>((controlId, population) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, population } }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample',
+      verb: `extracted the population — ${population.count.toLocaleString()} instances${population.sourceCount ? ` from ${population.sourceCount.toLocaleString()} rows` : ''}`,
+      target: population.criteria ?? population.source }));
+  }, [patchControl, pushExec, role]);
+
+  // What "one instance" is comes out of the control's design, so it is the
+  // auditor's call — and it is recorded rather than implied, because a row count
+  // on its own never says whether it counted the right things.
+  //
+  // PARKED 30 Jul: the definition form was taken off step ① (user ask — the step
+  // is now upload → select → extract). Nothing calls this; it is kept wired so
+  // the form can come back without re-deriving the shape, and the seeds still
+  // carry definitions that the working paper prints.
+  const setPopulationDefinition = useCallback<IcfrCtx['setPopulationDefinition']>((controlId, def) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, definition: { ...def, by: me, at: 'just now' } } }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `defined the population — ${def.basis.toLowerCase()}, ${def.expectedCount} expected`, target: def.instance }));
+  }, [patchControl, me, pushExec, role]);
+
+  // A different extract is a different population. The sample drawn off the old
+  // one, the results recorded against it and the gate that passed it all go with
+  // it — keeping any of them would leave results keyed to items nobody can find.
+  const clearPopulation = useCallback<IcfrCtx['clearPopulation']>((controlId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({
+      ...c,
+      operating: {
+        ...c.operating, population: undefined, sampling: undefined, extractionConfirmed: undefined, exceptions: undefined,
+        steps: c.operating.steps.map(s => (s.sampleResults ? { ...s, sampleResults: undefined } : s)),
+      },
+    }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: 'withdrew the population — the sample drawn from it went with it' }));
+  }, [patchControl, pushExec, role]);
+
+  // PARKED — the population used to lock behind three tick boxes. Two of them
+  // are computed now and the third became `provenance`; see PopulationChecks.
+  const setPopulationCheck = useCallback<IcfrCtx['setPopulationCheck']>((controlId, key, value) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => (c.operating.population
+      ? { ...c, operating: { ...c.operating, population: { ...c.operating.population, checks: { countMatches: false, dateRangeFull: false, productionSource: false, ...c.operating.population.checks, [key]: value } } } }
+      : c));
+  }, [patchControl, role]);
+
+  // The facts the application cannot work out for itself — where the extract came
+  // from, and why a computed check was argued with. Recorded, never attested.
+  const setPopulationFacts = useCallback<IcfrCtx['setPopulationFacts']>((controlId, patch) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => (c.operating.population
+      ? { ...c, operating: { ...c.operating, population: { ...c.operating.population, ...patch } } }
+      : c));
+  }, [patchControl, role]);
+
+  // Locking is the auditor's act — it is the moment the population stops being a
+  // proposal and becomes the thing every later conclusion rests on.
+  const lockPopulation = useCallback<IcfrCtx['lockPopulation']>((controlId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => (c.operating.population
+      ? { ...c, operating: { ...c.operating, population: { ...c.operating.population, locked: { by: me, at: 'just now' } } } }
+      : c));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: 'locked the population' }));
+  }, [patchControl, me, pushExec, role]);
+
+  // Freeze what each sampled item will be tested against. Reopening is allowed
+  // and logged: an attribute the field work proves wrong has to be fixable.
+  const lockAttributes = useCallback<IcfrCtx['lockAttributes']>((controlId, locked) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, attributesLocked: locked ? { by: me, at: 'just now' } : undefined } }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: locked ? 'locked the test attributes ahead of the draw' : 'reopened the test attributes' }));
+  }, [patchControl, me, pushExec, role]);
+
+  const confirmExtraction = useCallback<IcfrCtx['confirmExtraction']>((controlId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, extractionConfirmed: { by: me, at: 'just now' } } }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: 'confirmed the extraction — items trace to the locked population, method and seed recorded' }));
+  }, [patchControl, me, pushExec, role]);
+
+  // One judgement per failure. Re-judging the same failure replaces the entry
+  // rather than stacking a second opinion on the same item.
+  const recordException = useCallback<IcfrCtx['recordException']>((controlId, sampleId, stepId, kind, reason) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => {
+      const rest = (c.operating.exceptions ?? []).filter(x => !(x.sampleId === sampleId && x.stepId === stepId));
+      return { ...c, operating: { ...c.operating, exceptions: [...rest, { sampleId, stepId, kind, reason, by: me, at: 'just now' }] } };
+    });
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `judged an exception a ${kind.toLowerCase()}`, target: reason }));
+  }, [patchControl, me, pushExec, role]);
+
+  const addEvidenceReport = useCallback<IcfrCtx['addEvidenceReport']>((controlId, name, usedFor, insideControl) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, evidenceReports: [...(c.operating.evidenceReports ?? []), { id: uid('rep'), name, usedFor, insideControl }] } }));
+  }, [patchControl, role]);
+
+  const removeEvidenceReport = useCallback<IcfrCtx['removeEvidenceReport']>((controlId, reportId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, evidenceReports: (c.operating.evidenceReports ?? []).filter(r => r.id !== reportId) } }));
+  }, [patchControl, role]);
+
+  const proveEvidenceReport = useCallback<IcfrCtx['proveEvidenceReport']>((controlId, reportId, note) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({
+      ...c,
+      operating: { ...c.operating, evidenceReports: (c.operating.evidenceReports ?? []).map(r => r.id === reportId ? { ...r, proven: { by: me, at: 'just now', note } } : r) },
+    }));
+    pushExec(() => ({ controlId, track: 'operating', kind: 'ipe', verb: 'proved a report standing behind the evidence' }));
+  }, [patchControl, me, pushExec, role]);
 
   // Tag / untag a management review control and keep its investigation threshold.
   const setMrc = useCallback<IcfrCtx['setMrc']>((controlId, isMrc, threshold) => {
@@ -676,7 +835,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => {
       const s = c.operating.sampling;
       if (!s) return c;
-      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult }));
+      // Tagged as the extension round: appended to the one list the results are
+      // keyed against, but distinguishable on the paper from the original draw.
+      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true }));
       return { ...c, operating: { ...c.operating, sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
@@ -1514,7 +1675,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
-    setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
+    setPointEvidenceType, setStepEvidenceType, setDesignBasis,
+    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, lockPopulation, lockAttributes, confirmExtraction, recordException,
+    addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
+    registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
@@ -1523,7 +1687,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
