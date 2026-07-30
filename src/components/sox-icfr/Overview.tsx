@@ -164,8 +164,11 @@ export default function Overview() {
       {/* New audit — appended above the read-out rather than woven into it, so the
           Overview keeps the shape it had. The same sheet the SOX audit tab opens;
           both replace the parked Audit logs tab's button (user ask). Auditor and
-          reviewer only — starting a cycle is not the owner's call. */}
-      {!isOwner && (
+          reviewer only — starting a cycle is not the owner's call. Hidden once
+          inside an audit (this same component doubles as its Dashboard): a new
+          audit is created from the engagement's SOX audit tab, one level up —
+          not from inside a cycle that is already open. */}
+      {!isOwner && !inAudit && (
         <div className="flex items-center justify-end">
           <button
             onClick={() => setCreating(true)}
