@@ -1,6 +1,9 @@
 import { test, expect } from './_helpers';
 
-const SHOTS = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/c41a6cf3-b8f2-458a-a672-96b6efab4b96/scratchpad/flow-v2';
+// Relative to the repo root, and test-results/ is already gitignored. This was
+// an absolute path into one machine's scratchpad, which passed there and would
+// have failed for everyone else — including CI.
+const SHOTS = 'test-results/flow-v2';
 
 /**
  * The audit-level control page, simplified to exactly five steps:
@@ -65,6 +68,11 @@ test('five steps, and only five', async ({ page }) => {
     await expect(page.getByText('Checked automatically')).toBeVisible();
     await expect(page.getByText('Count', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Period covered')).toBeVisible();
+    // The window must read as the day it IS, not the day before. A date-only
+    // ISO parsed as UTC midnight and rendered locally prints 31 Dec 2025 for
+    // 2026-01-01 anywhere west of UTC, which silently misstates the period the
+    // audit covers. Run this spec with TZ=America/New_York to exercise it.
+    await expect(page.getByText(/Covers the whole audit period, 1 Jan 2026/)).toBeVisible();
     // What it cannot work out — asked as facts.
     await expect(page.getByText('Where this data came from')).toBeVisible();
     await expect(page.getByText('System of record')).toBeVisible();

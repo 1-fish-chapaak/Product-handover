@@ -13,7 +13,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import {
   controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, type PopVerdict,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, type PopVerdict,
 } from './helpers';
 import { programmeFor } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, Toggle, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
@@ -1162,13 +1162,6 @@ function useEngagementFiles(): { name: string; kind: string; rows: number; from:
   }, [eng.id, eng.audits, openAuditId, racmDocs]);
 }
 
-/** '2026-01-31' → '31 Jan 2026'. Left alone if it isn't a date. */
-function shortDate(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 /** One thing the application checked for itself.
  *
  *  There is no tick box here on purpose. The row states what the numbers say and
@@ -1268,6 +1261,13 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
  *  control's own id so the same population always shows the same items — this
  *  prototype holds no file bytes, and inventing a different set on every open
  *  would make the preview useless for exactly the thing it is for. */
+/** A Date back to 'YYYY-MM-DD' by its LOCAL parts. `toISOString().slice(0, 10)`
+ *  would convert to UTC first and hand back the previous day west of it — the
+ *  same drift `parseDay` exists to avoid. */
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function PopulationPreviewModal({ control, onClose }: { control: Control; onClose: () => void }) {
   const pop = control.operating.population!;
   const SHOWN = 25;
@@ -1275,14 +1275,14 @@ function PopulationPreviewModal({ control, onClose }: { control: Control; onClos
     // Deterministic — a tiny LCG seeded off the control id.
     let s = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
     const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
-    const start = pop.filterFrom ? new Date(pop.filterFrom).getTime() : Date.parse('2026-01-01');
-    const end = pop.filterTo ? new Date(pop.filterTo).getTime() : Date.parse('2026-12-31');
+    const start = (parseDay(pop.filterFrom) ?? new Date(2026, 0, 1)).getTime();
+    const end = (parseDay(pop.filterTo) ?? new Date(2026, 11, 31)).getTime();
     const span = Math.max(1, end - start);
     const who = ['R. Nair', 'S. Kulkarni', 'A. Verma', 'P. Desai', 'M. Iyer'];
     const kind = ['Vendor payment run', 'Payroll disbursement', 'Inter-company transfer', 'Utility settlement', 'Treasury sweep'];
     return Array.from({ length: Math.min(SHOWN, pop.count) }, (_, i) => ({
       ref: `${control.id}-${String(i + 1).padStart(5, '0')}`,
-      date: new Date(start + next() * span).toISOString().slice(0, 10),
+      date: isoDay(new Date(start + next() * span)),
       description: kind[Math.floor(next() * kind.length)],
       account: `${2100 + Math.floor(next() * 6) * 10} — ${['Trade payables', 'Bank — current', 'Payroll clearing', 'Inter-company', 'Accruals', 'Treasury'][Math.floor(next() * 6)]}`,
       amount: Math.round((next() * 480 + 12) * 1000),
@@ -1321,7 +1321,7 @@ function PopulationPreviewModal({ control, onClose }: { control: Control; onClos
               {rows.map(r => (
                 <tr key={r.ref} className="border-b border-canvas-border last:border-b-0 hover:bg-paper-50">
                   <td className="px-3 py-1.5 font-mono text-[0.6875rem] text-ink-700 whitespace-nowrap">{r.ref}</td>
-                  <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap tabular-nums">{shortDate(r.date)}</td>
+                  <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap tabular-nums">{fmtDay(r.date)}</td>
                   <td className="px-3 py-1.5 text-ink-800">{r.description}</td>
                   <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap">{r.account}</td>
                   <td className="px-3 py-1.5 text-ink-900 text-right tabular-nums whitespace-nowrap">₹{r.amount.toLocaleString('en-IN')}</td>
@@ -1383,7 +1383,7 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   // instances it touches, so it is a hint beside the field, never the value.
   const runsInWindow = derivedRunCount(control, from, to);
 
-  const criteria = [txnType && `type ${txnType}`, account && `account ${account}`, (from || to) && `${shortDate(from) || '…'} – ${shortDate(to) || '…'}`].filter(Boolean).join(' · ');
+  const criteria = [txnType && `type ${txnType}`, account && `account ${account}`, (from || to) && `${fmtDay(from, '') || '…'} – ${fmtDay(to, '') || '…'}`].filter(Boolean).join(' · ');
 
   const extract = () => {
     if (!chosen || !Number(expected)) return;
@@ -1918,7 +1918,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
                 <label className="block min-w-0">
                   <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Seed</span>
                   <div className="flex items-center gap-1.5">
-                    <input value={seed} onChange={e => setSeed(Number(e.target.value.replace(/\D/g, '')) || 0)} inputMode="numeric"
+                    <input value={seed} onChange={e => { const n = Number(e.target.value.replace(/\D/g, '')); setSeed(n > 0 ? n : 1); }} inputMode="numeric"
                       className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
                     <button onClick={() => setSeed(10000 + ((seed * 7919 + 104729) % 89999))} title="New seed"
                       className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer" aria-label="New seed"><Dices size={13} /></button>

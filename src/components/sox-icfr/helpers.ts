@@ -171,16 +171,39 @@ export function derivedRunCount(c: Control, from?: string, to?: string): number 
   return Math.max(1, Math.round((perYear * windowMonths(from, to)) / 12));
 }
 
-const fmtDate = (iso?: string) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
+/** Read a date the way it is written.
+ *
+ *  `new Date('2026-01-01')` is UTC midnight by specification, so rendering it
+ *  through toLocaleDateString anywhere west of UTC prints the day before: an
+ *  audit window opening 1 Jan 2026 reads as 31 Dec 2025 in New York. Every date
+ *  in this step is a calendar date rather than an instant — the day the period
+ *  opens, the day the extract was taken — so each is parsed at LOCAL midnight
+ *  and stays the day it says it is, wherever it is read.
+ *
+ *  Anything that isn't a bare YYYY-MM-DD falls through to the normal parse. */
+export function parseDay(iso?: string): Date | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** '2026-01-31' → '31 Jan 2026'. Left as-is if it isn't a date; `empty` covers
+ *  the missing case, so a filter field can render blank where a working-paper
+ *  row wants an em dash. */
+export function fmtDay(iso?: string, empty = '—'): string {
+  if (!iso) return empty;
+  const d = parseDay(iso);
+  return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
+}
+
+const fmtDate = (iso?: string) => fmtDay(iso);
 const dayGap = (a?: string, b?: string) => {
-  if (!a || !b) return 0;
-  const x = new Date(a).getTime(), y = new Date(b).getTime();
-  if (isNaN(x) || isNaN(y)) return 0;
-  return Math.round((y - x) / 86_400_000);
+  const x = parseDay(a), y = parseDay(b);
+  if (!x || !y) return 0;
+  // Both ends are local midnight, so a DST boundary inside the span makes one
+  // day 23 or 25 hours long — rounding keeps the answer in whole days.
+  return Math.round((y.getTime() - x.getTime()) / 86_400_000);
 };
 
 /** An overshoot inside this band is noise on an estimate, not a finding. The
