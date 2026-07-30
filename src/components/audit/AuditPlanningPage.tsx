@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ const STATUS_CLS: Record<string, string> = {
   Review: 'bg-mitigated-50 text-mitigated-700',
   Planned: 'bg-brand-50 text-brand-700',
   Draft: 'bg-draft-50 text-draft-700',
-  Closed: 'bg-gray-100 text-gray-600',
+  Closed: 'bg-canvas text-ink-600',
 };
 
 const SEED_ENGAGEMENTS: TimelineEngagement[] = [
@@ -84,6 +85,7 @@ const FRAMEWORK_LIST = ['SOX ICFR', 'IFC', 'COSO', 'SOC 1', 'SOC 2', 'ISO 27001'
 
 export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagements }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [activeTab, setActiveTab] = useState<PlanningTab>('timeline');
 
   // Stateful engagement list
@@ -94,6 +96,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
     setEngagements(prev => [...prev, eng]);
     setShowPlanDrawer(false);
     addToast({ message: `"${eng.name}" planned — visible on timeline and engagement list`, type: 'success' });
+    logEvent({ action: 'Create', description: `Planned engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
   };
 
   // Filters
@@ -216,7 +219,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             </div>
 
             {/* Gantt chart */}
-            <div className="glass-card rounded-xl overflow-hidden relative">
+            <div className="glass-card overflow-hidden relative">
               {/* Month header */}
               <div className="flex border-b border-border bg-surface-2/50 sticky top-0 z-10">
                 <div className="w-[200px] shrink-0 px-4 py-2.5 text-[0.625rem] font-semibold text-text-muted uppercase">Process / Engagement</div>
@@ -324,7 +327,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                 { label: 'At Risk', value: filtered.filter(e => e.atRisk).length, color: 'text-risk-700' },
               ].map((kpi, i) => (
                 <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.04 }}
-                  className="glass-card rounded-xl p-3 text-center">
+                  className="glass-card p-3 text-center">
                   <div className={`text-lg font-bold tabular-nums ${kpi.color}`}>{kpi.value}</div>
                   <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
                 </motion.div>
@@ -365,8 +368,10 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             engagements={engagements}
             onPlanNew={() => setShowPlanDrawer(true)}
             onActivate={(id) => {
+              const eng = engagements.find(e => e.id === id);
               setEngagements(prev => prev.map(e => e.id === id ? { ...e, status: 'Active' as EngStatus } : e));
               addToast({ message: 'Engagement activated — now visible in execution workspace', type: 'success' });
+              logEvent({ action: 'Update', description: `Activated engagement "${eng?.name ?? id}"`, module: 'Engagements', entity: 'Engagement' });
             }}
           />
         )}
@@ -563,7 +568,7 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
               <span className="text-[0.6875rem] font-bold text-text-muted uppercase">SOX Enforcement</span>
               {isSox
                 ? <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-bold bg-brand-100 text-brand-700">Enabled</span>
-                : <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-gray-100 text-gray-500">Disabled</span>}
+                : <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-canvas text-ink-500">Disabled</span>}
             </div>
             {isSox
               ? <p className="text-[0.625rem] text-brand-700 leading-relaxed">Reviewer approval, evidence requirements, key-control validation, and period locking will be enforced.</p>
@@ -641,7 +646,7 @@ const PLAN_STATUS_CLS: Record<PlanStatus, string> = {
   Planned: 'bg-brand-50 text-brand-700',
   Approved: 'bg-evidence-50 text-evidence-700',
   Active: 'bg-compliant-50 text-compliant-700',
-  Closed: 'bg-gray-100 text-gray-600',
+  Closed: 'bg-canvas text-ink-600',
 };
 
 function toPlanRow(e: TimelineEngagement): PlanRow {
@@ -711,7 +716,7 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
       </div>
 
       {/* Table */}
-      <div className="glass-card rounded-xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[0.75rem]">
             <thead>

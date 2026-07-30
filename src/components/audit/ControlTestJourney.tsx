@@ -10,6 +10,7 @@ import {
   ChevronRight, ChevronLeft, Loader2, ListChecks, FileCheck2, Database,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { Engagement } from '../../data/engagements';
 import { attrCode, racmRowsForProcess } from '../../data/racm';
 import { useEngagementWorkspace } from './engagementWorkspace';
@@ -39,6 +40,7 @@ const POP_PREVIEW: (string | number)[][] = [
 
 export default function ControlTestJourney({ engagement, controlId, onClose }: { engagement: Engagement; controlId: string; onClose: () => void }) {
   const { addToast, updateToast } = useToast();
+  const logEvent = useAuditLog();
   const ws = useEngagementWorkspace();
   const control = ws.controls.find(c => c.controlId === controlId);
 
@@ -136,6 +138,7 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
       { population: population ?? 0, method, samples: samples.map(s => ({ ref: s.ref, result: 'Pass' as const })) },
     );
     addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_${control.controlId}.xlsx` });
+    logEvent({ action: 'Export', description: `Exported working paper Working_Paper_${control.controlId}.xlsx`, module: 'Engagements', entity: 'Working Paper' });
   };
 
   const canContinue =

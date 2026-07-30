@@ -14,10 +14,10 @@ export const DEFICIENCY_LABELS: Record<DeficiencyType, string> = {
 export const DEFICIENCY_CLS: Record<DeficiencyType, string> = {
   SYSTEM_DEFICIENCY: 'bg-red-50 text-red-700', DESIGN_DEFICIENCY: 'bg-amber-50 text-amber-700', OPERATING_DEFICIENCY: 'bg-orange-50 text-orange-700',
   DATA_DEFICIENCY: 'bg-blue-50 text-blue-700', DOCUMENTATION_DEFICIENCY: 'bg-purple-50 text-purple-700', CONTROL_DEFICIENCY: 'bg-red-50 text-red-600',
-  PROCESS_DEFICIENCY: 'bg-amber-50 text-amber-600', OTHER: 'bg-gray-100 text-gray-600',
+  PROCESS_DEFICIENCY: 'bg-amber-50 text-amber-600', OTHER: 'bg-canvas text-ink-600',
 };
 export const REMEDIATION_STATUS_CLS: Record<RemediationStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600', IN_PROGRESS: 'bg-blue-50 text-blue-700', SUBMITTED: 'bg-purple-50 text-purple-700',
+  NOT_STARTED: 'bg-canvas text-ink-600', IN_PROGRESS: 'bg-blue-50 text-blue-700', SUBMITTED: 'bg-purple-50 text-purple-700',
   ACCEPTED: 'bg-emerald-50 text-emerald-700', REJECTED: 'bg-red-50 text-red-700',
 };
 export const DEFICIENCY_TYPES: DeficiencyType[] = ['SYSTEM_DEFICIENCY', 'DESIGN_DEFICIENCY', 'OPERATING_DEFICIENCY', 'DATA_DEFICIENCY', 'DOCUMENTATION_DEFICIENCY', 'CONTROL_DEFICIENCY', 'PROCESS_DEFICIENCY', 'OTHER'];
@@ -58,11 +58,11 @@ export interface AutomationCasesState {
 }
 
 export const CASE_STATUS_CLS: Record<CaseStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600', OPEN: 'bg-blue-50 text-blue-700', IN_PROGRESS: 'bg-purple-50 text-purple-700',
-  RESOLVED: 'bg-emerald-50 text-emerald-700', CLOSED: 'bg-gray-50 text-gray-500', CANCELLED: 'bg-gray-50 text-gray-400',
+  DRAFT: 'bg-canvas text-ink-600', OPEN: 'bg-blue-50 text-blue-700', IN_PROGRESS: 'bg-purple-50 text-purple-700',
+  RESOLVED: 'bg-emerald-50 text-emerald-700', CLOSED: 'bg-canvas text-ink-500', CANCELLED: 'bg-canvas text-ink-400',
 };
 export const CASE_PRIORITY_CLS: Record<CasePriority, string> = {
-  LOW: 'bg-gray-100 text-gray-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
+  LOW: 'bg-canvas text-ink-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
 };
 export const CASE_CAT_LABELS: Record<CaseCategory, string> = {
   RECONCILIATION_MISMATCH: 'Reconciliation Mismatch', DUPLICATE: 'Duplicate', MISSING_DOCUMENT: 'Missing Document',

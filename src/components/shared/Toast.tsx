@@ -12,6 +12,9 @@ interface Toast {
   action?: { label: string; onClick: () => void };
   /** Secondary action (e.g. Undo) shown to the left of the primary action */
   secondaryAction?: { label: string; onClick: () => void };
+  /** Never auto-dismiss — stays until the user acts or closes it. Used for
+   *  destructive actions (e.g. a section delete) so the Undo is always there. */
+  persist?: boolean;
 }
 
 interface ToastContextType {
@@ -92,10 +95,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   useEffect(() => {
     const ms = DISMISS_MS[toast.type];
-    if (ms === null) return;
+    if (ms === null || toast.persist) return;
     const timer = setTimeout(() => onRemove(toast.id), ms);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.type, onRemove]);
+  }, [toast.id, toast.type, toast.persist, onRemove]);
 
   const icons = {
     loading: <Loader2 size={16} className="text-brand-600 animate-spin" />,
@@ -118,15 +121,15 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       <div className="shrink-0 mt-0.5">{icons[toast.type]}</div>
       <div className="flex-1 min-w-0">
         {title && (
-          <div className="text-[13px] font-semibold text-ink-900 leading-tight mb-0.5">{title}</div>
+          <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight mb-0.5">{title}</div>
         )}
-        <div className="text-[13px] text-ink-800 leading-snug">{toast.message}</div>
+        <div className="text-[0.8125rem] text-ink-800 leading-snug">{toast.message}</div>
         {(toast.action || toast.secondaryAction) && (
           <div className="flex items-center gap-3 mt-2">
             {toast.secondaryAction && (
               <button
                 onClick={() => { toast.secondaryAction!.onClick(); onRemove(toast.id); }}
-                className="text-[12px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer whitespace-nowrap"
+                className="text-[0.75rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer whitespace-nowrap"
               >
                 {toast.secondaryAction.label}
               </button>
@@ -134,7 +137,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
             {toast.action && (
               <button
                 onClick={toast.action.onClick}
-                className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 transition-colors cursor-pointer whitespace-nowrap"
+                className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 transition-colors cursor-pointer whitespace-nowrap"
               >
                 {toast.action.label}
               </button>

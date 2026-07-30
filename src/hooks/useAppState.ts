@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useCurrentUser } from '../context/CurrentUserContext';
 import { findEngagement } from '../data/engagements';
 import type { WorkflowTypeId } from '../data/mockData';
 import type { WorkflowRunSeed } from '../components/workflow/workflowRunSeed';
@@ -31,7 +32,9 @@ export type View =
   | 'programs'
   // Engagements
   | 'engagements'
+  | 'sox-testing'
   | 'sox-icfr'
+  | 'compliance-engagement'
   | 'engagement-overview'
   | 'engagement-case-management'
   | 'my-queue'
@@ -64,6 +67,7 @@ export type View =
   | 'admin-users'
   | 'admin-roles'
   | 'admin-logs'
+  | 'platform-usage'
   // One-Click Audit
   | 'one-click-audit'
   // Case Management
@@ -238,6 +242,16 @@ const getInitialBPId = (): string | null => {
   return params.get('bp');
 };
 
+// New-tab deep links into the chat (e.g. an insight's "what to do next" step
+// opened via ?view=chat&prompt=<text>) seed the composer draft — pre-filled,
+// not auto-submitted, so the auditor edits and sends it themselves.
+const getInitialChatDraft = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'chat') return null;
+  return params.get('prompt');
+};
+
 const INITIAL_STATE: AppState = {
   view: getInitialView(),
   sidebarExpanded: false,
@@ -265,7 +279,7 @@ const INITIAL_STATE: AppState = {
   workflowType: null,
   chatInitialQuery: null,
   chatWorkflowRunSeed: null,
-  chatComposerDraft: null,
+  chatComposerDraft: getInitialChatDraft(),
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
   workflowBuilderSeedPrompt: null,
@@ -278,7 +292,10 @@ const INITIAL_STATE: AppState = {
   pendingDashboard: null,
   executionPanel: null,
   executionPanelControlId: null,
-  exceptionRole: 'risk-owner',
+  // Placeholder only — `useAppState` derives the real initial value from the
+  // signed-in user (risk owners → 'risk-owner', everyone else → 'auditor').
+  // ManageExceptionsView's own toggle remains a demo affordance on top.
+  exceptionRole: 'auditor',
   knowledgeHubFocusSourceId: null,
   // Initialised lazily from localStorage in `useAppState` below; the empty
   // array here is just a type-correct placeholder the lazy init replaces.
@@ -288,11 +305,31 @@ const INITIAL_STATE: AppState = {
 };
 
 export function useAppState() {
+  // `useAppState` is always called under CurrentUserProvider (App.tsx), so the
+  // Manage Exceptions persona can be derived from the real login instead of a
+  // hardcoded default. Risk owners get the Risk Owner lens; everyone else
+  // (incl. signed-out) starts as Auditor. The in-view toggle still works as a
+  // demo affordance via setExceptionRole.
+  const { currentUser } = useCurrentUser();
+  const authRoleId = currentUser?.roleId ?? null;
+
   // Lazy init: hydrate notifications from localStorage on first mount only.
   const [state, setState] = useState<AppState>(() => ({
     ...INITIAL_STATE,
+    exceptionRole: authRoleId === 'role-risk' ? 'risk-owner' : 'auditor',
     notifications: loadPersistedNotifications(),
   }));
+
+  // Re-sync the exception persona when the signed-in identity changes
+  // (sign-in from the login gate, persona switch, sign-out). Render-time
+  // derived-state pattern — see react.dev "storing information from previous
+  // renders" — so no effect-driven cascading render.
+  const [prevAuthRoleId, setPrevAuthRoleId] = useState<string | null>(authRoleId);
+  if (prevAuthRoleId !== authRoleId) {
+    setPrevAuthRoleId(authRoleId);
+    const derived: ExceptionRole = authRoleId === 'role-risk' ? 'risk-owner' : 'auditor';
+    setState(prev => (prev.exceptionRole === derived ? prev : { ...prev, exceptionRole: derived }));
+  }
 
   // Persist notifications to localStorage whenever they change. Read flags,
   // dismissals, and (Phase 2+) action state / snooze / archive all flow
@@ -353,7 +390,12 @@ export function useAppState() {
 
   const openEngagement = useCallback((engagementId: string) => {
     const eng = findEngagement(engagementId);
-    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr' : 'engagement-overview';
+    // Type routing: SOX gets the ICFR workspace; Compliance gets the promoted
+    // pattern workspace (scope → PBC → testing → review → conclusion); the rest
+    // keep the classic overview.
+    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr'
+      : eng?.type === 'Compliance' ? 'compliance-engagement'
+      : 'engagement-overview';
     setState(prev => ({ ...prev, view, selectedEngagementId: engagementId }));
   }, []);
 

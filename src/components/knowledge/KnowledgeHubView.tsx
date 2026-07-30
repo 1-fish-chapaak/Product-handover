@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Database, Brain, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Database, Brain, Sparkles, Zap, ArrowRight } from 'lucide-react';
 import DataSourcesView, {
   type DataSourcesViewHandle,
 } from '../data-sources/DataSourcesView';
+import SmartLearnView from './SmartLearnView';
 import FloatingLines from '../shared/FloatingLines';
+import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
+import { SEED } from '../data-sources/sources';
+import { MEMORY_STORE } from '../../data/memoryStore';
 
 type TabId = 'data' | 'learn';
-const TABS: { id: TabId; label: string; icon: React.ElementType; comingSoon?: boolean }[] = [
+const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'data',  label: 'Data Sources', icon: Database },
-  { id: 'learn', label: 'Smart Learn',  icon: Brain, comingSoon: true },
+  { id: 'learn', label: 'Smart Learn',  icon: Brain },
 ];
 
 // ─── Underlined tabs ────────────────────────────────────────────────────────
@@ -64,56 +68,6 @@ function UnderlinedTabs({
   );
 }
 
-// ─── Smart Learn coming-soon ────────────────────────────────────────────────
-
-function SmartLearnComingSoon() {
-  const prefersReducedMotion = useReducedMotion();
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-      className="max-w-2xl mx-auto"
-    >
-      {/* Flat, hairline card — Linear/Notion aesthetic: no floating shadow,
-          no gradient blob, no elevated icon tile. Brand is reserved for the
-          flat icon square + the Coming-soon pill accent. */}
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-10 py-14 text-center">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-semibold tracking-wider uppercase mb-6">
-          <Sparkles size={11} />
-          Coming soon
-        </span>
-        <div className="w-12 h-12 mx-auto mb-5 rounded-lg bg-brand-50 flex items-center justify-center">
-          <motion.div
-            animate={prefersReducedMotion ? undefined : { rotate: [0, 6, -6, 0] }}
-            transition={prefersReducedMotion ? undefined : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Brain size={24} className="text-brand-700" />
-          </motion.div>
-        </div>
-        <h2 className="text-[1.75rem] text-ink-900 leading-tight mb-3">
-          Smart Learn is on the way
-        </h2>
-        <p className="text-[0.9375rem] text-ink-500 leading-relaxed max-w-md mx-auto">
-          IRA will remember your output preferences, your team's vocabulary, and the
-          corrections you make in chat — so answers sound like
-          <em className="not-italic font-semibold text-ink-800"> you</em>, not a generic assistant.
-        </p>
-        <div className="mt-7 flex items-center justify-center gap-1.5" aria-hidden="true">
-          {[0, 1, 2].map(i => (
-            <motion.span
-              key={i}
-              className="w-1.5 h-1.5 rounded-full bg-brand-400"
-              animate={prefersReducedMotion ? { opacity: 0.6 } : { opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
-              transition={prefersReducedMotion ? undefined : { duration: 1.2, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
-            />
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 //
 // Plain editorial layout matching Dashboards: breadcrumb eyebrow, serif
@@ -128,12 +82,14 @@ export default function KnowledgeHubView() {
   // title / subhead / tabs header is hidden (the detail's own breadcrumb leads
   // back).
   const [detailOpen, setDetailOpen] = useState(false);
+  // One-Click Audit modal — surfaced because integrated DBs are connected.
+  const [auditWithAiOpen, setAuditWithAiOpen] = useState(false);
+  const connectedDbs = SEED.filter(s => s.type === 'database').length;
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
-  // stays in the future tense so the header never promises a feature that
-  // isn't shipped yet (the tab is Coming Soon).
+  // to the memory registry it now hosts.
   const ira = <span className="font-medium text-brand-700">IRA</span>;
   const subhead = tab === 'learn'
-    ? <>What {ira} will remember about how you and your team work — coming soon.</>
+    ? <>Everything {ira} has learned about how you and your team work — every memory traceable, scoped, and governed.</>
     : <>One place for every file, database, and cloud source {ira} can draw on.</>;
 
   useEffect(() => {
@@ -209,7 +165,7 @@ export default function KnowledgeHubView() {
             transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
             className="-mb-px"
           >
-            <UnderlinedTabs active={tab} onChange={setTab} />
+            <UnderlinedTabs active={tab} onChange={setTab} counts={{ learn: MEMORY_STORE.length }} />
           </motion.div>
         </div>
       </div>
@@ -234,6 +190,52 @@ export default function KnowledgeHubView() {
               // scroll region (no scroll-within-scroll).
               className="flex-1 min-h-0 flex flex-col overflow-hidden"
             >
+              {/* Audit with AI — recommended banner. Shown because integrated DB
+                  sources are connected; opens the One-Click Audit wizard. Hidden
+                  while a source detail takes over the page. */}
+              {!detailOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+                  className="shrink-0 mb-4 relative overflow-hidden rounded-2xl border border-brand-300/40 bg-gradient-to-r from-[#26064A] via-[#3B0B72] to-[#550FA5] px-5 py-3.5 flex items-center justify-between gap-4"
+                >
+                  <FloatingLines
+                    enabledWaves={['top', 'bottom']}
+                    lineCount={3}
+                    lineDistance={8}
+                    bendRadius={5}
+                    bendStrength={-0.3}
+                    interactive
+                    parallax
+                    color="#C393FA"
+                    opacity={0.35}
+                  />
+                  <div className="relative flex items-center gap-3.5 min-w-0">
+                    <div className="size-10 rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 flex items-center justify-center shadow-[0_0_18px_rgba(163,102,240,0.45)] shrink-0">
+                      <Sparkles size={18} className="text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[0.9375rem] font-semibold text-white">Audit with AI</p>
+                        <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[9px] font-bold uppercase tracking-[0.1em]">Recommended</span>
+                      </div>
+                      <p className="text-[0.75rem] text-white/65 truncate">
+                        {connectedDbs} databases connected — Ira can draft engagements, controls & workflows from your live data in one click.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAuditWithAiOpen(true)}
+                    className="relative shrink-0 h-9 px-4 rounded-lg bg-white text-brand-800 hover:bg-brand-50 text-[0.8125rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
+                  >
+                    <Zap size={13} />
+                    One-Click Audit
+                    <ArrowRight size={13} />
+                  </button>
+                </motion.div>
+              )}
               <DataSourcesView ref={dataSourcesRef} onDetailChange={setDetailOpen} />
             </motion.div>
           ) : (
@@ -243,13 +245,18 @@ export default function KnowledgeHubView() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              className="flex-1 min-h-0 flex items-center justify-center"
+              // The registry scrolls as one region under the pinned page header.
+              className="flex-1 min-h-0 overflow-y-auto"
             >
-              <SmartLearnComingSoon />
+              <SmartLearnView />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {auditWithAiOpen && <OneClickAuditModal onClose={() => setAuditWithAiOpen(false)} />}
+      </AnimatePresence>
     </div>
   );
 }

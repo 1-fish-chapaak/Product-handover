@@ -85,7 +85,7 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
         <div className="flex items-center justify-between">
           <div>
             <span className="text-[0.6875rem] font-semibold text-text block">Upload RACM</span>
-            <span className="text-[0.625rem] text-gray-400">Upload an Excel/CSV RACM file to link controls to this engagement.</span>
+            <span className="text-[0.625rem] text-ink-400">Upload an Excel/CSV RACM file to link controls to this engagement.</span>
           </div>
           <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.625rem] font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
             Choose File
@@ -106,7 +106,7 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-[0.6875rem] text-gray-400 cursor-not-allowed">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-ink-400 cursor-not-allowed">
           <input type="checkbox" checked={config.reviewerRequired} disabled className={checkCls + ' opacity-50'} />
           Reviewer required
         </label>
@@ -182,14 +182,14 @@ function AutomationProjectSetup({ config, onChange }: { config: AutomationProjec
             const label = ot === 'CASE_MANAGEMENT' ? 'Case Management' : ot === 'DOWNLOADABLE_FILE' ? 'Downloadable File' : ot.charAt(0) + ot.slice(1).toLowerCase();
             const isDashboard = ot === 'DASHBOARD';
             return (
-              <label key={ot} className={`flex items-center gap-2 text-[0.6875rem] ${isReport ? 'text-gray-400 cursor-not-allowed' : 'text-text cursor-pointer'}`} title={isDashboard ? 'Creates a monitoring dashboard when this project is scheduled for recurring runs.' : undefined}>
+              <label key={ot} className={`flex items-center gap-2 text-[0.6875rem] ${isReport ? 'text-ink-400 cursor-not-allowed' : 'text-text cursor-pointer'}`} title={isDashboard ? 'Creates a monitoring dashboard when this project is scheduled for recurring runs.' : undefined}>
                 <input type="checkbox" checked={checked || isReport} disabled={isReport} onChange={() => toggleOutput(ot)} className={checkCls + (isReport ? ' opacity-50' : '')} />
                 {label}
               </label>
             );
           })}
         </div>
-        <p className="text-[0.5625rem] text-gray-400 mt-1">Report is required and cannot be unchecked.</p>
+        <p className="text-[0.5625rem] text-ink-400 mt-1">Report is required and cannot be unchecked.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">

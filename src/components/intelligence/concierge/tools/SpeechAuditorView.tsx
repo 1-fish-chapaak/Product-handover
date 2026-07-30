@@ -14,6 +14,7 @@ import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Pill, type Tone } from '../../../shared/StatusBadge';
 import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
 import ConfirmationModal from '../../../shared/ConfirmationModal';
+import { useAuditLog, type LogInput } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -306,7 +307,7 @@ function ReportView({ report }: { report: SpeechAuditResult['report'] }) {
   return (
     <div className="space-y-6">
       {/* Executive summary */}
-      <section className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-5">
+      <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <h3 className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 mb-2">
           Executive summary
         </h3>
@@ -327,7 +328,7 @@ function ReportView({ report }: { report: SpeechAuditResult['report'] }) {
       {/* Controls scorecard */}
       <section>
         <h3 className="text-[0.9375rem] font-semibold text-ink-900 mb-3">Controls scorecard</h3>
-        <div className="rounded-[14px] border border-canvas-border overflow-hidden">
+        <div className="rounded-lg border border-canvas-border overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-paper-50/70">
               <tr className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
@@ -361,7 +362,7 @@ function ReportView({ report }: { report: SpeechAuditResult['report'] }) {
         </h3>
         <div className="space-y-3">
           {report.findings.map((f, i) => (
-            <div key={i} className="rounded-[14px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+            <div key={i} className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
               <div className="flex items-center gap-2 border-b border-canvas-border bg-paper-50/50 px-4 py-2.5">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-brand-50 text-[0.6875rem] font-bold text-brand-700">
                   {i + 1}
@@ -387,7 +388,7 @@ function ReportView({ report }: { report: SpeechAuditResult['report'] }) {
       </section>
 
       {/* Conclusion */}
-      <section className="rounded-[14px] border border-brand-100 bg-brand-50/40 p-5">
+      <section className="rounded-lg border border-brand-100 bg-brand-50/40 p-5">
         <h3 className="text-[0.75rem] font-semibold uppercase tracking-wide text-brand-700 mb-2">
           Auditor&apos;s conclusion
         </h3>
@@ -399,7 +400,7 @@ function ReportView({ report }: { report: SpeechAuditResult['report'] }) {
 
 function TranscriptView({ transcript }: { transcript: SpeechAuditResult['transcript'] }) {
   return (
-    <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated">
       <div className="flex items-center justify-between border-b border-canvas-border px-5 py-3">
         <div className="flex items-center gap-2">
           <Quote size={15} className="text-ink-400" />
@@ -444,26 +445,26 @@ function SentimentView({ transcript }: { transcript: SpeechAuditResult['transcri
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Overall</p>
           <p className={`mt-1 text-[1.25rem] font-semibold ${SENT_PILL[overall].split(' ').find((c) => c.startsWith('text-')) ?? 'text-ink-900'}`}>
             {overall}
           </p>
           <p className="text-[0.75rem] text-ink-400 tabular-nums">score {transcript.overall_sentiment.toFixed(2)}</p>
         </div>
-        <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Lowest point</p>
           <p className="mt-1 text-[0.875rem] font-semibold text-risk-700">{lowest.speaker} · {lowest.timestamp}</p>
           <p className="text-[0.75rem] text-ink-400 tabular-nums">score {lowest.sentiment_score.toFixed(2)}</p>
         </div>
-        <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+        <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Highest point</p>
           <p className="mt-1 text-[0.875rem] font-semibold text-compliant-700">{highest.speaker} · {highest.timestamp}</p>
           <p className="text-[0.75rem] text-ink-400 tabular-nums">score {highest.sentiment_score.toFixed(2)}</p>
         </div>
       </div>
 
-      <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-5">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <div className="mb-3 flex items-center gap-2">
           <TrendingUp size={15} className="text-brand-600" />
           <h3 className="text-[0.9375rem] font-semibold text-ink-900">Sentiment over the call</h3>
@@ -642,15 +643,37 @@ function ExtraControls(
 
 // ─── Result actions: exports ─────────────────────────────────────────────────
 
-function ResultActions(result: SpeechAuditResult): ReactNode {
+function ResultActions(result: SpeechAuditResult, logEvent?: (e: LogInput) => void): ReactNode {
   const btn =
     'inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer';
   return (
     <>
-      <button onClick={() => exportTranscriptTxt(result)} className={btn}>
+      <button
+        onClick={() => {
+          exportTranscriptTxt(result);
+          logEvent?.({
+            action: 'Export',
+            description: 'Exported Speech Auditor transcript as TXT',
+            module: 'AI Concierge',
+            entity: 'Speech Auditor',
+          });
+        }}
+        className={btn}
+      >
         <Download size={14} /> Transcript (.txt)
       </button>
-      <button onClick={() => exportTranscriptCsv(result)} className={btn}>
+      <button
+        onClick={() => {
+          exportTranscriptCsv(result);
+          logEvent?.({
+            action: 'Export',
+            description: 'Exported Speech Auditor transcript as CSV',
+            module: 'AI Concierge',
+            entity: 'Speech Auditor',
+          });
+        }}
+        className={btn}
+      >
         <FileDown size={14} /> Export CSV
       </button>
     </>
@@ -827,6 +850,7 @@ function SpeechHistoryList({ jobs, onOpen, onDelete }: {
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<SpeechAuditResult>
       title="Speech Auditor"
@@ -845,7 +869,7 @@ export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
       tips={TIPS}
       buildResult={buildResult}
       renderResult={(result) => <ResultBody result={result} />}
-      resultActions={ResultActions}
+      resultActions={(result) => ResultActions(result, logEvent)}
       historyMeta={(r) =>
         `${overallLabel(r.transcript.overall_sentiment)} · ${r.report.findings.length} finding${r.report.findings.length === 1 ? '' : 's'}`
       }

@@ -38,36 +38,36 @@ export default function EngagementExecutionV2Placeholder({ engagementId, onBack 
             <span className={`px-3 py-1 rounded-full text-[0.6875rem] font-semibold ${
               status === 'active' ? 'bg-emerald-50 text-emerald-700' :
               status === 'complete' ? 'bg-blue-50 text-blue-700' :
-              'bg-gray-100 text-gray-600'
+              'bg-canvas text-ink-600'
             }`}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
           </div>
 
           <div className="grid grid-cols-4 gap-4 text-[0.75rem]">
             <div className="flex items-center gap-2">
-              <Shield size={14} className="text-gray-400 shrink-0" />
+              <Shield size={14} className="text-ink-400 shrink-0" />
               <div>
-                <span className="text-gray-400 block text-[0.625rem]">Framework</span>
+                <span className="text-ink-400 block text-[0.625rem]">Framework</span>
                 <span className="text-text font-medium">{framework}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Calendar size={14} className="text-gray-400 shrink-0" />
+              <Calendar size={14} className="text-ink-400 shrink-0" />
               <div>
-                <span className="text-gray-400 block text-[0.625rem]">Audit Period</span>
+                <span className="text-ink-400 block text-[0.625rem]">Audit Period</span>
                 <span className="text-text font-medium">{auditPeriod}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Clock size={14} className="text-gray-400 shrink-0" />
+              <Clock size={14} className="text-ink-400 shrink-0" />
               <div>
-                <span className="text-gray-400 block text-[0.625rem]">Process</span>
+                <span className="text-ink-400 block text-[0.625rem]">Process</span>
                 <span className="text-text font-medium">{process}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <User size={14} className="text-gray-400 shrink-0" />
+              <User size={14} className="text-ink-400 shrink-0" />
               <div>
-                <span className="text-gray-400 block text-[0.625rem]">Owner</span>
+                <span className="text-ink-400 block text-[0.625rem]">Owner</span>
                 <span className="text-text font-medium">{engagement?.owner || '—'}</span>
               </div>
             </div>

@@ -7,6 +7,7 @@ import type {
   NotificationActionState,
 } from '../../data/notifications';
 import { timeAgo } from '../../utils/timeAgo';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // Each category gets its own dedicated color on the unread stripe — so the
 // user can scan the panel and tell at a glance: red bars = exceptions,
@@ -48,6 +49,7 @@ export default function NotificationRow({
   const acted = !!notification.actionState;
   const [commenting, setCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const logEvent = useAuditLog();
 
   const handleAction = (e: React.MouseEvent, action: NotificationAction) => {
     e.stopPropagation();
@@ -56,6 +58,7 @@ export default function NotificationRow({
       return;
     }
     onAction?.(notification, action);
+    logEvent({ action: 'Update', description: `${action === 'accept' ? 'Accepted' : 'Declined'} notification "${notification.title}"`, module: 'Notifications', entity: 'Notification' });
   };
 
   const submitComment = (e: React.MouseEvent | React.KeyboardEvent) => {

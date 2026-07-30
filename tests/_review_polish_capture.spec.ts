@@ -22,10 +22,15 @@ async function send(page: Page, msg: string) {
   await ta.fill(msg);
   await ta.press('Enter');
 }
+// Stepped radiogroup card (role=radio single / role=checkbox multi) with an
+// explicit Next / Done — no longer an auto-advancing role=option listbox.
 async function pick(page: Page, label: RegExp) {
-  const opt = page.getByRole('option', { name: label });
+  const opt = page.getByRole('radio', { name: label }).or(page.getByRole('checkbox', { name: label }));
   await opt.first().waitFor({ timeout: 15000 });
   await opt.first().click();
+  const done = page.getByRole('button', { name: 'Done' });
+  if (await done.count() > 0) await done.click();
+  else await page.getByRole('button', { name: 'Next' }).click();
   await page.waitForTimeout(600);
 }
 
@@ -45,7 +50,7 @@ test('crop-clarification-card', async ({ page }) => {
   await boot(page);
   await startChat(page);
   await send(page, 'Detect duplicate invoices');
-  await page.getByRole('option', { name: /Last 90 days/ }).first().waitFor({ timeout: 15000 });
+  await page.getByRole('radio', { name: /Last 90 days/ }).first().waitFor({ timeout: 15000 });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}/31-clarification-card.png`, clip: { x: 300, y: 440, width: 860, height: 380 } });
 });

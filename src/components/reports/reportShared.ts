@@ -41,95 +41,37 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Other: 'text-ink-500 bg-paper-50',
 };
 
-/** Controlled vocabulary for a template's report type. Fixed for now (a clean
- *  taxonomy keeps filtering/reporting useful); "Other" is the escape hatch. */
-export const REPORT_TYPES = ['Audit', 'Compliance', 'SOX', 'ATR', 'Risk', 'Other'] as const;
-export type ReportTypeName = typeof REPORT_TYPES[number];
-
-// ── Report type → required / recommended sections (PRD §4.6) ─────────────────
-// Each type carries a curated set, split into `required` (the must-haves that
-// define the type) and `recommended` (the usual rest). Picking a type pre-fills
-// these in the editor, and on upload shows the user what their document is
-// missing for the chosen type. `match` keeps presence-detection tolerant of
-// naming variants (a detected "Detailed Findings" satisfies the Audit
-// "Findings / Observations"). First-pass set, to confirm with auditors.
-export type SectionTier = 'required' | 'recommended';
-export type TypeSection = { name: string; icon: string; tier: SectionTier; match: RegExp };
-
-export const TYPE_SECTION_MAP: Record<ReportTypeName, TypeSection[]> = {
-  Audit: [
-    { name: 'Executive Summary',          icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Scope & Objectives',         icon: 'file-text',      tier: 'recommended', match: /scope|objective/i },
-    { name: 'Testing Methodology',        icon: 'file-text',      tier: 'recommended', match: /methodology/i },
-    { name: 'Findings / Observations',    icon: 'check-circle',   tier: 'required',    match: /finding|observation|audit quer/i },
-    { name: 'Recommendations',            icon: 'trending-up',    tier: 'required',    match: /recommendation/i },
-    { name: 'Management Response',         icon: 'book-open',      tier: 'recommended', match: /management response|response/i },
-    { name: 'Conclusion / Audit Opinion', icon: 'shield',         tier: 'required',    match: /conclusion|opinion/i },
-    { name: 'Sign-off',                   icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  SOX: [
-    { name: 'Executive Summary',                 icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Scope & Methodology',               icon: 'file-text',      tier: 'recommended', match: /scope|methodology/i },
-    { name: 'Control Environment Overview',      icon: 'file-text',      tier: 'recommended', match: /control environment/i },
-    { name: 'Control Testing Results',           icon: 'check-circle',   tier: 'required',    match: /control testing|testing results/i },
-    { name: 'Deficiencies / Exceptions',         icon: 'alert-triangle', tier: 'required',    match: /deficienc|exception/i },
-    { name: 'Remediation Plan',                  icon: 'check-circle',   tier: 'recommended', match: /remediation/i },
-    { name: 'Conclusion / Management Assertion', icon: 'shield',         tier: 'required',    match: /conclusion|assertion/i },
-    { name: 'Sign-off',                          icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  Compliance: [
-    { name: 'Executive Summary',            icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Regulatory Scope & Framework', icon: 'file-text',      tier: 'recommended', match: /scope|framework|regulat/i },
-    { name: 'Compliance Assessment',        icon: 'check-circle',   tier: 'required',    match: /compliance assessment|assessment|testing/i },
-    { name: 'Gaps / Non-compliance',        icon: 'alert-triangle', tier: 'required',    match: /gap|non-?compliance/i },
-    { name: 'Remediation / Action Plan',    icon: 'check-circle',   tier: 'recommended', match: /remediation|action plan/i },
-    { name: 'Conclusion',                   icon: 'shield',         tier: 'required',    match: /conclusion/i },
-    { name: 'Sign-off',                     icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  Risk: [
-    { name: 'Executive Summary',           icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Risk Methodology',            icon: 'file-text',      tier: 'recommended', match: /methodology/i },
-    { name: 'Risk Findings / Register',    icon: 'check-circle',   tier: 'required',    match: /risk (finding|register)|register|finding/i },
-    { name: 'Risk Rating / Significance',  icon: 'alert-triangle', tier: 'required',    match: /rating|significance/i },
-    { name: 'Risk Heatmap / Summary',      icon: 'bar-chart',      tier: 'recommended', match: /heatmap/i },
-    { name: 'Mitigation / Treatment Plan', icon: 'check-circle',   tier: 'required',    match: /mitigation|treatment/i },
-    { name: 'Conclusion',                  icon: 'shield',         tier: 'recommended', match: /conclusion/i },
-  ],
-  ATR: [
-    { name: 'Observation / Finding',           icon: 'check-circle',   tier: 'required',    match: /observation|finding/i },
-    { name: 'Action Taken',                    icon: 'check-circle',   tier: 'required',    match: /action taken|action/i },
-    { name: 'Closure / Classification Status', icon: 'bar-chart',      tier: 'required',    match: /closure|classification|status/i },
-    { name: 'Original Recommendation (MAP)',   icon: 'trending-up',    tier: 'recommended', match: /recommendation|management action|map/i },
-    { name: 'Risk Significance',               icon: 'alert-triangle', tier: 'recommended', match: /risk significance|significance|severity/i },
-    { name: 'Due Date',                        icon: 'file-text',      tier: 'recommended', match: /due date|timeline|due/i },
-    { name: 'Auditor Verification / Comments', icon: 'book-open',      tier: 'recommended', match: /verification|auditor comment|management comment/i },
-    { name: 'Supporting Evidence',             icon: 'file-text',      tier: 'recommended', match: /evidence/i },
-  ],
-  Other: [],
-};
-
-/** The curated section set for a type (required + recommended). Empty for Other. */
-export function typeSectionsFor(type: ReportTypeName): TypeSection[] {
-  return TYPE_SECTION_MAP[type] ?? [];
-}
-
-/** Coverage of a type's sections against the current/detected section names.
- *  `match` makes detection tolerant of naming variants. */
-export function sectionCoverage(type: ReportTypeName, sectionNames: string[]) {
-  const spec = typeSectionsFor(type);
-  const present = (e: TypeSection) => sectionNames.some(n => e.match.test(n));
-  const required = spec.filter(s => s.tier === 'required');
-  const recommended = spec.filter(s => s.tier === 'recommended');
-  return {
-    spec,
-    requiredTotal: required.length,
-    requiredPresent: required.filter(present).length,
-    recommendedTotal: recommended.length,
-    recommendedPresent: recommended.filter(present).length,
-    missingRequired: required.filter(s => !present(s)),
-    missingRecommended: recommended.filter(s => !present(s)),
-    allMissing: spec.filter(s => !present(s)),
-  };
+/** One-line "what belongs here" description per section. Shown as body copy in the
+ *  template preview and used as the starter text when a report is generated, so a
+ *  fresh section reads like a real report section. Keyword-matched so it fits
+ *  custom / imported section names, with a generic fallback. */
+const SECTION_BLURBS: { match: RegExp; blurb: string }[] = [
+  { match: /executive|summary/i, blurb: 'A high-level overview of the audit’s purpose, key findings, and overall opinion.' },
+  { match: /scope|objective/i, blurb: 'What the audit covered, the period reviewed, and the objectives it set out to test.' },
+  { match: /methodology/i, blurb: 'How the work was performed — approach, sampling, and the data sources used.' },
+  { match: /finding|observation|audit quer|issue/i, blurb: 'The issues identified during testing, each with evidence and a risk rating.' },
+  { match: /recommendation|management action|map\b/i, blurb: 'Actionable steps to address each finding and strengthen the control environment.' },
+  { match: /management response|response/i, blurb: 'Management’s agreed actions, owners, and target dates for each recommendation.' },
+  { match: /conclusion|opinion|assertion/i, blurb: 'The overall assessment and audit opinion based on the work performed.' },
+  { match: /sign-?off|approval/i, blurb: 'Approvals and signatures confirming the report is final.' },
+  { match: /control environment/i, blurb: 'An overview of the control environment relevant to the areas under review.' },
+  { match: /control testing|testing results/i, blurb: 'Results of control testing, showing design and operating effectiveness.' },
+  { match: /deficienc|exception|gap|non-?compliance/i, blurb: 'Control gaps and exceptions raised, with severity and the processes affected.' },
+  { match: /remediation|action plan/i, blurb: 'The plan to close each gap — owners, actions, and remediation timelines.' },
+  { match: /framework|regulat/i, blurb: 'The regulations and frameworks in scope for this assessment.' },
+  { match: /risk (finding|register)|register/i, blurb: 'The risks identified, captured as a register with context and ownership.' },
+  { match: /rating|significance|severity/i, blurb: 'How each item is rated for likelihood and impact, and why it matters.' },
+  { match: /heatmap/i, blurb: 'A visual summary of risks plotted by likelihood and impact.' },
+  { match: /mitigation|treatment/i, blurb: 'Planned mitigations or treatments for the significant risks.' },
+  { match: /action taken/i, blurb: 'The action taken against each original recommendation, with current status.' },
+  { match: /closure|classification|status/i, blurb: 'Closure status and classification for each item being tracked.' },
+  { match: /evidence/i, blurb: 'Supporting evidence and artefacts referenced by this report.' },
+  { match: /due date|timeline|due/i, blurb: 'Target and actual dates for the actions being tracked.' },
+  { match: /verification|auditor comment|management comment/i, blurb: 'Auditor verification notes and comments on the actions taken.' },
+];
+export function sectionBlurb(name: string): string {
+  const hit = SECTION_BLURBS.find(b => b.match.test(name));
+  return hit ? hit.blurb : 'Describe what this section will cover in the generated report.';
 }
 
 export const SECTION_ICONS: Record<string, ElementType> = {
@@ -144,13 +86,123 @@ export const SECTION_ICONS: Record<string, ElementType> = {
   'book-open': BookOpen,
 };
 
-/** Theme name → cover-banner gradient (deep → mid). Mirrors the editor swatches. */
+/** Theme name → cover-banner gradient (deep → mid). Single source of truth for
+ *  the editor swatch picker (it iterates these keys) and the report cover banner.
+ *  Add a combination here (and to TEMPLATE_THEME_SWATCH below) to expose it. */
 export const TEMPLATE_THEME_GRADIENT: Record<string, [string, string]> = {
   'Purple & White': ['#5b0fb0', '#6a12cd'],
+  'Indigo & Sky': ['#1e1b4b', '#4f46e5'],
   'Navy & Gold': ['#1a2744', '#2b3c5e'],
+  'Ocean & Cyan': ['#083344', '#0891b2'],
   'Teal & Light': ['#0a7268', '#0d9488'],
+  'Forest & Sage': ['#14432a', '#15803d'],
   'Slate & Blue': ['#1e293b', '#3b5573'],
+  'Charcoal & Graphite': ['#18181b', '#3f3f46'],
+  'Burgundy & Wine': ['#4c0519', '#9f1239'],
+  'Bronze & Sand': ['#431407', '#9a3412'],
 };
+
+/** Theme name → the two named colours, shown as a pair of dots in the picker so
+ *  the combination reads literally (purple + white, navy + gold…). Keep the keys
+ *  in sync with TEMPLATE_THEME_GRADIENT. */
+export const TEMPLATE_THEME_SWATCH: Record<string, [string, string]> = {
+  'Purple & White': ['#6a12cd', '#f7f7fb'],
+  'Indigo & Sky': ['#4f46e5', '#7dd3fc'],
+  'Navy & Gold': ['#1a2744', '#c9a24b'],
+  'Ocean & Cyan': ['#0e4b5e', '#06b6d4'],
+  'Teal & Light': ['#0d9488', '#d7f7f1'],
+  'Forest & Sage': ['#15803d', '#a7d3ac'],
+  'Slate & Blue': ['#334155', '#3b82f6'],
+  'Charcoal & Graphite': ['#1c1c1f', '#71717a'],
+  'Burgundy & Wine': ['#9f1239', '#5a0b22'],
+  'Bronze & Sand': ['#9a3412', '#e4c7a1'],
+};
+
+/** Theme name → content accent (section numbers, underline ticks, outline-rail
+ *  index) so a themed report's body accents match its cover instead of clashing
+ *  with brand purple. Each is readable on white. Falls back to brand-700 when a
+ *  report has no theme. */
+export const TEMPLATE_THEME_ACCENT: Record<string, string> = {
+  'Purple & White': '#550fa5',
+  'Indigo & Sky': '#4f46e5',
+  'Navy & Gold': '#26436e',
+  'Ocean & Cyan': '#0e7490',
+  'Teal & Light': '#0d9488',
+  'Forest & Sage': '#15803d',
+  'Slate & Blue': '#3f5f86',
+  'Charcoal & Graphite': '#3f3f46',
+  'Burgundy & Wine': '#9f1239',
+  'Bronze & Sand': '#9a3412',
+};
+
+// ─── Brand colour → report palette ──────────────────────────────────────────
+// A single custom brand colour drives the report cover gradient + body accent,
+// so changing it re-skins the whole report. Named themes above remain quick
+// presets; a set brandColour overrides them.
+const DEFAULT_BRAND = '#6a12cd';
+/** Accept #rgb / #rrggbb (with or without #); returns null for anything else so
+ *  callers can fall back rather than render a broken colour. */
+function parseHexColor(hex?: string): { r: number; g: number; b: number } | null {
+  if (!hex) return null;
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+export function isValidHexColor(hex?: string): boolean {
+  return parseHexColor(hex) !== null;
+}
+const clamp255 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+const toHex = (r: number, g: number, b: number) =>
+  '#' + [r, g, b].map(n => clamp255(n).toString(16).padStart(2, '0')).join('');
+/** Mix a colour toward a target ([0..1] amount toward target). */
+function mixColor(c: { r: number; g: number; b: number }, target: { r: number; g: number; b: number }, amount: number) {
+  return { r: c.r + (target.r - c.r) * amount, g: c.g + (target.g - c.g) * amount, b: c.b + (target.b - c.b) * amount };
+}
+const BLACK = { r: 0, g: 0, b: 0 };
+// Relative luminance (WCAG) for readability decisions.
+function luminance(c: { r: number; g: number; b: number }): number {
+  const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+
+/** Report cover gradient [deep, mid] derived from a brand colour — deep is the
+ *  colour darkened, mid is the colour (matches the preset deep→mid look). A light
+ *  brand colour is darkened first so white title text stays legible on the
+ *  banner. Invalid/absent colour falls back to the brand purple gradient. */
+export function brandGradient(hex?: string): [string, string] {
+  const c = parseHexColor(hex);
+  if (!c) return ['#3b0b72', DEFAULT_BRAND];
+  let mid = c;
+  let guard = 0;
+  while (luminance(mid) > 0.42 && guard < 14) { mid = mixColor(mid, BLACK, 0.16); guard += 1; }
+  const deep = mixColor(mid, BLACK, 0.42);
+  return [toHex(deep.r, deep.g, deep.b), toHex(mid.r, mid.g, mid.b)];
+}
+
+/** Body accent (section numbers / ticks) from a brand colour — darkened enough
+ *  to stay readable on white. Very light brand colours darken more. */
+export function brandAccent(hex?: string): string {
+  const c = parseHexColor(hex);
+  if (!c) return '#550fa5';
+  let out = c;
+  // Darken toward black until luminance is low enough to read on white.
+  let guard = 0;
+  while (luminance(out) > 0.28 && guard < 12) { out = mixColor(out, BLACK, 0.18); guard += 1; }
+  return toHex(out.r, out.g, out.b);
+}
+
+/** The report cover gradient: a valid custom brandColor wins, else the named
+ *  theme, else undefined (callers default to brand purple). */
+export function reportGradient(theme?: string, brandColor?: string): [string, string] | undefined {
+  if (isValidHexColor(brandColor)) return brandGradient(brandColor);
+  return theme ? TEMPLATE_THEME_GRADIENT[theme] : undefined;
+}
+/** The report body accent (numbers/ticks): custom brandColor wins, else theme. */
+export function reportAccent(theme?: string, brandColor?: string): string {
+  if (isValidHexColor(brandColor)) return brandAccent(brandColor);
+  return (theme && TEMPLATE_THEME_ACCENT[theme]) || '#550fa5';
+}
 
 // Blank base for the create-from-scratch flow — the TemplateEditor opens on
 // this with an empty section list and a name the user is expected to replace.
@@ -247,48 +299,208 @@ export type WorkflowResult = {
 // The bulk audit report detail page renders in a single editorial treatment.
 export type BulkAuditAestheticVariant = 'editorial';
 
-/** A report template plus the optional branding the Customize editor sets.
- *  Standard templates omit these; custom templates persist them. */
-export type EditableTemplate = typeof REPORT_TEMPLATES[number] & {
-  brand?: string;
-  theme?: string;
-  headerText?: string;
-  footerText?: string;
-  /** The "golden copy": section names of the reference sample this template is
-   *  validated against. Set when a Smart Upload is marked as the reference format;
-   *  drives the format-match verdict on later uploads (Template Studio §5).
-   *  (Field name kept as `approvedSections` for stored-data compatibility.) */
-  approvedSections?: string[];
-  referenceFileName?: string;
+/** Page watermark config — a text or image mark laid diagonally across every
+ *  page, with opacity / rotation / size controls. */
+export type WatermarkPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
+
+export type WatermarkConfig = {
+  enabled: boolean;
+  mode: 'text' | 'image';
+  text: string;
+  imageDataUrl?: string;
+  opacity: number;   // 0..1 (rendered fill)
+  rotation: number;  // degrees, -90..90
+  size: number;      // % of page width, 20..100
+  /** Where the mark sits on the page. Absent = center (back-compat). */
+  position?: WatermarkPosition;
 };
 
-// A seeded custom template that already has a reference format, so the
-// format-match verdict (Template Studio §5) is demonstrable without first
-// uploading twice. Mirrors the Air India "Annual Safety Audit" example: its
-// reference format expects a "Corrective Actions" section, which the scripted
-// drifted upload is missing. App.tsx prepends it to the custom-templates list.
-export const SEED_APPROVED_TEMPLATE: EditableTemplate = {
-  id: 'ct-seed-safety-audit',
-  name: 'Annual Safety Audit Report',
-  desc: 'Built from Annual_Safety_Audit_2025.pdf — 7 sections, set as the reference format.',
-  category: 'Audit',
-  icon: 'shield',
-  sections: [
-    { name: 'Executive Summary', icon: 'file-text' },
-    { name: 'Scope & Objectives', icon: 'file-text' },
-    { name: 'Testing Methodology', icon: 'file-text' },
-    { name: 'Control Testing Results', icon: 'check-circle' },
-    { name: 'Detailed Findings', icon: 'alert-triangle' },
-    { name: 'Corrective Actions', icon: 'check-circle' },
-    { name: 'Appendix', icon: 'file-text' },
-  ],
-  approvedSections: ['Executive Summary', 'Scope & Objectives', 'Testing Methodology', 'Control Testing Results', 'Detailed Findings', 'Corrective Actions', 'Appendix'],
-  referenceFileName: 'Annual_Safety_Audit_2025.pdf',
+export const DEFAULT_WATERMARK: WatermarkConfig = {
+  enabled: false,
+  mode: 'text',
+  text: 'CONFIDENTIAL',
+  opacity: 0.08,
+  rotation: -35,
+  size: 60,
+  position: 'center',
+};
+
+/** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
+ *  — they hold no numbers. Values come from trusted query data at generate time,
+ *  never scraped from an uploaded report. `cards` is a repeating finding card
+ *  (one saved shape, stamped once per finding); `human` is a slot only a real
+ *  person may fill (sign-off, management response) — the AI never writes it.
+ *  Legacy single-kind sections only — new BYOT sections carry `blocks`. */
+export type SectionKind = 'text' | 'kpi' | 'chart' | 'table' | 'cards' | 'human';
+
+// ─── BYOT block model ────────────────────────────────────────────────────────
+// A section = heading + description + typed blocks. Extraction keeps the
+// skeleton, never the content: block shapes and labels survive, values don't.
+
+/** Where a block's content comes from at generation — the five cases, minus
+ *  'mixed' (a section-level answer). A section is never silently skipped:
+ *  query  → auto-filled from query data (fills by binding, prints their name)
+ *  manual → kept, rendered empty, "No data connected — fill in manually"
+ *  fixed  → prints word-for-word every time, never rewritten
+ *  human  → a prompted empty state only a real person may fill */
+export type BlockFill = 'query' | 'manual' | 'fixed' | 'human';
+/** Section-level fill. 'mixed' = fill types attach to its blocks individually
+ *  (a fixed objective + human scope list + data table under one heading). */
+export type SectionFill = BlockFill | 'mixed';
+
+/** Our side of a query-filled section's two identities: the DISPLAY NAME is
+ *  theirs (printed exactly); the BINDING is ours — which concept fills it.
+ *  Filling by binding works in any wording; matching heading text wouldn't. */
+export type DataBinding = 'findings' | 'summary' | 'metrics' | 'actions';
+
+/** The kinds of building block a client report uses. */
+export type TemplateBlockKind =
+  | 'narrative'   // prose under a (sub-)heading
+  | 'table'       // real table — column names kept, rows thrown away
+  | 'stat'        // a stat strip: big numbers with captions (labels kept)
+  | 'slot'        // fill-in-the-blank label + value pairs (labels kept)
+  | 'callout'     // text set apart as a note / key point
+  | 'chart'       // a figure placeholder
+  | 'cards'       // one repeating card shape, stamped once per finding
+  | 'signoff';    // signature slots (roles kept)
+
+/** One typed block inside a template section. */
+export type TemplateBlock = {
+  kind: TemplateBlockKind;
+  /** The label the block carried (sub-heading, caption, metric name). */
+  label?: string;
+  fill: BlockFill;
+  binding?: DataBinding;
+  /** Tables — column names from the header row (names only, rows discarded). */
+  columns?: string[];
+  /** Tables — set when rows reuse the finding IDs: auto-built from findings. */
+  linkedTo?: string;
+  /** Cards — field labels, human-only fields, ID shape, repeat count. */
+  cardFields?: string[];
+  humanFields?: string[];
+  idPattern?: string;
+  cardCount?: number;
+  /** Fixed text — the verbatim lines this block prints, word-for-word. */
+  fixedBody?: string[];
+  /** Stat strips / slots — the captions or labels kept (values discarded). */
+  slotLabels?: string[];
+  /** Sign-off — signatory roles found (Prepared by, Approved by…). */
+  signRoles?: string[];
+  /** A severity-split section ("Detailed findings — medium") holds the same
+   *  repeating card, filtered to one rating. Without it every section claims
+   *  every finding and generation stamps each one into all of them. */
+  severity?: string;
+  /** One block printed in two places (the net-risk table on the cover AND in
+   *  the executive summary) is stored ONCE and placed twice. The definition
+   *  carries `refId`; every other placement carries `ref` and no shape of its
+   *  own, so editing the shape once keeps both positions in step. */
+  refId?: string;
+  ref?: string;
+};
+
+/** All blocks a template defines by `refId`, so a placement (`ref`) can be
+ *  resolved back to the one stored shape. */
+export function collectBlockLibrary(sections: TemplateSection[]): Record<string, TemplateBlock> {
+  const lib: Record<string, TemplateBlock> = {};
+  for (const s of sections) {
+    for (const b of s.blocks ?? []) if (b.refId) lib[b.refId] = b;
+  }
+  return lib;
+}
+
+/** A placement resolved to the shape it points at. Its own label wins, so the
+ *  second position can carry the heading the document gave it there. */
+export function resolveBlock(block: TemplateBlock, library?: Record<string, TemplateBlock>): TemplateBlock {
+  if (!block.ref) return block;
+  const def = library?.[block.ref];
+  if (!def) return block;
+  return { ...def, refId: undefined, ref: block.ref, label: block.label ?? def.label, fill: block.fill };
+}
+
+/** One section in a template outline. */
+export type TemplateSection = {
+  name: string;
+  icon: string;
+  /** Author-editable one-line description of what the section covers. Absent =
+   *  fall back to the auto blurb (sectionBlurb). Editable inline in the editor. */
+  description?: string;
+  /** Block type — text (a heading) or a kpi/chart/table placeholder. Absent = text.
+   *  Placeholders are set by import detection; their numbers fill from query data
+   *  at generate time, never scraped from an upload. */
+  kind?: SectionKind;
+  /** For KPI/chart/table placeholders — the label the block carried. */
+  metric?: string;
+  /** For chart blocks — the chart style. */
+  chartType?: 'bar' | 'line';
+  /** For table blocks — the column names read from the document's header row.
+   *  Only the names survive extraction; the rows are always thrown away. */
+  columns?: string[];
+  /** For a table that reuses the finding IDs — the name of the findings section
+   *  it's auto-built from, so the two sections can't disagree. */
+  linkedTo?: string;
+  /** For repeating cards — the field labels each card carries, in order. */
+  cardFields?: string[];
+  /** For repeating cards — the fields only a real person may fill (they render
+   *  as an empty "awaiting response" slot, never AI-written). */
+  humanFields?: string[];
+  /** For repeating cards — the document's finding-ID shape, digits generalised
+   *  ("IA-##-H##"). */
+  idPattern?: string;
+  /** For repeating cards — how many repeats the uploaded report carried. */
+  cardCount?: number;
+  /** Fixed text: this section prints word-for-word every time and is never
+   *  rewritten at generation (rating definitions, legal lines). */
+  fixed?: boolean;
+  /** The verbatim lines a fixed section prints. */
+  fixedBody?: string[];
+  /** Where this section's content comes from at generation (the five cases).
+   *  Guessed by extraction, confirmed by the user at review. Absent = query. */
+  fill?: SectionFill;
+  /** The data concept that fills this section (query-filled sections). */
+  binding?: DataBinding;
+  /** The section's typed blocks (BYOT). When present, generation renders these
+   *  in order; the legacy single-kind fields above are for older templates. */
+  blocks?: TemplateBlock[];
+  /** Door 2 of "no data connected": content typed once in a generated report
+   *  and remembered — pre-fills this section in every future report. Setup
+   *  that never changes (distribution list, intro paragraph), not audit data. */
+  savedContent?: string;
+};
+
+/** A report template plus the optional branding the Customize editor sets.
+ *  Standard templates omit these; custom templates persist them. */
+export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'> & {
+  sections: TemplateSection[];
+  brand?: string;
+  theme?: string;
+  /** Custom brand colour (hex). When set, drives the report cover gradient +
+   *  body accent, overriding the named `theme`. */
+  brandColor?: string;
+  headerText?: string;
+  footerText?: string;
+  /** Brand logo (data URL) shown on the letterhead cover. */
+  logoDataUrl?: string;
+  /** Diagonal page watermark (text or image). */
+  watermark?: WatermarkConfig;
+  /** Page numbers on the printed / exported report. Absent = on (reports
+   *  paginate by default; the toggle removes them). */
+  pageNumbers?: boolean;
+  /** Sign-off block on the report. When enabled, `signatories` define the roles
+   *  (Prepared by, Approved by…) each report gets a manual sign / sign-off for. */
+  signoffEnabled?: boolean;
+  signatories?: SignatorySlot[];
+  /** The document's own rating language, captured at import — the finding scale
+   *  (e.g. Critical / High / Medium / Low) and the overall-opinion scale (e.g.
+   *  Effective → Unsatisfactory). Generated reports speak these words. */
+  findingScale?: string[];
+  opinionScale?: string[];
+  /** Free-form tags for findability once the library grows (§9). */
+  tags?: string[];
 };
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
-export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string };
+export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string; attachments?: string[] };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
@@ -328,8 +540,9 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   reportPeriod?: string;
   /** The template's advertised sections, baked at generate time so the report
    *  delivers the structure the template card promises (rendered as editable
-   *  note blocks around the query body). */
-  templateSections?: { name: string; icon: string }[];
+   *  note blocks around the query body; typed blocks — tables, repeating cards,
+   *  fixed text, human slots — render as their block shape). */
+  templateSections?: TemplateSection[];
   description?: string;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
@@ -350,9 +563,34 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
    *  template's Customize fields) — applied to the cover banner / footer. */
   brand?: string;
   theme?: string;
+  /** Custom brand colour (hex) carried from the template — drives cover + accent. */
+  brandColor?: string;
   headerText?: string;
   footerText?: string;
+  /** Page numbers on the exported report (carried from the template). Absent = on. */
+  pageNumbers?: boolean;
+  /** Sign-off block config carried from the template. */
+  signoffEnabled?: boolean;
+  signatories?: SignatorySlot[];
+  /** Rating language carried from the template (captured at import). */
+  findingScale?: string[];
+  opinionScale?: string[];
+  /** Runtime sign state, keyed by signatory-slot id — set when a report is
+   *  manually signed, cleared on sign-off. */
+  signoffs?: Record<string, Signoff>;
 };
+
+/** A sign-off slot on the report: a role (Prepared by / Approved by…) and an
+ *  optional pre-assigned name. */
+export type SignatorySlot = { id: string; role: string; name?: string };
+/** The manual sign record for a slot. */
+export type Signoff = { signedBy: string; signedAt: string };
+/** Default rows seeded when the sign-off block is first enabled. */
+export const DEFAULT_SIGNATORIES: SignatorySlot[] = [
+  { id: 'sig-prepared', role: 'Prepared by' },
+  { id: 'sig-reviewed', role: 'Reviewed by' },
+  { id: 'sig-approved', role: 'Approved by' },
+];
 
 // Simulated report download — shows a 'loading' toast that resolves to a
 // 'success' toast after a short "preparing" delay. No real file is produced
@@ -370,82 +608,3 @@ export function startReportDownload(
   }, 1800);
 }
 
-// First-run seeds for Custom Templates — used only until the user's own
-// customs are persisted to localStorage.
-export const CUSTOM_TEMPLATES = [
-  {
-    id: 'ct-custom-01',
-    name: 'Third-Party Vendor Risk Scorecard',
-    desc: 'Custom scorecard for third-party vendors with risk tiers, control gaps, and remediation SLAs.',
-    category: 'Risk',
-    icon: 'alert-triangle',
-    sections: [
-      { name: 'Vendor Overview', icon: 'file-text' },
-      { name: 'Risk Tier Summary', icon: 'alert-triangle' },
-      { name: 'Control Gaps', icon: 'shield' },
-      { name: 'Remediation Plan', icon: 'check-circle' },
-    ],
-  },
-  {
-    id: 'ct-custom-02',
-    name: 'Quarterly Audit Snapshot',
-    desc: 'One-page executive snapshot of quarterly audit findings and status.',
-    category: 'Audit',
-    icon: 'file-text',
-    sections: [
-      { name: 'Quarter Summary', icon: 'file-text' },
-      { name: 'Key Findings', icon: 'alert-triangle' },
-      { name: 'Status & Owners', icon: 'check-circle' },
-    ],
-  },
-  {
-    id: 'ct-003',
-    name: 'Internal Controls Health Report',
-    desc: 'Tracks control design effectiveness and operating effectiveness across business processes.',
-    category: 'Controls',
-    icon: 'check-circle',
-    sections: [
-      { name: 'Scope', icon: 'file-text' },
-      { name: 'Design Effectiveness', icon: 'shield' },
-      { name: 'Operating Effectiveness', icon: 'check-circle' },
-      { name: 'Recommendations', icon: 'trending-up' },
-    ],
-  },
-  {
-    id: 'ct-004',
-    name: 'Board Slide Deck',
-    desc: 'Executive board-ready deck with headline metrics, risk heatmap, and narrative commentary.',
-    category: 'Executive',
-    icon: 'trending-up',
-    sections: [
-      { name: 'Headline Metrics', icon: 'bar-chart' },
-      { name: 'Risk Heatmap', icon: 'alert-triangle' },
-      { name: 'Narrative', icon: 'file-text' },
-      { name: 'Outlook', icon: 'trending-up' },
-    ],
-  },
-  {
-    id: 'ct-005',
-    name: 'Ad-hoc Exception Summary',
-    desc: 'Quick exception digest grouped by owner with action taken and resolution status.',
-    category: 'Risk',
-    icon: 'alert-triangle',
-    sections: [
-      { name: 'Exception List', icon: 'alert-triangle' },
-      { name: 'Owner Responses', icon: 'file-text' },
-      { name: 'Resolution Status', icon: 'check-circle' },
-    ],
-  },
-  {
-    id: 'ct-006',
-    name: 'Finance Close Checklist',
-    desc: 'Period-close checklist with reconciliation status, journal review, and sign-offs.',
-    category: 'Audit',
-    icon: 'clipboard-check',
-    sections: [
-      { name: 'Reconciliations', icon: 'check-circle' },
-      { name: 'Journal Review', icon: 'file-text' },
-      { name: 'Sign-offs', icon: 'shield' },
-    ],
-  },
-];

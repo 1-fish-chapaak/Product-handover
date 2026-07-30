@@ -20,7 +20,6 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
   const prefersReducedMotion = useReducedMotion();
   const parsed = useMemo(() => parseKpiValue(value), [value]);
   const [n, setN] = useState(parsed && !prefersReducedMotion ? 0 : parsed?.num ?? 0);
-  const [popped, setPopped] = useState(false);
 
   useEffect(() => {
     if (!parsed) return;
@@ -29,15 +28,16 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
     let to: ReturnType<typeof setTimeout>;
     const begin = () => {
       const start = performance.now();
-      // ease-out-back with ~7% overshoot — "soft professional bouncy".
-      const c1 = 1.18;
-      const c3 = c1 + 1;
+      // Exponential ease-out. A counter must never overshoot: the number would
+      // read past its true value before settling back. (DESIGN.md §6)
+      // Normalised by (1 - 2^-10) so it lands on the target instead of snapping
+      // the last ~0.1% on the final frame.
+      const NORM = 1 - Math.pow(2, -10);
       const tick = (t: number) => {
         const p = Math.min(1, (t - start) / duration);
-        const eased = 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+        const eased = (1 - Math.pow(2, -10 * p)) / NORM;
         setN(parsed.num * eased);
         if (p < 1) raf = requestAnimationFrame(tick);
-        else setPopped(true);
       };
       raf = requestAnimationFrame(tick);
     };
@@ -47,13 +47,9 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
 
   if (!parsed) return <>{value}</>;
   return (
-    <motion.span
-      className="inline-block"
-      animate={popped && !prefersReducedMotion ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-      transition={{ duration: 0.36, ease: [0.34, 1.56, 0.64, 1] }}
-    >
+    <span className="inline-block">
       {parsed.prefix}{n.toLocaleString('en-IN', { minimumFractionDigits: parsed.decimals, maximumFractionDigits: parsed.decimals })}{parsed.suffix}
-    </motion.span>
+    </span>
   );
 }
 
@@ -101,7 +97,7 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, val
       }
       whileHover={onClick && !prefersReducedMotion ? { y: -3, scale: 1.015, transition: { type: 'spring', stiffness: 420, damping: 22 } } : undefined}
       whileTap={onClick && !prefersReducedMotion ? { scale: 0.985 } : undefined}
-      className={`glass-card rounded-xl px-5 py-4 transition-[border-color,box-shadow] duration-300 ${selected ? '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]' : ''} ${onClick ? 'cursor-pointer hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)]' : 'cursor-default'} ${className}`}
+      className={`glass-card px-5 py-4 transition-[border-color,box-shadow] duration-300 ${selected ? '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]' : ''} ${onClick ? 'cursor-pointer hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)]' : 'cursor-default'} ${className}`}
     >
       {editing ?? (
         <>

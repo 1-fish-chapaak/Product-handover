@@ -31,6 +31,56 @@ export function InitialsAvatar({ name, size = 32 }: { name: string; size?: numbe
   );
 }
 
+/**
+ * A group of members as overlapping faces, most important first.
+ *
+ * THE OVERLAP IS 4px, NOT 8px, AND THAT IS THE WHOLE POINT OF THIS COMPONENT.
+ * A photo stack can overlap by a third of its width because a face is still
+ * recognisable from a sliver. These are INITIALS, and two letters are not: at
+ * -8px the next circle's 2px ring landed at x≈16 of a 26px avatar whose text
+ * sits at x≈6.5–19.5, so it ate the second letter of every avatar except the
+ * last one in the row. Both Teams tables were rendering "Aditya Thakur" as "A",
+ * "Rohan Desai" as "R" — a stack of half-letters that the hover-lift existed to
+ * apologise for. At -4px the ring lands at x≈20, every pair of initials is
+ * whole at rest, and the rings still knit the row into one group rather than a
+ * line of loose chips.
+ *
+ * This lived twice, spelled identically, in Administration's Teams table and
+ * Platform Usage's Teams table — which is how both of them had the same bug and
+ * how a fix to one would have silently left the other broken.
+ */
+export function AvatarStack({ names, max = 5, size = 26 }: {
+  names: string[];
+  /** Faces before the rest roll into a +N chip. */
+  max?: number;
+  size?: number;
+}) {
+  const shown = names.slice(0, max);
+  const rest = names.length - shown.length;
+  return (
+    <div className="flex items-center -space-x-1">
+      {shown.map((n, i) => (
+        <div
+          key={`${n}-${i}`}
+          title={n}
+          className="relative rounded-full ring-2 ring-canvas-elevated transition-transform duration-150 hover:z-10 hover:-translate-y-0.5"
+        >
+          <InitialsAvatar name={n} size={size} />
+        </div>
+      ))}
+      {rest > 0 && (
+        <div
+          title={`${rest} more`}
+          style={{ width: size, height: size }}
+          className="relative shrink-0 rounded-full flex items-center justify-center text-[0.625rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums"
+        >
+          +{rest}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>

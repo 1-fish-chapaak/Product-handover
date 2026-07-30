@@ -76,8 +76,8 @@ export type PermissionKey =
   | 'plan_view' | 'plan_edit'
   // AI Concierge (new) — Ask IRA chat is free for everyone, so it has no key
   | 'concierge_use'
-  // Admin (existing 2 + new 4)
-  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage';
+  // Admin (existing 2 + new 4 + usage)
+  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_export';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -172,6 +172,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'ad_logs_export',  name: 'Export Logs',      desc: 'Export audit logs as CSV' },
     { key: 'ad_users_manage', name: 'Manage Users',     desc: 'Manage users and teams' },
     { key: 'ad_roles_manage', name: 'Manage Roles',     desc: 'Manage roles and permissions' },
+    { key: 'ad_usage',        name: 'Platform Usage',   desc: 'View workspace-wide platform usage and adoption metrics' },
+    // Named per-person visibility. Held alone (without `ad_usage`) it is the
+    // team-lead scope: the People tab, scoped to the holder's own team. Held
+    // together with `ad_usage` (System Admin) it unlocks every named member and
+    // team across the workspace.
+    { key: 'ad_usage_people', name: 'Per-person Usage', desc: 'See named member and team activity in Platform Usage' },
+    { key: 'ad_usage_export', name: 'Export Usage',     desc: 'Export platform usage as CSV' },
   ]},
 ];
 
@@ -239,6 +246,14 @@ const REVIEWER_KEYS: PermissionKey[] = [
   'exc_triage',
 ];
 
+// A team lead reads their own team's adoption, and nothing else admin. They hold
+// `ad_usage_people` WITHOUT `ad_usage`: that combination is the signal Platform
+// Usage reads to scope the People tab to the holder's own team (see the view).
+const TEAM_LEAD_KEYS: PermissionKey[] = [
+  ...VIEW_ALL,
+  'ad_usage_people',
+];
+
 const ENABLER_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
   // a broad creator/operator, minus org admin
@@ -268,6 +283,8 @@ export const SEED_ROLES: Role[] = [
     description: 'Reviews and comments; limited edit.', permissions: REVIEWER_KEYS },
   { id: 'role-viewer',  name: 'Viewer',       type: 'System', createdBy: 'System', lastModified: 'Jan 10, 2026',
     description: 'Read-only across all modules.', permissions: [...VIEW_ALL] },
+  { id: 'role-teamlead',name: 'Team Lead',    type: 'System', createdBy: 'System', lastModified: 'Jul 16, 2026',
+    description: "Reads their own team's adoption in Platform Usage.", permissions: TEAM_LEAD_KEYS },
 ];
 
 export function getRole(roleId: string): Role | undefined {
@@ -291,7 +308,8 @@ export const PERSON_ROLES: Record<string, string> = Object.fromEntries(
  * Route gating — which permission a view requires
  * ────────────────────────────────────────────────────────────────────────── */
 
-export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey>> = {
+/** A view gate is one permission, or a set the user needs ANY of (see App.tsx). */
+export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKey[]>> = {
   // Workflows
   'workflow-templates': 'wf_view',
   'workflow-detail': 'wf_view',
@@ -306,6 +324,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey>> = {
   'audit-planning': 'plan_view',
   // Engagements
   'engagements': 'eng_view',
+  'sox-testing': 'eng_view',
   'engagement-overview': 'eng_view',
   'engagement-case-management': 'eng_view',
   'my-queue': 'eng_view',
@@ -347,5 +366,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey>> = {
   'admin-users': 'ad_users_manage',
   'admin-roles': 'ad_roles_manage',
   'admin-logs': 'ad_logs',
+  // Either the workspace-wide admin view, or a team lead's own-team scope.
+  'platform-usage': ['ad_usage', 'ad_usage_people'],
   // home, recents, dev routes intentionally ungated (open to all)
 };

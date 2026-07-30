@@ -60,7 +60,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
+        className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(o => (
@@ -136,14 +136,14 @@ export default function SampleDataModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[94vw] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[94vw] max-h-[92vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog"
         aria-label="Sample the Data"
       >
         {/* Header */}
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               <Wand2 size={18} />
             </div>
             <div>
@@ -170,7 +170,7 @@ export default function SampleDataModal({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1.5 w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="mt-1.5 w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
           </div>
 
@@ -218,7 +218,7 @@ export default function SampleDataModal({
                     </div>
                     <button
                       onClick={() => removeFilter(f.id)}
-                      className="self-end w-10 h-10 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-risk hover:bg-risk-50 cursor-pointer"
+                      className="self-end w-10 h-10 rounded-md flex items-center justify-center text-ink-400 hover:text-risk hover:bg-risk-50 cursor-pointer"
                       aria-label="Remove filter row"
                     >
                       <Trash2 size={15} />
@@ -227,7 +227,7 @@ export default function SampleDataModal({
                 ))}
                 <button
                   onClick={addFilter}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 hover:text-brand-700 cursor-pointer"
                 >
                   <Plus size={13} />
                   Add another item
@@ -262,7 +262,7 @@ export default function SampleDataModal({
                       const v = Number(e.target.value);
                       setSamplePct(Number.isFinite(v) ? Math.max(1, Math.min(100, v)) : 1);
                     }}
-                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[0.75rem] text-ink-500">%</span>
                 </div>
@@ -280,7 +280,7 @@ export default function SampleDataModal({
           </div>
 
           {/* Info note */}
-          <div className="flex items-start gap-2 bg-evidence-50/60 border border-evidence-50 rounded-[8px] px-3 py-2.5">
+          <div className="flex items-start gap-2 bg-evidence-50/60 border border-evidence-50 rounded-md px-3 py-2.5">
             <Info size={13} className="text-evidence-700 mt-0.5 shrink-0" />
             <p className="text-[0.75rem] text-ink-700 leading-snug">
               <span className="font-semibold">Note:</span> New Sample Data Sheet will be created.{' '}
@@ -293,7 +293,7 @@ export default function SampleDataModal({
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -308,7 +308,7 @@ export default function SampleDataModal({
               });
             }}
             disabled={!canCreate}
-            className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors ${
+            className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors ${
               canCreate
                 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                 : 'bg-brand-600/50 text-white/80 cursor-not-allowed'

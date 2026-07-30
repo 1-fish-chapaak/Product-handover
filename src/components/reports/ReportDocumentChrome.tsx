@@ -3,7 +3,9 @@
 // brand banner, metadata grid, numbered sections, KPI tile grid.
 
 import { motion } from 'motion/react';
+import { PenLine, Check, RotateCcw } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
+import type { SignatorySlot, Signoff } from './reportShared';
 
 export type ReportStat = {
   label: string;
@@ -39,7 +41,7 @@ export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boole
         // (text-<tone>-700 from stat.color); the label stays muted ink.
         const toneText = stat.color.match(/text-[\w-]+/)?.[0] ?? 'text-ink-900';
         return (
-          <div key={stat.label} className="glass-card rounded-xl px-5 py-5">
+          <div key={stat.label} className="glass-card px-5 py-5">
             <p className={`text-[2.5rem] font-bold leading-none tabular-nums tracking-[-0.035em] ${toneText}`}>
               {stat.value}
             </p>
@@ -71,7 +73,10 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-baseline gap-3.5 min-w-0">
-          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">
+          <span
+            className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none"
+            style={{ color: 'var(--rep-accent, #550fa5)' }}
+          >
             {String(n).padStart(2, '0')}
           </span>
           <div className="min-w-0">
@@ -86,10 +91,78 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
         whileInView={{ scaleX: 1 }}
         viewport={{ once: true, margin: '-80px' }}
         transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full bg-brand-500/80"
+        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full"
+        style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }}
         aria-hidden="true"
       />
     </motion.div>
+  );
+}
+
+// Approvals & sign-off block. Static in the template preview (no callbacks); in
+// the report reader `onSign`/`onSignOff` make each slot manually signable and
+// revocable. Signed slots record who + when. Accent tracks --rep-accent (theme
+// / brand colour), so the block matches the rest of the report.
+export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, className = '' }: {
+  signatories: SignatorySlot[];
+  signoffs?: Record<string, Signoff>;
+  onSign?: (slot: SignatorySlot) => void;
+  onSignOff?: (slot: SignatorySlot) => void;
+  className?: string;
+}) {
+  if (!signatories.length) return null;
+  const interactive = !!onSign;
+  const cols = signatories.length >= 3 ? 'sm:grid-cols-3' : signatories.length === 2 ? 'sm:grid-cols-2' : 'grid-cols-1';
+  return (
+    <div className={className}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-7 h-7 rounded-md flex items-center justify-center text-white shrink-0" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={14} /></span>
+        <div>
+          <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15]">Approvals &amp; Sign-Off</h2>
+          <p className="text-[0.8125rem] text-ink-500 leading-snug">Manual authorisation of this report.</p>
+        </div>
+      </div>
+      <div className={`grid grid-cols-1 ${cols} gap-4`}>
+        {signatories.map(s => {
+          const signed = signoffs?.[s.id];
+          const name = signed?.signedBy || s.name;
+          return (
+            <div key={s.id} className={`rounded-lg border p-5 transition-colors ${signed ? 'border-compliant-200 bg-compliant-50/40' : 'border-canvas-border'}`}>
+              <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
+                <PenLine size={12} /> {s.role}
+              </div>
+              {name ? (
+                <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight mb-4">{name}</div>
+              ) : (
+                <div className="h-5 mb-4" />
+              )}
+              {signed ? (
+                <div className="border-t border-dashed border-compliant-300 pt-2.5">
+                  <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-compliant-700"><Check size={12} strokeWidth={2.5} /> Signed · {signed.signedAt}</div>
+                  {interactive && (
+                    <button onClick={() => onSignOff?.(s)} className="mt-2 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-risk-700 transition-colors cursor-pointer"><RotateCcw size={11} /> Sign off</button>
+                  )}
+                </div>
+              ) : (
+                <div className="border-t border-dashed border-canvas-border pt-2.5">
+                  {interactive ? (
+                    <button onClick={() => onSign?.(s)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white cursor-pointer transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={12} /> Sign</button>
+                  ) : (
+                    <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
+                  )}
+                  {/* Nearly every audit sign-off carries "signed on ____", and
+                      it is awkward to retrofit once reports are in print. */}
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-400">Signed on</span>
+                    <span className="flex-1 border-b border-dashed border-canvas-border" />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -173,7 +246,7 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
             {description}
           </div>
           {facts && facts.length > 0 && (
-            <div className="shrink-0 flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+            <div className="shrink-0 flex items-stretch rounded-lg border border-white/20 bg-white/10 overflow-hidden">
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
                   <div className="text-[1.5rem] font-bold text-white tabular-nums leading-none">{f.value}</div>
@@ -296,7 +369,7 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
               initial={{ opacity: 0, scale: 0.96, y: 6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden"
+              className="flex items-stretch rounded-lg border border-white/20 bg-white/10 overflow-hidden"
             >
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>

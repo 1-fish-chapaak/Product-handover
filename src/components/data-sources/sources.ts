@@ -2,16 +2,16 @@
 // and DataPickerModal (chat-attach). Single source of truth for the mock list.
 
 import {
-  Database, FileText, Globe, Cloud, MessageSquare,
+  Database, FileText, MessageSquare,
 } from 'lucide-react';
 
-export type SourceType = 'file' | 'database' | 'api' | 'cloud' | 'session';
+export type SourceType = 'file' | 'database' | 'session';
 
 export interface DataSource {
   id: string;
   name: string;
   type: SourceType;
-  /** Sub-detail shown under the name (file format, db engine, api method, cloud provider, etc.) */
+  /** Sub-detail shown under the name (file format, db engine, linked chat, etc.) */
   subtype: string;
   createdAt: string; // ISO date
   /** Optional override for the date shown on the card. When set, the card
@@ -53,11 +53,11 @@ export const SEED: DataSource[] = [
     columns: ['Vendor', 'Invoice ID', 'Invoice Date', 'Amount', 'Status', 'Description'] },
   { id: 'f-06', name: 'Import Remittance — Bank Demo',         type: 'file', subtype: 'CSV · 1.4 MB',   createdAt: dayOffset(3) },
   { id: 'f-08', name: 'Demo Invoice Data 1604',                type: 'file', subtype: 'CSV · 3.3 MB',   createdAt: dayOffset(7) },
-  { id: 'f-11', name: 'Air India HR KPI — Dummy Employees',    type: 'file', subtype: 'CSV · 2.9 MB',   createdAt: dayOffset(8) },
+  { id: 'f-11', name: 'Airline Group HR KPI — Dummy Employees',    type: 'file', subtype: 'CSV · 2.9 MB',   createdAt: dayOffset(8) },
   { id: 'f-12', name: 'NSE Agreement Sample',                  type: 'file', subtype: 'PDF · 4.4 MB',   createdAt: dayOffset(9) },
   { id: 'f-14', name: 'NSE Position Limits Monitoring',        type: 'file', subtype: 'CSV · 1.8 MB',   createdAt: dayOffset(11) },
   { id: 'f-15', name: 'NSE Penalty on Shortfall Margin',       type: 'file', subtype: 'XLSX · 3.5 MB',  createdAt: dayOffset(11) },
-  { id: 'f-16', name: 'Air India HR KPI — Bills vs Reimbursement', type: 'file', subtype: 'XLSX · 6.0 MB', createdAt: dayOffset(13) },
+  { id: 'f-16', name: 'Airline Group HR KPI — Bills vs Reimbursement', type: 'file', subtype: 'XLSX · 6.0 MB', createdAt: dayOffset(13) },
 
   // ── Multi-file uploads (folder aggregates — one folder per card) ──
   { id: 'f-01', name: 'AI_Fare Audit',           type: 'file', isFolder: true, subtype: 'Folder · 2 files · 12.4 MB', createdAt: dayOffset(0),
@@ -99,16 +99,6 @@ export const SEED: DataSource[] = [
   { id: 'db-05', name: 'Amazon Athena connection', type: 'database', subtype: 'Athena · ap-south-1',  createdAt: '2026-05-05',
     columns: ['query_id', 'query_text', 'rows_scanned', 'bytes_scanned', 'duration_ms', 'status'] },
 
-  // ── APIs ──
-  { id: 'api-01', name: 'Workday Access Events',         type: 'api', subtype: 'REST · OAuth2',     createdAt: dayOffset(2) },
-  { id: 'api-02', name: 'NetSuite Vendors',              type: 'api', subtype: 'REST · API Key',    createdAt: dayOffset(6) },
-  { id: 'api-03', name: 'JIRA Audit Issues',             type: 'api', subtype: 'REST · OAuth2',     createdAt: dayOffset(12) },
-
-  // ── Cloud ──
-  { id: 'cl-01', name: 'S3 — auditify-evidence-bucket',  type: 'cloud', subtype: 'AWS S3',          createdAt: dayOffset(0) },
-  { id: 'cl-02', name: 'Google Drive — Q1 Workpapers',   type: 'cloud', subtype: 'Google Drive',    createdAt: dayOffset(4) },
-  { id: 'cl-03', name: 'SharePoint — Audit Library',     type: 'cloud', subtype: 'Microsoft 365',   createdAt: dayOffset(15) },
-
   // ── Session files (chat-attached) ──
   { id: 'sf-01', name: 'IRA chat — JE anomaly samples',  type: 'session', subtype: 'CSV · linked to ch-005', createdAt: dayOffset(0) },
   { id: 'sf-02', name: 'IRA chat — Vendor concentration', type: 'session', subtype: 'XLSX · linked to ch-002', createdAt: dayOffset(2) },
@@ -116,13 +106,11 @@ export const SEED: DataSource[] = [
   { id: 'sf-04', name: 'IRA chat — Privileged access',   type: 'session', subtype: 'CSV · linked to ch-001',  createdAt: dayOffset(14) },
 ];
 
-export const INTEGRATED_TYPES: SourceType[] = ['database', 'api', 'cloud', 'session'];
+export const INTEGRATED_TYPES: SourceType[] = ['database', 'session'];
 
 export const TYPE_META: Record<SourceType, { icon: React.ElementType; tone: string; label: string }> = {
   file:     { icon: FileText,       tone: 'text-brand-700 bg-brand-50',         label: 'File' },
   database: { icon: Database,       tone: 'text-evidence-700 bg-evidence-50',   label: 'Database' },
-  api:      { icon: Globe,          tone: 'text-mitigated-700 bg-mitigated-50', label: 'API' },
-  cloud:    { icon: Cloud,          tone: 'text-compliant-700 bg-compliant-50', label: 'Cloud' },
   session:  { icon: MessageSquare,  tone: 'text-ink-700 bg-paper-100',          label: 'Session file' },
 };
 

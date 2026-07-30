@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -108,6 +108,49 @@ const METRIC_ROWS: {
 interface JustificationAnchor {
   rect: DOMRect;
   alignmentId: string;
+}
+
+// Position a portaled menu against an anchor button, opening UPWARD when there
+// isn't enough room below (so bottom-of-list dropdowns never clip against the
+// scroll container). Repositions on scroll/resize while open.
+function useAnchoredPosition(
+  anchorEl: HTMLElement | null,
+  menuRef: { current: HTMLElement | null },
+  opts: { align?: 'left' | 'right'; minWidth?: number; matchWidth?: boolean } = {},
+) {
+  const { align = 'left', minWidth = 0, matchWidth = false } = opts;
+  const [pos, setPos] = useState<{ top: number; left: number; width?: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchorEl) return;
+    const compute = () => {
+      const menu = menuRef.current;
+      const a = anchorEl.getBoundingClientRect();
+      const margin = 8;
+      const gap = 4;
+      const menuH = menu?.offsetHeight ?? 0;
+      const menuW = matchWidth ? Math.max(a.width, minWidth) : menu?.offsetWidth ?? minWidth;
+      const vH = window.innerHeight;
+      const vW = window.innerWidth;
+      const spaceBelow = vH - a.bottom;
+      const spaceAbove = a.top;
+      const openUp = spaceBelow < menuH + margin + gap && spaceAbove > spaceBelow;
+      const top = openUp ? Math.max(margin, a.top - menuH - gap) : a.bottom + gap;
+      let left = align === 'right' ? a.right - menuW : a.left;
+      if (left + menuW > vW - margin) left = vW - menuW - margin;
+      if (left < margin) left = margin;
+      setPos({ top, left, width: matchWidth ? menuW : undefined });
+    };
+    compute();
+    window.addEventListener('scroll', compute, true);
+    window.addEventListener('resize', compute);
+    return () => {
+      window.removeEventListener('scroll', compute, true);
+      window.removeEventListener('resize', compute);
+    };
+  }, [anchorEl, menuRef, align, minWidth, matchWidth]);
+
+  return pos;
 }
 
 export default function ExecutorColumnMapping({
@@ -226,17 +269,17 @@ export default function ExecutorColumnMapping({
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
+                  <span className="text-[0.875rem] font-bold text-ink-900">{input.name}</span>
                   <SlotFunctionTag input={input} />
                 </div>
-                <p className="text-[11.5px] text-ink-400 mt-0.5 line-clamp-1">{input.description}</p>
+                <p className="text-[0.71875rem] text-ink-400 mt-0.5 line-clamp-1">{input.description}</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 ml-4">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[18px] font-bold text-ink-800 tabular-nums leading-tight">
+                  <span className="text-[1.125rem] font-bold text-ink-800 tabular-nums leading-tight">
                     {mapped}/{total}
                   </span>
-                  <span className="text-[10px] text-ink-400 font-semibold leading-tight">
+                  <span className="text-[0.625rem] text-ink-400 font-semibold leading-tight">
                     column
                     <br />
                     mapped
@@ -253,26 +296,54 @@ export default function ExecutorColumnMapping({
             <div className="px-5 pb-4">
               <div className="border-t border-canvas-border/40 mb-3" />
 
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink-400">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-[0.65625rem] font-bold uppercase tracking-[0.12em] text-ink-400 shrink-0">
                     Mapped Sources
                   </span>
                   {uploaded.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setPreviewInput({ name: input.name, files: uploaded })}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated hover:border-ink-300 hover:text-ink-800 px-2.5 py-0.5 text-[11px] font-semibold text-ink-600 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated hover:border-ink-300 hover:text-ink-800 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-ink-600 transition-colors cursor-pointer shrink-0"
                     >
                       <Eye size={11} />
                       Preview
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <SelectFileDropdown
+                    isOpen={selectFileOpen === input.id}
+                    onToggle={() => {
+                      setSelectFileOpen(selectFileOpen === input.id ? null : input.id);
+                      setSelectFileSearch('');
+                    }}
+                    onClose={() => setSelectFileOpen(null)}
+                    search={selectFileSearch}
+                    setSearch={setSelectFileSearch}
+                    allFiles={allUploadedFiles}
+                    currentFiles={uploaded}
+                    onToggleFile={(fileName, isCurrentlySelected) => {
+                      const current = files[input.id] ?? [];
+                      if (isCurrentlySelected) {
+                        setFiles({ ...files, [input.id]: current.filter((f) => f.name !== fileName) });
+                      } else {
+                        const source = allUploadedFiles.find((f) => f.name === fileName);
+                        if (source) {
+                          const original = (files[source.inputId] ?? []).find((f) => f.name === fileName);
+                          setFiles({
+                            ...files,
+                            [input.id]: [...current, original ?? { name: fileName, size: 0 }],
+                          });
+                        }
+                      }
+                    }}
+                  />
                   <span
                     className={[
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em]',
+                      'inline-flex items-center rounded-full px-2 py-0.5 text-[0.65625rem] font-bold uppercase tracking-[0.08em] shrink-0',
                       matchTier.text,
                       matchTier.pillBg,
                     ].join(' ')}
@@ -282,74 +353,43 @@ export default function ExecutorColumnMapping({
                   <button
                     type="button"
                     title="Match score is the average confidence across all column alignments for this source."
-                    className="text-ink-400 hover:text-ink-600 transition-colors cursor-help"
+                    className="text-ink-400 hover:text-ink-600 transition-colors cursor-help shrink-0"
                   >
                     <Info size={12} />
                   </button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center flex-wrap gap-1.5 min-w-0">
-                  {uploaded.length === 0 ? (
-                    <span className="text-[11.5px] text-ink-400 italic">
-                      No files mapped. Upload or choose a file to get started.
-                    </span>
-                  ) : (
-                    <>
-                      {uploaded.slice(0, 2).map((f, i) => (
-                        <span
-                          key={`${f.name}-${i}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/60 bg-brand-50/60 pl-2.5 pr-1.5 py-1 text-[11.5px] text-ink-700"
+              <div className="flex items-center flex-wrap gap-1.5">
+                {uploaded.length === 0 ? (
+                  <span className="text-[0.71875rem] text-ink-400 italic">
+                    No files mapped. Upload or choose a file to get started.
+                  </span>
+                ) : (
+                  <>
+                    {uploaded.slice(0, 2).map((f, i) => (
+                      <span
+                        key={`${f.name}-${i}`}
+                        title={f.name}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/60 bg-brand-50/60 pl-2.5 pr-1.5 py-1 text-[0.71875rem] text-ink-700"
+                      >
+                        <FileIcon size={11} className="text-brand-600/70 shrink-0" />
+                        <span className="max-w-[180px] truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(input.id, f.name)}
+                          className="p-0.5 rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                          aria-label="Remove file"
                         >
-                          <FileIcon size={11} className="text-brand-600/70 shrink-0" />
-                          <span className="max-w-[180px] truncate">{f.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(input.id, f.name)}
-                            className="p-0.5 rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                            aria-label="Remove file"
-                          >
-                            <X size={11} />
-                          </button>
-                        </span>
-                      ))}
-                      {uploaded.length > 2 && (
-                        <span className="inline-flex items-center rounded-lg border border-brand-200/60 bg-brand-50/40 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700">
-                          + {uploaded.length - 2} more
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <SelectFileDropdown
-                  isOpen={selectFileOpen === input.id}
-                  onToggle={() => {
-                    setSelectFileOpen(selectFileOpen === input.id ? null : input.id);
-                    setSelectFileSearch('');
-                  }}
-                  onClose={() => setSelectFileOpen(null)}
-                  search={selectFileSearch}
-                  setSearch={setSelectFileSearch}
-                  allFiles={allUploadedFiles}
-                  currentFiles={uploaded}
-                  onToggleFile={(fileName, isCurrentlySelected) => {
-                    const current = files[input.id] ?? [];
-                    if (isCurrentlySelected) {
-                      setFiles({ ...files, [input.id]: current.filter((f) => f.name !== fileName) });
-                    } else {
-                      const source = allUploadedFiles.find((f) => f.name === fileName);
-                      if (source) {
-                        const original = (files[source.inputId] ?? []).find((f) => f.name === fileName);
-                        setFiles({
-                          ...files,
-                          [input.id]: [...current, original ?? { name: fileName, size: 0 }],
-                        });
-                      }
-                    }
-                  }}
-                />
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                    {uploaded.length > 2 && (
+                      <MoreFilesChip files={uploaded.slice(2)} />
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -357,13 +397,13 @@ export default function ExecutorColumnMapping({
             {isOpen && total > 0 && (
               <div className="border-t border-canvas-border/40">
                 <div className="px-5 pt-4 pb-1">
-                  <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink-400">
+                  <span className="text-[0.65625rem] font-bold uppercase tracking-[0.12em] text-ink-400">
                     Column Alignment
                   </span>
                 </div>
 
                 {/* Table headers */}
-                <div className="grid grid-cols-[1fr_1fr_120px] gap-3 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-400">
+                <div className="grid grid-cols-[1fr_1fr_120px] gap-3 px-5 py-2 text-[0.625rem] font-bold uppercase tracking-[0.1em] text-ink-400">
                   <span>Source Column</span>
                   <span>Target Schema</span>
                   <span className="text-right">Confidence</span>
@@ -379,13 +419,13 @@ export default function ExecutorColumnMapping({
                       }
                       className="w-full flex items-center justify-between gap-3 px-5 py-2 bg-brand-50/40 border-y border-brand-100/60 hover:bg-brand-50/60 transition-colors cursor-pointer text-left"
                     >
-                      <div className="flex items-center gap-2 text-[12px] text-brand-700 font-semibold">
+                      <div className="flex items-center gap-2 text-[0.75rem] text-brand-700 font-semibold">
                         <CheckCircle2 size={14} className="text-brand-600" />
                         <span>{auto.length} fields auto-mapped</span>
                         <span className="text-ink-400 font-normal">·</span>
                         <span className="text-ink-500 font-normal">avg {avgAuto}% confidence</span>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700">
+                      <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700">
                         {autoOpen ? 'Collapse' : 'Expand'}
                         {autoOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </span>
@@ -422,7 +462,7 @@ export default function ExecutorColumnMapping({
                 {/* Review group (70–89) — auto-mapped but flagged for a glance */}
                 {review.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50/60 border-y border-mitigated/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-mitigated-700">
+                    <div className="flex items-center gap-2 px-5 py-2 border-y border-canvas-border text-[0.71875rem] font-bold uppercase tracking-[0.1em] text-mitigated-700">
                       <AlertCircle size={13} />
                       Review recommended ({review.length})
                     </div>
@@ -455,7 +495,7 @@ export default function ExecutorColumnMapping({
                 {/* Needs attention group (<70) — not auto-mapped, manual required */}
                 {attention.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 px-5 py-2 bg-risk-50 border-y border-risk/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-risk-700">
+                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50/60 border-y border-mitigated/20 text-[0.71875rem] font-bold uppercase tracking-[0.1em] text-mitigated-700">
                       <AlertTriangle size={13} />
                       Needs attention ({attention.length})
                     </div>
@@ -541,21 +581,26 @@ function AlignmentRow({
   // Force unmapped rendering for confidence < 70 unless the user has explicitly picked.
   const isUnmapped = !userMapped && (alignment.confidence < 70 || !alignment.target);
 
-  const accent = tone === 'auto' ? 'before:bg-brand-400/70' : 'before:bg-mitigated';
-  const rowBg = tone === 'attention' ? 'bg-mitigated-50/60' : 'bg-brand-50/30';
+  // The amber highlight is reserved for rows that still need the user to act.
+  // A mapped row — whether auto-mapped (review-recommended) or just hand-mapped
+  // in "needs attention" — goes calm/white, so the fill tracks "resolved vs not"
+  // rather than the tier label.
+  const rowBg = isUnmapped
+    ? 'bg-mitigated-50/60'
+    : tone === 'auto'
+      ? 'bg-brand-50/30'
+      : 'bg-canvas-elevated';
 
   return (
     <div
       className={[
-        'relative grid grid-cols-[1fr_1fr_120px] gap-3 items-center px-5 py-2.5',
-        'before:absolute before:inset-y-2 before:left-1.5 before:w-[3px] before:rounded-full',
-        accent,
+        'grid grid-cols-[1fr_1fr_120px] gap-3 items-center px-5 py-2.5 transition-colors',
         rowBg,
       ].join(' ')}
     >
       {/* Source */}
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[12.5px] font-semibold text-ink-800 truncate">
+        <span className="text-[0.78125rem] font-semibold text-ink-800 truncate">
           {alignment.source.name}
         </span>
         <DTypeChip dtype={alignment.source.dtype} />
@@ -578,7 +623,7 @@ function AlignmentRow({
       <div className="flex items-center justify-end gap-1.5">
         {!isUnmapped ? (
           <>
-            <span className={`text-[13px] font-bold tabular-nums ${tier.text}`}>
+            <span className={`text-[0.8125rem] font-bold tabular-nums ${tier.text}`}>
               {alignment.confidence}%
             </span>
             <button
@@ -596,7 +641,7 @@ function AlignmentRow({
             </button>
           </>
         ) : (
-          <span className="text-[11.5px] text-ink-400">—</span>
+          <span className="text-[0.71875rem] text-ink-400">—</span>
         )}
       </div>
     </div>
@@ -605,8 +650,39 @@ function AlignmentRow({
 
 function DTypeChip({ dtype }: { dtype: ColumnDType }) {
   return (
-    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider bg-canvas text-ink-500 border border-canvas-border shrink-0">
+    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[0.59375rem] font-bold uppercase tracking-wider bg-canvas text-ink-500 border border-canvas-border shrink-0">
       {dtype}
+    </span>
+  );
+}
+
+// "+N more" pill that reveals the collapsed file names on hover. Native `title`
+// tooltips are slow and easy to miss, so this shows the list instantly.
+function MoreFilesChip({ files }: { files: { name: string }[] }) {
+  const [open, setOpen] = useState(false);
+  if (files.length === 0) return null;
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span className="inline-flex items-center rounded-lg border border-brand-200/60 bg-brand-50/40 px-2.5 py-1 text-[0.71875rem] font-semibold text-brand-700 cursor-default">
+        + {files.length} more
+      </span>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] max-w-[280px] rounded-lg border border-canvas-border bg-canvas-elevated p-1.5 shadow-[0_10px_28px_-12px_rgba(15,8,30,0.28)]">
+          {files.map((f, i) => (
+            <div
+              key={`${f.name}-${i}`}
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-[0.71875rem] text-ink-700"
+            >
+              <FileIcon size={11} className="text-brand-600/70 shrink-0" />
+              <span className="truncate">{f.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </span>
   );
 }
@@ -628,42 +704,35 @@ function TargetPicker({
   onToggle: () => void;
   onPick: (name: string) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onToggle();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isOpen, onToggle]);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   if (!current) {
     return (
-      <div ref={ref} className="relative min-w-0">
+      <div className="relative min-w-0">
         <button
+          ref={btnRef}
           type="button"
           onClick={onToggle}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-canvas-elevated hover:bg-brand-50/40 px-3 py-1.5 text-[12px] font-semibold text-brand-700 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-canvas-elevated hover:bg-brand-50/40 px-3 py-1.5 text-[0.75rem] font-semibold text-brand-700 transition-colors cursor-pointer"
         >
           <Plus size={12} />
           Map column
           <ChevronDown size={12} />
         </button>
         {isOpen && (
-          <PickerMenu options={options} current={null} onPick={onPick} />
+          <PickerMenu anchorEl={btnRef.current} options={options} current={null} onPick={onPick} onClose={onToggle} />
         )}
       </div>
     );
   }
 
   return (
-    <div ref={ref} className="relative min-w-0 flex-1">
+    <div className="relative min-w-0 flex-1">
       <button
+        ref={btnRef}
         type="button"
         onClick={onToggle}
-        className="w-full inline-flex items-center justify-between gap-2 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 px-2 py-1.5 text-[12px] text-ink-800 transition-colors cursor-pointer"
+        className="w-full inline-flex items-center justify-between gap-2 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 px-2 py-1.5 text-[0.75rem] text-ink-800 transition-colors cursor-pointer"
       >
         <span className="flex items-center gap-1.5 min-w-0">
           <span className="font-semibold text-brand-700 truncate">{current}</span>
@@ -671,33 +740,68 @@ function TargetPicker({
         </span>
         <ChevronDown size={12} className="text-ink-400 shrink-0" />
       </button>
-      {isOpen && <PickerMenu options={options} current={current} onPick={onPick} />}
+      {isOpen && <PickerMenu anchorEl={btnRef.current} options={options} current={current} onPick={onPick} onClose={onToggle} />}
     </div>
   );
 }
 
 function PickerMenu({
+  anchorEl,
   options,
   current,
   onPick,
+  onClose,
 }: {
+  anchorEl: HTMLButtonElement | null;
   options: string[];
   current: string | null;
   onPick: (name: string) => void;
+  onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const pos = useAnchoredPosition(anchorEl, menuRef, { matchWidth: true, minWidth: 240 });
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t)) return;
+      if (anchorEl?.contains(t)) return;
+      onClose();
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [anchorEl, onClose]);
+
   const filtered = options.filter((opt) =>
     opt.toLowerCase().includes(query.toLowerCase()),
   );
 
-  return (
-    <div className="absolute left-0 top-full mt-1 w-full min-w-[240px] bg-canvas-elevated rounded-lg border border-brand-300 shadow-lg z-40 overflow-hidden">
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        width: pos?.width,
+        visibility: pos ? 'visible' : 'hidden',
+        zIndex: 9999,
+      }}
+      className="min-w-[240px] bg-canvas-elevated rounded-lg border border-brand-300 shadow-lg overflow-hidden"
+    >
       <div className="px-2.5 py-2 border-b border-canvas-border/60">
         <input
           ref={inputRef}
@@ -705,12 +809,12 @@ function PickerMenu({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search columns..."
-          className="w-full text-[12px] text-ink-800 placeholder:text-ink-400 outline-none bg-transparent"
+          className="w-full text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none bg-transparent"
         />
       </div>
       <div className="max-h-60 overflow-y-auto py-1">
         {filtered.length === 0 ? (
-          <p className="px-3 py-2 text-[11.5px] text-ink-400 italic">No matches.</p>
+          <p className="px-3 py-2 text-[0.71875rem] text-ink-400 italic">No matches.</p>
         ) : (
           filtered.map((opt) => {
             const selected = opt === current;
@@ -719,7 +823,7 @@ function PickerMenu({
                 key={opt}
                 type="button"
                 onClick={() => onPick(opt)}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left transition-colors cursor-pointer ${
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[0.78125rem] text-left transition-colors cursor-pointer ${
                   selected ? 'bg-brand-50/60 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-brand-50/40'
                 }`}
               >
@@ -730,7 +834,8 @@ function PickerMenu({
           })
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -792,7 +897,7 @@ function JustificationPopover({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-canvas-border/60">
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-brand-700">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[0.65625rem] font-bold uppercase tracking-[0.1em] text-brand-700">
           <Sparkles size={11} />
           AI Justification
         </span>
@@ -814,11 +919,11 @@ function JustificationPopover({
           return (
             <div key={m.key}>
               <div className="flex items-baseline justify-between gap-2 mb-1">
-                <span className="text-[12.5px] font-bold text-ink-800">
+                <span className="text-[0.78125rem] font-bold text-ink-800">
                   {m.label}{' '}
-                  <span className="text-ink-400 font-normal text-[11px]">×{m.weight}%</span>
+                  <span className="text-ink-400 font-normal text-[0.6875rem]">×{m.weight}%</span>
                 </span>
-                <span className={`text-[12.5px] font-bold tabular-nums ${valueTier.text}`}>
+                <span className={`text-[0.78125rem] font-bold tabular-nums ${valueTier.text}`}>
                   {value}%
                 </span>
               </div>
@@ -828,7 +933,7 @@ function JustificationPopover({
                   style={{ width: `${Math.min(100, Math.max(2, value))}%` }}
                 />
               </div>
-              <p className="text-[11px] text-ink-500 mt-1">{m.description}</p>
+              <p className="text-[0.6875rem] text-ink-500 mt-1">{m.description}</p>
             </div>
           );
         })}
@@ -836,17 +941,17 @@ function JustificationPopover({
 
       {/* Summary */}
       <div className="px-4 pb-3 pt-1">
-        <p className="text-[11.5px] text-ink-700 leading-snug">{alignment.explanation}</p>
+        <p className="text-[0.71875rem] text-ink-700 leading-snug">{alignment.explanation}</p>
       </div>
 
       {/* Footer */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-t border-canvas-border/60 bg-canvas/40">
         <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${tier.text} ${tier.pillBg} ${tier.pillBorder}`}
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6875rem] font-bold ${tier.text} ${tier.pillBg} ${tier.pillBorder}`}
         >
           Overall: {alignment.confidence}%
         </span>
-        <span className="text-[11px] text-ink-500 truncate">
+        <span className="text-[0.6875rem] text-ink-500 truncate">
           {alignment.source.name} → {alignment.target?.name ?? '—'}
         </span>
       </div>
@@ -876,76 +981,123 @@ function SelectFileDropdown({
   currentFiles: { name: string }[];
   onToggleFile: (fileName: string, isCurrentlySelected: boolean) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTimeout(() => searchRef.current?.focus(), 0);
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isOpen, onClose]);
-
-  const currentNames = new Set(currentFiles.map((f) => f.name));
-  const filtered = allFiles.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div className="relative shrink-0">
       <button
+        ref={btnRef}
         type="button"
         onClick={onToggle}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-canvas-elevated hover:bg-brand-50 px-3 py-1.5 text-[11.5px] font-semibold text-brand-700 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-canvas-elevated hover:bg-brand-50 px-3 py-1.5 text-[0.71875rem] font-semibold text-brand-700 transition-colors cursor-pointer"
       >
         <ArrowLeftRight size={12} />
         Select File(s)
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1.5 w-72 bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg z-50 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-canvas-border/60">
-            <Search size={14} className="text-ink-400 shrink-0" />
-            <input
-              ref={searchRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search files..."
-              className="w-full text-[12px] text-ink-700 placeholder:text-ink-400 outline-none bg-transparent"
-            />
-          </div>
-          <div className="max-h-48 overflow-y-auto py-1">
-            {filtered.length > 0 ? (
-              filtered.map((f, i) => {
-                const isSelected = currentNames.has(f.name);
-                return (
-                  <label
-                    key={`${f.name}-${i}`}
-                    className={`flex items-center gap-2.5 px-3 py-2 text-[12px] cursor-pointer transition-colors ${
-                      isSelected ? 'text-ink-800' : 'text-ink-600 hover:bg-brand-50/40'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => onToggleFile(f.name, isSelected)}
-                      className="size-3.5 rounded border-ink-300 accent-brand-600 shrink-0 cursor-pointer"
-                    />
-                    <span className="truncate">{f.name}</span>
-                  </label>
-                );
-              })
-            ) : (
-              <p className="px-3 py-3 text-[11px] text-ink-400 text-center">No files found</p>
-            )}
-          </div>
-        </div>
+        <SelectFileMenu
+          anchorEl={btnRef.current}
+          onClose={onClose}
+          search={search}
+          setSearch={setSearch}
+          allFiles={allFiles}
+          currentFiles={currentFiles}
+          onToggleFile={onToggleFile}
+        />
       )}
     </div>
+  );
+}
+
+function SelectFileMenu({
+  anchorEl,
+  onClose,
+  search,
+  setSearch,
+  allFiles,
+  currentFiles,
+  onToggleFile,
+}: {
+  anchorEl: HTMLButtonElement | null;
+  onClose: () => void;
+  search: string;
+  setSearch: (s: string) => void;
+  allFiles: { name: string; inputId: string }[];
+  currentFiles: { name: string }[];
+  onToggleFile: (fileName: string, isCurrentlySelected: boolean) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const pos = useAnchoredPosition(anchorEl, menuRef, { align: 'right' });
+
+  useEffect(() => {
+    setTimeout(() => searchRef.current?.focus(), 0);
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t)) return;
+      if (anchorEl?.contains(t)) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [anchorEl, onClose]);
+
+  const currentNames = new Set(currentFiles.map((f) => f.name));
+  const filtered = allFiles.filter((f) =>
+    f.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        visibility: pos ? 'visible' : 'hidden',
+        zIndex: 9999,
+      }}
+      className="w-72 bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg overflow-hidden"
+    >
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-canvas-border/60">
+        <Search size={14} className="text-ink-400 shrink-0" />
+        <input
+          ref={searchRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search files..."
+          className="w-full text-[0.75rem] text-ink-700 placeholder:text-ink-400 outline-none bg-transparent"
+        />
+      </div>
+      <div className="max-h-48 overflow-y-auto py-1">
+        {filtered.length > 0 ? (
+          filtered.map((f, i) => {
+            const isSelected = currentNames.has(f.name);
+            return (
+              <label
+                key={`${f.name}-${i}`}
+                className={`flex items-center gap-2.5 px-3 py-2 text-[0.75rem] cursor-pointer transition-colors ${
+                  isSelected ? 'text-ink-800' : 'text-ink-600 hover:bg-brand-50/40'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggleFile(f.name, isSelected)}
+                  className="size-3.5 rounded border-ink-300 accent-brand-600 shrink-0 cursor-pointer"
+                />
+                <span className="truncate">{f.name}</span>
+              </label>
+            );
+          })
+        ) : (
+          <p className="px-3 py-3 text-[0.6875rem] text-ink-400 text-center">No files found</p>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -988,8 +1140,8 @@ function DataPreviewModal({
               <FileIcon size={16} className="text-brand-600" />
             </div>
             <div>
-              <div className="text-[14px] font-bold text-ink-900">{schemaName}</div>
-              <div className="text-[11.5px] text-ink-400">{fileName}</div>
+              <div className="text-[0.875rem] font-bold text-ink-900">{schemaName}</div>
+              <div className="text-[0.71875rem] text-ink-400">{fileName}</div>
             </div>
           </div>
           <button
@@ -1002,13 +1154,13 @@ function DataPreviewModal({
         </div>
 
         <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[0.78125rem]">
             <thead>
               <tr className="border-b border-canvas-border bg-canvas/60">
                 {PREVIEW_COLUMNS.map((col) => (
                   <th
                     key={col}
-                    className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-ink-400"
+                    className="px-4 py-2.5 text-left text-[0.625rem] font-bold uppercase tracking-[0.1em] text-ink-400"
                   >
                     {col}
                   </th>
@@ -1031,11 +1183,11 @@ function DataPreviewModal({
         </div>
 
         <div className="flex items-center justify-between px-6 py-3 border-t border-canvas-border">
-          <span className="text-[11px] text-ink-400">Previewing first 5 entries</span>
+          <span className="text-[0.6875rem] text-ink-400">Previewing first 5 entries</span>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-4 py-2 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold px-4 py-2 transition-colors cursor-pointer"
           >
             Close Preview
           </button>

@@ -54,7 +54,7 @@ export function deriveOutputReviewSummary(runs: AutomationRunsState, review: Aut
 }
 
 export const REVIEW_STATUS_CLS: Record<OutputReviewStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600', IN_PROGRESS: 'bg-blue-50 text-blue-700',
+  NOT_STARTED: 'bg-canvas text-ink-600', IN_PROGRESS: 'bg-blue-50 text-blue-700',
   READY_FOR_CASES: 'bg-purple-50 text-purple-700', READY_FOR_REPORTS: 'bg-emerald-50 text-emerald-700',
   COMPLETED: 'bg-emerald-50 text-emerald-700',
 };

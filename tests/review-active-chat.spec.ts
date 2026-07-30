@@ -25,10 +25,16 @@ async function send(page: Page, msg: string) {
   await ta.press('Enter');
 }
 
+// The clarification card is now a stepped radiogroup (role=radio single /
+// role=checkbox multi) that needs an explicit Next / Done to advance — it no
+// longer auto-advances on pick like the old role=option listbox.
 async function pick(page: Page, label: RegExp) {
-  const opt = page.getByRole('option', { name: label });
+  const opt = page.getByRole('radio', { name: label }).or(page.getByRole('checkbox', { name: label }));
   await opt.first().waitFor({ timeout: 15000 });
   await opt.first().click();
+  const done = page.getByRole('button', { name: 'Done' });
+  if (await done.count() > 0) await done.click();
+  else await page.getByRole('button', { name: 'Next' }).click();
   await page.waitForTimeout(600);
 }
 

@@ -2,7 +2,8 @@
 
 import type { ConfigurableEngagement } from './configurableEngagementTypes';
 import { EngagementPatternType } from './configurableEngagementTypes';
-import type { ComplianceWorkspaceState, PBCRequest, PBCRequestStatus } from './patterns/compliance/complianceRequestsData';
+import type { ComplianceWorkspaceState, PBCRequest } from './patterns/compliance/complianceRequestsData';
+import type { ScopeControl } from './patterns/compliance/complianceControlScopeData';
 import type { SampleBatch, EvidenceItem } from './patterns/compliance/complianceSamplesEvidenceData';
 import type { AttributeTestingState } from './patterns/compliance/complianceAttributeTestingData';
 import type { ComplianceReviewState } from './patterns/compliance/complianceReviewData';
@@ -55,7 +56,8 @@ interface Props {
   activeTabLabel: string;
   complianceState?: ComplianceWorkspaceState;
   onCreateRequest?: (req: PBCRequest) => void;
-  onUpdateRequestStatus?: (id: string, status: PBCRequestStatus) => void;
+  onUpdateRequest?: (id: string, patch: Partial<PBCRequest>) => void;
+  onUpdateScopeControls?: (controls: ScopeControl[]) => void;
   onAddBatch?: (batch: SampleBatch) => void;
   onAddEvidence?: (ev: EvidenceItem) => void;
   onUpdateAttributeTesting?: (state: AttributeTestingState) => void;
@@ -82,22 +84,28 @@ interface Props {
   onNavigateTab?: (tabId: string) => void;
 }
 
-export default function PatternWorkspaceRenderer({ engagement, activeTabId, activeTabLabel, complianceState, onCreateRequest, onUpdateRequestStatus, onAddBatch, onAddEvidence, onUpdateAttributeTesting, onUpdateReview, onUpdateConclusion, iaState, onUpdateIAScope, onUpdateIAAnnouncement, onUpdateIARequests, onUpdateIAAnalysis, onUpdateIAObservations, onUpdateIADiscussion, onUpdateIAFinalReport, onUpdateIAActionPlan, automationState, onUpdateAutomationInputData, onUpdateAutomationSetup, onUpdateAutomationRuns, onUpdateAutomationOutputReview, onUpdateAutoRunException, onUpdateAutomationCases, onUpdateAutomationReports, onUpdateAutomationSchedule, onNavigateTab }: Props) {
+export default function PatternWorkspaceRenderer({ engagement, activeTabId, activeTabLabel, complianceState, onCreateRequest, onUpdateRequest, onUpdateScopeControls, onAddBatch, onAddEvidence, onUpdateAttributeTesting, onUpdateReview, onUpdateConclusion, iaState, onUpdateIAScope, onUpdateIAAnnouncement, onUpdateIARequests, onUpdateIAAnalysis, onUpdateIAObservations, onUpdateIADiscussion, onUpdateIAFinalReport, onUpdateIAActionPlan, automationState, onUpdateAutomationInputData, onUpdateAutomationSetup, onUpdateAutomationRuns, onUpdateAutomationOutputReview, onUpdateAutoRunException, onUpdateAutomationCases, onUpdateAutomationReports, onUpdateAutomationSchedule, onNavigateTab }: Props) {
   if (activeTabId === 'overview') {
     return <WorkspaceOverview engagement={engagement} automationState={automationState} onNavigateTab={onNavigateTab} />;
   }
 
   if (engagement.patternType === EngagementPatternType.COMPLIANCE_CONTROL_TESTING) {
-    if (activeTabId === 'control-scope') {
-      return <ComplianceControlScopeTab engagement={engagement} />;
+    if (activeTabId === 'control-scope' && complianceState && onUpdateScopeControls) {
+      return (
+        <ComplianceControlScopeTab
+          engagement={engagement}
+          scopeControls={complianceState.scopeControls}
+          onUpdateScopeControls={onUpdateScopeControls}
+        />
+      );
     }
-    if (activeTabId === 'requests' && complianceState && onCreateRequest && onUpdateRequestStatus) {
+    if (activeTabId === 'requests' && complianceState && onCreateRequest && onUpdateRequest) {
       return (
         <ComplianceRequestsPBCTab
           engagement={engagement}
           requests={complianceState.requests}
           onCreateRequest={onCreateRequest}
-          onUpdateRequestStatus={onUpdateRequestStatus}
+          onUpdateRequest={onUpdateRequest}
         />
       );
     }

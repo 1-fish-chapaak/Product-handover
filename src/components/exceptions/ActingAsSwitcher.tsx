@@ -23,7 +23,7 @@ export default function ActingAsSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500">
+      <span className="hidden md:inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">
         <UserCog size={13} /> Acting as
       </span>
       <div className="w-[200px]">

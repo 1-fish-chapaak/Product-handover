@@ -118,19 +118,19 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
       {/* Heading */}
       <div className="mb-1 flex items-baseline justify-between gap-4">
         <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">Confirm annexure mapping</h2>
-        <span className="shrink-0 text-[12px] font-medium text-ink-500 tabular-nums">{confirmedCount} of {shownObs.length} confirmed</span>
+        <span className="shrink-0 text-[0.75rem] font-medium text-ink-500 tabular-nums">{confirmedCount} of {shownObs.length} confirmed</span>
       </div>
-      <p className="text-[12.5px] text-ink-500 leading-snug mb-4">
+      <p className="text-[0.78125rem] text-ink-500 leading-snug mb-4">
         Each observation is linked to its annexure. Confirm the suggestions, or adjust any that need a second look.
       </p>
 
       {/* Mapping table — toolbar strip + column header + hairline-divided rows,
           all in one card so it reads as a single component. */}
-      <div className="rounded-[12px] border border-canvas-border overflow-visible bg-canvas-elevated">
+      <div className="rounded-lg border border-canvas-border overflow-visible bg-canvas-elevated">
         {/* Toolbar — a status breakdown (what still needs attention) on the left,
             table-level actions as real buttons on the right. */}
         <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-b border-canvas-border">
-          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-[12px] text-ink-600">
+          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-[0.75rem] text-ink-600">
             {needsReview > 0 ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-mitigated-500" aria-hidden="true" />
@@ -158,7 +158,7 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
         </div>
 
         {/* Column header */}
-        <div className={`${COLS} px-4 py-2 border-b border-canvas-border bg-canvas/60 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400`}>
+        <div className={`${COLS} px-4 py-2 border-b border-canvas-border bg-canvas/60 text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400`}>
           <span>Observation</span>
           <span>Annexure</span>
           <span className="text-right">Status</span>
@@ -168,8 +168,8 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
           {shownObs.length === 0 && (
             <div className="px-4 py-10 text-center">
               <Unlink size={20} className="mx-auto text-ink-300 mb-2" aria-hidden="true" />
-              <div className="text-[13px] font-medium text-ink-700">No observations to link</div>
-              <div className="text-[12px] text-ink-500 mt-0.5">Select observations on the previous step to map annexures here.</div>
+              <div className="text-[0.8125rem] font-medium text-ink-700">No observations to link</div>
+              <div className="text-[0.75rem] text-ink-500 mt-0.5">Select observations on the previous step to map annexures here.</div>
             </div>
           )}
           {shownObs.map(o => {
@@ -185,44 +185,44 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
 
                 {/* Observation */}
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-ink-900 truncate" title={obsTitle}>{obsTitle}</div>
-                  {o.process && <div className="text-[11.5px] text-ink-500 truncate">{o.process}</div>}
+                  <div className="text-[0.8125rem] font-semibold text-ink-900 truncate" title={obsTitle}>{obsTitle}</div>
+                  {o.process && <div className="text-[0.71875rem] text-ink-500 truncate">{o.process}</div>}
                 </div>
 
                 {/* Linked annexures */}
                 <div className="min-w-0 relative">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {linked.map(a => (
-                      <span key={a.id} className="inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-[6px] bg-canvas border border-canvas-border text-[11.5px] text-ink-700 max-w-full">
+                      <span key={a.id} className="inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-sm bg-canvas border border-canvas-border text-[0.71875rem] text-ink-700 max-w-full">
                         <FileSpreadsheet size={11} className="text-compliant-700 shrink-0" aria-hidden="true" />
                         <button onClick={() => setViewId(a.id)} title={`View ${a.filename}`} className="truncate max-w-[200px] hover:text-brand-700 hover:underline underline-offset-2 cursor-pointer">{a.filename}</button>
                         <button onClick={() => unlink(a.id)} className="w-4 h-4 rounded-full hover:bg-risk-50 text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Unlink ${a.filename}`}><X size={10} aria-hidden="true" /></button>
                       </span>
                     ))}
-                    <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-[6px] text-[11.5px] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
+                    <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-sm text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
                       <Plus size={12} aria-hidden="true" /> Link
                     </button>
-                    {linked.length === 0 && <span className="text-[11.5px] text-ink-400">No annexure linked yet</span>}
+                    {linked.length === 0 && <span className="text-[0.71875rem] text-ink-400">No annexure linked yet</span>}
                   </div>
                   {picker === o.id && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setPicker(null)} />
-                      <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-64 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-[10px] p-1">
+                      <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-64 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-lg p-1">
                         {available.length === 0 ? (
-                          <div className="px-3 py-2.5 text-[11px] text-ink-500 text-center">No unlinked annexures to pick.</div>
+                          <div className="px-3 py-2.5 text-[0.6875rem] text-ink-500 text-center">No unlinked annexures to pick.</div>
                         ) : available.map(a => (
-                          <button key={a.id} onClick={() => { link(a.id, o.id); setPicker(null); }} title={a.filename} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
+                          <button key={a.id} onClick={() => { link(a.id, o.id); setPicker(null); }} title={a.filename} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-sm hover:bg-brand-50 text-left cursor-pointer">
                             <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" aria-hidden="true" />
-                            <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-medium text-ink-800 truncate">{a.filename}</span><span className="block text-[10px] text-ink-400">{a.rows.length} exception row{a.rows.length === 1 ? '' : 's'}</span></span>
+                            <span className="min-w-0 flex-1"><span className="block text-[0.71875rem] font-medium text-ink-800 truncate">{a.filename}</span><span className="block text-[0.625rem] text-ink-400">{a.rows.length} exception row{a.rows.length === 1 ? '' : 's'}</span></span>
                           </button>
                         ))}
                         {/* Upload a new annexure → linked straight to this observation. */}
                         <button
                           onClick={() => { setLinkTargetObs(o.id); setPicker(null); linkUploadInputRef.current?.click(); }}
-                          className="w-full flex items-center gap-2 px-2.5 py-2 mt-1 rounded-[7px] border-t border-canvas-border text-brand-700 hover:bg-brand-50 text-left cursor-pointer"
+                          className="w-full flex items-center gap-2 px-2.5 py-2 mt-1 rounded-sm border-t border-canvas-border text-brand-700 hover:bg-brand-50 text-left cursor-pointer"
                         >
                           <Upload size={13} className="shrink-0" aria-hidden="true" />
-                          <span className="text-[11.5px] font-semibold">Upload annexure &amp; link</span>
+                          <span className="text-[0.71875rem] font-semibold">Upload annexure &amp; link</span>
                         </button>
                       </div>
                     </>
@@ -232,17 +232,17 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
                 {/* Status / action — surfaces only the decision that matters per row */}
                 <div className="flex items-center justify-end">
                   {linkState === 'confirmed' && (
-                    <span title={meta.hint} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-compliant-700">
+                    <span title={meta.hint} className="inline-flex items-center gap-1 text-[0.71875rem] font-medium text-compliant-700">
                       <CheckCircle2 size={13} aria-hidden="true" /> Confirmed
                     </span>
                   )}
                   {linkState === 'review' && (
-                    <button onClick={() => confirmObs(o.id)} title={meta.hint} className="inline-flex items-center gap-1 h-7 px-3 rounded-[7px] border border-mitigated/40 bg-mitigated-50 text-[11.5px] font-semibold text-mitigated-700 hover:bg-mitigated-100 transition-colors cursor-pointer">
+                    <button onClick={() => confirmObs(o.id)} title={meta.hint} className="inline-flex items-center gap-1 h-7 px-3 rounded-sm border border-mitigated/40 bg-mitigated-50 text-[0.71875rem] font-semibold text-mitigated-700 hover:bg-mitigated-100 transition-colors cursor-pointer">
                       <Check size={13} aria-hidden="true" /> Confirm
                     </button>
                   )}
                   {linkState === 'unlinked' && (
-                    <span title={meta.hint} className="text-[11.5px] text-ink-400">Not linked</span>
+                    <span title={meta.hint} className="text-[0.71875rem] text-ink-400">Not linked</span>
                   )}
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
       </div>
 
       {orphanAnnex.length > 0 && (
-        <p className="mt-2.5 text-[11.5px] text-ink-500">
+        <p className="mt-2.5 text-[0.71875rem] text-ink-500">
           <span className="font-medium text-ink-600">{orphanAnnex.length} unlinked annexure{orphanAnnex.length === 1 ? '' : 's'}</span> — use <span className="font-medium text-brand-700">Link</span> on an observation to attach {orphanAnnex.length === 1 ? 'it' : 'them'}.
         </p>
       )}
@@ -275,12 +275,12 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
             onClose={() => setViewId(null)}
             footer={<Button variant="outline" onClick={() => setViewId(null)}>Close</Button>}
           >
-            <div className="overflow-x-auto rounded-[8px] border border-canvas-border">
+            <div className="overflow-x-auto rounded-md border border-canvas-border">
               <table className="w-full">
                 <thead>
                   <tr className="bg-canvas">
                     {viewing.columns.map(c => (
-                      <th key={c} className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 whitespace-nowrap">{c}</th>
+                      <th key={c} className="px-3 py-2 text-left text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-500 whitespace-nowrap">{c}</th>
                     ))}
                   </tr>
                 </thead>
@@ -288,7 +288,7 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
                   {viewing.rows.map(r => (
                     <tr key={r.id} className="border-t border-canvas-border">
                       {viewing.columns.map(c => (
-                        <td key={c} className="px-3 py-2 text-[12px] text-ink-700 whitespace-nowrap tabular-nums">{r.data[c] ?? '—'}</td>
+                        <td key={c} className="px-3 py-2 text-[0.75rem] text-ink-700 whitespace-nowrap tabular-nums">{r.data[c] ?? '—'}</td>
                       ))}
                     </tr>
                   ))}

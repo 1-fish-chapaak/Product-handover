@@ -9,6 +9,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { Button as BaseButton } from '../shared/Button';
@@ -34,51 +35,22 @@ import { addCreatedControl, useCreatedControls } from '../../data/createdControl
 import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
 import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES } from '../../data/mockData';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRecs, isPricingSubject } from '../../data/layeredInsights';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type RiskLifecycleStatus = 'Draft' | 'Active' | 'Under Review' | 'Archived';
-type RiskPriority = 'Critical' | 'High' | 'Medium' | 'Low';
-type RiskCategory = 'Financial' | 'Operational' | 'Compliance' | 'IT' | 'Fraud' | 'Reporting' | 'Other';
-// (STATUS_FILTER_OPTIONS removed — no UI control consumed it; dead code.)
+// Risks, their types and the seed register now live in the data layer, so the
+// RACM tables, Process Hub and Platform Usage all count the same rows.
+// Re-exported here because both were imported from this module historically.
+import {
+  SEED_RISKS,
+  type RiskEntry, type RiskLifecycleStatus, type RiskPriority, type RiskCategory,
+} from '../../data/riskRegister';
 
-export interface RiskEntry {
-  id: string;
-  name: string;
-  description: string;
-  businessProcess: string;
-  subProcess: string;
-  category: RiskCategory;
-  priority: RiskPriority;
-  owner: string;
-  reviewer: string;
-  status: RiskLifecycleStatus;
-  lastReviewed: string;
-  createdAt: string;
-}
-
-// ─── Seed Data ──────────────────────────────────────────────────────────────
-
-export const SEED_RISKS: RiskEntry[] = [
-  { id: 'RSK-001', name: 'Unauthorized vendor payments', description: 'Payments processed without proper PO or approval, leading to financial loss', businessProcess: 'P2P', subProcess: 'Accounts Payable', category: 'Financial', priority: 'Critical', owner: 'Rajiv Sharma', reviewer: 'Deepak Bansal', status: 'Active', lastReviewed: 'Apr 10, 2026', createdAt: 'Jan 15, 2026' },
-  { id: 'RSK-002', name: 'Duplicate invoices processed', description: 'Same invoice paid twice due to weak detection controls', businessProcess: 'P2P', subProcess: 'Invoice Processing', category: 'Financial', priority: 'High', owner: 'Rajiv Sharma', reviewer: 'Meera Patel', status: 'Active', lastReviewed: 'Apr 8, 2026', createdAt: 'Jan 15, 2026' },
-  { id: 'RSK-003', name: 'Fictitious vendor registration', description: 'Vendor created without verification of identity and bank details', businessProcess: 'P2P', subProcess: 'Vendor Management', category: 'Fraud', priority: 'Critical', owner: 'Deepak Bansal', reviewer: 'Rajiv Sharma', status: 'Active', lastReviewed: 'Apr 12, 2026', createdAt: 'Jan 15, 2026' },
-  { id: 'RSK-004', name: 'Unauthorized PO creation', description: 'Purchase orders above threshold committed without dual sign-off', businessProcess: 'P2P', subProcess: 'Procurement', category: 'Operational', priority: 'High', owner: 'Meera Patel', reviewer: 'Rajiv Sharma', status: 'Draft', lastReviewed: '—', createdAt: 'Mar 20, 2026' },
-  { id: 'RSK-005', name: 'SOD violation in AP', description: 'Same user creates and approves payment transactions', businessProcess: 'P2P', subProcess: 'Accounts Payable', category: 'IT', priority: 'Critical', owner: 'IT Security', reviewer: 'Deepak Bansal', status: 'Under Review', lastReviewed: 'Apr 5, 2026', createdAt: 'Feb 1, 2026' },
-  { id: 'RSK-006', name: 'Revenue recognition timing', description: 'Revenue recognized before performance obligation completion under ASC 606', businessProcess: 'O2C', subProcess: 'Revenue Accounting', category: 'Financial', priority: 'High', owner: 'Neha Joshi', reviewer: 'Karan Mehta', status: 'Active', lastReviewed: 'Apr 10, 2026', createdAt: 'Jan 20, 2026' },
-  { id: 'RSK-007', name: 'Incorrect journal entries', description: 'Manual JE posted without review or with incorrect amounts', businessProcess: 'R2R', subProcess: 'General Ledger', category: 'Financial', priority: 'High', owner: 'Rohan Patel', reviewer: 'Karan Mehta', status: 'Active', lastReviewed: 'Apr 14, 2026', createdAt: 'Jan 20, 2026' },
-  { id: 'RSK-008', name: 'GL balance discrepancy', description: 'Subsidiary balances do not reconcile to consolidated GL', businessProcess: 'R2R', subProcess: 'Reconciliation', category: 'Financial', priority: 'Medium', owner: 'Karan Mehta', reviewer: 'Rohan Patel', status: 'Draft', lastReviewed: '—', createdAt: 'Mar 25, 2026' },
-  { id: 'RSK-009', name: 'Credit limit override without approval', description: 'Customer credit limits changed without proper authorization', businessProcess: 'O2C', subProcess: 'Credit Management', category: 'Operational', priority: 'Medium', owner: 'Sneha Desai', reviewer: 'Neha Joshi', status: 'Active', lastReviewed: 'Apr 2, 2026', createdAt: 'Feb 10, 2026' },
-  { id: 'RSK-010', name: 'Unauthorized access to financial systems', description: 'Users retain access after role change or termination', businessProcess: 'ITGC', subProcess: 'Access Management', category: 'IT', priority: 'Critical', owner: 'IT Security', reviewer: 'Deepak Bansal', status: 'Active', lastReviewed: 'Apr 15, 2026', createdAt: 'Jan 10, 2026' },
-  { id: 'RSK-011', name: 'Uncontrolled change management', description: 'System changes deployed without proper testing and approval', businessProcess: 'ITGC', subProcess: 'Change Management', category: 'IT', priority: 'High', owner: 'IT Security', reviewer: 'Rohan Patel', status: 'Under Review', lastReviewed: 'Apr 1, 2026', createdAt: 'Feb 5, 2026' },
-  { id: 'RSK-012', name: 'Regulatory reporting delay', description: 'Financial reports not submitted to regulators within deadline', businessProcess: 'R2R', subProcess: 'Reporting', category: 'Compliance', priority: 'High', owner: 'Karan Mehta', reviewer: 'Neha Joshi', status: 'Active', lastReviewed: 'Apr 8, 2026', createdAt: 'Jan 25, 2026' },
-  { id: 'RSK-013', name: 'Contract revenue leakage', description: 'Revenue not billed per contract terms due to manual tracking', businessProcess: 'O2C', subProcess: 'Contract Billing', category: 'Financial', priority: 'Medium', owner: 'Neha Joshi', reviewer: 'Sneha Desai', status: 'Active', lastReviewed: 'Mar 15, 2026', createdAt: 'Dec 1, 2025' },
-  { id: 'RSK-014', name: 'Inadequate backup and recovery', description: 'Critical system backups not tested or failing silently', businessProcess: 'ITGC', subProcess: 'Operations', category: 'IT', priority: 'Medium', owner: 'IT Security', reviewer: 'Deepak Bansal', status: 'Draft', lastReviewed: '—', createdAt: 'Apr 10, 2026' },
-  { id: 'RSK-021', name: 'Unauthorized sales order pricing', description: 'Order prices or discounts applied outside approved price lists, eroding margin', businessProcess: 'O2C', subProcess: 'Order Management', category: 'Operational', priority: 'High', owner: 'Sneha Desai', reviewer: 'Neha Joshi', status: 'Active', lastReviewed: 'Apr 11, 2026', createdAt: 'Feb 14, 2026' },
-  { id: 'RSK-022', name: 'Goods shipped without approved order', description: 'Shipments released and invoiced before the sales order is approved and credit-cleared', businessProcess: 'O2C', subProcess: 'Shipping & Billing', category: 'Operational', priority: 'Critical', owner: 'Neha Joshi', reviewer: 'Karan Mehta', status: 'Active', lastReviewed: 'Apr 9, 2026', createdAt: 'Feb 18, 2026' },
-  { id: 'RSK-023', name: 'Customer cash receipts misapplied', description: 'Incoming customer payments posted to the wrong account or invoice, distorting AR balances', businessProcess: 'O2C', subProcess: 'Cash Application', category: 'Financial', priority: 'High', owner: 'Karan Mehta', reviewer: 'Sneha Desai', status: 'Under Review', lastReviewed: 'Apr 4, 2026', createdAt: 'Feb 22, 2026' },
-  { id: 'RSK-024', name: 'Aged receivables not provisioned', description: 'Overdue receivables not assessed for impairment, overstating collectible AR', businessProcess: 'O2C', subProcess: 'Collections', category: 'Financial', priority: 'Medium', owner: 'Neha Joshi', reviewer: 'Karan Mehta', status: 'Active', lastReviewed: 'Apr 6, 2026', createdAt: 'Mar 1, 2026' },
-];
+export { SEED_RISKS };
+export type { RiskEntry, RiskLifecycleStatus, RiskPriority, RiskCategory };
 
 const PROCESSES = ['P2P', 'O2C', 'R2R', 'ITGC', 'S2C'];
 const CATEGORIES: RiskCategory[] = ['Financial', 'Operational', 'Compliance', 'IT', 'Fraud', 'Reporting', 'Other'];
@@ -410,11 +382,21 @@ function RiskDetailPage({
         </div>
       </div>
 
+      {/* AI insight summary */}
+      <div className="mb-6">
+        <InsightGenerator
+          layer="risk"
+          subjectId={risk.id}
+          subjectLabel={risk.name}
+          priority={risk.priority}
+        />
+      </div>
+
       {/* Stacked sections */}
       <div className="space-y-6">
 
         {/* Mapped controls */}
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
               <Shield size={13} className="text-ink-400" /> Mapped Controls
@@ -495,7 +477,7 @@ function RiskDetailPage({
         </div>
 
         {/* Found in RACMs */}
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-baseline justify-between mb-4">
             <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
               <Grid3x3 size={13} className="text-ink-400" /> Found in RACMs
@@ -537,6 +519,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -704,9 +687,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (exists) {
       setRisks(prev => prev.map(r => r.id === risk.id ? risk : r));
       addToast({ message: `Risk "${risk.name}" updated`, type: 'success' });
+      logEvent({ action: 'Update', description: `Updated risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     } else {
       setRisks(prev => [risk, ...prev]);
       addToast({ message: `Risk "${risk.name}" created`, type: 'success' });
+      logEvent({ action: 'Create', description: `Created risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     }
     setShowCreateDrawer(false);
   };
@@ -715,20 +700,25 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setRisks(prev => prev.map(r => r.id === updated.id ? updated : r));
     // Editing happens on the full detail page; Save updates it in place + toasts.
     addToast({ message: `Risk "${updated.name}" updated`, type: 'success' });
+    logEvent({ action: 'Update', description: `Updated risk "${updated.name}" (${updated.id})`, module: 'Risk Register', entity: 'Risk' });
   };
 
   // Single-row archive replaces the old sticky bulk bar.
   const handleArchiveOne = (id: string) => {
+    const risk = risks.find(r => r.id === id);
     setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Risk archived`, type: 'success' });
+    logEvent({ action: 'Update', description: `Archived risk "${risk?.name || id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
   };
   // Delete-risk confirmation (the trash action on a risk card).
   const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ id: string; name: string } | null>(null);
   const handleDeleteOne = (id: string) => {
+    const risk = risks.find(r => r.id === id);
     setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Risk deleted`, type: 'success' });
+    logEvent({ action: 'Delete', description: `Deleted risk "${risk?.name || id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
@@ -740,6 +730,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Count risks with no mapped controls (draft status = unmapped)
   const unmappedCount = baseRisks.filter(r => r.status === 'Draft').length;
+
+  // The register-level AI insight box (mirrors the engagement overview's) anchors
+  // on the headline risk: the flagship pricing thread when present, else the
+  // highest-priority risk in view. Cheap to derive; no engine call until Generate.
+  const RISK_PRIORITY_RANK: Record<RiskPriority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const headlineRisk = baseRisks.length === 0 ? null : [...baseRisks].sort((a, b) =>
+    (Number(isPricingSubject(b.name)) - Number(isPricingSubject(a.name))) ||
+    (RISK_PRIORITY_RANK[a.priority] - RISK_PRIORITY_RANK[b.priority]))[0];
 
   // Link Control + Link Workflow drawers — shared by the list view and the risk
   // detail-page takeover (both can trigger linking), so they render in each return.
@@ -756,6 +754,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             onApply={(controls) => {
               addRiskControlLinks(linkControlRisk.id, controls);
               addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+              logEvent({ action: 'Update', description: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to risk "${linkControlRisk.name}" (${linkControlRisk.id})`, module: 'Risk Register', entity: 'Risk' });
               setLinkControlRisk(null);
             }}
           />
@@ -800,6 +799,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 linkedWorkflowId: null,
               };
               addCreatedControl(data);
+              logEvent({ action: 'Create', description: `Created control "${name}" and linked it to risk "${linkControlRisk.name}" (${linkControlRisk.id})`, module: 'Control Library', entity: 'Control' });
               addToast({
                 message: inRacm
                   ? `Created "${name}", linked it to ${linkControlRisk.name}, and added it to the RACM.`
@@ -839,6 +839,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               onLink={(wf: ControlWorkflow) => {
                 addLinkedWorkflow(lwt.riskId, lwc.id, wf);
                 addToast({ message: `Linked "${wf.name}" to ${lwc.id}.`, type: 'success' });
+                logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${lwc.name}" (${lwc.id})`, module: 'Control Library', entity: 'Control' });
                 setLinkWfControl(null);
                 setLinkWfTarget(null);
               }}
@@ -955,6 +956,27 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         ) : (
         <>
 
+        {/* ─── AI insight · register altitude (generate-on-demand) ───
+            One box for the whole register — the engagement-overview pattern. It
+            anchors on the headline risk and renders the full Layer-3 card inline;
+            InsightGenerator session-caches, so revisits don't re-bill. */}
+        {headlineRisk && (
+          <InsightGenerator
+            layer="risk"
+            subjectId={headlineRisk.id}
+            subjectLabel={headlineRisk.name}
+            priority={headlineRisk.priority}
+            labelOverride="this risk register"
+            scanOverride="Scans every risk in this register and rolls up the controls mapped to the sharpest exposure"
+            stepsOverride={[
+              'Reading every risk in the register',
+              'Rolling up each risk’s mapped controls',
+              'Finding the shared coverage gap',
+              'Writing the explanation',
+            ]}
+          />
+        )}
+
         {/* Filter row — search on the left, dropdown filters + clear on the right. */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="relative shrink-0">
@@ -990,7 +1012,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
           {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
-              <div key={`skel-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+              <div key={`skel-${i}`} className="px-6 py-5 rounded-lg border border-border-light bg-white">
                 <div className="h-3 bg-paper-100 rounded-xs animate-pulse w-2/3 mb-2.5" />
                 <div className="h-3 bg-paper-100 rounded-xs animate-pulse w-1/2" />
               </div>
@@ -1013,6 +1035,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
             const cardControls = controlsForRisk(risk);
+            // Deterministic, engine-free recommendations for this risk (do-now / this-period).
+            // Same source the other tabs use — powers the click-to-open popover on the badge.
+            const aiRecs = actionableRecs({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority });
             return (
               <motion.div
                 key={risk.id}
@@ -1105,6 +1130,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
+                            {aiRecs.length > 0 && (
+                              <AIRecommendsPopover recs={aiRecs} subjectLabel={risk.id} subjectSub={risk.name} className="shrink-0" />
+                            )}
                           </div>
                           <p title={risk.description} className="text-[0.8125rem] text-text leading-relaxed mt-2.5 max-w-[50ch] line-clamp-2">{risk.description || '—'}</p>
                         </div>
@@ -1125,6 +1153,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
+                            {aiRecs.length > 0 && (
+                              <AIRecommendsPopover recs={aiRecs} subjectLabel={risk.id} subjectSub={risk.name} className="shrink-0" />
+                            )}
                             {p2pChip}
                             {categoryChip}
                             {priorityChip}

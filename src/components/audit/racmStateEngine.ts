@@ -139,11 +139,11 @@ function deriveAction(checks: RacmChecks): RacmAction {
 // ─── Style maps (single source for UI rendering) ─────────────────────────
 
 export const RACM_STATUS_STYLES: Record<RacmStatus, string> = {
-  Draft: 'bg-gray-100 text-gray-600',
+  Draft: 'bg-canvas text-ink-600',
   'In Progress': 'bg-blue-50 text-blue-700',
   Active: 'bg-emerald-50 text-emerald-700',
   Locked: 'bg-purple-50 text-purple-700',
-  Archived: 'bg-gray-50 text-gray-400',
+  Archived: 'bg-canvas text-ink-400',
 };
 
 export const RACM_READINESS_STYLES: Record<RacmReadiness, string> = {
@@ -157,5 +157,5 @@ export const RACM_ACTION_STYLES: Record<RacmAction, string> = {
   Map: 'bg-primary/10 text-primary hover:bg-primary/20',
   'Continue Setup': 'bg-amber-50 text-amber-700 hover:bg-amber-100/70',
   Configure: 'bg-blue-50 text-blue-700 hover:bg-blue-100/70',
-  View: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70',
+  View: 'bg-canvas text-ink-600 hover:bg-canvas-border/70',
 };

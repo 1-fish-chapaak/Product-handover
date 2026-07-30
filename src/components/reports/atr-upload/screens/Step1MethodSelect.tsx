@@ -53,11 +53,11 @@ export default function Step1MethodSelect({ onPick }: { onPick: (method: UploadM
           top-to-bottom with no dead space in the middle. */}
       <div className="mt-5 flex-1 min-h-0 grid lg:grid-cols-[1.4fr_1fr] gap-4">
         {/* What the finished ATR contains */}
-        <div className="rounded-[12px] border border-canvas-border bg-brand-50/30 p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-700/80 mb-3">What every ATR includes</div>
+        <div className="rounded-lg border border-canvas-border bg-brand-50/30 p-5">
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-brand-700/80 mb-3">What every ATR includes</div>
           <ul className="grid grid-cols-2 gap-x-5 gap-y-2">
             {ATR_INCLUDES.map(item => (
-              <li key={item} className="flex items-start gap-2 text-[12.5px] text-ink-700 leading-snug">
+              <li key={item} className="flex items-start gap-2 text-[0.78125rem] text-ink-700 leading-snug">
                 <Check size={13} className="text-brand-600 mt-0.5 shrink-0" aria-hidden="true" /> {item}
               </li>
             ))}
@@ -65,8 +65,8 @@ export default function Step1MethodSelect({ onPick }: { onPick: (method: UploadM
         </div>
 
         {/* How the rest of the flow runs — a clean connected timeline. */}
-        <div className="rounded-[12px] border border-canvas-border bg-canvas p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-4">After you start</div>
+        <div className="rounded-lg border border-canvas-border bg-canvas p-5">
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-4">After you start</div>
           <ol className="relative">
             {FLOW_STEPS.map((label, i) => (
               <li key={label} className="relative flex items-start gap-3 pb-5 last:pb-0">
@@ -74,10 +74,10 @@ export default function Step1MethodSelect({ onPick }: { onPick: (method: UploadM
                 {i < FLOW_STEPS.length - 1 && (
                   <span aria-hidden="true" className="absolute left-[13px] top-7 bottom-1 w-px bg-canvas-border" />
                 )}
-                <span className="relative z-10 w-7 h-7 rounded-full bg-brand-600 text-white text-[12px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
+                <span className="relative z-10 w-7 h-7 rounded-full bg-brand-600 text-white text-[0.75rem] font-semibold flex items-center justify-center shrink-0 tabular-nums">
                   {i + 1}
                 </span>
-                <span className="pt-1 text-[12.5px] text-ink-700 leading-snug">{label}</span>
+                <span className="pt-1 text-[0.78125rem] text-ink-700 leading-snug">{label}</span>
               </li>
             ))}
           </ol>

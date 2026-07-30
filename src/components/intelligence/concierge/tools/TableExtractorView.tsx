@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -317,6 +318,7 @@ function SchemaBuilder({
   fields: Field[];
   setFields: (f: Field[]) => void;
 }) {
+  const logEvent = useAuditLog();
   const [profiles, setProfiles] = useState<LayoutProfile[]>(() => {
     try {
       const raw = localStorage.getItem(PROFILES_KEY);
@@ -369,7 +371,7 @@ function SchemaBuilder({
   };
 
   return (
-    <div className="mt-4 rounded-[14px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+    <div className="mt-4 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
       {/* Header / toolbar */}
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-canvas-border bg-paper-50/60 flex-wrap">
         <div className="min-w-0">
@@ -396,7 +398,15 @@ function SchemaBuilder({
             <Upload size={12} /> Import
           </button>
           <button
-            onClick={() => exportSchemaCsv(fields)}
+            onClick={() => {
+              exportSchemaCsv(fields);
+              logEvent({
+                action: 'Export',
+                description: 'Exported Table Extractor schema as CSV',
+                module: 'AI Concierge',
+                entity: 'Table Extractor',
+              });
+            }}
             disabled={!fields.length}
             title="Export schema as CSV"
             className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 px-2 py-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -488,7 +498,7 @@ function SchemaControls({
 function StatCard({ icon: Icon, label, value, tone = 'brand' }: { icon: typeof Rows3; label: string; value: number; tone?: 'brand' | 'warn' }) {
   const warn = tone === 'warn' && value > 0;
   return (
-    <div className={`flex items-center gap-3 rounded-[12px] border px-4 py-3.5 ${warn ? 'border-amber-200 bg-amber-50/60' : 'border-canvas-border bg-canvas-elevated'}`}>
+    <div className={`flex items-center gap-3 rounded-lg border px-4 py-3.5 ${warn ? 'border-amber-200 bg-amber-50/60' : 'border-canvas-border bg-canvas-elevated'}`}>
       <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${warn ? 'bg-amber-100' : 'bg-brand-50'}`}>
         <Icon size={17} className={warn ? 'text-amber-700' : 'text-brand-700'} strokeWidth={1.75} />
       </span>
@@ -515,7 +525,7 @@ function ResultView({ result }: { result: Result }) {
       </div>
 
       {/* Extracted rows */}
-      <div className="rounded-[12px] border border-canvas-border overflow-hidden">
+      <div className="rounded-lg border border-canvas-border overflow-hidden">
         <div className="px-4 py-2.5 border-b border-canvas-border bg-paper-50/70 flex items-center justify-between">
           <p className="text-[0.75rem] font-semibold text-ink-700">Extracted rows</p>
           <p className="text-[0.6875rem] text-ink-400 tabular-nums">{rows.length} total</p>
@@ -568,7 +578,7 @@ function ResultView({ result }: { result: Result }) {
 
       {/* Validation flags */}
       {validation_flags.length > 0 && (
-        <div className="rounded-[12px] border border-amber-200 overflow-hidden">
+        <div className="rounded-lg border border-amber-200 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 bg-amber-50">
             <p className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-amber-700">
               <AlertTriangle size={13} /> Validation flags ({validation_flags.length})
@@ -598,6 +608,7 @@ const HISTORY_SEED: HistoryJob[] = [
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export default function TableExtractorView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<Result>
       title="Table Extractor"
@@ -647,7 +658,15 @@ export default function TableExtractorView({ onBack }: { onBack: () => void }) {
       renderResult={(result) => <ResultView result={result} />}
       resultActions={(result) => (
         <button
-          onClick={() => exportResultsCsv(result)}
+          onClick={() => {
+            exportResultsCsv(result);
+            logEvent({
+              action: 'Export',
+              description: 'Exported Table Extractor results as CSV',
+              module: 'AI Concierge',
+              entity: 'Table Extractor',
+            });
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 px-3.5 py-2 transition-colors cursor-pointer"
         >
           <Download size={14} /> Export CSV

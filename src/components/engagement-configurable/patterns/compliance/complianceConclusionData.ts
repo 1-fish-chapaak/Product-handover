@@ -4,6 +4,7 @@ import { MOCK_COMPLIANCE_CONTROLS } from './complianceControlScopeData';
 import { deriveComplianceSampleResult, type AttributeTestResult } from './complianceAttributeTestingData';
 import { type ControlReviewState } from './complianceReviewData';
 import type { TestItem } from './complianceSamplesEvidenceData';
+import type { SeverityClassification } from './complianceSeverityData';
 
 export type ConclusionValue = 'EFFECTIVE' | 'PARTIALLY_EFFECTIVE' | 'INEFFECTIVE' | 'NOT_APPLICABLE';
 export type ConclusionStatus = 'LOCKED' | 'READY' | 'FINALIZED';
@@ -29,6 +30,8 @@ export interface ControlConclusionState {
   finalizedAt: string | null;
   finalizedBy: string;
   history: ConclusionHistoryItem[];
+  /** Deficiency severity classification — set for controls concluded with failures. */
+  severity?: SeverityClassification | null;
 }
 
 export interface ComplianceConclusionState {
@@ -38,7 +41,7 @@ export interface ComplianceConclusionState {
 export function getOrCreateControlConclusion(state: ComplianceConclusionState, controlId: string): ControlConclusionState {
   return state.conclusions.find(c => c.controlId === controlId) || {
     controlId, status: 'LOCKED', recommendedConclusion: null, finalConclusion: null,
-    reason: '', remarks: '', generatedAt: null, finalizedAt: null, finalizedBy: '', history: [],
+    reason: '', remarks: '', generatedAt: null, finalizedAt: null, finalizedBy: '', history: [], severity: null,
   };
 }
 
@@ -154,9 +157,21 @@ export function finalizeConclusion(
   return { conclusions: exists ? state.conclusions.map(c => c.controlId === controlId ? updated : c) : [...state.conclusions, updated] };
 }
 
+/** Persist a deficiency severity classification against a control's conclusion. */
+export function classifySeverity(
+  state: ComplianceConclusionState,
+  controlId: string,
+  severity: SeverityClassification,
+): ComplianceConclusionState {
+  const existing = getOrCreateControlConclusion(state, controlId);
+  const updated: ControlConclusionState = { ...existing, severity };
+  const exists = state.conclusions.some(c => c.controlId === controlId);
+  return { conclusions: exists ? state.conclusions.map(c => c.controlId === controlId ? updated : c) : [...state.conclusions, updated] };
+}
+
 export const CONCLUSION_DISPLAY: Record<ConclusionValue, { label: string; cls: string; icon: 'check' | 'partial' | 'x' | 'minus' }> = {
   EFFECTIVE: { label: 'Effective', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'check' },
   PARTIALLY_EFFECTIVE: { label: 'Partially Effective', cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: 'partial' },
   INEFFECTIVE: { label: 'Ineffective', cls: 'bg-red-50 text-red-700 border-red-200', icon: 'x' },
-  NOT_APPLICABLE: { label: 'Not Applicable', cls: 'bg-gray-50 text-gray-600 border-gray-200', icon: 'minus' },
+  NOT_APPLICABLE: { label: 'Not Applicable', cls: 'bg-canvas text-ink-600 border-canvas-border', icon: 'minus' },
 };

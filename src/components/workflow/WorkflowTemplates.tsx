@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { StatusBadge, TypeBadge } from '../shared/StatusBadge';
-import BorderGlow from '../shared/BorderGlow';
 import Gated from '../shared/Gated';
 import { useCan } from '../../context/CurrentUserContext';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onSelectWorkflow: (id: string) => void;
@@ -63,6 +63,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
 
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedWfs, setSelectedWfs] = useState<Set<string>>(new Set());
   const [bulkSearch, setBulkSearch] = useState('');
@@ -85,6 +86,12 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
     if (!can('wf_run')) { addToast({ message: 'You do not have permission to run workflows.', type: 'error' }); return; }
     setBulkRunning(true);
     addToast({ message: `Running ${selectedWfs.size} workflows...`, type: 'success' });
+    logEvent({
+      action: 'Run',
+      description: `Bulk-ran ${selectedWfs.size} workflow${selectedWfs.size === 1 ? '' : 's'} and generated a consolidated report`,
+      module: 'Workflow Library',
+      entity: 'Workflow',
+    });
     setTimeout(() => {
       addToast({ message: 'All workflows completed', type: 'success' });
       setTimeout(() => {
@@ -222,38 +229,28 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 + i * 0.08 }}
                 >
-                  <BorderGlow
-                    borderRadius={16}
-                    glowRadius={35}
-                    glowIntensity={1}
-                    coneSpread={30}
-                    edgeSensitivity={40}
-                    backgroundColor="#ffffff"
-                    colors={['#6a12cd', '#9b59d6', '#c084fc']}
+                  <div
+                    className="p-5 relative cursor-pointer group rounded-lg border border-canvas-border bg-canvas-elevated hover:border-brand-200 active:scale-[0.98] transition-[border-color,transform] duration-150"
+                    onClick={onBuildNew}
                   >
-                    <div
-                      className="p-5 relative cursor-pointer group rounded-2xl hover:shadow-sm active:scale-[0.98] transition-all"
-                      onClick={onBuildNew}
-                    >
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                          <TypeIcon size={14} />
-                        </div>
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/5">
-                          <Sparkles size={9} className="text-primary" />
-                          <span className="text-[0.75rem] font-bold text-primary">{rw.score}% match</span>
-                        </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                        <TypeIcon size={14} />
                       </div>
-                      <h4 className="text-[0.8125rem] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rw.name}</h4>
-                      <p className="text-[0.75rem] text-text-muted leading-relaxed">{rw.desc}</p>
-                      <div className="mt-3 flex items-center justify-between">
-                        <TypeBadge type={rw.type} />
-                        <span className="text-[0.75rem] text-primary font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-                          Build <ArrowRight size={9} />
-                        </span>
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/5">
+                        <Sparkles size={9} className="text-primary" />
+                        <span className="text-[0.75rem] font-bold text-primary">{rw.score}% match</span>
                       </div>
                     </div>
-                  </BorderGlow>
+                    <h4 className="text-[0.8125rem] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rw.name}</h4>
+                    <p className="text-[0.75rem] text-text-muted leading-relaxed">{rw.desc}</p>
+                    <div className="mt-3 flex items-center justify-between">
+                      <TypeBadge type={rw.type} />
+                      <span className="text-[0.75rem] text-primary font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                        Build <ArrowRight size={9} />
+                      </span>
+                    </div>
+                  </div>
                 </motion.div>
               );
             })}
@@ -264,7 +261,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
         <AnimatePresence>
           {bulkMode && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-5">
-              <div className="glass-card rounded-2xl p-5">
+              <div className="glass-card p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Zap size={15} className="text-primary" />
@@ -370,7 +367,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04 }}
                 onClick={() => onSelectWorkflow(wf.id)}
-                className="glass-card rounded-2xl p-5 cursor-pointer hover:shadow-primary/5 hover:border-primary/20 active:scale-[0.998] transition-all duration-300 group relative overflow-hidden"
+                className="glass-card p-5 cursor-pointer hover:shadow-primary/5 hover:border-primary/20 active:scale-[0.998] transition-all duration-300 group relative overflow-hidden"
               >
                 {/* Bulk mode checkbox */}
                 {bulkMode && (
@@ -474,7 +471,11 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                   </Gated>
                   <Gated permission="wf_create" mode="disable" title="You don't have permission to create workflows">
                   <button
-                    onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" duplicated`, type: 'success' }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast({ message: `"${wf.name}" duplicated`, type: 'success' });
+                      logEvent({ action: 'Create', description: `Duplicated workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer"
                   >
                     <Copy size={11} /> Duplicate
@@ -482,7 +483,11 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                   </Gated>
                   <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to delete workflows">
                   <button
-                    onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" deleted`, type: 'info' }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast({ message: `"${wf.name}" deleted`, type: 'info' });
+                      logEvent({ action: 'Delete', description: `Deleted workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer ml-auto"
                   >
                     <Trash2 size={11} /> Delete

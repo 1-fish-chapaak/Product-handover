@@ -31,12 +31,12 @@ export interface InternalAuditActionPlanState {
 }
 
 export const ACTION_STATUS_CLS: Record<ActionItemStatus, string> = {
-  NOT_STARTED: 'bg-gray-100 text-gray-600', IN_PROGRESS: 'bg-blue-50 text-blue-700',
+  NOT_STARTED: 'bg-canvas text-ink-600', IN_PROGRESS: 'bg-blue-50 text-blue-700',
   COMPLETED: 'bg-emerald-50 text-emerald-700', OVERDUE: 'bg-red-50 text-red-700',
-  DEFERRED: 'bg-amber-50 text-amber-700', CANCELLED: 'bg-gray-50 text-gray-400',
+  DEFERRED: 'bg-amber-50 text-amber-700', CANCELLED: 'bg-canvas text-ink-400',
 };
 export const PRIORITY_CLS: Record<ActionPriority, string> = {
-  LOW: 'bg-gray-100 text-gray-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
+  LOW: 'bg-canvas text-ink-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
 };
 export const PRIORITIES_LIST: ActionPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 

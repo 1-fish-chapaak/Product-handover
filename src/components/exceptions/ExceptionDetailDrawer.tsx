@@ -156,7 +156,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[900px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[900px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-xl z-[60] flex flex-col"
         role="dialog"
         aria-label={isPlanView ? `Action plan ${ex.actionableId}` : `Exception ${ex.id}`}
       >
@@ -165,22 +165,22 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
           <div className="min-w-0">
             {isPlanView ? (
               <>
-                <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-700 uppercase tracking-[0.14em] mb-1">
+                <div className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold text-brand-700 uppercase tracking-[0.14em] mb-1">
                   <LinkIcon size={12} /> Management Action Plan
                 </div>
-                <h2 className="text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight font-mono">
+                <h2 className="text-[1.75rem] leading-[1.15] font-semibold text-ink-900 tracking-tight font-mono">
                   {ex.actionableId}
                 </h2>
-                <p className="text-[13px] text-ink-500 mt-1 leading-snug">
+                <p className="text-[0.8125rem] text-ink-500 mt-1 leading-snug">
                   {ex.classification} · {linked.length} linked exceptions
                 </p>
               </>
             ) : (
               <>
-                <h2 className="text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight">
+                <h2 className="text-[1.75rem] leading-[1.15] font-semibold text-ink-900 tracking-tight">
                   {ex.id}
                 </h2>
-                <p className="text-[13px] text-ink-500 mt-1 leading-snug">
+                <p className="text-[0.8125rem] text-ink-500 mt-1 leading-snug">
                   {ex.actionableId
                     ? <>Action plan <span className="font-mono text-brand-700">{ex.actionableId}</span> · Case <span className="font-mono">{ex.id.toLowerCase()}</span></>
                     : <>Case <span className="font-mono">{ex.id.toLowerCase()}</span></>}
@@ -215,8 +215,8 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
               Classify / Action columns, never here. */}
           {assignment && (
             <section>
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Approval Route</h3>
-              <div className="border border-canvas-border rounded-[12px] bg-[#FAFAFB] p-5">
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Approval Route</h3>
+              <div className="border border-canvas-border rounded-lg bg-[#FAFAFB] p-5">
                 <WorkflowPipelineView assignment={assignment} />
               </div>
             </section>
@@ -225,11 +225,11 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
           {/* Part of Bulk Action — one action plan shared across the linked cases. */}
           {isPlanView && (
             <section>
-              <div className="rounded-[12px] border border-brand-100 bg-brand-50/40 p-4">
-                <div className="flex items-center gap-2 text-[12.5px] font-semibold text-brand-700 mb-2">
+              <div className="rounded-lg border border-brand-100 bg-brand-50/40 p-4">
+                <div className="flex items-center gap-2 text-[0.78125rem] font-semibold text-brand-700 mb-2">
                   <LinkIcon size={13} /> Part of Bulk Action
                 </div>
-                <div className="flex items-center gap-2 text-[12.5px] text-ink-700 mb-3">
+                <div className="flex items-center gap-2 text-[0.78125rem] text-ink-700 mb-3">
                   <span>ID: <span className="font-mono font-bold text-brand-700">{ex.actionableId}</span></span>
                   <span className="text-ink-300">|</span>
                   <span className="tabular-nums">{linked.length} cases grouped</span>
@@ -237,7 +237,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                 <button
                   type="button"
                   onClick={() => setShowLinked(true)}
-                  className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[0.78125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                 >
                   View all cases in this bulk action <ExternalLink size={12} />
                 </button>
@@ -248,34 +248,34 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
           {/* Action-plan due date — with the revised-date request when present */}
           {(ex.dueDate || ex.dueDateRevision) && (
             <section>
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Plan Due Date</h3>
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Plan Due Date</h3>
               {ex.dueDateRevision ? (
-                <div className="border border-canvas-border rounded-[10px] p-4">
+                <div className="border border-canvas-border rounded-lg p-4">
                   <div className="flex items-stretch gap-2.5">
-                    <div className="flex-1 rounded-[8px] border border-canvas-border bg-[#FAFAFB] p-3">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous</div>
-                      <div className={`text-[13.5px] font-semibold ${ex.dueDateRevision.status === 'Approved' ? 'text-ink-500 line-through decoration-ink-300' : 'text-ink-800'}`}>
+                    <div className="flex-1 rounded-md border border-canvas-border bg-[#FAFAFB] p-3">
+                      <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous</div>
+                      <div className={`text-[0.84375rem] font-semibold ${ex.dueDateRevision.status === 'Approved' ? 'text-ink-500 line-through decoration-ink-300' : 'text-ink-800'}`}>
                         {fmtDate(ex.dueDateRevision.previousDueDate)}
                       </div>
                     </div>
                     <div className="flex items-center shrink-0"><ArrowRight size={15} className="text-ink-400" /></div>
-                    <div className="flex-1 rounded-[8px] border border-brand-200 bg-brand-50/60 p-3">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised</div>
-                      <div className="text-[13.5px] font-bold text-brand-700">{fmtDate(ex.dueDateRevision.revisedDueDate)}</div>
+                    <div className="flex-1 rounded-md border border-brand-200 bg-brand-50/60 p-3">
+                      <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised</div>
+                      <div className="text-[0.84375rem] font-bold text-brand-700">{fmtDate(ex.dueDateRevision.revisedDueDate)}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-3">
-                    <span className="text-[11.5px] text-ink-500">Requested by {ex.dueDateRevision.requestedBy}</span>
+                    <span className="text-[0.71875rem] text-ink-500">Requested by {ex.dueDateRevision.requestedBy}</span>
                     <Pill className={REVIEW_STYLE[ex.dueDateRevision.status] ?? 'bg-[#F4F2F7] text-ink-600'}>
                       {ex.dueDateRevision.status === 'Pending' ? 'Awaiting approval' : ex.dueDateRevision.status}
                     </Pill>
                   </div>
                   {ex.dueDateRevision.reason && (
-                    <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3 pt-3 border-t border-canvas-border">{ex.dueDateRevision.reason}</p>
+                    <p className="text-[0.78125rem] text-ink-700 leading-relaxed mt-3 pt-3 border-t border-canvas-border">{ex.dueDateRevision.reason}</p>
                   )}
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-canvas-border bg-[#FAFAFB] text-[13px] font-semibold text-ink-800">
+                <div className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-canvas-border bg-[#FAFAFB] text-[0.8125rem] font-semibold text-ink-800">
                   <Calendar size={14} className="text-ink-500" />
                   {fmtDate(ex.dueDate)}
                 </div>
@@ -286,22 +286,22 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
           {/* Management Action Plan(s) */}
           {plans.length > 0 && (
             <section>
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">
                 {plans.length > 1 ? `Management Action Plans · ${plans.length}` : 'Management Action Plan'}
               </h3>
-              <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border overflow-hidden">
+              <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border overflow-hidden">
                 {plans.map((p, i) => (
                   <div key={i} className="p-4">
-                    <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-900 leading-snug mb-1">
+                    <div className="flex items-center gap-1.5 text-[0.84375rem] font-semibold text-ink-900 leading-snug mb-1">
                       <FileText size={13} className="text-ink-500 shrink-0" />
                       {p.name || `Management Action Plan ${i + 1}`}
                     </div>
                     {p.dueDate && (
-                      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                      <span className="inline-flex items-center gap-1.5 text-[0.71875rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                         <Calendar size={11} /> Due {fmtDate(p.dueDate)}
                       </span>
                     )}
-                    {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed mt-1">{p.details}</p>}
+                    {p.details && <p className="text-[0.78125rem] text-ink-700 leading-relaxed mt-1">{p.details}</p>}
                   </div>
                 ))}
               </div>
@@ -311,29 +311,29 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
           {/* Action completed by the Risk Owner — note + evidence */}
           {completion && (
             <section>
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Taken</h3>
-              <div className="border border-compliant/40 bg-compliant-50/40 rounded-[10px] p-4">
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Taken</h3>
+              <div className="border border-compliant/40 bg-compliant-50/40 rounded-lg p-4">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700">
+                  <div className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-compliant-700">
                     <CheckCircle2 size={13} /> Completed by the Risk Owner
                   </div>
                   {completion.selfAssessment && (
-                    <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-semibold ${completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>
+                    <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>
                       Reported: {completion.selfAssessment}
                     </span>
                   )}
                 </div>
-                <p className="text-[12.5px] text-ink-700 leading-relaxed">{completion.note}</p>
+                <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{completion.note}</p>
                 {completion.evidence.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2.5">
                     {completion.evidence.map((ev, i) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[0.71875rem] text-ink-700">
                         <Paperclip size={11} className="text-brand-600" /> {ev.name}
                       </span>
                     ))}
                   </div>
                 )}
-                {completion.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
+                {completion.completedAt && <p className="text-[0.6875rem] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
               </div>
             </section>
           )}
@@ -343,8 +343,8 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
               phase, or review outcome: the two personas can always talk here. */}
           <section>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em]">Activity &amp; Comments</h3>
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Activity &amp; Comments</h3>
+              <span className="inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
                 <MessageSquare size={12} className="text-brand-600" />
                 Risk Owner and Auditor can comment anytime
               </span>
@@ -353,7 +353,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
             {/* Composer — always available to whichever persona is active. */}
             {onComment && (
               <div className="flex gap-3 mb-5">
-                <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[10px] font-semibold tracking-wider" aria-hidden="true">
+                <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[0.625rem] font-semibold tracking-wider" aria-hidden="true">
                   {personaInitials}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -365,10 +365,10 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                     onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitComment(); } }}
                     rows={2}
                     placeholder={`Comment as the ${personaLabel} — the ${otherPersonaLabel} will be notified and can reply.`}
-                    className="w-full resize-y rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2 text-[12.5px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
+                    className="w-full resize-y rounded-md border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.78125rem] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
                   />
                   {commentAttachment && (
-                    <div className="mt-2 inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[11.5px] text-ink-700">
+                    <div className="mt-2 inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[0.71875rem] text-ink-700">
                       <Paperclip size={11} className="text-brand-600" /> {commentAttachment.name}
                       <button type="button" onClick={() => setCommentAttachment(null)} aria-label="Remove attachment" className="w-4 h-4 inline-flex items-center justify-center rounded-full text-ink-500 hover:text-ink-800 hover:bg-white cursor-pointer"><X size={11} /></button>
                     </div>
@@ -385,17 +385,17 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         title="Attach a file"
-                        className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] font-medium text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 hover:text-brand-700 cursor-pointer transition-colors"
                       >
                         <Paperclip size={13} /> Attach
                       </button>
-                      <span className="text-[11px] text-ink-400 truncate"><kbd className="font-mono text-[10px] text-ink-500">⌘↵</kbd> to post · visible to both personas.</span>
+                      <span className="text-[0.6875rem] text-ink-400 truncate"><kbd className="font-mono text-[0.625rem] text-ink-500">⌘↵</kbd> to post · visible to both personas.</span>
                     </div>
                     <button
                       type="button"
                       onClick={submitComment}
                       disabled={!hasUnsentComment}
-                      className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[0.78125rem] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Send size={13} /> Post Comment
                     </button>
@@ -416,15 +416,15 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="text-[12.5px] text-ink-800"><span className="font-semibold">{entry.author}</span> <span className="text-ink-500">[{entry.role}]</span></div>
-                          <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
+                          <div className="text-[0.78125rem] text-ink-800"><span className="font-semibold">{entry.author}</span> <span className="text-ink-500">[{entry.role}]</span></div>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
                         </div>
-                        <p className="text-[12.5px] text-ink-700 leading-snug mt-0.5">{entry.message}</p>
+                        <p className="text-[0.78125rem] text-ink-700 leading-snug mt-0.5">{entry.message}</p>
                         {entry.comment && (
-                          <div className="mt-2 px-3 py-2 bg-brand-50/50 border-l-2 border-brand-300 rounded-r-[8px] text-[12px] text-ink-800 leading-relaxed">{entry.comment}</div>
+                          <div className="mt-2 px-3 py-2 bg-brand-50/50 border-l-2 border-brand-300 rounded-r-md text-[0.75rem] text-ink-800 leading-relaxed">{entry.comment}</div>
                         )}
                         {entry.attachment && (
-                          <span className="mt-2 inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                          <span className="mt-2 inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[0.71875rem] text-ink-700">
                             <Paperclip size={11} className="text-brand-600" /> {entry.attachment.name}
                           </span>
                         )}
@@ -434,20 +434,20 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                 })}
               </ol>
             ) : (
-              <p className="text-[12px] text-ink-400 py-2">No activity yet. Start the conversation with a comment above.</p>
+              <p className="text-[0.75rem] text-ink-400 py-2">No activity yet. Start the conversation with a comment above.</p>
             )}
           </section>
 
           {/* All data fields — joined row from the source query's output table */}
           <section>
-            <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">All Data Fields</h3>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">All Data Fields</h3>
             {dataFields.length === 0 ? (
-              <div className="border border-canvas-border rounded-[10px] px-4 py-6 text-center text-[12.5px] text-ink-500">
+              <div className="border border-canvas-border rounded-lg px-4 py-6 text-center text-[0.78125rem] text-ink-500">
                 No data fields available for this exception.
               </div>
             ) : (
-              <div className="border border-canvas-border rounded-[10px] overflow-hidden bg-[#FAFAFB]">
-                <table className="w-full text-[12.5px]">
+              <div className="border border-canvas-border rounded-lg overflow-hidden bg-[#FAFAFB]">
+                <table className="w-full text-[0.78125rem]">
                   <tbody>
                     {dataFields.map((f, i) => (
                       <tr key={f.name} className={i < dataFields.length - 1 ? 'border-b border-canvas-border/70' : ''}>
@@ -465,16 +465,16 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
 
           {/* Audit */}
           <section>
-            <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Audit</h3>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Audit</h3>
             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
               <DetailField label="Created">
-                <span className="text-[13px] text-ink-800">{ex.lastUpdated}</span>
+                <span className="text-[0.8125rem] text-ink-800">{ex.lastUpdated}</span>
               </DetailField>
               <DetailField label="Updated">
-                <span className="text-[13px] text-ink-800">{ex.lastUpdated}</span>
+                <span className="text-[0.8125rem] text-ink-800">{ex.lastUpdated}</span>
               </DetailField>
             </div>
-            <div className="mt-3 text-[12.5px] text-ink-500">
+            <div className="mt-3 text-[0.78125rem] text-ink-500">
               Reference ID: <span className="font-mono text-ink-700">{ex.id.toLowerCase()}</span>
             </div>
           </section>
@@ -484,7 +484,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
         <footer className="shrink-0 px-7 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             {hasUnsentComment && actions.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-mitigated-700 mr-1">
+              <span className="inline-flex items-center gap-1.5 text-[0.71875rem] font-medium text-mitigated-700 mr-1">
                 <MessageSquare size={12} /> Post your comment to continue.
               </span>
             )}
@@ -498,20 +498,20 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                     disabled={hasUnsentComment}
                     onClick={() => onAction?.(a.kind, ex)}
                     title={hasUnsentComment ? 'Post your comment first, then continue with this action.' : `${a.label} · ${role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} action`}
-                    className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Icon size={14} /> {a.label}
                   </button>
                 );
               })
             ) : role ? (
-              <span className="text-[12px] text-ink-400">No actions available for the {role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} right now.</span>
+              <span className="text-[0.75rem] text-ink-400">No actions available for the {role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} right now.</span>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors shrink-0"
+            className="h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-[#F4F2F7] cursor-pointer transition-colors shrink-0"
           >
             Close
           </button>
@@ -528,17 +528,17 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[560px] max-h-[80vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[71] flex flex-col"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[560px] max-h-[80vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[71] flex flex-col"
               role="dialog"
               aria-label="Linked cases"
             >
               <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
-                    <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Cases in this bulk action</h2>
+                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
+                    <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Cases in this bulk action</h2>
                   </div>
-                  <p className="text-[12.5px] text-ink-500 leading-snug">
+                  <p className="text-[0.78125rem] text-ink-500 leading-snug">
                     ID: <span className="font-mono">{ex.actionableId}</span> · {linked.length} cases · one action plan applies to all
                   </p>
                 </div>
@@ -547,7 +547,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                 </button>
               </header>
               <div className="flex-1 overflow-y-auto px-6 py-5">
-                <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+                <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border overflow-hidden">
                   {linked.map(le => {
                     const current = le.id === ex.id;
                     return (
@@ -560,10 +560,10 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-medium text-brand-700 text-[12.5px]">{le.id}</span>
-                            {current && <span className="text-[10px] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">Current</span>}
+                            <span className="font-mono font-medium text-brand-700 text-[0.78125rem]">{le.id}</span>
+                            {current && <span className="text-[0.625rem] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">Current</span>}
                           </div>
-                          <div className="text-[12px] text-ink-600 truncate mt-0.5">{le.title}</div>
+                          <div className="text-[0.75rem] text-ink-600 truncate mt-0.5">{le.title}</div>
                         </div>
                         <Pill className={CLASSIFICATION_STYLE[le.classification]}>{le.classification}</Pill>
                         {onSelectLinked && !current && <ExternalLink size={13} className="text-ink-400 shrink-0" />}
@@ -583,7 +583,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
 function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">{label}</div>
+      <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">{label}</div>
       {children}
     </div>
   );
@@ -591,7 +591,7 @@ function DetailField({ label, children }: { label: string; children: React.React
 
 function Pill({ className, children }: { className: string; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center h-7 px-3 rounded-full text-[12px] font-medium ${className}`}>
+    <span className={`inline-flex items-center h-7 px-3 rounded-full text-[0.75rem] font-medium ${className}`}>
       {children}
     </span>
   );

@@ -52,11 +52,11 @@ export const CATEGORIES_LIST: ObservationCategory[] = ['CONTROL_GAP', 'PROCESS_G
 export const SEVERITIES_LIST: ObservationSeverity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export const SEVERITY_CLS: Record<ObservationSeverity, string> = {
-  LOW: 'bg-gray-100 text-gray-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
+  LOW: 'bg-canvas text-ink-600', MEDIUM: 'bg-blue-50 text-blue-700', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700',
 };
 export const STATUS_CLS: Record<ObservationStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600', READY_FOR_DISCUSSION: 'bg-blue-50 text-blue-700',
-  IN_DISCUSSION: 'bg-purple-50 text-purple-700', AGREED: 'bg-emerald-50 text-emerald-700', DROPPED: 'bg-gray-50 text-gray-400',
+  DRAFT: 'bg-canvas text-ink-600', READY_FOR_DISCUSSION: 'bg-blue-50 text-blue-700',
+  IN_DISCUSSION: 'bg-purple-50 text-purple-700', AGREED: 'bg-emerald-50 text-emerald-700', DROPPED: 'bg-canvas text-ink-400',
 };
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }

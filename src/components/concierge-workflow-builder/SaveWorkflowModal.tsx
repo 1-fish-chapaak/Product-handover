@@ -92,7 +92,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
         {/* Switch-mode callout */}
         <div className="flex items-start gap-2.5 rounded-lg border border-mitigated-50 bg-mitigated-50/70 px-3.5 py-3">
           <Lightbulb size={15} className="text-mitigated-700 mt-0.5 shrink-0" />
-          <p className="text-[13px] text-mitigated-700 leading-relaxed">
+          <p className="text-[0.8125rem] text-mitigated-700 leading-relaxed">
             This chat will switch to <strong className="font-semibold">workflow mode</strong>. You
             won&apos;t be able to switch back to query mode in this chat — start a new chat for
             that.
@@ -101,7 +101,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
 
         {/* Workflow name */}
         <div>
-          <label className="block text-[13px] font-semibold text-ink-800 mb-1.5">
+          <label className="block text-[0.8125rem] font-semibold text-ink-800 mb-1.5">
             Workflow name <span className="text-risk">*</span>
           </label>
           <Input
@@ -110,7 +110,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Duplicate Invoice Detection — Q1 ±3 days"
           />
-          <p className="text-[12px] text-ink-400 mt-1">
+          <p className="text-[0.75rem] text-ink-400 mt-1">
             IRA pre-filled this from your query. Edit if needed.
           </p>
         </div>
@@ -118,7 +118,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
         {/* Business process + RACM */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[13px] font-semibold text-ink-800 mb-1.5">
+            <label className="block text-[0.8125rem] font-semibold text-ink-800 mb-1.5">
               Business process <span className="text-risk">*</span>
             </label>
             <Select
@@ -137,7 +137,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
             </Select>
           </div>
           <div>
-            <label className="block text-[13px] font-semibold text-ink-800 mb-1.5">
+            <label className="block text-[0.8125rem] font-semibold text-ink-800 mb-1.5">
               RACM <span className="text-risk">*</span>
             </label>
             <Select
@@ -163,7 +163,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
 
         {/* Description */}
         <div>
-          <label className="block text-[13px] font-semibold text-ink-800 mb-1.5">
+          <label className="block text-[0.8125rem] font-semibold text-ink-800 mb-1.5">
             Description
           </label>
           <Textarea
@@ -172,7 +172,7 @@ export default function SaveWorkflowModal({ open, onClose, workflow, onConfirm }
             rows={3}
             placeholder="What does this workflow do?"
           />
-          <p className="text-[12px] text-ink-400 mt-1">
+          <p className="text-[0.75rem] text-ink-400 mt-1">
             Optional. IRA pre-filled this from your query.
           </p>
         </div>

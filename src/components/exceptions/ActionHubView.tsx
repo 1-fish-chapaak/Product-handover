@@ -142,9 +142,9 @@ function StageCard({ icon: Icon, label, sublabel, count, denom, tone, onClick }:
   const t = TONE[tone];
   const pct = denom > 0 ? Math.round((count / denom) * 100) : 0;
   return (
-    <button onClick={onClick} title={`${label} — ${count} of ${denom} (${sublabel})`} className={`group text-left bg-canvas-elevated border border-canvas-border rounded-[12px] px-3.5 py-3 flex flex-col gap-2 cursor-pointer transition-colors ${t.ring}`}>
+    <button onClick={onClick} title={`${label} — ${count} of ${denom} (${sublabel})`} className={`group text-left bg-canvas-elevated border border-canvas-border rounded-lg px-3.5 py-3 flex flex-col gap-2 cursor-pointer transition-colors ${t.ring}`}>
       <div className="flex items-center gap-2.5">
-        <div className={`w-8 h-8 rounded-[9px] ${t.iconBg} ${t.icon} flex items-center justify-center shrink-0`}><Icon size={15} strokeWidth={1.9} /></div>
+        <div className={`w-8 h-8 rounded-md ${t.iconBg} ${t.icon} flex items-center justify-center shrink-0`}><Icon size={15} strokeWidth={1.9} /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1">
             <span className={`text-[1.375rem] leading-none font-semibold tabular-nums ${t.value}`}>{count}</span>
@@ -166,7 +166,7 @@ function StageCard({ icon: Icon, label, sublabel, count, denom, tone, onClick }:
 function KpiTile({ icon: Icon, label, value, tone, onClick }: { icon: React.ElementType; label: string; value: number; tone: Tone; onClick: () => void }) {
   const t = TONE[tone];
   return (
-    <button onClick={onClick} className={`group bg-canvas-elevated border border-canvas-border rounded-[12px] p-4 flex items-center gap-3.5 text-left cursor-pointer transition-colors ${t.ring}`}>
+    <button onClick={onClick} className={`group bg-canvas-elevated border border-canvas-border rounded-lg p-4 flex items-center gap-3.5 text-left cursor-pointer transition-colors ${t.ring}`}>
       <div className={`w-10 h-10 rounded-full ${t.iconBg} ${t.icon} flex items-center justify-center shrink-0`}><Icon size={17} strokeWidth={1.9} /></div>
       <div className="min-w-0 flex-1">
         <div className={`text-[1.5rem] leading-none font-semibold tabular-nums ${t.value}`}>{value}</div>
@@ -180,10 +180,10 @@ function KpiTile({ icon: Icon, label, value, tone, onClick }: { icon: React.Elem
 function CollapsibleSection({ icon: Icon, title, subtitle, children }: { icon: React.ElementType; title: string; subtitle?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
-    <section className="bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden mb-5">
+    <section className="bg-canvas-elevated border border-canvas-border rounded-lg overflow-hidden mb-5">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 px-5 py-4 cursor-pointer text-left">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[8px] bg-[#F4F2F7] text-ink-600 flex items-center justify-center"><Icon size={16} /></div>
+          <div className="w-9 h-9 rounded-md bg-[#F4F2F7] text-ink-600 flex items-center justify-center"><Icon size={16} /></div>
           <div>
             <h3 className="text-[0.875rem] font-semibold text-ink-900">{title}</h3>
             {subtitle && <p className="text-[0.75rem] text-ink-500 mt-0.5">{subtitle}</p>}
@@ -254,7 +254,7 @@ function ClassificationDonut({ rows, onSelect }: { rows: { label: string; count:
                 type="button"
                 onClick={clickable ? () => onSelect!(row.label) : undefined}
                 disabled={!clickable}
-                className="group w-full flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-[8px] text-left transition-colors enabled:cursor-pointer enabled:hover:bg-brand-50/40 disabled:opacity-60"
+                className="group w-full flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-md text-left transition-colors enabled:cursor-pointer enabled:hover:bg-brand-50/40 disabled:opacity-60"
               >
                 <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: CLASS_HEX[row.label] ?? '#C2B9CB' }} />
                 <span className="flex-1 text-[0.75rem] font-medium text-ink-700 truncate">{row.label}</span>
@@ -365,7 +365,7 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
       <div className="px-8 py-6 max-w-[1600px] mx-auto">
 
         {/* ── ATR Readiness — the journey toward issuing the Audit-to-Record ── */}
-        <section className="mb-5 rounded-[14px] border border-canvas-border bg-gradient-to-br from-brand-50/50 via-canvas-elevated to-canvas-elevated px-5 py-4">
+        <section className="mb-5 rounded-lg border border-canvas-border bg-gradient-to-br from-brand-50/50 via-canvas-elevated to-canvas-elevated px-5 py-4">
           <div className="flex items-center gap-3.5 mb-4">
             <CircularProgress pct={readinessPct} size={52} stroke={5} label={m.total > 0 ? <span className="text-[0.8125rem] font-bold tabular-nums">{m.atrReady}/{m.total}</span> : <span className="text-[0.75rem] font-semibold text-ink-400">—</span>} />
             <div className="min-w-0">
@@ -400,7 +400,7 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
 
         {/* ── Overdue strip ── */}
         {m.overdue > 0 && (
-          <button onClick={() => openDrawer('overdue')} className="group w-full flex items-stretch mb-5 text-left cursor-pointer rounded-[12px] bg-canvas-elevated border border-canvas-border hover:border-risk/30 transition-colors overflow-hidden">
+          <button onClick={() => openDrawer('overdue')} className="group w-full flex items-stretch mb-5 text-left cursor-pointer rounded-lg bg-canvas-elevated border border-canvas-border hover:border-risk/30 transition-colors overflow-hidden">
             <div className="w-[3px] bg-risk shrink-0" aria-hidden="true" />
             <div className="flex-1 min-w-0 flex items-center gap-4 px-5 py-4">
               <div className="w-9 h-9 rounded-full bg-risk-50 text-risk flex items-center justify-center shrink-0"><AlertTriangle size={16} strokeWidth={1.75} /></div>

@@ -1,29 +1,224 @@
 // Template authoring + apply surfaces, extracted from ReportsView:
 //   • TemplateEditor       — the brand/theme/header-footer/arrangement editor
 //   • ApplyTemplateDropdown — pick a template to apply to an open report
-//   • TemplateSectionRow / TemplateCarousel — internal helpers
+//   • ReportSectionBlock — internal draggable report-styled section
 // (mergeTemplateOptions lives in reportShared so this module exports only
 //  components, keeping React Fast Refresh intact.)
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
 
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence, useDragControls } from 'motion/react';
+import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'motion/react';
 import {
-  Check, ChevronDown, ChevronRight, FileText, GripVertical, Image, Layout,
-  Loader2, Palette, Plus, Settings, Trash2, Type, X,
-  Tag, ShieldCheck, BookOpen, Search,
+  Check, ChevronRight, FileText, GripVertical,
+  Loader2, Plus, X, Pencil, ShieldCheck, Trash2,
+  BookOpen, Search, Upload, Info, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { ReportBrandBanner } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
-  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT,
-  REPORT_TYPES, typeSectionsFor, sectionCoverage,
-  type ReportTypeName, type EditableTemplate,
+  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
+  sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
+  collectBlockLibrary,
+  type EditableTemplate, type WatermarkConfig,
+  type TemplateSection, type SignatorySlot, type TemplateBlock,
 } from './reportShared';
+import { extractTemplateFromReport, type ExtractedTemplate, type ExtractOutcome } from './byotExtraction';
+import SectionReviewCanvas from './SectionReviewCanvas';
+import { RowDeleteButton } from './RowDeleteButton';
+import { renderSectionShape, sectionTypeLabel } from './templateSectionShape';
+import { type CanvasSection, type CanvasBlock } from './sectionReviewShared';
+import { useAuditLog } from '../../context/AdminDataContext';
 
+// Soft length guide for letterhead header/footer text — past this the counter
+// turns amber and a hint warns about truncation, but saving is never blocked.
+const LETTERHEAD_SOFT_MAX = 60;
+// Hard cap on the template name — mirrors the letterhead 60-char counter, but
+// enforced (a name this long overflows the cover and the picker rows).
+const TEMPLATE_NAME_MAX = 60;
+
+// Watermark placement → the flex alignment (+ edge padding) that pins the mark to
+// that side of the page. Center is the default diagonal stamp.
+const WATERMARK_POS: Record<'center' | 'top' | 'bottom' | 'left' | 'right', string> = {
+  center: 'items-center justify-center',
+  top: 'items-start justify-center pt-8',
+  bottom: 'items-end justify-center pb-8',
+  left: 'items-center justify-start pl-8',
+  right: 'items-center justify-end pr-8',
+};
+
+// Plain field label — matches the platform's form convention (no per-field icon
+// tile, which over-spent the brand accent). Optional right-aligned content
+// (e.g. a character counter) and a required marker.
+function FieldLabel({ children, right, required }: { children: ReactNode; right?: ReactNode; required?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-1.5">
+      <span className="text-[0.8125rem] font-semibold text-ink-800">
+        {children}{required && <span className="ml-0.5 text-risk-600" title="Required">*</span>}
+      </span>
+      {right}
+    </div>
+  );
+}
+
+// Small uppercase group heading that structures the Details panel into sections.
+function GroupEyebrow({ children, hint }: { children: ReactNode; hint?: string }) {
+  return (
+    <div className="flex items-baseline gap-2 mb-3">
+      <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">{children}</span>
+      {hint && <span className="text-[0.6875rem] text-ink-400">· {hint}</span>}
+    </div>
+  );
+}
+
+// A labelled range slider with a live value read-out (watermark controls).
+function Slider({ label, value, min, max, step = 1, suffix = '', onChange }: { label: string; value: number; min: number; max: number; step?: number; suffix?: string; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[0.75rem] font-medium text-ink-600">{label}</span>
+        <span className="text-[0.6875rem] tabular-nums text-ink-400">{value}{suffix}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full h-1.5 appearance-none rounded-full bg-canvas-border accent-brand-600 cursor-pointer"
+      />
+    </div>
+  );
+}
+
+// A small on/off switch.
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button
+      type="button" role="switch" aria-checked={checked} aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer shrink-0 ${checked ? 'bg-brand-600' : 'bg-ink-300'}`}
+    >
+      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[1.125rem]' : 'translate-x-0.5'}`} />
+    </button>
+  );
+}
+
+// "Import from a report" scan theatre — the six passes, narrated while the PDF is
+// read. The scan runs for a deliberate ~10s so the document-scanner animation
+// plays out in full and each pass stays legible; the real parse (usually much
+// faster) resolves behind it, and its sections land in the outline when the scan
+// finishes (optimistic apply).
+const IMPORT_SCAN_MESSAGES = [
+  'Unpacking the document…',
+  'Setting aside headers and footers…',
+  'Finding the sections…',
+  'Classifying tables, stats and callouts…',
+  'Spotting repeating finding cards…',
+  'Labelling the structure…',
+];
+// Deliberate on-screen scan duration — the parse resolves behind it, but the
+// theatre always plays for this long so the animation reads as a real scan.
+const SCAN_DURATION_MS = 10000;
+// Fail a PDF parse that hasn't settled by here, so the progress card can't hang.
+// Kept above SCAN_DURATION_MS so a slow-but-fine parse still lands.
+const EXTRACT_TIMEOUT_MS = 30000;
+
+// V1 reads one format, done well: digital PDF. Everything else converts to PDF
+// in one click — nothing converts the other way — so the picker accepts .pdf
+// only and stops advertising what we can't read. Word/PowerPoint drops get an
+// honest "save it as PDF" message instead of a fabricated outline.
+const IMPORT_ACCEPT = '.pdf';
+type ImportKind = 'pdf' | 'word' | 'ppt';
+const IMPORT_KIND_LABEL: Record<ImportKind, string> = { pdf: 'PDF', word: 'Word', ppt: 'PowerPoint' };
+function classifyImport(name: string): ImportKind | null {
+  if (/\.pdf$/i.test(name)) return 'pdf';
+  if (/\.docx?$/i.test(name)) return 'word';
+  if (/\.pptx?$/i.test(name)) return 'ppt';
+  return null;
+}
+// Detected headings often carry their own enumerator ("1. Executive Summary",
+// "2.1 Scope"). The outline already numbers every row with its own index badge,
+// so we strip the leading enumerator to avoid a doubled "2. 1. Executive Summary".
+function stripLeadingEnumerator(name: string): string {
+  return name.replace(/^\s*(?:\d+(?:[.)]\d+)*[.)]?|[A-Za-z][.)]|[IVXLCM]+[.)])\s+/, '').trim() || name.trim();
+}
+
+// Non-blocking extraction progress card — a compact toast pinned to the VIEWPORT
+// bottom-right (portaled to <body>, not inside the editor modal). It's the whole
+// UI while the editor is minimized, so extraction keeps running with the app
+// fully usable behind it. Shows an extracting state (with Minimize while the
+// modal is open, or Open while minimized) and a done state (Open to review).
+function ExtractionCard({
+  filename, messages = IMPORT_SCAN_MESSAGES, done = false, sectionCount,
+  progress = 0, msgIdx = 0,
+  onMinimize, onOpen, onClose,
+}: {
+  filename: string;
+  messages?: string[];
+  done?: boolean;
+  sectionCount?: number;
+  /** Controlled progress + message step — driven by the parent so the run stays
+      continuous when switching between the full-modal overlay and this card. */
+  progress?: number;
+  msgIdx?: number;
+  onMinimize?: () => void;
+  onOpen?: () => void;
+  onClose?: () => void;
+}) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <motion.div
+      role="status"
+      aria-label={done ? 'Extraction complete' : `Extracting ${filename}`}
+      initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
+      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      className="fixed bottom-5 right-5 z-[80] w-[360px] max-w-[calc(100vw-2.5rem)] rounded-lg border border-canvas-border bg-white shadow-[0_16px_40px_-12px_rgba(15,8,30,0.28)] p-4"
+    >
+      <div className="flex items-start gap-3">
+        <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${done ? 'bg-compliant-50 text-compliant-600' : 'bg-brand-50 text-brand-600'}`}>
+          {done ? <Check size={16} strokeWidth={2.5} /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
+          <div className="text-[0.75rem] text-ink-500 truncate mt-0.5">
+            {done
+              ? (sectionCount != null ? `${sectionCount} section${sectionCount === 1 ? '' : 's'} ready to review` : 'Ready to review')
+              : (
+                <AnimatePresence mode="wait">
+                  <motion.span key={msgIdx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {messages[msgIdx]}
+                  </motion.span>
+                </AnimatePresence>
+              )}
+          </div>
+        </div>
+        {!done && <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 shrink-0">{Math.round(progress)}%</span>}
+        {onClose && (
+          <button onClick={onClose} aria-label="Dismiss" className="w-7 h-7 -mr-1 -mt-0.5 rounded-full text-ink-400 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={14} /></button>
+        )}
+      </div>
+      {!done && (
+        <div className="mt-3 h-1.5 rounded-full bg-brand-50 overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-500 transition-[width] duration-200" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background. Keep working.'}</span>
+        {onOpen ? (
+          <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
+            <Maximize2 size={13} /> Open
+          </button>
+        ) : onMinimize ? (
+          <button onClick={onMinimize} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-700 border border-canvas-border bg-white hover:bg-paper-50 cursor-pointer transition-colors">
+            <Minimize2 size={13} /> Minimize
+          </button>
+        ) : null}
+      </div>
+    </motion.div>,
+    document.body,
+  );
+}
 
 // ─── Apply Template Dropdown ───
 export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose, onSaveAsTemplate }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void; onSaveAsTemplate?: () => void }) {
@@ -37,7 +232,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1.5 w-[300px] bg-white rounded-[12px] shadow-[0_16px_40px_-12px_rgba(15,8,30,0.22)] border border-canvas-border z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1.5 w-[300px] bg-white rounded-lg shadow-[0_16px_40px_-12px_rgba(15,8,30,0.22)] border border-canvas-border z-50 overflow-hidden"
     >
       <div className="px-3.5 pt-3 pb-1">
         <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-[0.12em]">Select Template</span>
@@ -54,7 +249,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); if (query) setQuery(''); else onClose(); } }}
             placeholder="Search templates…"
             aria-label="Search templates"
-            className="w-full h-9 pl-9 pr-8 rounded-[8px] bg-canvas border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-600/40 transition-colors"
+            className="w-full h-9 pl-9 pr-8 rounded-md bg-canvas border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-600/40 transition-colors"
           />
           {query && (
             <button
@@ -79,10 +274,10 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
               aria-current={isActive || undefined}
-              className={`group/item relative w-full text-left px-3 py-2.5 rounded-[8px] transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-brand-50'}`}
+              className={`group/item relative w-full text-left px-3 py-2.5 rounded-md transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-brand-50'}`}
             >
               {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-brand-600" aria-hidden="true" />}
-              <div className={`p-1.5 rounded-[8px] transition-colors ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              <div className={`p-1.5 rounded-md transition-colors ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
@@ -101,9 +296,9 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
           <button
             onClick={() => { onSaveAsTemplate(); onClose(); }}
             title="Save this report's structure as a reusable custom template"
-            className="w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 hover:bg-brand-50 group/save"
+            className="w-full text-left px-3 py-2.5 rounded-md transition-colors cursor-pointer flex items-center gap-2.5 hover:bg-brand-50 group/save"
           >
-            <div className="p-1.5 rounded-[8px] text-ink-500 bg-paper-50 group-hover/save:text-brand-600">
+            <div className="p-1.5 rounded-md text-ink-500 bg-paper-50 group-hover/save:text-brand-600">
               <BookOpen size={12} />
             </div>
             <div className="flex-1 min-w-0">
@@ -119,36 +314,83 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 
 // ─── Template Editor Modal ───
 
-// Compact, freely-draggable section row for the left-hand outline editor. The
-// row can be picked up by its grip and moved in ANY direction (not locked to a
-// vertical rail); on release it snaps into the slot nearest the drop point, so
-// dragging left↔right works as well as up↕down. Reordering drives the same
-// `sections` state the document preview renders from.
-function LeftSectionRow({ section, index, onMove, listRef, onDelete }: {
-  section: { name: string; icon: string };
+// A section rendered as it prints in the report — an editorial numbered heading
+// (zero-padded brand index + title + a short brand tick, matching the report
+// reader) over a body placeholder shaped to the section's kind. It stays fully
+// editable: a grip in the left margin drags to reorder (freely, in any
+// direction — on release it snaps to the slot nearest the drop point), and a
+// hover control removes it. Reordering drives the same `sections` state.
+
+function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe, blockLibrary }: {
+  section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
   listRef: React.RefObject<HTMLDivElement | null>;
   onDelete: () => void;
+  onRename: (name: string) => void;
+  onDescribe: (description: string) => void;
+  /** Blocks the template stores by id, so a placement resolves to its shape. */
+  blockLibrary?: Record<string, TemplateBlock>;
 }) {
-  const SectionIcon = SECTION_ICONS[section.icon] || FileText;
+  // BYOT sections carry typed blocks — their body renders through the shared
+  // shape renderer, and the chip says where the content comes from (fill case).
+  const typeLabel = sectionTypeLabel(section);
   const controls = useDragControls();
+  // Inline rename — a local draft keeps the field stable while typing (the parent
+  // only hears the new name on commit), then Enter/blur saves and Escape reverts.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(section.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const startEdit = () => { setDraft(section.name); setEditing(true); requestAnimationFrame(() => inputRef.current?.select()); };
+  const commitEdit = () => {
+    const name = draft.trim();
+    setEditing(false);
+    if (name && name !== section.name) onRename(name);
+  };
+  // The description (body blurb) is editable too: it falls back to the auto blurb
+  // until the author types their own, then persists on the section. Same inline
+  // draft-then-commit pattern as the name.
+  const fallbackDesc = sectionBlurb(section.name);
+  const shownDesc = section.description ?? fallbackDesc;
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState(shownDesc);
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const startDescEdit = () => { setDescDraft(section.description ?? fallbackDesc); setEditingDesc(true); requestAnimationFrame(() => descRef.current?.select()); };
+  const commitDesc = () => {
+    const next = descDraft.trim();
+    setEditingDesc(false);
+    // Store only a real override; clearing back to the auto blurb drops it.
+    if (next && next !== fallbackDesc) onDescribe(next);
+    else if (!next || next === fallbackDesc) onDescribe('');
+  };
+  // The pencil edits BOTH at once: open the heading (focused) and the description
+  // together. The description opens WITHOUT taking focus — otherwise moving focus
+  // onto the heading blurs the textarea, fires commitDesc, and closes it (leaving
+  // only the heading editable). Double-click still edits each field on its own.
+  const startEditBoth = () => {
+    setDescDraft(section.description ?? fallbackDesc);
+    setEditingDesc(true);
+    startEdit();
+  };
+  // The body placeholder — null for a plain prose section, where the editable
+  // description takes its place.
+  const shape = renderSectionShape(section, blockLibrary, shownDesc);
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
       drag
       dragSnapToOrigin
       dragElastic={0.2}
       dragControls={controls}
       dragListener={false}
-      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 10px 26px rgba(15,8,30,0.18)' }}
+      whileDrag={{ scale: 1.01, zIndex: 50, boxShadow: '0 12px 30px rgba(15,8,30,0.16)' }}
       onDragEnd={(_, info) => {
-        // Reorder by where the row was dropped: count how many *other* rows sit
-        // above the drop point → that's the new insertion index.
+        // Reorder by where the block was dropped: count how many *other* blocks
+        // sit above the drop point → that's the new insertion index.
         const rows = listRef.current ? (Array.from(listRef.current.children) as HTMLElement[]) : [];
         const y = info.point.y;
         let target = 0;
@@ -159,131 +401,109 @@ function LeftSectionRow({ section, index, onMove, listRef, onDelete }: {
         });
         onMove(index, target);
       }}
-      className="group flex items-center gap-2 rounded-[9px] border border-canvas-border bg-white pl-1.5 pr-2 py-1.5 transition-colors hover:border-brand-600/40"
+      className="group relative border-x border-canvas-border bg-white px-9 py-6 transition-colors hover:bg-canvas/20"
     >
+      {/* Drag grip — sits in the left margin, revealed on hover. */}
       <button
         onPointerDown={(e) => controls.start(e)}
         aria-label={`Drag ${section.name} to reorder`}
-        className="no-focus-ring shrink-0 text-ink-300 hover:text-brand-600 cursor-grab active:cursor-grabbing touch-none transition-colors"
+        className="no-focus-ring absolute left-2.5 top-6 text-ink-300 hover:text-brand-600 cursor-grab active:cursor-grabbing touch-none opacity-0 group-hover:opacity-100 transition-all"
       >
-        <GripVertical size={14} />
+        <GripVertical size={15} />
       </button>
-      <span className="shrink-0 w-6 h-6 rounded-[6px] bg-brand-50 text-brand-600 flex items-center justify-center">
-        <SectionIcon size={13} />
-      </span>
-      <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-800">{section.name}</span>
-      <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">{index + 1}</span>
-      <button
-        onClick={onDelete}
-        aria-label={`Delete ${section.name}`}
-        className="no-focus-ring shrink-0 w-6 h-6 flex items-center justify-center rounded-[6px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer opacity-0 group-hover:opacity-100 transition-all"
-      >
-        <Trash2 size={12} />
-      </button>
-    </motion.div>
-  );
-}
-
-// Document-preview section block. Reordering / deleting now lives in the left
-// outline, so the right pane renders these read-only as the report would print.
-function TemplateSectionRow({
-  section,
-  index,
-}: {
-  section: { name: string; icon: string };
-  index: number;
-}) {
-  const SectionIcon = SECTION_ICONS[section.icon] || FileText;
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 8) * 0.035 }}
-      className="relative rounded-[12px] border border-canvas-border bg-white px-5 py-4"
-    >
-      <div className="flex items-center gap-2.5 mb-3">
-        <SectionIcon size={16} className="shrink-0 text-brand-600" />
-        <h4 className="flex-1 min-w-0 truncate text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h4>
-        <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">Section {index + 1}</span>
+      {/* Edit + remove — revealed on hover, top-right. */}
+      <div className="absolute right-4 top-5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+        <button
+          onClick={startEditBoth}
+          aria-label={`Edit ${section.name}`}
+          title="Edit heading and description"
+          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
+        >
+          <Pencil size={14} />
+        </button>
+        <RowDeleteButton
+          onConfirm={onDelete}
+          ariaLabel={`Delete ${section.name}`}
+          triggerClassName="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
+        />
       </div>
-      <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-5 py-6 text-center">
-        <p className="text-[0.75rem] text-ink-400/80">Section content generated from report data</p>
-      </div>
-    </motion.div>
-  );
-}
 
-// The report types valid on the platform. 'Other' stays as the internal
-// "none selected" state (shown as a placeholder), so it isn't offered here.
-const VALID_REPORT_TYPES = ['Audit', 'SOX', 'ATR'] as const;
-const REPORT_TYPE_LABEL: Partial<Record<ReportTypeName, string>> = {
-  Audit: 'Internal Audit',
-  SOX: 'SOX',
-  ATR: 'ATR',
-};
-const reportTypeLabel = (t: ReportTypeName) => REPORT_TYPE_LABEL[t] ?? t;
-
-// Styled report-type dropdown — replaces the native <select> (which falls back
-// to the OS-dark menu). Shows only the platform-valid types; an unset value
-// ('Other') renders as a placeholder.
-function ReportTypeSelect({ value, onChange }: { value: ReportTypeName; onChange: (t: ReportTypeName) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-  const chosen = (VALID_REPORT_TYPES as readonly string[]).includes(value);
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="no-focus-ring w-full flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-canvas-border bg-white text-[0.875rem] cursor-pointer hover:border-brand-300 focus:outline-none focus:border-brand-600/40 transition-colors"
-      >
-        <span className={chosen ? 'text-ink-800 font-medium' : 'text-ink-400'}>{chosen ? reportTypeLabel(value) : 'Select a report type'}</span>
-        <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
-            role="listbox"
-            className="absolute z-30 left-0 right-0 mt-1.5 rounded-[10px] border border-canvas-border bg-white shadow-[0_10px_28px_rgba(15,8,30,0.14)] p-1"
-          >
-            {VALID_REPORT_TYPES.map(t => {
-              const active = t === value;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => { onChange(t as ReportTypeName); setOpen(false); }}
-                  className={`no-focus-ring w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[7px] text-left text-[0.875rem] cursor-pointer transition-colors ${active ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'}`}
-                >
-                  {reportTypeLabel(t as ReportTypeName)}
-                  {active && <Check size={14} className="text-brand-600 shrink-0" />}
-                </button>
-              );
-            })}
-          </motion.div>
+      {/* Editorial numbered heading — matches the report reader. Double-click or the
+          hover pencil turns it into an inline rename field. */}
+      <div className="flex items-start justify-between gap-4 pr-16">
+        <div className="flex items-baseline gap-3.5 min-w-0 flex-1">
+          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(index + 1).padStart(2, '0')}</span>
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              autoFocus
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+              }}
+              onPointerDown={e => e.stopPropagation()}
+              aria-label="Section name"
+              className="min-w-0 flex-1 -my-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-brand-400 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+            />
+          ) : (
+            <h2 onDoubleClick={startEdit} title="Double-click to rename" className="min-w-0 truncate text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] cursor-text">{section.name}</h2>
+          )}
+        </div>
+        {typeLabel && (
+          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{typeLabel}</span>
         )}
-      </AnimatePresence>
-    </div>
+      </div>
+      <span className="mt-3 block h-[2px] w-8 rounded-full" style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }} aria-hidden="true" />
+
+      {/* Body placeholder — the shape of the content this section will hold. */}
+      <div className="mt-4 pl-[1.9rem]">
+        {shape ?? (editingDesc ? (
+          <textarea
+            ref={descRef}
+            value={descDraft}
+            rows={2}
+            onChange={e => setDescDraft(e.target.value)}
+            onBlur={commitDesc}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitDesc(); }
+              else if (e.key === 'Escape') { e.preventDefault(); setEditingDesc(false); }
+            }}
+            onPointerDown={e => e.stopPropagation()}
+            aria-label="Section description"
+            className="w-full max-w-[80ch] resize-none rounded-sm bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+          />
+        ) : (
+          <p
+            onDoubleClick={startDescEdit}
+            title="Double-click to edit this description"
+            className={`max-w-[80ch] text-[0.875rem] leading-relaxed cursor-text rounded-xs -mx-1 px-1 hover:bg-canvas/60 transition-colors ${section.description ? 'text-ink-600' : 'text-ink-500'}`}
+          >
+            {shownDesc}
+          </p>
+        ))}
+      </div>
+    </motion.div>
   );
 }
 
-export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; initialName?: string }) {
+// The sections a report commonly carries — offered as click-to-add suggestion
+// chips under the composer so a blank template fills in fast. A static set, not
+// tied to any report type.
+const SUGGESTED_SECTIONS: { name: string; icon: string }[] = [
+  { name: 'Executive Summary', icon: 'file-text' },
+  { name: 'Scope & Objectives', icon: 'file-text' },
+  { name: 'Testing Methodology', icon: 'file-text' },
+  { name: 'Findings / Observations', icon: 'check-circle' },
+  { name: 'Recommendations', icon: 'trending-up' },
+  { name: 'Management Response', icon: 'book-open' },
+  { name: 'Conclusion', icon: 'shield' },
+  { name: 'Sign-off', icon: 'shield' },
+];
+
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -295,31 +515,71 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const isNew = template.id === 'ct-blank';
   // The name field is shown in every flow (New / Edit), seeded to a sensible
   // default: an explicit initialName, or the template's own name when editing.
-  const defaultName = initialName ?? template.name;
+  // Cap the seeded name to the same 60-char limit the field enforces, so a long
+  // auto-generated name doesn't start over the limit (counter red on open).
+  const defaultName = (initialName ?? template.name).slice(0, TEMPLATE_NAME_MAX);
   const [copyName, setCopyName] = useState(defaultName);
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
+  // Custom brand colour (hex). Empty = use the named theme. When set (and valid)
+  // it drives the cover gradient + body accent everywhere the report renders.
+  // Importing a report samples this from the uploaded cover (the brand kit).
+  const [brandColor, setBrandColor] = useState(template.brandColor ?? '');
+  // The document's own rating language, captured at import (template settings).
+  const [findingScale, setFindingScale] = useState<string[] | undefined>(template.findingScale);
+  const [opinionScale, setOpinionScale] = useState<string[] | undefined>(template.opinionScale);
+  // Cover gradient + accent for the live preview — the named theme, overridden
+  // by the captured brand colour when present.
+  const coverGradient = reportGradient(theme, brandColor) ?? TEMPLATE_THEME_GRADIENT['Purple & White'];
+  const coverAccent = reportAccent(theme, brandColor);
   const [headerText, setHeaderText] = useState(template.headerText ?? 'Confidential — For Internal Use Only');
-  const [footerText, setFooterText] = useState(template.footerText ?? 'Generated by Auditify Copilot');
-  // New (blank) templates open with a default 10-section skeleton so the author
-  // reorders rather than starting from an empty outline; a brand-new template
-  // starts EMPTY and is built up from the type's recommended sections.
+  // Footer auto-tracks the brand ("Generated by <brand>") until the author edits it
+  // directly; an existing saved footer or an imported one counts as customised.
+  const [footerText, setFooterText] = useState(template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`);
+  const [footerCustom, setFooterCustom] = useState(!!template.footerText);
+  useEffect(() => {
+    if (!footerCustom) setFooterText(`Generated by ${brand.trim() || 'Irame'}`);
+  }, [brand, footerCustom]);
+  // Page numbers on the exported report — on by default (undefined = on).
+  const [pageNumbers, setPageNumbers] = useState(template.pageNumbers ?? true);
+  // Sign-off block — off by default. Enabling seeds default signatory rows.
+  const [signoffEnabled, setSignoffEnabled] = useState(template.signoffEnabled ?? false);
+  const [signatories, setSignatories] = useState<SignatorySlot[]>(template.signatories ?? []);
+  const toggleSignoff = (on: boolean) => {
+    setSignoffEnabled(on);
+    if (on && signatories.length === 0) setSignatories(DEFAULT_SIGNATORIES.map(s => ({ ...s })));
+  };
+  const addSignatory = () => setSignatories(prev => [...prev, { id: `sig-${Date.now()}`, role: '' }]);
+  const updateSignatory = (id: string, patch: Partial<SignatorySlot>) => setSignatories(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+  const removeSignatory = (id: string) => setSignatories(prev => prev.filter(s => s.id !== id));
+  // Persisted signatory list: drop empty rows, trim, keep only real content.
+  const cleanSignatories: SignatorySlot[] = signatories
+    .filter(s => s.role.trim() || (s.name ?? '').trim())
+    .map(s => ({ id: s.id, role: s.role.trim() || 'Signatory', ...(s.name?.trim() ? { name: s.name.trim() } : {}) }));
+  const logEvent = useAuditLog();
+  // Diagonal page watermark — the full-document branding.
+  const [watermark, setWatermark] = useState<WatermarkConfig>(template.watermark ?? DEFAULT_WATERMARK);
+  const watermarkImgInputRef = useRef<HTMLInputElement>(null);
+  const setWm = (patch: Partial<WatermarkConfig>) => setWatermark(w => ({ ...w, ...patch }));
+  // Read an uploaded image as a data URL (watermark image). 2 MB cap.
+  const readImageFile = (file: File, onDone: (url: string) => void) => {
+    if (!file.type.startsWith('image/')) { addToast({ type: 'error', message: 'Upload an image (PNG, JPG or SVG).' }); return; }
+    if (file.size > 2 * 1024 * 1024) { addToast({ type: 'error', message: 'Image is too large — 2 MB max.' }); return; }
+    const reader = new FileReader();
+    reader.onload = () => onDone(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+  // Seed from the template's own sections when editing/customising; a brand-new
+  // template starts EMPTY and is built up section by section.
   const seededSections = (template.sections && template.sections.length > 0)
     ? template.sections
     : [];
   const [sections, setSections] = useState(seededSections);
-  // Report type drives the §4.6 smart defaults. Seed from the template's category
-  // when it's already one of the known types, else "Other".
-  const knownType = (REPORT_TYPES as readonly string[]).includes(template.category)
-    ? (template.category as ReportTypeName) : 'Other';
-  const [reportType, setReportType] = useState<ReportTypeName>(knownType);
   // Left settings column is split into two segmented groups so the form reads as
   // a structured panel instead of a flat six-field stack.
   const [panel, setPanel] = useState<'identity' | 'branding'>('identity');
 
-  // Changing the type never auto-fills — it just re-derives the recommendations
-  // shown for that type, which the author adds when they want.
-  const onTypeChange = (next: ReportTypeName) => setReportType(next);
+  // Add one or more sections, skipping any already in the outline (case-insensitive).
   const addSections = (list: { name: string; icon: string }[]) => {
     if (!list.length) return;
     setSections(prev => {
@@ -328,13 +588,297 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       return [...prev, ...fresh.map(s => ({ name: s.name, icon: s.icon }))];
     });
   };
-  const coverage = sectionCoverage(reportType, sections.map(s => s.name));
-
-  // Recommended sections for the chosen type that aren't in the outline yet.
-  // Re-derives whenever the type or current sections change.
-  const recommendations = typeSectionsFor(reportType).filter(
+  // Suggested sections that aren't in the outline yet — a static set of the
+  // sections a report commonly carries, offered as click-to-add chips under the
+  // composer. Not tied to any report type.
+  const recommendations = SUGGESTED_SECTIONS.filter(
     rec => !sections.some(s => s.name.toLowerCase() === rec.name.toLowerCase()),
   );
+
+  // ── Import from a report ──────────────────────────────────────────────────
+  // Reads an existing PDF report and pre-fills the outline + letterhead, so the
+  // author starts from the real document instead of a blank page. This is the
+  // merged "Upload template" path, folded into the editor (one creation surface).
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [scanningName, setScanningName] = useState<string | null>(null);
+  // Minimize-and-continue: when true the editor collapses to the bottom-right
+  // extraction card and the full modal isn't rendered, so extraction keeps
+  // running (this component stays mounted) with the app fully usable behind it.
+  const [minimized, setMinimized] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importMsgIdx, setImportMsgIdx] = useState(0);
+  const reduceMotion = useReducedMotion();
+  // Drive the extraction progress + status message here (not in the card) so the
+  // same run feeds both the full-modal overlay and the minimized corner card —
+  // progress stays continuous when the user minimizes/restores. An eased rAF loop
+  // over SCAN_DURATION_MS (the same easeOutQuad the ATR flow uses) advances the
+  // bar and steps the status; messages spread evenly across the run. Holds just
+  // shy of 100% if the real parse outlasts the scan window.
+  useEffect(() => {
+    if (!importing) { setImportProgress(0); setImportMsgIdx(0); return; }
+    const msgs = IMPORT_SCAN_MESSAGES;
+    const start = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      const t = Math.min(1, (now - start) / SCAN_DURATION_MS);
+      const eased = 1 - Math.pow(1 - t, 2);
+      setImportProgress(Math.min(99, eased * 100));
+      setImportMsgIdx(Math.min(msgs.length - 1, Math.floor(t * msgs.length)));
+      if (t < 1) raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [importing]);
+  const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
+  // counter avoids the flicker that dragenter/dragleave cause over child nodes.
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+  // After a successful extraction the detected sections land in the shared review
+  // canvas (§4) for curation — nothing is applied to the outline until the author
+  // confirms. This is the same detect-and-curate step the format-check modal uses,
+  // so "import" behaves identically to "upload".
+  // The curation canvas is now opt-in (opened from the post-import banner's
+  // "Review"), not a required gate. pendingImport drives that on-demand canvas;
+  // reviewSections is its working copy while open.
+  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: ImportKind; result: ExtractedTemplate | null } | null>(null);
+  const [reviewSections, setReviewSections] = useState<CanvasSection[]>([]);
+  // Optimistic apply: detected sections + letterhead land in the outline the
+  // moment the parse finishes. This banner then offers Undo (revert the whole
+  // import in one tap) and Review (open the curation canvas). Curation is a
+  // choice, not a step — the common path is one gesture: pick file → done.
+  type ImportSnapshot = {
+    sections: typeof sections; headerText: string; footerText: string; brand: string; copyName: string; importedFrom: string | null;
+    brandColor: string; findingScale?: string[]; opinionScale?: string[]; signoffEnabled: boolean; signatories: SignatorySlot[];
+  };
+  const [importBanner, setImportBanner] = useState<
+    { fileName: string; kind: ImportKind; result: ExtractedTemplate | null; detected: CanvasSection[]; count: number; gotLetterhead: boolean; captured: string[] } | null
+  >(null);
+  // The state as it was just before the import applied, so Undo is exact.
+  const preImportRef = useRef<ImportSnapshot | null>(null);
+
+  // Apply a section list + captured letterhead to the editor. Shared by the
+  // initial optimistic import and the on-demand Review confirm. Empty-named rows
+  // are dropped; placeholder blocks (kpi/chart/table) keep their type + label.
+  // Returns a template name unique against existing names (case-insensitive),
+  // ignoring the template being edited. Suffixes " (2)", " (3)"… on collision.
+  const uniqueTemplateName = (name: string): string => {
+    const own = isNew ? null : template.name.toLowerCase();
+    const taken = new Set(existingTemplateNames.map(n => n.toLowerCase()).filter(n => n !== own));
+    if (!taken.has(name.toLowerCase())) return name;
+    for (let i = 2; i < 100; i++) {
+      const cand = `${name} (${i})`;
+      if (!taken.has(cand.toLowerCase())) return cand;
+    }
+    return name;
+  };
+
+  const applyToOutline = (
+    secs: CanvasSection[], result: ExtractedTemplate | null, fileName: string,
+  ): { count: number; gotLetterhead: boolean; captured: string[] } => {
+    // Pass 2's furniture lands as pre-filled template settings — the user
+    // verifies them here instead of typing them in.
+    const hf = result?.furniture;
+    if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
+    // Apply the PDF's own footer when it has one, and mark it customised so the
+    // "footer follows brand" effect doesn't immediately overwrite it back to
+    // "Generated by <brand>".
+    if (hf?.footer.length) { setFooterText(hf.footer.join('  ·  ')); setFooterCustom(true); }
+    if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
+    // Brand kit: the dominant colour sampled from the uploaded cover drives the
+    // template's cover gradient + accent (clearable in Branding).
+    const captured: string[] = [];
+    if (result?.coverColor) { setBrandColor(result.coverColor); captured.push('brand colour'); }
+    // The document's own rating language becomes a template setting — generated
+    // reports speak these words, not ours.
+    if (result?.findingScale) { setFindingScale(result.findingScale); captured.push('rating scale'); }
+    if (result?.opinionScale) { setOpinionScale(result.opinionScale); captured.push('opinion scale'); }
+    // A detected sign-off block (signature slots) turns on the template's
+    // existing signature block, seeded with the document's own roles — it isn't
+    // duplicated as a prose section.
+    const signRolesOf = (s: CanvasSection) => (s.blocks ?? []).find(b => b.kind === 'signoff' && (b.signRoles?.length ?? 0) > 0)?.signRoles;
+    const signRoles = secs.map(signRolesOf).find(Boolean);
+    if (signRoles) {
+      setSignoffEnabled(true);
+      setSignatories(signRoles.map((role, i) => ({ id: `sig-imp-${i}`, role })));
+      captured.push(`${signRoles.length} signature slot${signRoles.length === 1 ? '' : 's'}`);
+    }
+    // Name: only fill if still the untouched default, and never fill a name that
+    // already exists — a fresh import landing on an instant "already exists" error
+    // reads as a failure. Suffix "(2)", "(3)"… until unique.
+    const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    if (copyName === defaultName) {
+      const candidate = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
+      setCopyName(uniqueTemplateName(candidate).slice(0, TEMPLATE_NAME_MAX));
+    }
+    // Sections that are ONLY a sign-off block moved into the signature block
+    // above; wrapper paperwork the user didn't keep is excluded here too —
+    // with the review row's confirmation, never silently.
+    const kept = secs.filter(s =>
+      s.name.trim() &&
+      !s.wrapper &&
+      !((s.blocks ?? []).length > 0 && (s.blocks ?? []).every(b => b.kind === 'signoff')));
+    const toTemplateBlock = (b: CanvasBlock): TemplateBlock => {
+      // Strip the review-only detection facts; the persisted skeleton keeps
+      // shape + labels only.
+      const { id, confidence, page, preview, ...block } = b;
+      void id; void confidence; void page; void preview;
+      return block;
+    };
+    setSections(kept.map(s => ({
+      name: s.name.trim(),
+      icon: 'file-text',
+      ...(s.description ? { description: s.description } : {}),
+      ...(s.fill ? { fill: s.fill } : {}),
+      ...(s.binding ? { binding: s.binding } : {}),
+      ...(s.blocks?.length ? { blocks: s.blocks.map(toTemplateBlock) } : {}),
+    })));
+    setImportedFrom(fileName);
+    return { count: kept.length, gotLetterhead: !!hf, captured };
+  };
+
+  const handleImportFile = async (file: File) => {
+    const kind = classifyImport(file.name);
+    // V1 is PDF-only, said honestly: Word gets the one-click conversion path
+    // (phase 2 is coming), PowerPoint and everything else a plain "not
+    // supported" — never a fabricated outline.
+    if (kind === 'word') {
+      addToast({ type: 'info', message: 'Word support is coming. Save it as a PDF (File → Save as PDF) and upload that.' });
+      return;
+    }
+    if (kind === 'ppt') {
+      addToast({ type: 'info', message: 'PowerPoint isn’t supported. Export the report as a PDF and upload that.' });
+      return;
+    }
+    if (!kind) {
+      addToast({ type: 'error', message: 'Upload a past report as a PDF. That’s the one format we can read today.' });
+      return;
+    }
+
+    // Read the PDF for real — structure preserved with evidence + source lines.
+    setImporting(true);
+    setScanningName(file.name);
+    // The scan theatre plays in full; the parse resolves behind it. A timeout
+    // guards a hung read (e.g. the pdf.js worker failing to load) so the
+    // progress card can't stick forever — it falls through to the decline path.
+    let outcome: ExtractOutcome;
+    try {
+      const [res] = await Promise.all([
+        Promise.race<ExtractOutcome>([
+          extractTemplateFromReport(file),
+          new Promise<ExtractOutcome>((_, reject) =>
+            setTimeout(() => reject(new Error('extract-timeout')), EXTRACT_TIMEOUT_MS)),
+        ]),
+        new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS)),
+      ]);
+      outcome = res;
+    } catch {
+      outcome = { ok: false, reason: 'unreadable' };
+    } finally {
+      setImporting(false);
+      setScanningName(null);
+    }
+    if (!outcome.ok) {
+      // Restore the editor if it was minimized, so the failure isn't hidden
+      // behind a card that would otherwise read as "complete". Each decline
+      // reason gets its own honest message — never a silent failure.
+      setMinimized(false);
+      const message =
+        outcome.reason === 'password' ? `“${file.name}” is password-protected. Remove the password and upload it again.`
+        : outcome.reason === 'scanned' ? 'This looks like a scanned copy, so there’s no text inside to read. Please upload the original digital PDF.'
+        : outcome.reason === 'too-long' ? `This report is ${outcome.pageCount} pages. Upload a representative report of 50 pages or fewer. One typical report is enough.`
+        : outcome.reason === 'too-large' ? `“${file.name}” is too big to read here. Keep it under 30 MB.`
+        : `Couldn’t read “${file.name}”. Try re-exporting it as a PDF and uploading again.`;
+      addToast({ type: 'error', message });
+      return;
+    }
+    const result = outcome.template;
+    // The engine's hierarchical output → review rows: a section with its typed
+    // blocks, pre-filled description, and guessed fill case intact.
+    const detected: CanvasSection[] = result.sections.map((s, i) => ({
+      id: `imp-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
+      name: stripLeadingEnumerator(s.name),
+      description: s.description,
+      evidence: s.evidence,
+      fill: s.fill,
+      fillReason: s.fillReason,
+      binding: s.binding,
+      blocks: s.blocks.map((b, bi) => ({ ...b, id: `imp-${i}-b${bi}` })),
+      confidence: s.confidence,
+      page: s.page,
+      appendix: s.appendix,
+      wrapper: s.wrapper,
+      source: s.source,
+    }));
+
+    // Snapshot pre-import state, then apply optimistically and raise the banner.
+    preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom, brandColor, findingScale, opinionScale, signoffEnabled, signatories };
+    const { count, gotLetterhead, captured } = applyToOutline(detected, result, file.name);
+    setImportBanner({ fileName: file.name, kind, result, detected, count, gotLetterhead, captured });
+
+    // §4.5 — headings with no content beneath aren't auto-added, but never silently
+    // dropped: tell the user and offer a one-tap add-back.
+    const skipped = result?.skipped ?? [];
+    if (skipped.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Skipped ${skipped.length} empty heading${skipped.length === 1 ? '' : 's'} (no content beneath): ${skipped.map(s => `"${s}"`).join(', ')}.`,
+        secondaryAction: {
+          label: `Add ${skipped.length === 1 ? 'it' : 'all'}`,
+          onClick: () => setSections(prev => {
+            const have = new Set(prev.map(s => s.name.toLowerCase()));
+            return [...prev, ...skipped.filter(s => !have.has(s.toLowerCase())).map(s => ({ name: s, icon: 'file-text' }))];
+          }),
+        },
+      });
+    }
+  };
+
+  // Remove the imported file — revert the whole import (sections + letterhead +
+  // name) to the pre-import snapshot. The banner's X routes here through a
+  // confirmation, so removing an upload is deliberate, never an accidental tap.
+  const undoImport = () => {
+    const snap = preImportRef.current;
+    if (snap) {
+      setSections(snap.sections);
+      setHeaderText(snap.headerText);
+      setFooterText(snap.footerText);
+      setBrand(snap.brand);
+      setCopyName(snap.copyName);
+      setImportedFrom(snap.importedFrom);
+      setBrandColor(snap.brandColor);
+      setFindingScale(snap.findingScale);
+      setOpinionScale(snap.opinionScale);
+      setSignoffEnabled(snap.signoffEnabled);
+      setSignatories(snap.signatories);
+    }
+    preImportRef.current = null;
+    setImportBanner(null);
+    setPendingImport(null);
+    setReviewSections([]);
+    addToast({ type: 'info', message: 'Imported file removed.' });
+  };
+  // Review — open the curation canvas, seeded from the detected sections.
+  const openReview = () => {
+    if (!importBanner) return;
+    setReviewSections(importBanner.detected);
+    setPendingImport({ fileName: importBanner.fileName, kind: importBanner.kind, result: importBanner.result });
+  };
+  // Cancel the review canvas — the already-applied import is untouched.
+  const cancelImport = () => { setPendingImport(null); };
+  // Confirm the review: re-apply the curated sections and keep the banner (and
+  // its one-tap Undo, still pointing at the pre-import snapshot) in sync.
+  const applyImport = () => {
+    if (!pendingImport) return;
+    const { count, gotLetterhead, captured } = applyToOutline(reviewSections, pendingImport.result, pendingImport.fileName);
+    setImportBanner(b => (b ? { ...b, detected: reviewSections, count, gotLetterhead, captured } : b));
+    setPendingImport(null);
+  };
+
+  // One block printed in two places is stored once; every other placement
+  // points at it, so the preview resolves both to the same shape.
+  const blockLibrary = collectBlockLibrary(sections);
 
   const [newSectionName, setNewSectionName] = useState('');
   const addSection = () => {
@@ -347,6 +891,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setSections(prev => [...prev, { name, icon: 'file-text' }]);
     setNewSectionName('');
   };
+  // Rename a section in place — keyed by index so duplicate names stay distinct.
+  const renameSection = (index: number, name: string) => {
+    setSections(prev => prev.map((s, i) => (i === index ? { ...s, name } : s)));
+  };
+  // Set (or clear, with '') the section's custom description.
+  const describeSection = (index: number, description: string) => {
+    setSections(prev => prev.map((s, i) => (i === index ? { ...s, description: description || undefined } : s)));
+  };
   // Move a section from one index to another (drag-drop reorder).
   const moveSection = (from: number, to: number) => {
     if (to < 0 || to >= sections.length || to === from) return;
@@ -357,12 +909,53 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       return next;
     });
   };
+  // Remove a section — reversible, not a silent drop (matches the review canvas).
+  // Keyed by index so duplicate names can't delete the wrong row, and Undo
+  // restores it at its original position.
+  const removeSection = (index: number) => {
+    const removed = sections[index];
+    if (!removed) return;
+    setSections(prev => prev.filter((_, i) => i !== index));
+    addToast({
+      type: 'info',
+      // Persistent — the Undo stays until acted on or dismissed, so a delete is
+      // never a point of no return (#4).
+      persist: true,
+      message: `Removed “${removed.name || 'Untitled section'}”.`,
+      secondaryAction: {
+        label: 'Undo',
+        onClick: () => setSections(prev => {
+          const next = prev.slice();
+          next.splice(Math.min(index, next.length), 0, removed);
+          return next;
+        }),
+      },
+    });
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ field: 'copyName' | 'brand' | 'sections'; label: string }[]>([]);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
-  // Missing a required (🔒) section warns but never walls — save proceeds through
-  // a confirmation (PRD §4.6: "skippable with a confirmation, not a wall").
-  const [missingConfirm, setMissingConfirm] = useState<string[] | null>(null);
+  // The X on the post-import banner is the single "remove the uploaded file"
+  // action — it reverts the whole import, guarded by a confirmation (destructive).
+  const [confirmRemoveImport, setConfirmRemoveImport] = useState(false);
+  // Near-duplicate structure warning (§9) — the section overlap with the closest
+  // existing template, surfaced at save to kill "Copy of…" sprawl.
+  const [dupConfirm, setDupConfirm] = useState<{ name: string; shared: number; total: number } | null>(null);
+  // Soft advisory at save (non-blocking): the suggested sections not yet added.
+  // A template built without them tends to generate incomplete, so we surface the
+  // gap on "Create" but always let the author proceed.
+  const [suggestedConfirm, setSuggestedConfirm] = useState<string[] | null>(null);
+  const nearDuplicate = (): { name: string; shared: number; total: number } | null => {
+    const mine = sections.map(s => s.name.toLowerCase());
+    if (mine.length < 3) return null;
+    for (const other of existingStructures) {
+      const theirs = other.sectionNames.map(n => n.toLowerCase());
+      if (theirs.length < 3) continue;
+      const shared = mine.filter(m => theirs.includes(m)).length;
+      if (shared / Math.max(mine.length, theirs.length) >= 0.8) return { name: other.name, shared, total: mine.length };
+    }
+    return null;
+  };
 
   const copyNameRef = useRef<HTMLInputElement>(null);
   const brandRef = useRef<HTMLInputElement>(null);
@@ -378,17 +971,37 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     copyName: defaultName,
     brand: template.brand ?? 'Irame',
     theme: template.theme ?? 'Purple & White',
+    brandColor: template.brandColor ?? '',
+    findingScale: template.findingScale,
+    opinionScale: template.opinionScale,
     headerText: template.headerText ?? 'Confidential — For Internal Use Only',
-    footerText: template.footerText ?? 'Generated by Auditify Copilot',
+    footerText: template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`,
     sections: seededSections,
+    watermark: template.watermark ?? DEFAULT_WATERMARK,
+    pageNumbers: template.pageNumbers ?? true,
+    signoffEnabled: template.signoffEnabled ?? false,
+    signatories: template.signatories ?? [],
   }));
   const isDirty =
     copyName !== initial.copyName ||
     brand !== initial.brand ||
     theme !== initial.theme ||
+    brandColor !== initial.brandColor ||
+    findingScale !== initial.findingScale ||
+    opinionScale !== initial.opinionScale ||
     headerText !== initial.headerText ||
     footerText !== initial.footerText ||
-    sections !== initial.sections;
+    sections !== initial.sections ||
+    watermark !== initial.watermark ||
+    pageNumbers !== initial.pageNumbers ||
+    signoffEnabled !== initial.signoffEnabled ||
+    signatories !== initial.signatories;
+
+  // Inline duplicate-name check (#4) — warn before save, not only on submit. An
+  // existing template's own name isn't "taken"; only a real collision is.
+  const nameTaken = !!copyName.trim() && existingTemplateNames.some(
+    n => n.toLowerCase() === copyName.trim().toLowerCase() && (isNew || n.toLowerCase() !== template.name.toLowerCase()),
+  );
 
   const attemptClose = () => {
     if (isDirty && !isSaving) {
@@ -397,7 +1010,24 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       cancel();
     }
   };
-  useFocusTrap(containerRef, true, attemptClose);
+  useFocusTrap(containerRef, !minimized, attemptClose);
+
+  // Only surface a validation chip while its condition still holds. Adding a
+  // section (or typing a name/brand) clears its banner immediately, instead of
+  // leaving a stale "At least one section" until the next save attempt. Derived,
+  // not stored, so there's no setState-in-effect.
+  const activeErrors = errors.filter(e =>
+    e.field === 'copyName' ? !copyName.trim()
+    : e.field === 'brand' ? !brand.trim()
+    : !sections || sections.length === 0,
+  );
+
+  // Land focus in the name field on open and select its text, so typing replaces
+  // the "Untitled Template" default rather than shipping it verbatim (#1).
+  useEffect(() => {
+    const t = setTimeout(() => { const el = copyNameRef.current; if (el) { el.focus(); el.select(); } }, 80);
+    return () => clearTimeout(t);
+  }, []);
 
   const fieldRefs: Record<string, React.RefObject<HTMLElement | null>> = {
     copyName: copyNameRef,
@@ -405,7 +1035,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     sections: sectionsRef,
   };
 
-  const handleSave = (skipMissing = false) => {
+  const handleSave = (skipDup = false, skipSuggested = false) => {
     // Required-field validation: name + brand are required; sections non-empty.
     const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
     if (!copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
@@ -424,19 +1054,25 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       });
       return;
     }
-    // Soft block: missing a required (🔒) section for this type asks once, then
-    // saves anyway on confirm — never an absolute wall. New-from-scratch only;
-    // an uploaded/existing template's own sections are authoritative (§4.6).
-    if (isNew && !skipMissing && coverage.missingRequired.length > 0) {
-      setMissingConfirm(coverage.missingRequired.map(s => s.name));
+    // Missing suggested sections (non-blocking): warn once, then proceed on confirm.
+    // New templates built from scratch only — an imported report's own format is
+    // authoritative, so it's never audited against our generic section list.
+    if (isNew && !skipSuggested && !importedFrom && recommendations.length > 0) {
+      setSuggestedConfirm(recommendations.map(r => r.name));
       return;
+    }
+    // Near-duplicate structure warning (§9) — new templates only.
+    if (isNew && !skipDup) {
+      const dup = nearDuplicate();
+      if (dup) { setDupConfirm(dup); return; }
     }
     setErrors([]);
     setIsSaving(true);
     // Simulate an async save so the spinner is observable.
     window.setTimeout(() => {
+      const finalName = copyName.trim() || (isNew ? 'Untitled Template' : template.name);
+
       if (isNew && onSaveNew) {
-        const finalName = copyName.trim() || 'Untitled Template';
         if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
           setIsSaving(false);
           addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
@@ -446,19 +1082,25 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           ...template,
           id: `ct-new-${Date.now()}`,
           name: finalName,
-          category: reportType,
+          category: template.category ?? 'Custom',
           sections,
           brand: brand.trim(),
           theme,
+          brandColor: brandColor || undefined,
+          findingScale,
+          opinionScale,
           headerText: headerText.trim(),
           footerText: footerText.trim(),
+          watermark,
+          pageNumbers,
+          signoffEnabled,
+          signatories: cleanSignatories,
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
         // In-place edit (existing custom templates): persist changes back to
         // the same entry. New templates use the create path above.
         if (onSaveEdit) {
-          const finalName = copyName.trim() || template.name;
           // A rename can collide with another template; the template's own name
           // is always "taken", so only block when the name actually changed.
           if (
@@ -472,20 +1114,49 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           onSaveEdit({
             ...template,
             name: finalName,
-            category: reportType,
             sections,
             brand: brand.trim(),
             theme,
+            brandColor: brandColor || undefined,
+            findingScale,
+            opinionScale,
             headerText: headerText.trim(),
             footerText: footerText.trim(),
+            watermark,
+            pageNumbers,
+            signoffEnabled,
+            signatories: cleanSignatories,
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
       }
+      logEvent({
+        action: isNew ? 'Create' : 'Update',
+        description: `${isNew ? 'Created' : 'Saved'} template "${finalName}"`,
+        module: 'Reports',
+        entity: 'Report Template',
+      });
       setIsSaving(false);
       onClose();
     }, 320);
   };
+
+  // Minimized — the full modal is not rendered, so the app behind is usable while
+  // extraction runs (or after it finishes). Only the corner card shows; Open
+  // restores the editor with the imported outline in place.
+  if (minimized) {
+    return (
+      <ExtractionCard
+        filename={scanningName ?? importedFrom ?? 'your report'}
+        messages={IMPORT_SCAN_MESSAGES}
+        done={!importing}
+        sectionCount={!importing ? importBanner?.count : undefined}
+        progress={importProgress}
+        msgIdx={importMsgIdx}
+        onOpen={() => setMinimized(false)}
+      />
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
@@ -497,18 +1168,41 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         exit={{ opacity: 0, scale: 0.97, y: 12 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
+        className="relative bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
+        onDragEnter={e => {
+          // Only react to file drags, and not while a scan/review is already up.
+          if (importing || pendingImport || !Array.from(e.dataTransfer.types).includes('Files')) return;
+          e.preventDefault();
+          dragDepth.current += 1;
+          setDragActive(true);
+        }}
+        onDragOver={e => { if (dragActive) e.preventDefault(); }}
+        onDragLeave={() => {
+          if (!dragActive) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragActive(false);
+        }}
+        onDrop={e => {
+          if (!dragActive) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragActive(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void handleImportFile(f);
+        }}
       >
         <div className="px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Settings size={16} /></div>
+            <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
             <div className="min-w-0">
               <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
-              <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : template.name}</p>
+              <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'A reusable layout for your reports' : template.name}</p>
             </div>
           </div>
-          <button onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></button>
+          <div className="flex items-center gap-2 shrink-0">
+            <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></motion.button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 flex">
@@ -518,53 +1212,71 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             {/* Sticky top — validation + the tab switch stay put while the
                 panel below scrolls. */}
             <div className="px-6 pt-5 pb-4 shrink-0 space-y-4">
-              {errors.length > 0 && (
-                <div
-                  role="alert"
-                  className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
-                >
-                  <div className="font-semibold mb-1">Please complete the following before saving:</div>
-                  <ul className="space-y-0.5">
-                    {errors.map(err => (
-                      <li key={err.field}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (err.field === 'copyName' || err.field === 'brand') setPanel('identity');
-                            requestAnimationFrame(() => {
-                              const el = fieldRefs[err.field]?.current;
-                              el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-                              el?.focus?.();
-                            });
-                          }}
-                          className="underline hover:text-risk-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
-                        >
-                          {err.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* Validation summary — animates in/out (no hard layout jump) and
+                  each item is a clear, tappable "fix this field" chip. */}
+              <AnimatePresence initial={false}>
+                {activeErrors.length > 0 && (
+                  <motion.div
+                    role="alert"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="border border-risk-200 bg-risk-50 rounded-md px-3 py-2.5 text-[0.75rem] text-risk-800">
+                      <div className="font-semibold mb-1.5">Please complete the following before saving:</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeErrors.map(err => (
+                          <button
+                            key={err.field}
+                            type="button"
+                            onClick={() => {
+                              if (err.field === 'copyName' || err.field === 'brand') setPanel('identity');
+                              requestAnimationFrame(() => {
+                                const el = fieldRefs[err.field]?.current;
+                                el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                                el?.focus?.();
+                              });
+                            }}
+                            className="inline-flex items-center gap-0.5 rounded-full border border-risk-300 bg-white pl-2.5 pr-1.5 py-0.5 text-[0.6875rem] font-semibold text-risk-700 hover:bg-risk-100 hover:border-risk-400 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                          >
+                            {err.label} <ChevronRight size={12} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Segmented group switcher — Details (what the template is + its
-                  outline) vs Branding (how it looks). */}
-              <div className="relative flex p-1 bg-canvas rounded-[10px] gap-1">
-                {([['identity', 'Details'], ['branding', 'Branding']] as const).map(([key, label]) => {
+                  outline) vs Branding (how it looks). Full ARIA tab pattern with
+                  ←/→ navigation (#9). */}
+              <div role="tablist" aria-label="Template settings" className="relative flex p-1 bg-canvas rounded-lg gap-1">
+                {([['identity', 'Details'], ['branding', 'Branding']] as const).map(([key, label], i, arr) => {
                   const active = panel === key;
                   return (
                     <button
                       key={key}
                       type="button"
+                      role="tab"
+                      aria-selected={active}
+                      tabIndex={active ? 0 : -1}
                       onClick={() => setPanel(key)}
-                      aria-pressed={active}
-                      className={`no-focus-ring relative flex-1 h-8 rounded-[7px] text-[0.75rem] font-semibold cursor-pointer transition-colors duration-150 ${active ? 'text-ink-900' : 'text-ink-500 hover:text-ink-800'}`}
+                      onKeyDown={e => {
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                          e.preventDefault();
+                          setPanel(arr[(i + (e.key === 'ArrowRight' ? 1 : arr.length - 1)) % arr.length][0]);
+                        }
+                      }}
+                      className={`relative flex-1 h-8 rounded-sm text-[0.75rem] font-semibold cursor-pointer transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'text-brand-700' : 'text-ink-600 hover:text-ink-900'}`}
                     >
                       {active && (
                         <motion.span
                           layoutId="template-panel-pill"
                           transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
-                          className="absolute inset-0 rounded-[7px] bg-white border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.08)]"
+                          className="absolute inset-0 rounded-sm bg-white border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.08)]"
                         />
                       )}
                       <span className="relative z-10">{label}</span>
@@ -575,215 +1287,318 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             </div>
 
             {panel === 'identity' ? (
-              <motion.div key="panel-identity" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 flex flex-col">
-                {/* One scroll region for the fields + outline, so the section list
-                    gets the full column height. Tabs (above) and the Add bar
-                    (below) stay pinned. */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-3">
+              <motion.div key="panel-identity" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+                {/* Details holds only the template's properties — name, brand and
+                    letterhead. Section-building lives in the roomy right pane
+                    (next to its preview), so this column stays short and calm. */}
+                <div className="space-y-4">
+                  <div>
+                    <FieldLabel
+                      required
+                      right={<span className={`text-[0.6875rem] tabular-nums ${copyName.length >= TEMPLATE_NAME_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{copyName.length}/{TEMPLATE_NAME_MAX}</span>}
+                    >Template name</FieldLabel>
+                    <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value.slice(0, TEMPLATE_NAME_MAX))} maxLength={TEMPLATE_NAME_MAX} aria-invalid={nameTaken}
+                      placeholder="e.g. Internal Audit Report"
+                      className={`w-full h-10 px-3 rounded-lg border text-[0.8125rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-high/60 focus:border-high focus:ring-high/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
+                    {nameTaken && <p className="mt-1 text-[0.6875rem] text-high-700 font-medium">A template named “{copyName.trim()}” already exists — choose a different name to save.</p>}
+                  </div>
+                  <div>
+                    <FieldLabel>Brand name</FieldLabel>
+                    <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                    <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
+                  </div>
+                </div>
+
+                {/* Letterhead — header & footer shown on every printed page. */}
+                <div className="mt-5 pt-4 border-t border-canvas-border">
+                  <GroupEyebrow hint="shown on every page">Letterhead</GroupEyebrow>
                   <div className="space-y-4">
                     <div>
-                      <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><FileText size={14} /> Template Name</label>
-                      <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <FieldLabel
+                        right={<span className={`text-[0.6875rem] tabular-nums ${headerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{headerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
+                      >Header text</FieldLabel>
+                      <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Confidential — For Internal Use Only" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      {headerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long header text may be truncated in the letterhead.</p>}
                     </div>
                     <div>
-                      <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Tag size={14} /> Report Type</label>
-                      <ReportTypeSelect value={reportType} onChange={onTypeChange} />
-                      {/* Choosing a type surfaces its recommended sections in the
-                          preview; the report itself starts empty. */}
-                      <p className="text-[0.75rem] text-ink-400 mt-1 truncate">
-                        {reportType === 'Other'
-                          ? 'Pick a type to see suggestions.'
-                          : `Suggested ${reportTypeLabel(reportType)} sections below.`}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Image size={14} /> Brand Name</label>
-                      <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <FieldLabel
+                        right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
+                      >Footer text</FieldLabel>
+                      <input value={footerText} onChange={e => { setFooterCustom(true); setFooterText(e.target.value); }} placeholder={`Generated by ${brand.trim() || 'Irame'}`} className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      {footerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long footer text may be truncated in the letterhead.</p>}
                     </div>
                   </div>
+                </div>
 
-                  {/* Report Sections — the draggable outline, clubbed into Details. */}
-                  <div className="mt-5 pt-4 border-t border-canvas-border flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800"><FileText size={14} /> Report Sections</label>
-                    {sections.length > 0 && (
-                      <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas border border-canvas-border text-[0.75rem] font-medium text-ink-500 tabular-nums">{sections.length}</span>
-                    )}
-                  </div>
-
-                  {/* Added sections — only render the list (and its drag hint)
-                      once there's something in the outline. */}
-                  {sections.length > 0 && (
-                    <>
-                      <p className="pt-1 text-[0.75rem] text-ink-400">Drag to reorder · hover a row to remove.</p>
-                      <div ref={sectionsListRef} className="mt-2 space-y-1.5">
-                        <AnimatePresence initial={false}>
-                          {sections.map((section, i) => (
-                            <LeftSectionRow
-                              key={section.name}
-                              section={section}
-                              index={i}
-                              listRef={sectionsListRef}
-                              onMove={moveSection}
-                              onDelete={() => setSections(prev => prev.filter(s => s.name !== section.name))}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Recommendations — the primary way to build the outline. When
-                      it's empty these sit right under the header (no buried empty
-                      box) so the options are immediately obvious. */}
-                  {recommendations.length > 0 ? (
-                    <div className={sections.length > 0 ? 'mt-4 pt-4 border-t border-canvas-border' : 'mt-3'}>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-700">
-                          <ShieldCheck size={13} className="text-brand-500 shrink-0" />
-                          <span className="truncate">Recommended for {reportTypeLabel(reportType)}</span>
+                {/* Rating language — the words the uploaded report rates things
+                    in, captured at import. Generated reports speak these words. */}
+                {(findingScale || opinionScale) && (
+                  <div className="mt-5 pt-4 border-t border-canvas-border">
+                    <GroupEyebrow hint="captured from your report">Rating language</GroupEyebrow>
+                    <div className="space-y-2.5">
+                      {findingScale && (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Finding ratings</span>
+                            <div className="flex flex-wrap gap-1">
+                              {findingScale.map(w => (
+                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => setFindingScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => addSections(recommendations)}
-                          className="no-focus-ring shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                        >
-                          Add all
-                        </button>
-                      </div>
-                      <p className="text-[0.75rem] text-ink-400 mb-2.5">Tap a section to add it to your report.</p>
-                      <div className="space-y-1.5">
-                        <AnimatePresence initial={false}>
-                          {recommendations.map((rec, ri) => {
-                            const RecIcon = SECTION_ICONS[rec.icon] || FileText;
-                            return (
-                              <motion.button
-                                key={rec.name}
-                                type="button"
-                                layout
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.96 }}
-                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ri * 0.03 }}
-                                whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.98 }}
-                                onClick={() => addSections([rec])}
-                                className="no-focus-ring group/rec w-full flex items-center gap-2 rounded-[9px] border border-dashed border-canvas-border bg-canvas/30 pl-1.5 pr-2 py-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40 cursor-pointer"
-                              >
-                                <span className="shrink-0 w-6 h-6 rounded-[6px] bg-brand-50 text-brand-600 flex items-center justify-center"><RecIcon size={13} /></span>
-                                <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-700">{rec.name}</span>
-                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><Plus size={12} /></span>
-                              </motion.button>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </div>
+                      )}
+                      {opinionScale && (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Overall opinion</span>
+                            <div className="flex flex-wrap gap-1">
+                              {opinionScale.map(w => (
+                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => setOpinionScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                        </div>
+                      )}
+                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">Generated reports rate findings in these words, not ours.</p>
                     </div>
-                  ) : sections.length === 0 ? (
-                    <div className="mt-3 rounded-[10px] border border-dashed border-canvas-border bg-canvas/30 px-4 py-7 text-center">
-                      <FileText size={20} className="mx-auto text-ink-300 mb-2" />
-                      <p className="text-[0.875rem] font-semibold text-ink-800">No sections yet</p>
-                      <p className="text-[0.75rem] text-ink-400 mt-0.5">Pick a report type above to see recommendations, or type your own below.</p>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="px-6 shrink-0 h-[58px] border-t border-canvas-border flex items-center gap-2">
-                  <input
-                    value={newSectionName}
-                    onChange={e => setNewSectionName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
-                    placeholder="Add a section…"
-                    className="flex-1 h-9 px-3 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                  />
-                  <button
-                    onClick={addSection}
-                    disabled={!newSectionName.trim()}
-                    className={`no-focus-ring inline-flex items-center gap-1 h-9 px-3 text-[0.875rem] font-semibold rounded-[8px] transition-colors ${
-                      newSectionName.trim()
-                        ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
-                        : 'text-ink-400 bg-paper-100 border border-canvas-border cursor-not-allowed'
-                    }`}
-                  >
-                    <Plus size={14} /> Add
-                  </button>
-                </div>
+                  </div>
+                )}
               </motion.div>
             ) : (
-              <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-4">
+              <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-6">
                 <div>
-                  <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Palette size={14} /> Color Theme</label>
-                  {/* Theme cards — each shows its full colour palette (a dark →
-                      accent → light ramp) as a clean swatch bar, so the combination
-                      reads at a glance. No hex codes, just the colours. */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {[
-                      { name: 'Purple & White', palette: ['#2e0a52', '#6a12cd', '#a855f7', '#ede9fe'] },
-                      { name: 'Navy & Gold', palette: ['#0f1830', '#1a2744', '#c5a55a', '#ece1c5'] },
-                      { name: 'Teal & Light', palette: ['#075e54', '#0d9488', '#5eead4', '#e6fffb'] },
-                      { name: 'Slate & Blue', palette: ['#1e293b', '#334155', '#3b82f6', '#bfdbfe'] },
-                    ].map((t, ti) => {
-                      const active = theme === t.name;
+                  {/* One eyebrow heads the group — no separate "Color Theme" label
+                      stacked under an "Appearance" eyebrow. */}
+                  <GroupEyebrow hint="applied to the report cover">Color Theme</GroupEyebrow>
+                  {/* Theme rows — the combination shown as its two named colours
+                      (purple + white, navy + gold…) as a pair of floating dots.
+                      Compact so all combinations fit with little scrolling. */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.keys(TEMPLATE_THEME_SWATCH).map((name, ti) => {
+                      const active = theme === name;
+                      const [a, b] = TEMPLATE_THEME_SWATCH[name];
+                      const dotShadow = '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)';
                       return (
                         <motion.button
-                          key={t.name}
+                          key={name}
                           type="button"
-                          onClick={() => setTheme(t.name)}
+                          onClick={() => setTheme(name)}
                           aria-pressed={active}
-                          initial={{ opacity: 0, y: 6 }}
+                          initial={{ opacity: 0, y: 5 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1], delay: ti * 0.04 }}
-                          whileHover={{ y: -2 }}
+                          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ti * 0.03 }}
                           whileTap={{ scale: 0.98 }}
-                          className={`no-focus-ring rounded-[12px] border p-2 text-left transition-all cursor-pointer ${active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/30' : 'border-canvas-border bg-white hover:border-brand-300 hover:shadow-[0_2px_8px_rgba(15,8,30,0.06)]'}`}
+                          className={`no-focus-ring flex items-center gap-2 rounded-lg border pl-2 pr-2.5 py-2 text-left transition-all cursor-pointer ${active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-canvas/40'}`}
                         >
-                          <div className="flex h-11 rounded-[8px] overflow-hidden ring-1 ring-inset ring-black/[0.06]">
-                            {t.palette.map((c, i) => (
-                              <span key={i} className="flex-1" style={{ background: c }} />
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between gap-1 px-1 pt-2 pb-0.5">
-                            <span className={`text-[0.75rem] font-medium truncate ${active ? 'text-brand-700' : 'text-ink-700'}`}>{t.name}</span>
-                            {active && (
-                              <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }} className="shrink-0 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
-                                <Check size={10} strokeWidth={3} />
-                              </motion.span>
-                            )}
-                          </div>
+                          {/* The two named colours, overlapping with a white gap. */}
+                          <span className="shrink-0 flex items-center">
+                            <span className="w-5 h-5 rounded-full" style={{ background: a, boxShadow: dotShadow }} />
+                            <span className="w-5 h-5 rounded-full -ml-1.5" style={{ background: b, boxShadow: dotShadow }} />
+                          </span>
+                          <span className={`flex-1 min-w-0 text-[0.75rem] font-medium truncate ${active ? 'text-brand-700' : 'text-ink-700'}`}>{name}</span>
+                          {active && (
+                            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }} className="shrink-0 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
+                              <Check size={10} strokeWidth={3} />
+                            </motion.span>
+                          )}
                         </motion.button>
                       );
                     })}
                   </div>
+                  {/* Brand colour sampled from the uploaded report's cover — it
+                      overrides the named theme until cleared. */}
+                  {brandColor && (
+                    <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-canvas-border bg-white px-3 py-2">
+                      <span className="w-5 h-5 rounded-full shrink-0" style={{ background: brandColor, boxShadow: '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)' }} />
+                      <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-700 truncate">Brand colour from your report’s cover</span>
+                      <button type="button" onClick={() => setBrandColor('')} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Clear</button>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Type size={14} /> Header Text</label>
-                  <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+
+
+                {/* Page numbers — shown on every page of the exported report. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Page numbers <span className="font-normal normal-case tracking-normal text-ink-400">· numbered footer on every page</span></span>
+                    <Toggle checked={pageNumbers} onChange={setPageNumbers} label="Show page numbers" />
+                  </div>
                 </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Layout size={14} /> Footer Text</label>
-                  <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+
+                {/* Sign-off block — an Approvals & Sign-Off section on the report;
+                    each signatory gets a manual Sign / Sign-off in the reader. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· job titles, signature lines and a date on every report</span></span>
+                    <Toggle checked={signoffEnabled} onChange={toggleSignoff} label="Enable signature block" />
+                  </div>
+                  {signoffEnabled && (
+                    <div className="mt-3 space-y-2">
+                      {signatories.length === 0 && (
+                        <p className="text-[0.6875rem] text-ink-400">Add the roles that sign this report (e.g. Prepared by, Approved by).</p>
+                      )}
+                      {/* Say exactly what this does, or it reads as e-signing. */}
+                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+                        Prints the page and nothing more. Names are optional and are kept for next time. No sending, no notifying, no signing online.
+                      </p>
+                      {signatories.map(s => (
+                        <div key={s.id} className="flex items-center gap-2">
+                          <input
+                            value={s.role}
+                            onChange={e => updateSignatory(s.id, { role: e.target.value })}
+                            placeholder="Role — e.g. Approved by"
+                            aria-label="Signatory role"
+                            className="w-[42%] h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                          />
+                          <input
+                            value={s.name ?? ''}
+                            onChange={e => updateSignatory(s.id, { name: e.target.value })}
+                            placeholder="Name (optional)"
+                            aria-label="Signatory name"
+                            className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                          />
+                          <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Watermark — a diagonal text or image mark across every page. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Watermark <span className="font-normal normal-case tracking-normal text-ink-400">· diagonal mark on every page</span></span>
+                    <Toggle checked={watermark.enabled} onChange={v => setWm({ enabled: v })} label="Enable watermark" />
+                  </div>
+                  {watermark.enabled && (
+                    <div className="space-y-3.5">
+                      {/* content mode — text or an uploaded image */}
+                      <div className="inline-flex p-0.5 bg-canvas rounded-md gap-0.5">
+                        {(['text', 'image'] as const).map(m => (
+                          <button key={m} type="button" onClick={() => setWm({ mode: m })}
+                            className={`h-7 px-3 rounded-sm text-[0.75rem] font-semibold capitalize transition-colors cursor-pointer ${watermark.mode === m ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+
+                      {watermark.mode === 'text' ? (
+                        <input value={watermark.text} onChange={e => setWm({ text: e.target.value })} placeholder="CONFIDENTIAL"
+                          className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.875rem] uppercase tracking-wide transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      ) : (
+                        <>
+                          <input ref={watermarkImgInputRef} type="file" accept="image/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, url => setWm({ imageDataUrl: url })); if (watermarkImgInputRef.current) watermarkImgInputRef.current.value = ''; }} />
+                          {watermark.imageDataUrl ? (
+                            <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
+                              <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
+                                <img src={watermark.imageDataUrl} alt="Watermark" className="max-h-9 max-w-[56px] object-contain" />
+                              </div>
+                              <button type="button" onClick={() => watermarkImgInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
+                              <button type="button" onClick={() => setWm({ imageDataUrl: undefined })} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => watermarkImgInputRef.current?.click()}
+                              className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
+                              <Upload size={15} /> Upload a watermark image
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      <Slider label="Opacity" min={2} max={40} value={Math.round(watermark.opacity * 100)} suffix="%" onChange={v => setWm({ opacity: v / 100 })} />
+                      <Slider label="Rotation" min={-90} max={90} value={watermark.rotation} suffix="°" onChange={v => setWm({ rotation: v })} />
+                      <Slider label="Size" min={20} max={100} value={watermark.size} suffix="%" onChange={v => setWm({ size: v })} />
+
+                      {/* Placement — pin the mark to the centre (default) or a side of
+                          the page. Live-previews on the sheet beside this panel. */}
+                      <div>
+                        <span className="block text-[0.75rem] font-medium text-ink-600 mb-1.5">Placement</span>
+                        <div className="grid grid-cols-5 gap-1">
+                          {(['center', 'top', 'bottom', 'left', 'right'] as const).map(p => {
+                            const active = (watermark.position ?? 'center') === p;
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setWm({ position: p })}
+                                aria-pressed={active}
+                                className={`h-7 rounded-sm text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
+                              >
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
           </div>
 
-          {/* Right pane — the template document itself, readable and edited in
-              place. The report cover, metadata, and section outline all live on
-              one full-size page; sections are added / reordered / deleted right
-              where they appear, so there's no separate detached editor card. */}
-          <div className="flex-1 min-w-0 flex flex-col bg-white min-h-0">
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div>
+          {/* Right pane — a working preview of the report on a desk. A thin
+              builder toolbar (add a section) sits on top; below it the
+              template renders as the report page it will produce: gradient
+              letterhead cover, editorial numbered sections, footer strip. */}
+          <div className="relative flex-1 min-w-0 flex flex-col bg-canvas min-h-0">
+            {/* Post-import banner — the sections below are ALREADY applied. This is
+                the whole "flow": pick a file, it lands, and this offers to Review
+                (curate in the canvas) or Undo (revert the entire import). */}
+            <AnimatePresence>
+              {importBanner && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                  className="shrink-0 px-6 pt-4"
+                >
+                  <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/70 px-4 py-2.5">
+                    <span className="w-7 h-7 rounded-full bg-compliant-500 text-white flex items-center justify-center shrink-0"><Check size={15} strokeWidth={2.5} /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
+                        Imported {importBanner.count} section{importBanner.count === 1 ? '' : 's'}{importBanner.gotLetterhead ? ' + letterhead' : ''}
+                      </p>
+                      <p className="text-[0.75rem] text-ink-500 leading-tight truncate">
+                        from {importBanner.fileName}
+                        {importBanner.captured.length > 0 && <> · captured {importBanner.captured.join(', ')}</>}
+                        {' '}· edit inline below
+                      </p>
+                    </div>
+                    <button
+                      type="button" onClick={openReview}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-white border border-brand-200 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                    ><Pencil size={13} /> Review</button>
+                    <button
+                      type="button" onClick={() => setConfirmRemoveImport(true)} aria-label="Remove imported file"
+                      title="Remove imported file"
+                      className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-700 hover:bg-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    ><X size={15} /></button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* The report page — a white sheet on the canvas desk. Sections and the
+                composer that adds them both live INSIDE the page, the way the
+                finished report reads; there's no separate toolbar on top. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+              <div className="relative mx-auto w-full max-w-3xl rounded-lg shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
-                  gradient={TEMPLATE_THEME_GRADIENT[theme]}
+                  className="rounded-t-lg"
+                  gradient={coverGradient}
                   headerText={headerText}
                   footer={
                     /* All report facts live in the letterhead as one full-width
                        strip — no duplicated meta panel below. */
-                    <div className="grid grid-cols-4 gap-6">
+                    <div className="grid grid-cols-3 gap-6">
                       {[
                         { label: 'Brand', value: brand || 'Irame' },
-                        { label: 'Report Type', value: reportType },
                         { label: 'Generated On', value: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
                         { label: 'Sections', value: `${sections.length}` },
                       ].map(f => (
@@ -798,112 +1613,438 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <p className="text-[0.875rem] text-white/75">{template.desc || 'Custom report template'}</p>
                 </ReportBrandBanner>
 
-                {/* Section outline — read-only preview; editing lives in the left panel. */}
-                <div ref={sectionsRef} tabIndex={-1} className="px-9 pt-7 pb-7">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 text-[0.875rem] font-semibold text-ink-900"><FileText size={15} className="text-brand-600" /> Report Sections</h3>
-                    {sections.length > 0 && (
-                      <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-canvas text-[0.75rem] font-medium text-ink-400 tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
-                    )}
+                {/* Sections — each drag-reorderable and removable on hover. */}
+                {sections.length > 0 && (
+                  <div ref={sectionsListRef}>
+                    <AnimatePresence initial={false}>
+                      {sections.map((section, i) => (
+                        <ReportSectionBlock
+                          key={section.name}
+                          section={section}
+                          index={i}
+                          listRef={sectionsListRef}
+                          onMove={moveSection}
+                          onDelete={() => removeSection(i)}
+                          onRename={name => renameSection(i, name)}
+                          onDescribe={description => describeSection(i, description)}
+                          blockLibrary={blockLibrary}
+                        />
+                      ))}
+                    </AnimatePresence>
                   </div>
+                )}
 
-                  {/* Added sections — the live report preview. */}
-                  {sections.length > 0 && (
-                    <div className="space-y-3.5">
-                      <AnimatePresence initial={false}>
-                        {sections.map((section, i) => (
-                          <TemplateSectionRow key={section.name} section={section} index={i} />
-                        ))}
-                      </AnimatePresence>
-                    </div>
+                {/* Composer — add a section, in the flow of the document (not a
+                    detached toolbar). Suggested sections sit right beneath it. */}
+                <div ref={sectionsRef} tabIndex={-1} className="border-x border-canvas-border bg-white px-9 pt-5 pb-7">
+                  {sections.length === 0 && (
+                    <p className="mb-3 text-[0.8125rem] text-ink-400">This report has no sections yet — add one below, or tap a suggested section.</p>
                   )}
-
-                  {/* Recommended sections for the chosen type — click to add (or
-                      drag in from the left list). Re-derives when the type changes. */}
-                  {recommendations.length > 0 ? (
-                    <div className={`rounded-[12px] border border-canvas-border bg-canvas/40 p-4 ${sections.length > 0 ? 'mt-5' : ''}`}>
-                      <div className="flex items-start justify-between gap-3 mb-3.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="shrink-0 w-8 h-8 rounded-[9px] bg-brand-50 text-brand-600 flex items-center justify-center"><ShieldCheck size={16} /></span>
-                          <div className="min-w-0">
-                            <div className="text-[0.875rem] font-semibold text-ink-900 truncate leading-tight">Recommended for {reportTypeLabel(reportType)}</div>
-                            <div className="text-[0.75rem] text-ink-400 leading-tight mt-0.5">Tap a section to add it to your report</div>
-                          </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={newSectionName}
+                      onChange={e => setNewSectionName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
+                      placeholder="Add a section, then press ↵"
+                      title="Type a section name and press Enter to add"
+                      className="flex-1 h-10 px-3 rounded-lg border border-dashed border-canvas-border bg-canvas/30 text-[0.8125rem] transition-colors hover:border-brand-300 focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10"
+                    />
+                    <button
+                      onClick={addSection}
+                      disabled={!newSectionName.trim()}
+                      className={`no-focus-ring inline-flex items-center gap-1 h-10 px-4 text-[0.8125rem] font-semibold rounded-lg transition-colors ${
+                        newSectionName.trim()
+                          ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
+                          : 'text-text-muted bg-canvas-border cursor-not-allowed'
+                      }`}
+                    >
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                  {recommendations.length > 0 && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-600">
+                          <ShieldCheck size={13} className="text-brand-500 shrink-0" />
+                          <span className="truncate">Suggested sections</span>
                         </div>
                         <button
+                          type="button"
                           onClick={() => addSections(recommendations)}
-                          className="no-focus-ring shrink-0 inline-flex items-center gap-1 h-7 px-2.5 rounded-[7px] border border-brand-200 bg-white text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 hover:border-brand-300 cursor-pointer transition-colors"
+                          className="no-focus-ring shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
                         >
-                          <Plus size={12} /> Add all
+                          Add all
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      {/* Non-blocking advisory: these aren't required, but a report
+                          built without them tends to generate incomplete. Placed above
+                          the chips so the trade-off is clear before the author skips them. */}
+                      <p className="mb-2.5 flex items-start gap-1.5 text-[0.6875rem] leading-relaxed text-ink-400">
+                        <Info size={12} className="mt-[1.5px] shrink-0 text-brand-400" />
+                        <span>Recommended, not required. Skipping these may leave parts of the generated report incomplete.</span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
                         <AnimatePresence initial={false}>
                           {recommendations.map((rec, ri) => {
                             const RecIcon = SECTION_ICONS[rec.icon] || FileText;
                             return (
                               <motion.button
                                 key={rec.name}
+                                type="button"
                                 layout
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.96 }}
-                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ri * 0.03 }}
-                                whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.98 }}
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.94 }}
+                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1], delay: ri * 0.02 }}
+                                whileTap={{ scale: 0.97 }}
                                 onClick={() => addSections([rec])}
-                                className="no-focus-ring group/rec flex items-center gap-2.5 rounded-[10px] border border-canvas-border bg-white pl-2.5 pr-2 py-2 text-left transition-all hover:border-brand-300 hover:shadow-[0_2px_8px_rgba(15,8,30,0.06)] cursor-pointer"
+                                className="no-focus-ring group/rec inline-flex items-center gap-1.5 h-8 pl-1.5 pr-3 rounded-full border border-dashed border-canvas-border bg-canvas/40 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 cursor-pointer"
                               >
-                                <span className="shrink-0 w-6 h-6 rounded-[6px] bg-brand-50 text-brand-600 flex items-center justify-center"><RecIcon size={13} /></span>
-                                <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-800">{rec.name}</span>
-                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><Plus size={12} /></span>
+                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><RecIcon size={11} /></span>
+                                {rec.name}
                               </motion.button>
                             );
                           })}
                         </AnimatePresence>
                       </div>
                     </div>
-                  ) : sections.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center mb-3.5">
-                        <FileText size={20} className="text-brand-300" />
-                      </div>
-                      <p className="text-[0.875rem] font-semibold text-ink-700">Your report is empty</p>
-                      <p className="text-[0.75rem] text-ink-400 mt-1 max-w-[300px] mx-auto leading-relaxed">
-                        {reportType === 'Other'
-                          ? 'Choose a report type to see recommended sections, then add them from the left to build the outline.'
-                          : `Add ${reportTypeLabel(reportType)} sections from the left, and they'll preview here.`}
-                      </p>
-                    </div>
-                  ) : null}
+                  )}
                 </div>
+
+                {/* Sign-off block — the Approvals section on the finished report.
+                    Static here (no Sign action); the reader makes it signable. */}
+                {signoffEnabled && cleanSignatories.length > 0 && (
+                  <div className="border-x border-canvas-border bg-white px-9 pt-3 pb-8">
+                    <ReportSignoffBlock signatories={cleanSignatories} />
+                  </div>
+                )}
+
+                {/* Footer strip — closes the page. With page numbers on, the
+                    footer text sits left and a page number sits right, mirroring
+                    the numbered footer the export produces. */}
+                <div className={`border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-9 py-3 flex items-center ${pageNumbers ? 'justify-between' : 'justify-center'}`}>
+                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || `Generated by ${brand.trim() || 'Irame'}`}</span>
+                  {pageNumbers && <span className="text-[0.6875rem] text-ink-400 tabular-nums tracking-wide">Page 1</span>}
+                </div>
+
+                {/* Watermark — a diagonal text/image mark stamped across the page. */}
+                {watermark.enabled && (watermark.mode === 'text' ? watermark.text.trim() : watermark.imageDataUrl) && (
+                  <div className={`pointer-events-none absolute inset-0 z-[6] flex overflow-hidden rounded-lg ${WATERMARK_POS[watermark.position ?? 'center']}`}>
+                    {watermark.mode === 'text' ? (
+                      <span
+                        className="font-extrabold uppercase tracking-[0.15em] whitespace-nowrap text-ink-900 select-none leading-none"
+                        style={{ opacity: watermark.opacity, transform: `rotate(${watermark.rotation}deg)`, fontSize: `${watermark.size * 1.4}px` }}
+                      >
+                        {watermark.text}
+                      </span>
+                    ) : (
+                      <img
+                        src={watermark.imageDataUrl}
+                        alt=""
+                        className="max-w-none select-none"
+                        style={{ opacity: watermark.opacity, transform: `rotate(${watermark.rotation}deg)`, width: `${watermark.size * 5}px` }}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-            {footerText && (
-              <div className="shrink-0 px-9 h-[58px] flex items-center border-t border-canvas-border">
-                <p className="text-[0.75rem] text-ink-400">{footerText}</p>
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="px-7 py-2.5 border-t border-canvas-border flex justify-end gap-2 shrink-0">
-          <button
+        <div className="px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2 shrink-0">
+          {/* Left — import from a past report (PDF only, said honestly). The
+              shape is read — sections, tables, repeating cards, letterhead —
+              and the content thrown away. Drop a file anywhere, or browse. */}
+          <div className="min-w-0 flex items-center gap-2.5">
+            <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
+            <motion.button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              disabled={isSaving || importing}
+              whileTap={isSaving || importing ? undefined : { scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              title="Upload a past report as a PDF. Its sections, tables, cards and letterhead are detected; its words and numbers are thrown away"
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+            >
+              {importing
+                ? <><Loader2 size={15} className="animate-spin shrink-0" /> Reading the report…</>
+                : importedFrom
+                  ? <><FileText size={15} className="shrink-0" /> <span className="truncate">Imported · {importedFrom}</span> <Upload size={13} className="shrink-0 opacity-70" /></>
+                  : <><Upload size={15} className="shrink-0" /> Import from a report</>}
+            </motion.button>
+            {!importing && !importedFrom && (
+              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Using Word? Save it as PDF first.</span>
+            )}
+          </div>
+          {/* Right — primary actions. */}
+          <div className="flex items-center gap-2 shrink-0">
+          <motion.button
             onClick={attemptClose}
             disabled={isSaving}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-          >Cancel</button>
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          >Cancel</motion.button>
           {/* New templates create a fresh entry; existing custom templates save
               in place (overwrite). */}
-          <button
+          <motion.button
             onClick={() => handleSave()}
-            disabled={isSaving}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            disabled={isSaving || nameTaken || !copyName.trim()}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            title={nameTaken ? 'A template with this name already exists — choose a different name' : undefined}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
-            {isSaving && <Loader2 size={12} className="animate-spin" />}
-            {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save Template'}
-          </button>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={isSaving ? 'saving' : 'idle'}
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16 }}
+                className="inline-flex items-center gap-1.5"
+              >
+                {isSaving && <Loader2 size={12} className="animate-spin" />}
+                {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save changes'}
+              </motion.span>
+            </AnimatePresence>
+          </motion.button>
+          </div>
         </div>
+
+        {/* Drop-to-import affordance — shown whenever a file is dragged over the
+            editor. The whole modal is the drop target, so there's nothing to aim at. */}
+        <AnimatePresence>
+          {dragActive && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-brand-950/40 backdrop-blur-[2px] pointer-events-none"
+            >
+              <div className="w-full h-full rounded-lg border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
+                <motion.span
+                  initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }}
+                  className="w-14 h-14 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"
+                >
+                  <Upload size={24} />
+                </motion.span>
+                <div>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900">Drop a past report (PDF) to import</div>
+                  <div className="mt-1 text-[0.8125rem] text-ink-500">We read its shape (sections, tables, cards, letterhead) and throw away its words and numbers</div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Import scan theatre — a real document-scanner: the uploaded page sits
+            under a sweeping scan light inside a focus frame, the passed region
+            "digitizing" behind it. Minimize (top-right) collapses the whole modal
+            to the bottom-right card, where the same run keeps advancing. */}
+        <AnimatePresence>
+          {importing && (() => {
+            const kind = scanningName ? classifyImport(scanningName) : null;
+            const CORNERS = [
+              '-top-1.5 -left-1.5 border-t-2 border-l-2 rounded-tl-md',
+              '-top-1.5 -right-1.5 border-t-2 border-r-2 rounded-tr-md',
+              '-bottom-1.5 -left-1.5 border-b-2 border-l-2 rounded-bl-md',
+              '-bottom-1.5 -right-1.5 border-b-2 border-r-2 rounded-br-md',
+            ];
+            const sweep = { duration: 2.6, ease: 'linear' as const, repeat: Infinity };
+            return (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="absolute inset-0 z-50 bg-canvas-elevated overflow-y-auto"
+              role="status" aria-busy="true" aria-label={`Scanning ${scanningName ?? 'your document'}`}
+            >
+              <div className="min-h-full flex flex-col items-center justify-center px-8 py-12">
+                <h3 className="text-[1rem] font-semibold text-ink-900 mb-8">Scanning your document</h3>
+
+                {/* Scanner stage — the document page under the sweeping light. */}
+                <div className="relative w-[228px] h-[300px]">
+                  {/* focus-frame corner brackets */}
+                  {CORNERS.map((c, i) => (
+                    <span key={i} className={`absolute w-5 h-5 border-brand-500/70 ${c}`} aria-hidden="true" />
+                  ))}
+
+                  <div className="absolute inset-0 rounded-lg bg-white border border-canvas-border shadow-[0_22px_50px_-20px_rgba(15,8,30,0.4)] overflow-hidden">
+                    {/* the page content — reads as a real report page */}
+                    <div className="p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-sm bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
+                        <div className="flex-1 space-y-1">
+                          <div className="h-1.5 w-20 rounded-full bg-ink-200" />
+                          <div className="h-1 w-12 rounded-full bg-paper-200" />
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-1.5">
+                        <div className="h-2.5 w-11/12 rounded bg-ink-300" />
+                        <div className="h-2.5 w-2/3 rounded bg-ink-300" />
+                      </div>
+                      <div className="mt-4 space-y-[7px]">
+                        {[100, 94, 98, 86].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-1">
+                        {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-xs bg-paper-100 border border-paper-200" />)}
+                      </div>
+                      <div className="mt-4 space-y-[7px]">
+                        {[96, 82, 90].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                      </div>
+                    </div>
+
+                    {/* digitized region — grows top→down behind the beam, with a
+                        scan-line texture so the passed area reads as "captured" */}
+                    {!reduceMotion && (
+                      <motion.div
+                        className="absolute inset-x-0 top-0 pointer-events-none"
+                        style={{
+                          backgroundColor: 'rgba(136,56,222,0.05)',
+                          backgroundImage: 'repeating-linear-gradient(0deg, rgba(106,18,205,0.07) 0px, rgba(106,18,205,0.07) 1px, transparent 1px, transparent 4px)',
+                        }}
+                        initial={{ height: '0%' }}
+                        animate={{ height: ['0%', '100%'] }}
+                        transition={sweep}
+                      />
+                    )}
+
+                    {/* the sweeping scan light: a bright line + a soft light bloom */}
+                    <motion.div
+                      className="absolute inset-x-0 pointer-events-none"
+                      initial={{ top: '0%' }}
+                      animate={reduceMotion ? { top: '46%' } : { top: ['0%', '100%'] }}
+                      transition={reduceMotion ? { duration: 0 } : sweep}
+                    >
+                      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-brand-400/40 to-transparent" />
+                      <div
+                        className="absolute inset-x-0 bottom-0 h-[2px] bg-brand-200"
+                        style={{ boxShadow: '0 0 16px 3px rgba(136,56,222,0.8), 0 0 5px 1px rgba(216,180,254,0.95)' }}
+                      />
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* filename + status + progress */}
+                <div className="mt-9 flex flex-col items-center text-center w-full max-w-[340px]">
+                  <div className="flex items-center gap-2 max-w-full">
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-brand-600 text-white text-[0.5625rem] font-bold tracking-wider uppercase shrink-0">
+                      {kind ? IMPORT_KIND_LABEL[kind] : 'File'}
+                    </span>
+                    {scanningName && <span className="text-[0.8125rem] font-medium text-ink-700 truncate">{scanningName}</span>}
+                  </div>
+
+                  <p className="mt-3 h-4 text-[0.8125rem] text-ink-500">
+                    <AnimatePresence mode="wait">
+                      <motion.span key={importMsgIdx} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.2 }} className="inline-block">
+                        {IMPORT_SCAN_MESSAGES[importMsgIdx]}
+                      </motion.span>
+                    </AnimatePresence>
+                  </p>
+
+                  <div className="mt-3.5 w-full flex items-center gap-3">
+                    <div className="relative flex-1 h-2.5 rounded-full bg-brand-100 overflow-hidden">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
+                        style={{ background: 'linear-gradient(90deg, #550FA5 0%, #6A12CD 55%, #8838DE 100%)', boxShadow: '0 0 4px 0 rgba(106,18,205,0.25)' }}
+                        animate={{ width: `${importProgress}%` }}
+                        transition={{ ease: 'easeOut', duration: 0.2 }}
+                      >
+                        {/* subtle leading edge — the "scan head" */}
+                        <div className="absolute right-0 inset-y-0 w-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(233,213,255,0.55))' }} />
+                        {/* light sheen sweeping the fill — echoes the scan */}
+                        {!reduceMotion && (
+                          <motion.div
+                            className="absolute inset-y-0 w-1/2"
+                            style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)' }}
+                            initial={{ x: '-140%' }}
+                            animate={{ x: ['-140%', '320%'] }}
+                            transition={{ duration: 1.5, ease: 'easeInOut', repeat: Infinity, repeatDelay: 0.25 }}
+                          />
+                        )}
+                      </motion.div>
+                    </div>
+                    <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 w-10 text-right">{Math.round(importProgress)}%</span>
+                  </div>
+
+                  <button
+                    onClick={() => setMinimized(true)}
+                    className="mt-6 inline-flex items-center gap-2 h-10 px-5 rounded-md text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                  >
+                    <Minimize2 size={15} aria-hidden="true" /> Minimize
+                  </button>
+                  <p className="mt-2.5 text-[0.6875rem] text-ink-400">It’ll keep running in the background — keep working.</p>
+                </div>
+              </div>
+            </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
+        {/* Import review step — the shared "AI proposes, the human curates" canvas.
+            Detected sections are curated here before anything touches the outline,
+            so importing behaves exactly like the format-check upload flow (§4). */}
+        <AnimatePresence>
+          {pendingImport && (() => {
+            const namedCount = reviewSections.filter(s => s.name.trim()).length;
+            const hasLetterhead = !!pendingImport.result?.furniture;
+            const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
+            return (
+              <motion.div
+                initial={{ opacity: 1, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.99 }}
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-0 z-40 bg-canvas-elevated flex flex-col"
+              >
+                <header className="shrink-0 px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 text-ink-500 text-[0.625rem] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5">{kindLabel}</span>
+                      </div>
+                      {/* Layer 1: don't make them choose — every dropdown is
+                          pre-set; the user's job is verify, not choose. */}
+                      <p className="text-[0.75rem] text-ink-500 leading-snug truncate">
+                        From {pendingImport.fileName} — we’ve set up each section. Just confirm, or change anything that looks wrong.
+                      </p>
+                    </div>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} aria-label="Cancel import" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></motion.button>
+                </header>
+                <div className="flex-1 min-h-0 px-6 py-4 flex flex-col">
+                  <SectionReviewCanvas
+                    sections={reviewSections}
+                    onSectionsChange={setReviewSections}
+                    pages={pendingImport.result?.pages}
+                    pageCount={pendingImport.result?.pageCount}
+                    toc={pendingImport.result?.toc}
+                    reportChrome={{
+                      title: copyName || 'Untitled Template',
+                      desc: template.desc,
+                      brand,
+                      headerText,
+                      footerText,
+                      gradient: coverGradient,
+                      accent: coverAccent,
+                    }}
+                  />
+                </div>
+                <footer className="shrink-0 px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2">
+                  <span className="text-[0.75rem] text-ink-500">
+                    {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer">Discard</motion.button>
+                    <motion.button whileTap={namedCount === 0 ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                      Use these sections
+                    </motion.button>
+                  </div>
+                </footer>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
       </motion.div>
       <ConfirmDialog
         open={showAbandonConfirm}
@@ -915,14 +2056,39 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         destructive
       />
       <ConfirmDialog
-        open={missingConfirm !== null}
-        onClose={() => setMissingConfirm(null)}
-        onConfirm={() => { setMissingConfirm(null); handleSave(true); }}
-        title={`Save without ${missingConfirm && missingConfirm.length > 1 ? 'these sections' : 'this section'}?`}
+        open={suggestedConfirm !== null}
+        onClose={() => setSuggestedConfirm(null)}
+        onConfirm={() => { setSuggestedConfirm(null); handleSave(false, true); }}
+        title="Create without the suggested sections?"
         description={
-          <>A standard <span className="font-semibold">{reportType}</span> report usually includes {missingConfirm?.map(n => `“${n}”`).join(', ')}. You can save without {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} and add {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} later.</>
+          <>Your template is missing {suggestedConfirm?.length} suggested section{suggestedConfirm?.length === 1 ? '' : 's'} ({suggestedConfirm?.join(', ')}). A report built without {suggestedConfirm?.length === 1 ? 'it' : 'them'} may come out incomplete. You can go back and add {suggestedConfirm?.length === 1 ? 'it' : 'them'}, or create the template as is.</>
         }
-        confirmLabel="Save anyway"
+        confirmLabel="Create anyway"
+        cancelLabel="Go back and add"
+      />
+      <ConfirmDialog
+        open={dupConfirm !== null}
+        onClose={() => setDupConfirm(null)}
+        onConfirm={() => { setDupConfirm(null); handleSave(true, true); }}
+        title={dupConfirm && dupConfirm.shared === dupConfirm.total ? 'You already have this template' : 'This looks like a duplicate'}
+        description={
+          dupConfirm && dupConfirm.shared === dupConfirm.total
+            ? <>It has the same sections as your <span className="font-semibold">“{dupConfirm.name}”</span> template — all {dupConfirm.total}. Creating it just makes a second copy of the same thing.</>
+            : <>{dupConfirm?.shared} of its {dupConfirm?.total} sections are the same as your <span className="font-semibold">“{dupConfirm?.name}”</span> template, so this would be nearly a copy.</>
+        }
+        confirmLabel={dupConfirm && dupConfirm.shared === dupConfirm.total ? 'Create a copy anyway' : 'Create anyway'}
+        cancelLabel="Go back"
+      />
+      <ConfirmDialog
+        open={confirmRemoveImport}
+        onClose={() => setConfirmRemoveImport(false)}
+        onConfirm={() => { setConfirmRemoveImport(false); undoImport(); }}
+        title="Remove imported file?"
+        description={
+          <>This clears the {importBanner?.count ?? ''} imported section{importBanner?.count === 1 ? '' : 's'}{importBanner?.gotLetterhead ? ' and letterhead' : ''}{importBanner?.fileName ? <> from <span className="font-semibold">{importBanner.fileName}</span></> : ''}. You can import again anytime.</>
+        }
+        confirmLabel="Remove"
+        destructive
       />
     </motion.div>
   );

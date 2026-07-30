@@ -15,7 +15,7 @@ see the [Appendix](#appendix--paste-this-into-a-fresh-claude-code-session).
 
 - **Stack:** React 18 + TypeScript + Vite. Frontend-only, all data mocked in `src/data/mockData.ts`.
 - **Repo:** https://github.com/tech-irame/hackathon-prototype
-- **Live URL:** https://hackathon-demo-ujihgyhrpa-uc.a.run.app
+- **Live URL:** https://product-handover-ujihgyhrpa-uc.a.run.app
 - **Branch model:** **direct push to `main`**. Every push auto-deploys to Cloud Run in ~2 min.
 - **Don't touch:** the production stack at `auditify.platform.irame.ai`.
 
@@ -119,10 +119,10 @@ npm run lint
             │  (any in-flight older deploy is cancelled —
             │   the newest commit always wins)
             ▼
-   Cloud Run hackathon-demo updated   ~2 min total
+   Cloud Run product-handover updated   ~2 min total
             │
             ▼
-   https://hackathon-demo-ujihgyhrpa-uc.a.run.app
+   https://product-handover-ujihgyhrpa-uc.a.run.app
 ```
 
 ### 3.2 The preflight, in detail
@@ -340,10 +340,10 @@ gh run list --repo tech-irame/hackathon-prototype --limit 5
 gh run watch --repo tech-irame/hackathon-prototype
 
 # is the live site up?
-curl -sS -o /dev/null -w "HTTP %{http_code}\n" https://hackathon-demo-ujihgyhrpa-uc.a.run.app/
+curl -sS -o /dev/null -w "HTTP %{http_code}\n" https://product-handover-ujihgyhrpa-uc.a.run.app/
 
 # (requires gcloud) what revision is live?
-gcloud run services describe hackathon-demo \
+gcloud run services describe product-handover \
   --region us-central1 --project gen-lang-client-0250661731 \
   --format="value(status.latestReadyRevisionName,spec.template.spec.containers[0].image)"
 ```
@@ -351,9 +351,9 @@ gcloud run services describe hackathon-demo \
 Roll back via Cloud Run revisions:
 
 ```bash
-gcloud run revisions list --service=hackathon-demo --region=us-central1 --project=gen-lang-client-0250661731
-gcloud run services update-traffic hackathon-demo \
-  --to-revisions=hackathon-demo-00001-xyz=100 \
+gcloud run revisions list --service=product-handover --region=us-central1 --project=gen-lang-client-0250661731
+gcloud run services update-traffic product-handover \
+  --to-revisions=product-handover-00001-xyz=100 \
   --region=us-central1 --project=gen-lang-client-0250661731
 ```
 
@@ -474,8 +474,8 @@ Applies to: message-enter animations, sidebar width transitions, modal opens, sc
 > **Pod workflow:** multiple teams push directly to `main` from their Claude CLI sessions. No PRs required. Every push to `main` auto-deploys to Cloud Run in ~2 min.
 >
 > - Repo: https://github.com/tech-irame/hackathon-prototype
-> - Live URL: https://hackathon-demo-ujihgyhrpa-uc.a.run.app
-> - GCP project: `gen-lang-client-0250661731` · region `us-central1` · service `hackathon-demo`
+> - Live URL: https://product-handover-ujihgyhrpa-uc.a.run.app
+> - GCP project: `gen-lang-client-0250661731` · region `us-central1` · service `product-handover`
 >
 > **Pre-push preflight (already enabled if `npm run setup-hooks` was run):** when you `git push`, `tools/preflight-review.sh` runs three things in order. **(1) Auto-rebase** onto remote main if you are behind (aborts on rebase conflict so you resolve manually). **(2) Multi-page hard-review gate:** if the diff spans 2+ sidebar pages (Home, Recents, Ask IRA, Planning, Process Hub, Risk Register, Control Library, Dashboard, Report, Workflow Library, AI Concierge, Knowledge Hub, Admin), the push is **blocked** until you type `YES <one-line reason>` at the interactive prompt — or pass `MULTI_PAGE_OK="<reason>" git push` (non-empty reason required). Shared files (`shared/`, `sidebar/`, `modals/`, `hooks/`, CSS, configs) don't count toward the page total. **(3) Claude review** focused on **design conflicts**, **feature redundancy**, and **UX/flow gaps** — advisory only; never blocks the push. Multi-page pushes get a **stricter rubric** that demands per-page Added/Modified/Dropped, cross-page conflicts, and an intent check against your typed reason. Skip everything with `SKIP_PREFLIGHT=1 git push`. Run review on demand with `npm run review:local` (no rebase, no gate). The deploy workflow is set to **`cancel-in-progress: true`** so a newer push always wins — the live revision matches the latest tip of main.
 >

@@ -80,7 +80,7 @@ function getConfigSummary(eng: ConfigurableEngagement): { label: string; value: 
 const STATUS_ICON: Record<string, { icon: React.ElementType; cls: string }> = {
   ready: { icon: CheckCircle2, cls: 'text-emerald-500' },
   missing: { icon: AlertCircle, cls: 'text-red-400' },
-  optional: { icon: MinusCircle, cls: 'text-gray-300' },
+  optional: { icon: MinusCircle, cls: 'text-ink-300' },
 };
 
 function StandardOverview({ engagement }: { engagement: ConfigurableEngagement }) {
@@ -92,38 +92,38 @@ function StandardOverview({ engagement }: { engagement: ConfigurableEngagement }
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border-light p-4">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Objective</h5>
+        <h5 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Objective</h5>
         <p className="text-[0.75rem] text-text leading-relaxed">{engagement.description}</p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Configuration</h5>
+          <h5 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Configuration</h5>
           <div className="space-y-1.5">{configSummary.map((e, i) => (
-            <div key={i} className="flex items-baseline gap-2 text-[0.6875rem]"><span className="text-gray-400 w-28 shrink-0">{e.label}</span><span className="text-text font-medium">{e.value}</span></div>
+            <div key={i} className="flex items-baseline gap-2 text-[0.6875rem]"><span className="text-ink-400 w-28 shrink-0">{e.label}</span><span className="text-text font-medium">{e.value}</span></div>
           ))}</div>
         </div>
         <div className="rounded-lg border border-border-light p-4">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Readiness</h5>
-            <span className={`text-[0.625rem] font-semibold ${missingCount === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{readyCount}/{checks.length} ready</span>
+            <h5 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider">Readiness</h5>
+            <span className={`text-[0.6875rem] font-semibold ${missingCount === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{readyCount}/{checks.length} ready</span>
           </div>
           <div className="space-y-1">{checks.map((c, i) => {
             const { icon: Icon, cls } = STATUS_ICON[c.status];
-            return (<div key={i} className="flex items-center gap-2 text-[0.625rem]"><Icon size={11} className={cls} /><span className={c.status === 'missing' ? 'text-text' : 'text-gray-500'}>{c.label}</span>{c.status === 'optional' && <span className="text-[0.5rem] text-gray-300 ml-auto">Optional</span>}</div>);
+            return (<div key={i} className="flex items-center gap-2 text-[0.6875rem]"><Icon size={11} className={cls} /><span className={c.status === 'missing' ? 'text-text' : 'text-ink-500'}>{c.label}</span>{c.status === 'optional' && <span className="text-[0.6875rem] text-ink-300 ml-auto">Optional</span>}</div>);
           })}</div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Flow</h5>
+          <h5 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Workspace Flow</h5>
           <div className="flex flex-wrap gap-1.5">{pattern.workspaceTabs.map((tab, i) => (
-            <span key={tab.id} className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-semibold"><span className="text-[0.5rem] text-primary/50">{i + 1}</span>{tab.label}</span>
+            <span key={tab.id} className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-semibold"><span className="text-[0.6875rem] text-primary/50">{i + 1}</span>{tab.label}</span>
           ))}</div>
         </div>
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
+          <h5 className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Required Outputs</h5>
           <div className="space-y-1">{pattern.requiredOutputs.map(o => (
-            <div key={o} className="flex items-center gap-2 text-[0.625rem] text-text"><CheckCircle2 size={10} className="text-gray-300" />{o}</div>
+            <div key={o} className="flex items-center gap-2 text-[0.6875rem] text-text"><CheckCircle2 size={10} className="text-ink-300" />{o}</div>
           ))}</div>
         </div>
       </div>
@@ -229,11 +229,11 @@ function ContinuousMonitoringDashboard({ engagement, state, onNavigateTab }: {
           { title: 'Monitoring Health', value: failedRuns.length === 0 && openEx === 0 ? 'Healthy' : openEx > 3 ? 'At Risk' : 'Needs Review', trend: failedRuns.length === 0 && openEx === 0 ? 'up' as const : 'down' as const, change: scheduleActive ? `Next: ${nextRun || '—'}` : 'No schedule', color: failedRuns.length === 0 && openEx === 0 ? 'text-compliant bg-compliant-50' : 'text-high-700 bg-high-50' },
         ].map((kpi, i) => (
           <motion.div key={kpi.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + i * 0.05 }}
-            className="glass-card rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-md transition-all">
+            className="glass-card px-5 py-4 hover:border-brand-200 hover:shadow-md transition-all">
             <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2">{kpi.title}</p>
             <p className="text-[1.625rem] font-bold text-ink-900 leading-none">{kpi.value}</p>
             {kpi.change && (
-              <p className={`text-[0.625rem] font-semibold mt-2 flex items-center gap-1 ${kpi.trend === 'up' && kpi.title !== 'Open Exceptions' && kpi.title !== 'Case Candidates' ? 'text-compliant' : kpi.trend === 'down' && (kpi.title === 'Open Exceptions') ? 'text-compliant' : 'text-ink-400'}`}>
+              <p className={`text-[0.6875rem] font-semibold mt-2 flex items-center gap-1 ${kpi.trend === 'up' && kpi.title !== 'Open Exceptions' && kpi.title !== 'Case Candidates' ? 'text-compliant' : kpi.trend === 'down' && (kpi.title === 'Open Exceptions') ? 'text-compliant' : 'text-ink-400'}`}>
                 {kpi.change}
               </p>
             )}
@@ -347,7 +347,7 @@ function DashboardHeader({ engagement, schedule }: { engagement: ConfigurableEng
   const statusLabel = schedule.status === 'ACTIVE' ? 'Active' : schedule.status === 'PAUSED' ? 'Paused' : 'Not Scheduled';
   const statusCls = schedule.status === 'ACTIVE' ? 'bg-compliant-50 text-compliant' : schedule.status === 'PAUSED' ? 'bg-high-50 text-high-700' : 'bg-canvas-elevated text-ink-400';
   return (
-    <div className="glass-card rounded-2xl p-5">
+    <div className="glass-card p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-medium"><Activity size={18} className="text-white" /></div>
@@ -361,18 +361,18 @@ function DashboardHeader({ engagement, schedule }: { engagement: ConfigurableEng
           {schedule.frequency && <span className="text-[0.6875rem] text-ink-400 font-medium">{schedule.frequency}</span>}
         </div>
       </div>
-      <p className="text-[0.625rem] text-ink-300 mt-2">Dashboard is populated from workflow runs and scheduled executions.</p>
+      <p className="text-[0.6875rem] text-ink-300 mt-2">Dashboard is populated from workflow runs and scheduled executions.</p>
     </div>
   );
 }
 
 function MonitoringStatusBar({ schedule, lastRun, nextRun, wfCount }: { schedule: AutomationScheduleState; lastRun: any; nextRun: string | null; wfCount: number }) {
   return (
-    <div className="glass-card rounded-xl p-4 grid grid-cols-4 gap-4 text-[0.6875rem]">
-      <div><span className="text-ink-400 block text-[0.625rem]">Last Run</span><span className="text-ink-900 font-medium">{lastRun?.completedAt || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Next Run</span><span className="text-ink-900 font-medium">{nextRun || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Frequency</span><span className="text-ink-900 font-medium">{schedule.frequency || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Workflows</span><span className="text-ink-900 font-medium">{wfCount}</span></div>
+    <div className="glass-card p-4 grid grid-cols-4 gap-4 text-[0.6875rem]">
+      <div><span className="text-ink-400 block text-[0.6875rem]">Last Run</span><span className="text-ink-900 font-medium">{lastRun?.completedAt || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Next Run</span><span className="text-ink-900 font-medium">{nextRun || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Frequency</span><span className="text-ink-900 font-medium">{schedule.frequency || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Workflows</span><span className="text-ink-900 font-medium">{wfCount}</span></div>
     </div>
   );
 }
@@ -400,7 +400,7 @@ function AlertsDigestBar({ engagementId, state, allExceptions, schedule, onNavig
   const alertCount = alerts.filter(a => a.type === 'alert').length;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl overflow-hidden">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-light/50">
         <button onClick={() => setExpanded(p => !p)} className="flex items-center gap-2 cursor-pointer">
           <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-medium"><Sparkles size={13} className="text-white" /></div>
@@ -443,7 +443,7 @@ function AlertsDigestBar({ engagementId, state, allExceptions, schedule, onNavig
 
 function WidgetCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="glass-card rounded-2xl overflow-hidden">
+    <div className="glass-card overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border-light/50 flex items-center justify-between">
         <div><h4 className="text-[0.8125rem] font-semibold text-ink-900">{title}</h4><p className="text-[0.6875rem] text-ink-400">{subtitle}</p></div>
       </div>
@@ -487,7 +487,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
   if (workflows.length === 0) return null;
 
   return (
-    <div className="glass-card rounded-2xl overflow-hidden">
+    <div className="glass-card overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border-light/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Workflow size={14} className="text-primary" />
@@ -496,7 +496,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
         <button onClick={() => onNavigateTab?.('workflows')} className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer">View All</button>
       </div>
       <table className="w-full text-[0.75rem]">
-        <thead><tr className="border-b border-border-light bg-canvas-elevated/50 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
+        <thead><tr className="border-b border-border-light bg-canvas-elevated/50 text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">
           <th className="px-5 py-2.5 text-left">Workflow</th>
           <th className="px-4 py-2.5 text-center">Status</th>
           <th className="px-4 py-2.5 text-center">Outputs</th>
@@ -509,7 +509,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
         <tbody>{workflows.map(wf => (
           <tr key={wf.name} className="border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors">
             <td className="px-5 py-3 font-medium text-ink-900">{wf.name}</td>
-            <td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${wf.lastStatus === 'COMPLETED' ? 'text-compliant-700 bg-compliant-50' : 'text-risk-700 bg-risk-50'}`}>{wf.lastStatus === 'COMPLETED' ? 'Healthy' : 'Failed'}</span></td>
+            <td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-bold ${wf.lastStatus === 'COMPLETED' ? 'text-compliant-700 bg-compliant-50' : 'text-risk-700 bg-risk-50'}`}>{wf.lastStatus === 'COMPLETED' ? 'Healthy' : 'Failed'}</span></td>
             <td className="px-4 py-3 text-center tabular-nums text-ink-500">{wf.outputs}</td>
             <td className="px-4 py-3 text-center"><span className={`tabular-nums ${wf.approved > 0 ? 'text-compliant font-semibold' : 'text-ink-400'}`}>{wf.approved}</span></td>
             <td className="px-4 py-3 text-center"><span className={`tabular-nums ${wf.exceptions > 0 ? 'text-high-700 font-semibold' : 'text-ink-400'}`}>{wf.exceptions}</span></td>
@@ -525,7 +525,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
 
 function QuickActions({ onNavigateTab }: { onNavigateTab?: (tabId: string) => void }) {
   return (
-    <div className="glass-card rounded-2xl p-5">
+    <div className="glass-card p-5">
       <h5 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-3">Quick Actions</h5>
       <div className="flex flex-wrap gap-2">
         {[
@@ -549,7 +549,7 @@ function SetupPrompt({ icon: Icon, title, description, cta, onAction }: {
   icon: React.ElementType; title: string; description: string; cta: string; onAction: () => void;
 }) {
   return (
-    <div className="glass-card rounded-2xl p-8 text-center space-y-3">
+    <div className="glass-card p-8 text-center space-y-3">
       <Icon size={32} className="text-ink-300 mx-auto" />
       <h4 className="text-[0.875rem] font-semibold text-ink-900">{title}</h4>
       <p className="text-[0.75rem] text-ink-400 max-w-md mx-auto">{description}</p>
@@ -583,7 +583,7 @@ export default function WorkspaceOverview({ engagement, automationState, onNavig
               <span>Run or schedule workflows to populate the monitoring dashboard.</span>
             </div>
             {onNavigateTab && (
-              <button onClick={() => onNavigateTab('workflows')} className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.625rem] font-semibold cursor-pointer transition-colors shrink-0">Go to Workflows</button>
+              <button onClick={() => onNavigateTab('workflows')} className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors shrink-0">Go to Workflows</button>
             )}
           </div>
         </div>
@@ -593,7 +593,7 @@ export default function WorkspaceOverview({ engagement, automationState, onNavig
       return (
         <div className="space-y-4">
           <StandardOverview engagement={engagement} />
-          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500">
+          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-canvas border border-border-light text-[0.6875rem] text-ink-500">
             <Activity size={11} className="shrink-0 mt-0.5" />
             <span>Dashboard output was not selected for this project.</span>
           </div>

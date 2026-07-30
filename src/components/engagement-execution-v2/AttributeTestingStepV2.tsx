@@ -347,7 +347,7 @@ function ValidationWorkflowsCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilde
                   <div className="text-[0.75rem] font-semibold text-text truncate">{wf.name}</div>
                   <div className="text-[0.625rem] text-text-muted truncate">{wf.description}</div>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wf.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : wf.status === 'ERROR' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>{wf.status}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wf.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : wf.status === 'ERROR' ? 'bg-red-50 text-red-700' : 'bg-canvas text-ink-500'}`}>{wf.status}</span>
                 <button onClick={() => onUpdateControl(prev => ({ ...prev, execution: { ...prev.execution, validationWorkflows: (prev.execution.validationWorkflows || []).filter(w => w.id !== wf.id) } }))}
                   className="text-[0.625rem] text-text-muted hover:text-red-600 cursor-pointer"><X size={11} /></button>
               </div>
@@ -378,12 +378,12 @@ function SampleBasedAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }
         disabled={!samplingDone}
         className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors cursor-pointer ${expanded ? 'bg-primary/5' : 'hover:bg-surface-2/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
         <div className="flex items-center gap-3 min-w-0">
-          {samplingDone ? <ChevronDown size={12} className={`text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} /> : <Lock size={11} className="text-gray-400" />}
+          {samplingDone ? <ChevronDown size={12} className={`text-ink-400 transition-transform ${expanded ? '' : '-rotate-90'}`} /> : <Lock size={11} className="text-ink-400" />}
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[0.625rem] font-mono text-gray-400">{attr.id}</span>
+              <span className="text-[0.625rem] font-mono text-ink-400">{attr.id}</span>
               <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-primary/10 text-primary">SAMPLE-BASED</span>
-              <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{attr.type === 'AUTOMATED' ? 'AUTO' : 'MANUAL'}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-canvas text-ink-600'}`}>{attr.type === 'AUTOMATED' ? 'AUTO' : 'MANUAL'}</span>
               {attr.required && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-red-50 text-red-600">REQ</span>}
             </div>
             <div className="text-[0.75rem] font-semibold text-text truncate">{attr.name}</div>
@@ -457,10 +457,10 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
       <button onClick={onToggle}
         className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors cursor-pointer ${expanded ? 'bg-amber-50/30' : 'hover:bg-surface-2/40'}`}>
         <div className="flex items-center gap-3 min-w-0">
-          <ChevronDown size={12} className={`text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+          <ChevronDown size={12} className={`text-ink-400 transition-transform ${expanded ? '' : '-rotate-90'}`} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[0.625rem] font-mono text-gray-400">{attr.id}</span>
+              <span className="text-[0.625rem] font-mono text-ink-400">{attr.id}</span>
               <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-amber-100 text-amber-700">GENERIC</span>
               {attr.required && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-red-50 text-red-600">REQ</span>}
             </div>
@@ -471,7 +471,7 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
         <div className="flex items-center gap-3 shrink-0">
           {r === AttrResult.PASS && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-emerald-100 text-emerald-700">Pass</span>}
           {r === AttrResult.FAIL && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-red-100 text-red-700">Fail</span>}
-          {r === AttrResult.NOT_TESTED && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-gray-100 text-gray-500">Pending</span>}
+          {r === AttrResult.NOT_TESTED && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-canvas text-ink-500">Pending</span>}
         </div>
       </button>
 
@@ -502,9 +502,9 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
           <div className="flex items-center gap-2">
             <span className="text-[0.625rem] text-text-muted">Result:</span>
             <button onClick={() => setResult(AttrResult.PASS)} disabled={evCount === 0}
-              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
+              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-canvas text-ink-500 hover:bg-emerald-50'}`}>Pass</button>
             <button onClick={() => setResult(AttrResult.FAIL)} disabled={evCount === 0}
-              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
+              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-canvas text-ink-500 hover:bg-red-50'}`}>Fail</button>
             {r === AttrResult.FAIL && (
               <button onClick={clearEvidence} className="ml-auto px-2 py-1 rounded border border-amber-300 text-amber-700 text-[0.625rem] font-semibold cursor-pointer hover:bg-amber-50 flex items-center gap-1">
                 <RotateCcw size={9} />Replace evidence and retry
@@ -639,9 +639,9 @@ function SampleEvidenceTable({ ctrl, attr, rounds, onUpdateControl }: {
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setResult(ti.id, AttrResult.PASS)} disabled={ev === 0}
-                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
+                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-canvas text-ink-500 hover:bg-emerald-50'}`}>Pass</button>
                       <button onClick={() => setResult(ti.id, AttrResult.FAIL)} disabled={ev === 0}
-                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
+                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-canvas text-ink-500 hover:bg-red-50'}`}>Fail</button>
                     </div>
                   </td>
                 </tr>
@@ -688,7 +688,7 @@ function summariseSampleAttr(attr: Attribute, items: TestItem[]): { pass: number
 function StepBadge({ number, done, disabled }: { number: number; done?: boolean; disabled?: boolean }) {
   return (
     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[0.625rem] font-bold ${
-      disabled ? 'bg-gray-100 text-gray-400' :
+      disabled ? 'bg-canvas text-ink-400' :
       done ? 'bg-emerald-500 text-white' :
       'bg-primary text-white'
     }`}>
@@ -849,7 +849,7 @@ function TimelineNode({ num, title, done, locked, optional, children }: { num: n
     <li className="flex gap-4">
       <div className="flex flex-col items-center shrink-0">
         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[0.6875rem] font-bold ${
-          locked ? 'bg-gray-100 text-gray-400' :
+          locked ? 'bg-canvas text-ink-400' :
           done ? 'bg-emerald-500 text-white' :
           'bg-primary text-white'
         }`}>{done ? <Check size={12} /> : num}</div>
@@ -885,7 +885,7 @@ function NextCta({ ctrl, onNavigate }: { ctrl: ExecutionControl; onNavigate: Sha
   const allDone = ctrl.attributes.every(a => attrDone(ctrl, a));
   return (
     <button onClick={() => onNavigate('working-paper')} disabled={!allDone}
-      className="ml-auto px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300">
+      className="ml-auto px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-ink-300 disabled:hover:bg-ink-300">
       Working paper<ChevronRight size={11} />
     </button>
   );

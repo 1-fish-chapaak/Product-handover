@@ -33,7 +33,7 @@ import {
   FIELD_LABEL, FIELD_INPUT, BTN_CANCEL, BTN_PRIMARY,
   BTN_CTA_PRIMARY, BTN_CTA_OUTLINE, BTN_ROW, type Stat,
 } from './adminTokens';
-import { InitialsAvatar, MemberSearch, RowActions, AdminKpiRow, AdminSelect } from './AdminPrimitives';
+import { InitialsAvatar, AvatarStack, MemberSearch, RowActions, AdminKpiRow, AdminSelect } from './AdminPrimitives';
 
 interface Props {
   activeTab?: string;
@@ -70,6 +70,9 @@ const ACTION_DOT: Record<string, string> = {
   Delete: 'bg-risk-700',
   Login:  'bg-brand-500',
   Export: 'bg-draft-700',
+  Run:    'bg-evidence-700',
+  Upload: 'bg-evidence-700',
+  Share:  'bg-draft-700',
 };
 const RESULT_DOT: Record<string, string> = {
   Success: 'bg-compliant-700',
@@ -1676,10 +1679,15 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
     },
     {
       key: 'name', label: 'Team', sortable: true,
+      /* 26px and `gap-2.5`, the same mark the People view one toggle away puts on
+         a person. This was a 36px tile against People's 26px avatar, so the two
+         halves of the same segmented switch rendered at different ROW HEIGHTS and
+         the swap between them jumped. Platform Usage's Teams lens had inherited
+         the identical mismatch; both now speak the People view's dimensions. */
       render: (t) => (
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-            <Users size={15} className="text-brand-700" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-[26px] h-[26px] rounded-lg bg-brand-100 ring-1 ring-inset ring-brand-600/10 flex items-center justify-center shrink-0">
+            <Users size={13} className="text-brand-700" />
           </div>
           <InlineRename value={t.name} onCommit={(name) => renameTeam(t.team, name)} />
         </div>
@@ -1703,24 +1711,7 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
       render: (t) => (
         t.members.length === 0
           ? <span className="text-[0.75rem] text-ink-400">No users yet</span>
-          : (
-            <div className="flex items-center -space-x-2">
-              {t.members.slice(0, 5).map((m, i) => (
-                <div
-                  key={i}
-                  title={m}
-                  className="relative rounded-full ring-2 ring-canvas-elevated transition-transform duration-150 hover:z-10 hover:-translate-y-0.5"
-                >
-                  <InitialsAvatar name={m} size={26} />
-                </div>
-              ))}
-              {t.members.length > 5 && (
-                <div className="relative w-[26px] h-[26px] rounded-full flex items-center justify-center text-[0.625rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums">
-                  +{t.members.length - 5}
-                </div>
-              )}
-            </div>
-          )
+          : <AvatarStack names={t.members} />
       ),
     },
     {
@@ -1956,7 +1947,7 @@ function AuditLogSection() {
                 selectIndicator="checkbox"
               />
               <ColumnFilter
-                variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end"
+                variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Run', 'Upload', 'Share', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end"
                 renderOption={(opt) => (
                   <span className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ACTION_DOT[opt] ?? 'bg-ink-300'}`} aria-hidden />
@@ -1989,7 +1980,7 @@ function AuditLogSection() {
                     onClick={exportCsv}
                     disabled={filtered.length === 0}
                     title={filtered.length === 0 ? 'Nothing to export' : hasAnyFilter ? `Export ${filtered.length} filtered events` : 'Export all events'}
-                    className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[12px] font-medium hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:border-canvas-border disabled:hover:text-ink-700"
+                    className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[0.75rem] font-medium hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:border-canvas-border disabled:hover:text-ink-700"
                   >
                     <Download size={13} className="transition-transform duration-200 group-hover:translate-y-0.5 group-active:translate-y-1" />
                     Export CSV

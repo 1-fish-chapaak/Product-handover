@@ -3,7 +3,7 @@
 // drawers, the add-query modal). Extracted wholesale from ReportsView so the
 // landing (ReportsView) and the reader (this file) are separate concerns.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import {
@@ -13,7 +13,7 @@ import {
   Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
-  MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
+  MessageSquare, Paperclip, Send, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -30,20 +30,24 @@ import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
-  SECTION_ICONS, TEMPLATE_THEME_GRADIENT, mergeTemplateOptions,
-  computeQueryKpis, reportKind,
+  SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
+  computeQueryKpis, reportKind, collectBlockLibrary,
   type WorkflowResult,
-  CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
+  type SignatorySlot, type Signoff,
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { KpiCountUp } from '../shared/KpiTile';
-import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
+import { buildReportFacts } from './byot/templateBinding';
+import TemplateBlockBody, { type CardFinding } from './TemplateBlockBody';
+import type { TemplateSection } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -101,7 +105,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
       aria-busy={isOn}
       onClick={handleToggle}
       disabled={isOn}
-      className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold rounded-[8px] border transition-colors cursor-pointer ${
+      className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold rounded-md border transition-colors cursor-pointer ${
         isOn
           ? 'text-brand-700 bg-brand-50 border-brand-200 cursor-default'
           : 'text-ink-600 bg-canvas-elevated border-canvas-border hover:text-brand-700 hover:border-brand-300 hover:bg-brand-50/40'
@@ -123,7 +127,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
 }
 
 
-function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
+function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void; title?: string }) {
   const { addToast } = useToast();
   const { can } = useCan();
   const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
@@ -203,7 +207,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     <button
                       onClick={() => setCommentsOpen(true)}
                       aria-label="Comments on this query"
-                      className="relative inline-flex items-center justify-center w-8 h-8 text-ink-400 rounded-[8px] cursor-pointer hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                      className="relative inline-flex items-center justify-center w-8 h-8 text-ink-400 rounded-md cursor-pointer hover:text-brand-600 hover:bg-brand-50 transition-colors"
                     >
                       <MessageSquare size={16} className="shrink-0" />
                       {myComments > 0 && (
@@ -222,7 +226,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 <button
                   onClick={() => setWidgetModalOpen(true)}
                   aria-label="Add widgets"
-                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <LayoutGrid size={16} className="shrink-0" />
                 </button>
@@ -234,7 +238,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 <button
                   onClick={() => setMenuOpen(o => !o)}
                   aria-label="More options"
-                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <MoreVertical size={16} />
                 </button>
@@ -251,7 +255,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -6 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
-                      className="absolute right-0 top-10 z-10 w-[164px] origin-top-right bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5"
+                      className="absolute right-0 top-10 z-10 w-[164px] origin-top-right bg-white border border-canvas-border rounded-lg shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5"
                     >
                       {[
                         { icon: SquareArrowOutUpRight, label: 'Open Query', tile: 'text-brand-600 bg-brand-50', onClick: () => { setMenuOpen(false); onOpenQuery?.({ id: query.id, title: query.title }); } },
@@ -264,9 +268,9 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.05 + i * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                           onClick={item.onClick}
-                          className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
+                          className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
                         >
-                          <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] ${item.tile}`}>
+                          <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm ${item.tile}`}>
                             <item.icon size={14} strokeWidth={2.25} />
                           </span>
                           {item.label}
@@ -281,9 +285,9 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.05 + 3 * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                             onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                            className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
+                            className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-md text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
                           >
-                            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-risk-700 bg-risk-50">
+                            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm text-risk-700 bg-risk-50">
                               <Trash2 size={14} strokeWidth={2.25} />
                             </span>
                             Delete Query
@@ -343,7 +347,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-4 mb-5"
+            className="bg-canvas-elevated border border-canvas-border rounded-lg p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
@@ -354,7 +358,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setPendingWidgetRemove({ kind: 'chart', id: g.id, title: g.title })}
                 title="Remove graph"
                 aria-label="Remove graph"
-                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>
@@ -381,7 +385,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-4 mb-5"
+            className="bg-canvas-elevated border border-canvas-border rounded-lg p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
@@ -392,12 +396,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setPendingWidgetRemove({ kind: 'table', id: t.id, title: t.title })}
                 title="Remove table"
                 aria-label="Remove table"
-                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>
             </div>
-            <div className="overflow-x-auto rounded-[12px] border border-canvas-border">
+            <div className="overflow-x-auto rounded-lg border border-canvas-border">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-canvas-border bg-surface-2/50">
@@ -516,6 +520,30 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
 }
 
 
+// Comment attachments store only a filename (the composer keeps the name, not
+// the bytes), so there's no real file to serve. Open a clean placeholder
+// document in a new tab keyed to the file name.
+function openAttachment(name: string) {
+  const safe = (name || 'Attachment').replace(/[<>&"]/g, '');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safe}</title><style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:Inter,system-ui,sans-serif;background:#faf9fc;color:#1e1b2e}.doc{font-size:15px;font-weight:600}.hint{font-size:13px;color:#8b8698}.tag{font:600 11px/1 ui-monospace,monospace;color:#6d28d9;background:#f3effc;padding:4px 10px;border-radius:999px}</style></head><body><span class="tag">ATTACHMENT</span><div class="doc">${safe}</div><div class="hint">Preview isn't available in this prototype.</div></body></html>`;
+  window.open('data:text/html;charset=utf-8,' + encodeURIComponent(html), '_blank', 'noopener,noreferrer');
+}
+
+// Downloads the attachment under its own name. The prototype has no stored
+// bytes, so we save a small placeholder file keyed to the name.
+function downloadAttachment(name: string) {
+  const safe = name || 'attachment';
+  const blob = new Blob([`${safe}\n\nPlaceholder file — this prototype stores the attachment name, not its contents.`], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safe;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Query side-sheet — Comments ───
 function CommentDrawer({
   query,
@@ -525,11 +553,11 @@ function CommentDrawer({
 }: {
   query: QueryShape;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -538,22 +566,29 @@ function CommentDrawer({
 
   // Show only comments belonging to the query the user clicked from.
   const queryComments = comments.filter(c => c.queryId === query.id);
-  const grouped = queryComments.reduce<Record<string, { queryId: string; queryTitle: string; items: QueryComment[] }>>((acc, c) => {
-    if (!acc[c.queryId]) acc[c.queryId] = { queryId: c.queryId, queryTitle: c.queryTitle, items: [] };
-    acc[c.queryId].items.push(c);
-    return acc;
-  }, {});
-  const queryGroups = Object.values(grouped);
   const totalComments = queryComments.length;
+
+  // Coarse date buckets from the relative timestamp string, mirroring the
+  // Report Activity Log so both comment surfaces read the same.
+  const bucketOf = (ts: string): 'Today' | 'Yesterday' | 'Earlier' => {
+    const t = ts.toLowerCase();
+    if (/just now|second|minute|hour|today/.test(t)) return 'Today';
+    if (/^1\s*day|yesterday/.test(t)) return 'Yesterday';
+    return 'Earlier';
+  };
+  const sortedComments = [...queryComments].reverse();
+  const dateGroups = (['Today', 'Yesterday', 'Earlier'] as const)
+    .map(label => ({ label, items: sortedComments.filter(c => bucketOf(c.timestamp) === label) }))
+    .filter(g => g.items.length > 0);
 
   const handlePost = () => {
     const body = text.trim();
     if (!body || isPosting) return;
     setIsPosting(true);
     // Optimistic — clear inputs immediately so the new entry appears posted.
-    onAddComment?.(query.id, query.title, body, attachment ?? undefined);
+    onAddComment?.(query.id, query.title, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     // Release the busy state on the next frame; the parent state update has
     // already flushed by then.
     window.setTimeout(() => setIsPosting(false), 120);
@@ -580,101 +615,120 @@ function CommentDrawer({
         aria-modal="true"
         aria-label="Comments"
       >
-        {/* Header strip + close */}
-        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-canvas-border bg-white">
-          <div className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-brand-600">
-            <MessageSquare size={14} className="shrink-0" />
-            Comments
-            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.625rem] font-semibold rounded-full tabular-nums bg-brand-600/10 text-brand-600">
-              {totalComments}
-            </span>
+        {/* Header — icon tile + title + count, matching the Report Activity Log */}
+        <header className="group shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-md bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
+              <MessageSquare size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Comments</h2>
+                {totalComments > 0 && (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.15, type: 'spring', stiffness: 520, damping: 24 }}
+                    className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold tabular-nums"
+                  >
+                    {totalComments}
+                  </motion.span>
+                )}
+              </div>
+              <p title={`On ${query.id} — ${query.title}`} className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug line-clamp-1 group-hover:line-clamp-none transition-all">
+                On <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
+              </p>
+            </div>
           </div>
-          <button
+          <motion.button
             onClick={onClose}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
-          </button>
-        </div>
-
-        {/* Header (title + sub-text) */}
-        <header className="shrink-0 px-6 py-5 border-b border-canvas-border">
-          <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">
-            Comments
-          </h2>
-          <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
-            Commenting on{' '}
-            <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
-          </p>
+          </motion.button>
         </header>
 
         <>
-            {/* Comment input */}
-            <section className="shrink-0 px-6 py-4 border-b border-canvas-border">
-              <div className="relative">
+            {/* Composer — bordered card with inner toolbar, matching the activity log */}
+            <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
+              <div className="bg-white border border-canvas-border rounded-lg focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePost(); } }}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full resize-none bg-transparent border-0 px-3 pt-3 pb-1.5 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0"
                 />
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) setAttachment(f.name);
+                    const names = Array.from(e.target.files ?? []).map(f => f.name);
+                    if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                    e.target.value = '';
                   }}
                 />
-                <div className="absolute bottom-2 right-2 flex items-center gap-1">
-                  <button
+                <AnimatePresence>
+                  {attachments.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                        {attachments.map((name) => (
+                          <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                            <Paperclip size={12} />
+                            <span className="truncate max-w-[180px]">{name}</span>
+                            <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div className="flex items-center justify-between px-2 py-2 border-t border-canvas-border/60">
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-600 cursor-pointer"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     aria-label="Attach file"
                     title="Attach file"
                   >
-                    <Paperclip size={14} />
-                  </button>
-                  <button
-                    type="button"
+                    <Paperclip size={15} />
+                  </motion.button>
+                  <motion.button
                     onClick={handlePost}
                     disabled={!text.trim() || isPosting}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    whileTap={text.trim() && !isPosting ? { scale: 0.96 } : undefined}
+                    title="Post comment (⌘↵)"
+                    className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       text.trim() && !isPosting
                         ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
-                        : 'text-ink-400/50 cursor-not-allowed'
+                        : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
                     }`}
-                    aria-label="Post comment"
-                    title="Post comment"
                   >
-                    {isPosting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  </button>
+                    {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    {isPosting ? 'Posting…' : 'Post'}
+                  </motion.button>
                 </div>
               </div>
-              {attachment && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                    <Paperclip size={12} />
-                    {attachment}
-                  </span>
-                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-ink-400 hover:text-risk-700 cursor-pointer">remove</button>
-                </div>
-              )}
             </section>
 
-            {/* Shared activity log */}
-            <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">Activity log</h3>
-                <span className="text-[0.6875rem] text-ink-400 tabular-nums">
-                  {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
-                </span>
-              </div>
-              {queryGroups.length === 0 ? (
+            {/* Feed — date-bucketed spine timeline, matching the Report Activity Log */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 bg-white" aria-live="polite">
+              {totalComments === 0 ? (
                 <EmptyState
                   icon={MessageSquare}
                   title="No comments yet"
@@ -682,38 +736,35 @@ function CommentDrawer({
                   size="compact"
                 />
               ) : (
-                <div className="space-y-4">
-                  {queryGroups.map(group => (
-                    <section key={group.queryId} className="border border-canvas-border rounded-[12px] overflow-hidden">
-                      <header className={`px-3 py-2 bg-canvas border-b border-canvas-border flex items-center justify-between ${group.queryId === query.id ? 'bg-brand-600/5' : ''}`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[0.6875rem] font-bold text-brand-600 shrink-0">{group.queryId}</span>
-                          <span className="text-[0.6875rem] text-ink-400 truncate">{group.queryTitle}</span>
+                <div className="relative">
+                  <span aria-hidden className="absolute left-[15px] top-1 bottom-1 w-px bg-canvas-border" />
+                  <div className="space-y-6">
+                    {dateGroups.map(group => (
+                      <section key={group.label}>
+                        <div className="flex items-center gap-2.5 mb-3 pl-[46px]">
+                          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{group.label}</h3>
+                          <div className="flex-1 h-px bg-canvas-border/70" />
+                          <span className="text-[0.625rem] tabular-nums text-ink-300">
+                            {group.items.length} {group.items.length === 1 ? 'entry' : 'entries'}
+                          </span>
                         </div>
-                        <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">
-                          {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
-                        </span>
-                      </header>
-                      <ol className="divide-y divide-border-light">
-                        {group.items.slice().reverse().map(c => {
-                          const isLong = c.text.length > 1000;
-                          const isExpanded = expandedComments.has(c.id);
-                          const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
-                          return (
-                            <li key={c.id} className="px-3 py-3">
-                              <div className="flex items-start gap-2.5">
-                                <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
+                        <ol className="space-y-5">
+                          {group.items.map(c => {
+                            const isLong = c.text.length > 1000;
+                            const isExpanded = expandedComments.has(c.id);
+                            const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                            const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
+                            return (
+                              <li key={c.id} className="relative flex gap-3.5">
+                                <div className="relative z-[1] shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 ring-[3px] ring-white flex items-center justify-center text-[0.625rem] font-semibold tracking-tight">
                                   {c.initials}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
-                                    <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">
-                                      <ClockIcon size={12} />
-                                      {c.timestamp}
-                                    </span>
+                                </div>
+                                <div className="flex-1 min-w-0 pb-0.5">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{c.author}</span>
+                                    <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
                                   </div>
-                                  <p className="text-[0.75rem] text-ink-800 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  <p className="mt-1.5 text-[0.8125rem] text-ink-700 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
                                   {isLong && (
                                     <button
                                       type="button"
@@ -727,20 +778,38 @@ function CommentDrawer({
                                       {isExpanded ? 'Show less' : 'Show more'}
                                     </button>
                                   )}
-                                  {c.attachment && (
-                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                                      <Paperclip size={12} />
-                                      {c.attachment}
-                                    </span>
+                                  {files.length > 0 && (
+                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                      {files.map((file) => (
+                                        <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                          <button
+                                            onClick={() => openAttachment(file)}
+                                            title={`Open ${file} in a new tab`}
+                                            className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                          >
+                                            <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                            <span className="truncate">{file}</span>
+                                          </button>
+                                          <button
+                                            onClick={() => downloadAttachment(file)}
+                                            title={`Download ${file}`}
+                                            aria-label={`Download ${file}`}
+                                            className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                          >
+                                            <Download size={12} />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </section>
-                  ))}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </section>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -778,11 +847,11 @@ function ReportActivityLogDrawer({
 }: {
   reportName: string;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
@@ -808,9 +877,9 @@ function ReportActivityLogDrawer({
     if (!body || isPosting) return;
     setIsPosting(true);
     // Report-level entries are tagged as global so they show across all surfaces.
-    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachment ?? undefined);
+    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     window.setTimeout(() => setIsPosting(false), 120);
   };
 
@@ -837,7 +906,7 @@ function ReportActivityLogDrawer({
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-md bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
               <History size={20} />
             </div>
             <div>
@@ -862,7 +931,6 @@ function ReportActivityLogDrawer({
           <motion.button
             onClick={onClose}
             whileTap={{ scale: 0.88 }}
-            whileHover={{ rotate: 90 }}
             transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
@@ -873,7 +941,7 @@ function ReportActivityLogDrawer({
 
         {/* Comment composer — textarea + inline toolbar (attach · post) */}
         <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
-          <div className="bg-white border border-canvas-border rounded-[10px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
+          <div className="bg-white border border-canvas-border rounded-lg focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -887,14 +955,16 @@ function ReportActivityLogDrawer({
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setAttachment(f.name);
+                const names = Array.from(e.target.files ?? []).map(f => f.name);
+                if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                e.target.value = '';
               }}
             />
             <AnimatePresence>
-              {attachment && (
+              {attachments.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -902,14 +972,16 @@ function ReportActivityLogDrawer({
                   transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-3 pb-2">
-                    <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
-                      <Paperclip size={12} />
-                      <span className="truncate max-w-[200px]">{attachment}</span>
-                      <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
-                        <X size={12} />
-                      </button>
-                    </span>
+                  <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                    {attachments.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                        <Paperclip size={12} />
+                        <span className="truncate max-w-[180px]">{name}</span>
+                        <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 </motion.div>
               )}
@@ -919,7 +991,7 @@ function ReportActivityLogDrawer({
                 type="button"
                 whileTap={{ scale: 0.9 }}
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 aria-label="Attach file"
                 title="Attach file"
               >
@@ -930,7 +1002,7 @@ function ReportActivityLogDrawer({
                 disabled={!text.trim() || isPosting}
                 whileTap={text.trim() && !isPosting ? { scale: 0.96 } : undefined}
                 title="Post comment (⌘↵)"
-                className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                   text.trim() && !isPosting
                     ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                     : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
@@ -982,6 +1054,7 @@ function ReportActivityLogDrawer({
                     <ol className="space-y-5">
                       {group.items.map((c, ii) => {
                         const idx = offset + ii;
+                        const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
                         return (
                         <motion.li
                           key={c.id}
@@ -1004,20 +1077,35 @@ function ReportActivityLogDrawer({
                               <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
                             </div>
                             <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-400 min-w-0">
-                              <span className="inline-flex items-center h-[18px] px-1.5 font-mono font-semibold text-[0.625rem] bg-brand-50 text-brand-700 rounded-[5px] shrink-0">
+                              <span className="inline-flex items-center h-[18px] px-1.5 font-mono font-semibold text-[0.625rem] bg-brand-50 text-brand-700 rounded-sm shrink-0">
                                 {c.queryId}
                               </span>
                               <span className="truncate">{c.queryTitle}</span>
                             </div>
                             <p className="mt-2 text-[0.8125rem] text-ink-700 leading-relaxed">{c.text}</p>
-                            {c.attachment && (
-                              <motion.button
-                                whileTap={{ scale: 0.97 }}
-                                className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-[7px] hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer"
-                              >
-                                <Paperclip size={12} className="text-ink-400 shrink-0" />
-                                <span className="truncate">{c.attachment}</span>
-                              </motion.button>
+                            {files.length > 0 && (
+                              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                {files.map((file) => (
+                                  <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                    <button
+                                      onClick={() => openAttachment(file)}
+                                      title={`Open ${file} in a new tab`}
+                                      className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                    >
+                                      <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                      <span className="truncate">{file}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => downloadAttachment(file)}
+                                      title={`Download ${file}`}
+                                      aria-label={`Download ${file}`}
+                                      className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                    >
+                                      <Download size={12} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </motion.li>
@@ -1068,7 +1156,7 @@ function ContentsRow({
     <Reorder.Item
       value={section}
       dragControls={controls}
-      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
       dragListener={false}
     >
       <button
@@ -1078,7 +1166,7 @@ function ContentsRow({
       >
         <GripVertical size={13} />
       </button>
-      <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${active ? 'text-brand-700' : 'text-brand-500'}`}>{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right" style={{ color: 'var(--rep-accent, #550fa5)', opacity: active ? 1 : 0.65 }}>{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -1090,7 +1178,7 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-md px-2 py-1 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
@@ -1106,14 +1194,14 @@ function ContentsRow({
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
-            className="p-1.5 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             <Edit3 size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             aria-label="Delete section"
-            className="p-1.5 rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
           >
             <Trash2 size={14} />
           </button>
@@ -1191,7 +1279,7 @@ function ObservationActionsMenu({
         onClick={handleToggle}
         title="More options"
         aria-label="More options"
-        className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+        className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
       >
         <MoreVertical size={16} />
       </button>
@@ -1199,7 +1287,7 @@ function ObservationActionsMenu({
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-canvas-border rounded-md shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
@@ -1281,7 +1369,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-canvas-border' : 'border border-canvas-border rounded-lg'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -1348,7 +1436,7 @@ function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-[12px] border border-canvas-border overflow-hidden bg-canvas cursor-zoom-in hover:border-brand-600/40 transition-colors"
+                    className="block w-[88px] h-[88px] rounded-lg border border-canvas-border overflow-hidden bg-canvas cursor-zoom-in hover:border-brand-600/40 transition-colors"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -1364,7 +1452,7 @@ function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-600/40 hover:bg-white transition-colors group"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-md hover:border-brand-600/40 hover:bg-white transition-colors group"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
                   <span className="text-[0.75rem] text-ink-800 font-medium truncate group-hover:text-brand-600">{att.name}</span>
@@ -1425,7 +1513,7 @@ function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-xl cursor-default"
           />
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[0.75rem] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
@@ -1528,12 +1616,12 @@ function WorkflowResultCard({
                 onClick={() => setMenuOpen(o => !o)}
                 title="More options"
                 aria-label="More options"
-                className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
               >
                 <MoreVertical size={16} />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1">
+                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-canvas-border rounded-md shadow-xl py-1">
                   {onDelete && (
                     <button
                       onClick={() => { setMenuOpen(false); onDelete(); }}
@@ -1574,12 +1662,12 @@ function WorkflowResultCard({
                   if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
                 }}
                 placeholder="e.g., Priya Mehta"
-                className="flex-1 max-w-[280px] px-2 py-1 text-[0.75rem] text-ink-800 border border-brand-600/40 rounded-[8px] focus:outline-none focus:border-brand-600"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[0.75rem] text-ink-800 border border-brand-600/40 rounded-md focus:outline-none focus:border-brand-600"
               />
             ) : workflow.riskOwner ? (
               <button
                 onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
-                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] hover:bg-brand-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-brand-50 transition-colors cursor-pointer"
               >
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600/15 text-brand-600 text-[0.625rem] font-bold tabular-nums">
                   {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
@@ -1642,7 +1730,7 @@ function WorkflowResultCard({
                   {workflow.outputTable.rows.length}
                 </span>
               </h4>
-              <div className="border border-canvas-border rounded-[12px] overflow-hidden">
+              <div className="border border-canvas-border rounded-lg overflow-hidden">
                 <table className="w-full border-collapse text-[0.75rem]">
                   <thead>
                     <tr className="bg-canvas/70">
@@ -1674,7 +1762,7 @@ function WorkflowResultCard({
                             >
                               {isSeverity ? (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[0.625rem] font-semibold ${
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[0.625rem] font-semibold ${
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
@@ -1741,7 +1829,7 @@ function QueryCardSkeleton() {
         {/* title */}
         <div className="skeleton-cool h-6 w-2/3 rounded mb-7" />
         {/* KPI bar — matches the live unified divided stat-bar */}
-        <div className="overflow-hidden rounded-[14px] border border-canvas-border mb-7">
+        <div className="overflow-hidden rounded-lg border border-canvas-border mb-7">
           <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, k) => (
               <div key={k} className="border-l border-t border-canvas-border px-5 py-6">
@@ -1779,7 +1867,7 @@ function DraggableQuerySection({
   onOpenQuery?: (query: { id: string; title: string }) => void;
   onDelete: () => void;
   comments: QueryComment[];
-  onAddComment: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
@@ -1806,7 +1894,7 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1815,11 +1903,31 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
+  /** Persist manual sign / sign-off state on the report. */
+  onUpdateSignoffs?: (reportId: string, signoffs: Record<string, Signoff>) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
+  const { currentUser } = useCurrentUser();
+  const logEvent = useAuditLog();
+  // Manual sign-on / sign-off on the report's approval slots. Signing records
+  // the slot's assigned name (or the current user) + today's date; signing off
+  // clears it. Persisted via onUpdateSignoffs (no-op if the report is read-only).
+  const canSignoff = !!onUpdateSignoffs && !report.isReadOnly;
+  const handleSign = (slot: SignatorySlot) => {
+    const signer = slot.name?.trim() || currentUser?.name || 'You';
+    const signedAt = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    onUpdateSignoffs?.(report.id, { ...(report.signoffs ?? {}), [slot.id]: { signedBy: signer, signedAt } });
+    addToast({ type: 'success', message: `Signed as ${signer}.` });
+  };
+  const handleSignOff = (slot: SignatorySlot) => {
+    const next = { ...(report.signoffs ?? {}) };
+    delete next[slot.id];
+    onUpdateSignoffs?.(report.id, next);
+    addToast({ type: 'info', message: 'Sign-off removed.' });
+  };
   const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   // One-time skeleton "stream-in" on open: query sections resolve from a
@@ -1877,13 +1985,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   // Resolve the template this report was generated from — used to show the
-  // Apply Template control as active. Falls back to the seed constant so a
-  // report made from a custom template still names it even after that template
-  // is removed from the user's active list.
+  // Apply Template control as active. A report whose template has since been
+  // deleted resolves to null, so the control simply shows no active template
+  // rather than naming one nobody can open.
   const reportTemplate =
     REPORT_TEMPLATES.find(t => t.id === report.templateId) ??
     customTemplates.find(t => t.id === report.templateId) ??
-    CUSTOM_TEMPLATES.find(t => t.id === report.templateId) ??
     null;
 
   const displayDescription = report.description ?? reportTemplate?.desc ?? '';
@@ -1920,12 +2027,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             rows={2}
             placeholder="Add a description for this report…"
             autoFocus
-            className="w-full bg-canvas border border-canvas-border rounded-[8px] px-3 py-2 text-ink-800 text-[0.8125rem] leading-snug placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:bg-white transition-colors resize-none"
+            className="w-full bg-canvas border border-canvas-border rounded-md px-3 py-2 text-ink-800 text-[0.8125rem] leading-snug placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:bg-white transition-colors resize-none"
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={saveEditDesc}
-              className="inline-flex items-center gap-1 h-7 px-3 bg-brand-600 text-white text-[0.6875rem] font-semibold rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 h-7 px-3 bg-brand-600 text-white text-[0.6875rem] font-semibold rounded-md hover:bg-brand-700 transition-colors cursor-pointer"
             >
               <Check size={12} /> Save
             </button>
@@ -1952,7 +2059,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           onClick={startEditDesc}
           aria-label="Edit description"
           title="Edit description"
-          className={`shrink-0 inline-flex items-center justify-center w-6 h-6 -mt-0.5 rounded-[6px] border opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${onDark ? 'text-white/80 bg-white/10 border-white/25 hover:bg-white/20 hover:text-white focus-visible:ring-white/50' : 'text-ink-500 bg-canvas border-canvas-border hover:border-brand-300 hover:text-brand-700 focus-visible:ring-brand-600/30'}`}
+          className={`shrink-0 inline-flex items-center justify-center w-6 h-6 -mt-0.5 rounded-sm border opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${onDark ? 'text-white/80 bg-white/10 border-white/25 hover:bg-white/20 hover:text-white focus-visible:ring-white/50' : 'text-ink-500 bg-canvas border-canvas-border hover:border-brand-300 hover:text-brand-700 focus-visible:ring-brand-600/30'}`}
         >
           <Edit3 size={13} />
         </button>
@@ -2131,6 +2238,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
     | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
     | { id: string; kind: 'note'; title: string; content: string }
+    | { id: string; kind: 'tblock'; title: string; tsec: TemplateSection; cards?: CardFinding[]; composed?: string }
     | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
 
   type ObservationItem = {
@@ -2145,6 +2253,22 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
   const isBulkAudit = report.tag === 'Bulk Audit';
   const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+  // One block printed in two places is stored once. Placements resolve back to
+  // that stored shape here, so both positions always print the same thing.
+  const templateBlockLibrary = useMemo(
+    () => collectBlockLibrary(report.templateSections ?? []),
+    [report.templateSections],
+  );
+  // What a bound block reads: this report's findings, its numbers, its details.
+  const reportFacts = useMemo(
+    () => buildReportFacts(
+      [...activeQueries, ...reportWorkflows.map(workflowToQueryDef)],
+      report,
+      activeStats,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeQueries, reportWorkflows, report, activeStats],
+  );
 
   const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => {
     const head: SectionItem[] = [
@@ -2198,21 +2322,56 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     // above the body, the rest below.
     const tmpl = (report.generatedQueries?.length || reportWorkflows.length) ? (report.templateSections ?? []) : [];
     if (tmpl.length > 0) {
-      const anchorIdx = tmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+      // The findings pool, flattened — stamped into repeating cards and linked
+      // action-plan tables in the template's own shape and rating words.
+      const generatedFacts = buildReportFacts(evidence, report, activeStats);
+      const cardFindings: CardFinding[] = generatedFacts.findings;
+      const cardsBlockOf = (s: TemplateSection) => s.blocks?.find(b => b.kind === 'cards');
+      const cardsSec = tmpl.find(s => s.kind === 'cards' || cardsBlockOf(s));
+      const cardsIdPattern = cardsSec ? (cardsSec.kind === 'cards' ? cardsSec.idPattern : cardsBlockOf(cardsSec)?.idPattern) : undefined;
+      // A template with its own repeating finding cards carries the findings
+      // there — the generic per-query body would duplicate them.
+      const hasCards = !!cardsSec;
+      const anchorIdx = tmpl.findIndex(s => s === cardsSec || /quer(y|ies)|testing results|findings/i.test(s.name));
       const pre: SectionItem[] = [];
       const post: SectionItem[] = [];
       tmpl.forEach((s, i) => {
         if (/executive summary/i.test(s.name)) return; // covered by the summary block
-        const block: SectionItem = {
-          id: `sec-tmpl-${i}`,
-          kind: 'note',
-          title: s.name,
-          content: composeSectionContent(s.name, evidence),
-        };
+        // Route by what the section IS. Typed sections (BYOT blocks, legacy
+        // kinds, fixed text, or any non-query fill) render through the block
+        // renderer — manual stays honestly empty, human waits for a person,
+        // fixed prints verbatim. Only query-filled prose is ever composed;
+        // the AI never invents content for the other cases.
+        const hasBlocks = (s.blocks?.length ?? 0) > 0;
+        const typed = hasBlocks || (s.kind && s.kind !== 'text') || s.fixed || (s.fill && s.fill !== 'query');
+        const wantsComposed = hasBlocks
+          ? (s.blocks ?? []).some(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'query')
+          : !s.fill || s.fill === 'query';
+        const needsCards = s.kind === 'cards' || (s.kind === 'table' && !!s.linkedTo) ||
+          (s.blocks ?? []).some(b => b.kind === 'cards' || !!b.linkedTo);
+        // A linked table borrows the cards' ID shape so its refs match.
+        const patched: TemplateSection = hasBlocks
+          ? { ...s, blocks: s.blocks!.map(b => (b.linkedTo && !b.idPattern ? { ...b, idPattern: cardsIdPattern } : b)) }
+          : s.kind === 'table' && s.linkedTo && !s.idPattern ? { ...s, idPattern: cardsIdPattern } : s;
+        const block: SectionItem = typed
+          ? {
+              id: `sec-tmpl-${i}`,
+              kind: 'tblock',
+              title: s.name,
+              tsec: patched,
+              cards: needsCards ? cardFindings : undefined,
+              composed: wantsComposed ? composeSectionContent(s.name, evidence) : undefined,
+            }
+          : {
+              id: `sec-tmpl-${i}`,
+              kind: 'note',
+              title: s.name,
+              content: composeSectionContent(s.name, evidence),
+            };
         if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
         else post.push(block);
       });
-      return [...head, ...pre, ...bodyBlocks, ...post];
+      return hasCards ? [...head, ...pre, ...post] : [...head, ...pre, ...bodyBlocks, ...post];
     }
 
     return [...head, ...bodyBlocks];
@@ -2247,6 +2406,55 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // Initial-generation loading flag: the summary prose is gated behind it so
   // "Generate Summary" produces a visible empty → loading → content transition.
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // ── "No data connected" is not a dead end (door 1): the user types or
+  // pastes into the section's shape, and the text stays with this report.
+  // Persisted per report so a reopen keeps the filled sections filled.
+  const MANUAL_FILLS_KEY = 'irame.reports.manualFills.v1';
+  const [manualFills, setManualFills] = useState<Record<string, string>>(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      return all[report.id] ?? {};
+    } catch { return {}; }
+  });
+  // Sections already logged as hand-filled — the door-1 usage signal is one
+  // entry per section, not one per keystroke. That log IS the ranked evidence
+  // for which data integration to build next.
+  const manualLoggedRef = useRef<Set<string>>(new Set());
+  const setManualFill = (sectionId: string, text: string) =>
+    setManualFills(prev => ({ ...prev, [sectionId]: text }));
+  const commitManualFill = (sectionId: string, title: string) => {
+    try {
+      const all = JSON.parse(localStorage.getItem(MANUAL_FILLS_KEY) ?? '{}');
+      all[report.id] = { ...(all[report.id] ?? {}), [sectionId]: manualFills[sectionId] ?? '' };
+      localStorage.setItem(MANUAL_FILLS_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+    if ((manualFills[sectionId] ?? '').trim() && !manualLoggedRef.current.has(sectionId)) {
+      manualLoggedRef.current.add(sectionId);
+      logEvent({
+        action: 'Update',
+        description: `Filled "${title}" manually in "${report.name}" — no connected data for this section yet`,
+        module: 'Reports',
+        entity: 'Manual section',
+      });
+    }
+  };
+  // Door 2: setup that never changes gets remembered on the template itself —
+  // every future report from this template pre-fills it. Only custom templates
+  // can learn (standard ones are shared and read-only).
+  const canRemember = customTemplates.some(t => t.id === report.templateId);
+  const rememberManualFill = (title: string, content: string) => {
+    window.dispatchEvent(new CustomEvent('irame:template-remember-content', {
+      detail: { templateId: report.templateId, sectionName: title, content },
+    }));
+    logEvent({
+      action: 'Update',
+      description: `Saved "${title}" as a template default from "${report.name}"`,
+      module: 'Reports',
+      entity: 'Report Template',
+    });
+    addToast({ type: 'success', message: `Remembered. Future reports pre-fill “${title}” with this.` });
+  };
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
   const generateSummary = () => {
     if (isGeneratingSummary || summaryGenerated) return;
@@ -2462,7 +2670,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         {!isReadOnly && (
           <button
             onClick={openAddObservation}
-            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-md hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
           >
             <Plus size={14} />
             Add Observation
@@ -2483,7 +2691,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const RailAddObservation = () => !isReadOnly ? (
     <button
       onClick={openAddObservation}
-      className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
+      className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-md hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
     >
       <Plus size={14} />
       Add Observation
@@ -2494,7 +2702,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // (normal path), or the applied-template / empty outlines. The applied-template
   // case keeps observation reorder + rename + delete that the old inline TOC had.
   const OutlineRail = () => {
-    const railCls = 'rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5';
+    const railCls = 'rounded-lg border border-canvas-border bg-canvas-elevated p-3.5';
     if (!appliedTemplate) {
       if (sections.filter(s => s.kind !== 'cover').length === 0) return null;
       return <div className={railCls}><ContentsBlock /></div>;
@@ -2507,7 +2715,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <RailHeader count={tmplSections.length + appliedObservations.length} />
           <Reorder.Group axis="y" values={appliedObservations} onReorder={setAppliedObservations} as="ol" className="list-none p-0 m-0 space-y-0.5">
             {tmplSections.map((s, i) => (
-              <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
+              <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md hover:bg-brand-50/30 transition-colors">
                 <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
                 <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{s.name}</span>
               </li>
@@ -2545,7 +2753,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         <RailHeader count={outlineEntries.length} />
         <ol className="list-none p-0 m-0 space-y-0.5">
           {outlineEntries.map((e, i) => (
-            <li key={e.id} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px]">
+            <li key={e.id} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md">
               <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
               <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{e.title}</span>
             </li>
@@ -2583,7 +2791,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     { id: 'c-2', queryId: 'Q01', queryTitle: 'Detects duplicate invoice entries by vendor, date, and amount', author: 'Karan Mehta',  initials: 'KM', timestamp: '1 day ago',  text: 'Flagged EX-2024-003 as a bulk case for remediation — MFA enforcement applied.', attachment: 'mfa_remediation_plan.pdf' },
     { id: 'c-3', queryId: 'Q02', queryTitle: 'Identifies unauthorized vendor master changes without proper approval workflow in the last 90 days', author: 'Ravi Kumar', initials: 'RK', timestamp: '5 hours ago', text: 'Control owner confirmed — vendor master workflow is being tightened; expect residual risk to drop next quarter.' },
   ]);
-  const addComment = (queryId: string, queryTitle: string, text: string, attachment?: string) => {
+  const addComment = (queryId: string, queryTitle: string, text: string, attachments?: string[]) => {
     setComments(prev => [
       ...prev,
       {
@@ -2594,7 +2802,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         initials: (report.generatedBy ?? 'You').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
         timestamp: 'just now',
         text,
-        attachment,
+        attachments: attachments && attachments.length ? attachments : undefined,
       },
     ]);
   };
@@ -2645,7 +2853,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const backLink = (
     <button
       onClick={onBack}
-      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
     >
       <ArrowLeft size={14} /> Back to Reports
     </button>
@@ -2656,7 +2864,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         <div className="relative">
           <button
             onClick={() => setShowApplyTemplate(p => !p)}
-            className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+            className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
           >
             <Layout size={14} />
             <span className="truncate max-w-[160px] hidden md:inline">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
@@ -2688,18 +2896,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         onClick={() => setActivityLogOpen(true)}
         title="View this report's activity log"
         aria-label="View report activity log"
-        className="flex items-center justify-center w-9 h-9 text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+        className="flex items-center justify-center w-9 h-9 text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
       >
         <History size={16} />
       </button>
       {onShare && can('rp_share') && (
-        <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
+        <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
           <Share2 size={14} /> <span className="hidden sm:inline">Share</span>
         </button>
       )}
       <button
         onClick={() => setShowDownloadModal(true)}
-        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
       >
         <Download size={14} /> Download
       </button>
@@ -2726,7 +2934,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               <motion.div
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
-                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[12px] shadow-lg"
+                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-lg shadow-lg"
               >
                 <Loader2 size={20} className="text-brand-600 animate-spin" />
                 <span className="text-[0.875rem] font-semibold text-ink-800">Applying template...</span>
@@ -2748,7 +2956,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="switch-template-title"
-                className="relative bg-white rounded-[16px] border border-canvas-border shadow-xl w-[320px] p-6"
+                className="relative bg-white rounded-xl border border-canvas-border shadow-xl w-[320px] p-6"
                 onClick={e => e.stopPropagation()}
               >
                 <h3 id="switch-template-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Switch template?</h3>
@@ -2758,13 +2966,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={() => setPendingTemplate(null)}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-md text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => { const t = pendingTemplate; setPendingTemplate(null); applyTemplateNow(t); }}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-md text-[0.8125rem] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     Switch
                   </button>
@@ -2786,7 +2994,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           centered document column. The rail tracks scroll position and jumps
           between sections; the document keeps a comfortable reading measure
           instead of spanning the full page. */}
-      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+      <div
+        className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10"
+        // A custom brand colour (or named theme) colours the body accents (section
+        // numbers, ticks, outline rail) to match the cover.
+        style={{ '--rep-accent': reportAccent(report.theme, report.brandColor) } as React.CSSProperties}
+      >
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
           <OutlineRail />
         </aside>
@@ -2795,17 +3008,17 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <>
             {/* Report Cover — light letterhead with theme accent,
                 metadata grid attached below. */}
-            <div className="rounded-[12px] overflow-hidden mb-5 border border-canvas-border bg-white">
+            <div className="rounded-lg overflow-hidden mb-5 border border-canvas-border bg-white">
               <ReportBrandBanner
                 title={reportDisplayName(report.name)}
-                gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                gradient={reportGradient(report.theme, report.brandColor)}
                 actions={
                   <>
                     {canGenerateAtr && (
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Open the live Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
                       Live ATR
@@ -2832,10 +3045,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             </div>
 
 
-            {/* Summary Stats Bar — ATR-style KPI tiles */}
-            <div className="mb-5">
-              <ReportKpiTiles stats={activeStats} animate />
-            </div>
+            {/* Summary Stats Bar — ATR-style KPI tiles. A custom template with
+                its own summary section carries the tiles there instead, so the
+                reader never meets the same four numbers twice. */}
+            {!(appliedTemplate.sections ?? []).some(s =>
+              /\b(executive summary|overall (opinion|conclusion)|audit opinion|assurance opinion)\b/i.test(s.name)) && (
+              <div className="mb-5">
+                <ReportKpiTiles stats={activeStats} animate />
+              </div>
+            )}
 
             <AnimatePresence mode="wait">
               <motion.div key={appliedTemplate.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
@@ -2846,6 +3064,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 {(() => {
                   const tmplSections = appliedTemplate.sections ?? [];
                   const anchorIdx = tmplSections.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+                  // A section the template says "fills from audit data" has to
+                  // SHOW that data, not a sentence about it. The report's own
+                  // queries become the findings pool, and each typed section
+                  // renders through the same block engine the generated report
+                  // uses, so a severity-split section stamps only its own.
+                  // Generation reads the mould: every block's binding is looked
+                  // up against this report's own data before anything is drawn.
+                  const appliedFacts = buildReportFacts(activeQueries, report, activeStats);
+                  const appliedCards: CardFinding[] = appliedFacts.findings;
+                  // The applied template may be a BYOT one, which carries typed
+                  // blocks and its own rating words; the base seed type does not.
+                  const tmplTyped = tmplSections as TemplateSection[];
+                  const appliedLibrary = collectBlockLibrary(tmplTyped);
+                  const appliedScale = (appliedTemplate as { findingScale?: string[] }).findingScale;
                   const queryBlocks = (
                     <div className="space-y-4">
                       {activeQueries.map((q, qi) => (
@@ -2856,12 +3088,75 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (tmplSections.length === 0) return queryBlocks;
                   return (
                     <div className="space-y-4">
-                      {tmplSections.map((s, i) => {
+                      {tmplTyped.map((s, i) => {
                         const Icon = SECTION_ICONS[s.icon] || FileText;
                         const isExec = /executive summary/i.test(s.name);
                         const content = isExec
                           ? composeExecSummary(appliedTemplate.name, activeQueries)
                           : composeSectionContent(s.name, activeQueries);
+                        // The summary is the report's opening statement, so it
+                        // gets the same treatment under a custom template as it
+                        // does under ours: the numbers first, the rollup below
+                        // them, and a way to write it again. Only the heading
+                        // changes, because the heading is theirs.
+                        const isSummarySection = isExec
+                          || (s.blocks ?? []).some(b => b.binding === 'summary')
+                          || /\b(executive summary|overall (opinion|conclusion)|audit opinion|assurance opinion)\b/i.test(s.name);
+                        if (isSummarySection) {
+                          return (
+                            <div key={`${s.name}-${i}`} className="space-y-4">
+                              <motion.div
+                                initial={{ opacity: 0, y: 14 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: '-60px' }}
+                                transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                                className="bg-white rounded-lg border border-canvas-border px-6 py-5"
+                              >
+                                <ReportNumberedHeading
+                                  n={i + 1}
+                                  title={s.name}
+                                  subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
+                                  right={
+                                    <button
+                                      onClick={() => {
+                                        if (isRegeneratingSummary) return;
+                                        setIsRegeneratingSummary(true);
+                                        setTimeout(() => {
+                                          setSummaryOverride(ALT_SUMMARY);
+                                          setIsRegeneratingSummary(false);
+                                          addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                        }, 1200);
+                                      }}
+                                      disabled={isRegeneratingSummary}
+                                      aria-busy={isRegeneratingSummary || undefined}
+                                      title="Regenerate this summary with the latest queries"
+                                      className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      {isRegeneratingSummary
+                                        ? <Loader2 size={14} className="animate-spin" />
+                                        : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
+                                      {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
+                                    </button>
+                                  }
+                                />
+                                <div className="pb-6 border-b border-canvas-border mb-6">
+                                  <ReportKpiTiles stats={activeStats} animate />
+                                </div>
+                                {isRegeneratingSummary ? (
+                                  <div className="max-w-[80ch] space-y-2.5" aria-live="polite">
+                                    <div className="h-3.5 w-full rounded bg-canvas-border/70 animate-pulse" />
+                                    <div className="h-3.5 w-[92%] rounded bg-canvas-border/70 animate-pulse" />
+                                    <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
+                                  </div>
+                                ) : (
+                                  <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? content}</p>
+                                )}
+                              </motion.div>
+                              {(i === anchorIdx || (anchorIdx === -1 && i === tmplTyped.length - 1)) && queryBlocks}
+                            </div>
+                          );
+                        }
+
                         return (
                           <div key={`${s.name}-${i}`} className="space-y-4">
                             <motion.div
@@ -2869,12 +3164,23 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               whileInView={{ opacity: 1, y: 0 }}
                               viewport={{ once: true, margin: '-60px' }}
                               transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
-                              className="bg-white rounded-[12px] border border-canvas-border p-5"
+                              className="bg-white rounded-lg border border-canvas-border p-5"
                             >
                               <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
                                 <Icon size={14} className="text-brand-600" /> {s.name}
                               </h3>
-                              <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                              {(s.blocks?.length ?? 0) > 0 || (s.kind && s.kind !== 'text') || s.fixed ? (
+                                <TemplateBlockBody
+                                  tsec={s}
+                                  cards={appliedCards}
+                                  findingScale={appliedScale}
+                                  composed={content}
+                                  blockLibrary={appliedLibrary}
+                                  facts={appliedFacts}
+                                />
+                              ) : (
+                                <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
+                              )}
                             </motion.div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
                           </div>
@@ -2903,12 +3209,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 ))}
               </div>
             )}
+
           </>
         ) : (
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px] [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
+              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-lg [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
                 {sections.map((section, i) => {
                   // `key` is intentionally NOT in here — React requires keys to
                   // be passed directly on each element, never via a spread prop.
@@ -2933,16 +3240,22 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     dragListener: false as const,
                   };
 
-                  if (section.kind === 'cover') {
+  if (section.kind === 'cover') {
+                    // A cards-driven (BYOT) report carries its findings inside the
+                    // repeating-card block, not query sections — count what the
+                    // reader actually shows, never "0 queries".
+                    const cardTotal = sections.reduce((n, s) => n + (s.kind === 'tblock' && (s.tsec.kind === 'cards' || s.tsec.blocks?.some(b => b.kind === 'cards')) ? (s.cards?.length ?? 0) : 0), 0);
                     const scopeLabel = isBulkAudit
                       ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
-                      : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
+                      : cardTotal > 0
+                        ? `${cardTotal} ${cardTotal === 1 ? 'finding' : 'findings'}`
+                        : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
-                                    className="rounded-t-[12px]"
-                          gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                                    className="rounded-t-lg"
+                          gradient={reportGradient(report.theme, report.brandColor)}
                           eyebrow={report.id && (
                             <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
                           )}
@@ -2952,7 +3265,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <button
                                 onClick={() => setAtrModalOpen(true)}
                                 title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <FileText size={14} />
                                 Generate ATR
@@ -3006,7 +3319,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 disabled={isRegeneratingSummary}
                                 aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {isRegeneratingSummary ? (
                                   <Loader2 size={14} className="animate-spin" />
@@ -3020,7 +3333,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 onClick={generateSummary}
                                 disabled={isGeneratingSummary}
                                 aria-busy={isGeneratingSummary || undefined}
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {isGeneratingSummary ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                                 {isGeneratingSummary ? 'Generating…' : 'Generate Summary'}
@@ -3116,6 +3429,40 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     );
                   }
 
+                  // Typed template blocks (BYOT) — repeating finding cards, real
+                  // tables, KPI/chart placeholders, fixed text, human slots.
+                  if (section.kind === 'tblock') {
+                    const t = section.tsec;
+                    // Door 1: a "no data connected" section takes typed input in
+                    // place; door 2 pre-fills from the template's remembered
+                    // default. Never a dead end.
+                    const isManualSection = t.blocks?.length
+                      ? t.blocks.some(b => b.fill === 'manual')
+                      : t.fill === 'manual' || (t.kind === 'table' && !t.linkedTo);
+                    const manualText = manualFills[section.id] ?? t.savedContent ?? '';
+                    return (
+                      <Reorder.Item key={section.id} {...sectionProps}>
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
+                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
+                          <TemplateBlockBody
+                            tsec={t}
+                            blockLibrary={templateBlockLibrary}
+                            facts={reportFacts}
+                            cards={section.cards}
+                            findingScale={report.findingScale}
+                            composed={section.composed}
+                            manual={isManualSection ? {
+                              text: manualText,
+                              onChange: text => setManualFill(section.id, text),
+                              onCommit: () => commitManualFill(section.id, section.title),
+                              onRemember: canRemember ? () => rememberManualFill(section.title, manualText) : undefined,
+                            } : undefined}
+                          />
+                        </div>
+                      </Reorder.Item>
+                    );
+                  }
+
                   if (section.kind === 'observation') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
@@ -3134,11 +3481,25 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 })}
               </Reorder.Group>
               {report.footerText && (
-                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center justify-center">
+                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-9 py-3 flex items-center justify-center">
                   <span className="text-[0.6875rem] text-ink-400 tracking-wide">{report.footerText}</span>
                 </div>
               )}
             </main>
+          </div>
+        )}
+
+        {/* Approvals & Sign-Off — from the template's signature block, rendered
+            for both report layouts. Each slot is manually signable / revocable
+            here in the reader (persisted); static otherwise. */}
+        {report.signoffEnabled && (report.signatories?.length ?? 0) > 0 && (
+          <div className="mt-6 bg-white rounded-lg border border-canvas-border p-6">
+            <ReportSignoffBlock
+              signatories={report.signatories!}
+              signoffs={report.signoffs}
+              onSign={canSignoff ? handleSign : undefined}
+              onSignOff={canSignoff ? handleSignOff : undefined}
+            />
           </div>
         )}
         </div>
@@ -3166,6 +3527,28 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
+            pageNumbers={report.pageNumbers}
+            brandColor={report.brandColor}
+            signatories={report.signoffEnabled ? report.signatories : undefined}
+            signoffs={report.signoffs}
+            // The export checklist — sections still awaiting content (manual
+            // fill or a person's input) are named before download, so nothing
+            // incomplete leaves quietly. Export anyway stays allowed. A section
+            // the user already typed into (or the template remembered) is no
+            // longer incomplete.
+            incomplete={sections
+              .filter(s => {
+                if (s.kind !== 'tblock') return false;
+                const filled = (manualFills[s.id] ?? s.tsec.savedContent ?? '').trim().length > 0;
+                const manualOpen = !filled && (
+                  (s.tsec.blocks ?? []).some(b => b.fill === 'manual')
+                  || (!s.tsec.blocks?.length && s.tsec.fill === 'manual'));
+                const humanOpen =
+                  (s.tsec.blocks ?? []).some(b => (b.fill === 'human' && b.kind !== 'signoff') || (b.humanFields?.length ?? 0) > 0)
+                  || (!s.tsec.blocks?.length && (s.tsec.kind === 'human' || s.tsec.fill === 'human' || (s.tsec.humanFields?.length ?? 0) > 0));
+                return manualOpen || humanOpen;
+              })
+              .map(s => s.title)}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
@@ -3216,6 +3599,39 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               }
               if (s.kind === 'note') {
                 return { id: s.id, kind: 'note', title: s.title, content: s.content };
+              }
+              // Typed template blocks export as plain-language notes: the block
+              // shape is a screen affordance; the export states what fills it —
+              // by each block's own fill case, never invented.
+              if (s.kind === 'tblock') {
+                const t = s.tsec;
+                // Hand-typed content (door 1) or the template's remembered
+                // default (door 2) IS this section's export content.
+                const typed = (manualFills[s.id] ?? t.savedContent ?? '').trim();
+                const describeBlock = (b: NonNullable<TemplateSection['blocks']>[number]): string => {
+                  if (b.kind === 'cards') return `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${b.idPattern ? ` (${b.idPattern})` : ''}${b.cardFields?.length ? ` with fields: ${b.cardFields.join(', ')}` : ''}.`;
+                  if (b.kind === 'table') return `${b.columns?.length ? `Table — columns: ${b.columns.join(', ')}` : 'Table'}${b.linkedTo ? `. Auto-built from ${b.linkedTo}` : b.fill === 'manual' ? '. No data connected — filled in manually' : ''}.`;
+                  if (b.kind === 'signoff') return 'Signature slots — signed by real people.';
+                  if (b.kind === 'stat') return `Stat strip${b.slotLabels?.length ? ` (${b.slotLabels.join(', ')})` : ''}${b.fill === 'manual' ? ' — no data connected' : ''}.`;
+                  if (b.kind === 'slot') return `Details${b.slotLabels?.length ? `: ${b.slotLabels.join(', ')}` : ''}.`;
+                  if (b.kind === 'chart') return `${b.label ?? 'Chart'}${b.fill === 'manual' ? ' — no data connected' : ' — filled from query data'}.`;
+                  if (b.fill === 'fixed') return (b.fixedBody ?? []).join(' ');
+                  if (b.fill === 'human') return 'Awaiting response. Filled in by a person before the report is issued.';
+                  if (b.fill === 'manual') return typed || 'No data connected — filled in manually.';
+                  return s.composed ?? 'Filled from query data at generation.';
+                };
+                const content = t.blocks?.length
+                  ? t.blocks.map(describeBlock).filter(Boolean).join(' ')
+                  : t.kind === 'cards'
+                    ? `${s.cards?.length ?? 0} finding${(s.cards?.length ?? 0) === 1 ? '' : 's'} render as repeating cards${t.idPattern ? ` (${t.idPattern})` : ''}${t.cardFields?.length ? ` with fields: ${t.cardFields.join(', ')}` : ''}.`
+                    : t.kind === 'table'
+                      ? `${t.columns?.length ? `Table — columns: ${t.columns.join(', ')}` : 'Table'}${t.linkedTo ? `. Auto-built from ${t.linkedTo}` : ''}.`
+                      : t.kind === 'human'
+                        ? 'Awaiting response. Filled in by a person before the report is issued.'
+                        : t.fixed
+                          ? (t.fixedBody ?? []).join(' ')
+                          : (t.metric ?? s.composed ?? 'Filled from query data at generation.');
+                return { id: s.id, kind: 'note', title: s.title, content };
               }
               // Exec summary + stats sections carry the KPI tiles so exports can
               // render the same ATR-style tile grid as the on-screen document.

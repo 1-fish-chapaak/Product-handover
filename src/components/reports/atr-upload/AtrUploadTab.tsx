@@ -270,14 +270,14 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
       <FooterSlotContext.Provider value={footerEl}>
         <div className="p-4">
           <div className="flex items-start gap-3">
-            <span className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+            <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               {done ? <Check size={16} aria-hidden="true" /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
-              <div className="text-[11.5px] text-ink-500 truncate mt-0.5">{done ? `${obsCount} observation${obsCount === 1 ? '' : 's'} ready` : PROCESSING_MESSAGES[step]}</div>
+              <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
+              <div className="text-[0.71875rem] text-ink-500 truncate mt-0.5">{done ? `${obsCount} observation${obsCount === 1 ? '' : 's'} ready` : PROCESSING_MESSAGES[step]}</div>
             </div>
-            {!done && <span className="text-[13px] font-bold tabular-nums text-brand-700 shrink-0">{Math.round(progress)}%</span>}
+            {!done && <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 shrink-0">{Math.round(progress)}%</span>}
             <button onClick={requestClose} className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={14} /></button>
           </div>
           {!done && (
@@ -286,8 +286,8 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
             </div>
           )}
           <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-ink-400">{done ? 'Your ATR is ready to review.' : 'Running in the background — keep working.'}</span>
-            <button onClick={() => setMinimized(false)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[12px] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
+            <span className="text-[0.6875rem] text-ink-400">{done ? 'Your ATR is ready to review.' : 'Running in the background — keep working.'}</span>
+            <button onClick={() => setMinimized(false)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
               <Maximize2 size={13} aria-hidden="true" /> {done ? 'Open ATR' : 'Open'}
             </button>
           </div>
@@ -313,7 +313,7 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
         <header className="shrink-0 px-6 pt-3.5 pb-3 border-b border-canvas-border print:hidden">
           <div className="flex items-center justify-between gap-4 mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CloudUpload size={16} /></div>
+              <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CloudUpload size={16} /></div>
               <div>
                 <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Generate ATR by Upload</h2>
                 <p className="text-[0.75rem] text-ink-500 leading-snug">Pick a method, upload, validate, link annexures, then generate.</p>

@@ -85,11 +85,11 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
           { label: 'IA Lifecycle', sub: 'Audit Assignment', color: 'text-purple-600', icon: ClipboardCheck },
           { label: 'Workflow Automation', sub: 'Automation Projects', color: 'text-emerald-600', icon: Workflow },
         ].map(s => (
-          <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border-light bg-white px-4 py-3">
+          <div key={s.label} className="flex items-center gap-3 rounded-lg border border-border-light bg-white px-4 py-3">
             <s.icon size={16} className={s.color} />
             <div>
               <div className={`text-[0.75rem] font-semibold ${s.color}`}>{s.label}</div>
-              <div className="text-[0.625rem] text-gray-400">{s.sub}</div>
+              <div className="text-[0.625rem] text-ink-400">{s.sub}</div>
             </div>
           </div>
         ))}
@@ -126,7 +126,7 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
 
                 {/* Best for */}
                 <div className="mb-3">
-                  <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Best for</div>
+                  <div className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider mb-1.5">Best for</div>
                   <div className="flex flex-wrap gap-1.5">
                     {meta.bestFor.map(item => (
                       <span key={item} className="px-2 py-0.5 rounded-full bg-surface-2/50 border border-border-light/50 text-[0.625rem] text-text-muted font-medium">
@@ -138,7 +138,7 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
 
                 {/* Flow chips */}
                 <div className="mb-4">
-                  <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Workflow</div>
+                  <div className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider mb-1.5">Workflow</div>
                   <div className="flex flex-wrap items-center gap-1">
                     {pattern.workspaceTabs.map((tab, i) => (
                       <React.Fragment key={tab.id}>
@@ -146,7 +146,7 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
                           {tab.label}
                         </span>
                         {i < pattern.workspaceTabs.length - 1 && (
-                          <ChevronRight size={9} className="text-gray-300 shrink-0" />
+                          <ChevronRight size={9} className="text-ink-300 shrink-0" />
                         )}
                       </React.Fragment>
                     ))}
@@ -172,7 +172,7 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
       </div>
 
       {/* ── Which one should I choose? ── */}
-      <div className="rounded-xl border border-border-light bg-white p-5">
+      <div className="rounded-lg border border-border-light bg-white p-5">
         <h4 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2">
           <Lightbulb size={14} className="text-amber-500" />
           Which one should I choose?

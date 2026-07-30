@@ -239,7 +239,7 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
         ref={btnRef}
         onClick={(e) => { e.stopPropagation(); open ? setOpen(false) : openMenu(); }}
         onMouseDown={e => e.stopPropagation()}
-        className="flex items-center gap-1 px-[9px] py-px rounded-[5px] bg-white hover:bg-white/90 border border-white/80 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] transition-all shrink-0"
+        className="flex items-center gap-1 px-[9px] py-px rounded-sm bg-white hover:bg-white/90 border border-white/80 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] transition-all shrink-0"
         title={isDateField ? "Select date granularity" : "Change aggregation"}
       >
         {isDateField ? (
@@ -258,7 +258,7 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
       {open && createPortal(
         <div
           style={{ position: "fixed", top: pos.top, left: pos.left, width: 170, zIndex: 99999, maxHeight: '300px' }}
-          className="bg-white rounded-[8px] border border-[#e5e7eb] shadow-2xl py-1 overflow-y-auto"
+          className="bg-white rounded-md border border-[#e5e7eb] shadow-2xl py-1 overflow-y-auto"
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         >
           {isDateField ? (
@@ -273,7 +273,7 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleTemporalToggle(opt.value); }}
                     className={`w-full flex items-center gap-2 px-3 py-[6px] text-left transition-colors hover:bg-[#f5f0ff] ${isSelected ? "bg-[#faf5ff]" : ""}`}
                   >
-                    <div className={`w-[14px] h-[14px] rounded-[3px] border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#6a12cd] bg-[#6a12cd]" : "border-[#d1d5db] bg-white"}`}>
+                    <div className={`w-[14px] h-[14px] rounded-xs border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#6a12cd] bg-[#6a12cd]" : "border-[#d1d5db] bg-white"}`}>
                       {isSelected && <Check className="size-[10px] text-white" strokeWidth={3} />}
                     </div>
                     <span className={`text-[0.75rem] ${isSelected ? "text-[#6a12cd] font-medium" : "text-[#374151]"}`}>{opt.label}</span>
@@ -760,14 +760,14 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       </div>
       <div className="w-[340px] shrink-0 border-l border-[#f3f4f6] bg-[rgba(249,250,251,0.5)] p-4 flex flex-col gap-4 overflow-y-auto">
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Widget name</label>
-          <input value={widgetName} onChange={e => setWidgetName(e.target.value)} placeholder="e.g. Spend by Vendor" className="w-full h-9 px-3 bg-white border border-[#e5e7eb] rounded-[8px] text-[12.5px] text-text focus:outline-none focus:border-[#6a12cd]/40" />
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Widget name</label>
+          <input value={widgetName} onChange={e => setWidgetName(e.target.value)} placeholder="e.g. Spend by Vendor" className="w-full h-9 px-3 bg-white border border-[#e5e7eb] rounded-md text-[0.78125rem] text-text focus:outline-none focus:border-[#6a12cd]/40" />
         </div>
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Chart type</label>
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Chart type</label>
           <div className="grid grid-cols-3 gap-1.5">
             {MODEL_CHART_TYPES.map(ct => (
-              <button key={ct} onClick={() => setModelType(ct)} className={`py-2 rounded-[8px] border text-[10.5px] font-medium cursor-pointer transition-colors ${modelType === ct ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd]' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20'}`}>
+              <button key={ct} onClick={() => setModelType(ct)} className={`py-2 rounded-md border text-[0.65625rem] font-medium cursor-pointer transition-colors ${modelType === ct ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd]' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20'}`}>
                 {ct.replace(' Chart', '')}
               </button>
             ))}
@@ -775,7 +775,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
         </div>
         {isSlicerType ? (
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Slicer style</label>
+            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Slicer style</label>
             <div className="grid grid-cols-3 gap-1.5">
               {([
                 { id: 'list', label: 'List' },
@@ -785,7 +785,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 const disabled = s.numeric && slicerCol?.type !== 'number';
                 return (
                   <button key={s.id} disabled={disabled} onClick={() => setSlicerMode(s.id)} title={disabled ? 'Between needs a numeric field' : undefined}
-                    className={`py-2 rounded-[8px] border text-[10.5px] font-medium transition-colors ${disabled ? 'border-[#e5e7eb] text-ink-300 cursor-not-allowed' : slicerMode === s.id ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd] cursor-pointer' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20 cursor-pointer'}`}>
+                    className={`py-2 rounded-md border text-[10.5px] font-medium transition-colors ${disabled ? 'border-[#e5e7eb] text-ink-300 cursor-not-allowed' : slicerMode === s.id ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd] cursor-pointer' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20 cursor-pointer'}`}>
                     {s.label}
                   </button>
                 );
@@ -795,18 +795,18 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
           </div>
         ) : (
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
+            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
             <div className="flex gap-1.5">
-              {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-[8px] border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
+              {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-md border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
             </div>
           </div>
         )}
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
-          <div className="h-[200px] border border-[#e5e7eb] rounded-[10px] p-2 bg-white overflow-hidden">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
+          <div className="h-[200px] border border-[#e5e7eb] rounded-lg p-2 bg-white overflow-hidden">
             {isSlicerType ? (
               !slicerField
-                ? <div className="h-full flex items-center justify-center text-[11.5px] text-ink-400 text-center px-4">Pick one field to slice by.</div>
+                ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick one field to slice by.</div>
                 : (
                   <div className="h-full flex flex-col">
                     <div className="text-[11px] font-semibold text-[#26064a] mb-1.5 truncate">{slicerCol?.label ?? slicerField.column}</div>
@@ -828,11 +828,11 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                   </div>
                 )
             ) : modelFields.length === 0
-              ? <div className="h-full flex items-center justify-center text-[11.5px] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
+              ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
               : <ModelChart data={modelPreview!} type={modelType} color={modelColor} />}
           </div>
         </div>
-        <button onClick={addModelWidget} disabled={!canAddModel} className="mt-auto h-10 inline-flex items-center justify-center gap-2 text-[13px] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+        <button onClick={addModelWidget} disabled={!canAddModel} className="mt-auto h-10 inline-flex items-center justify-center gap-2 text-[0.8125rem] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
           {mode === 'edit' ? 'Save Widget' : 'Add Widget'}
         </button>
       </div>
@@ -859,7 +859,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       onOpenChange(newOpen);
     }}>
       <DialogContent
-        className="!p-0 !gap-0 !overflow-hidden !bg-white !flex !flex-col !rounded-[12px] !border !border-[#e5e7eb] !shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] font-['Inter',sans-serif] sm:max-w-[1200px]"
+        className="!p-0 !gap-0 !overflow-hidden !bg-white !flex !flex-col !rounded-lg !border !border-[#e5e7eb] !shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] font-['Inter',sans-serif] sm:max-w-[1200px]"
         style={{ width: "min(1200px, 96vw)", height: "min(775px, 92vh)" }}
       >
         <DialogTitle className="sr-only">{mode === 'edit' ? 'Edit Widget' : 'Add New Widget'}</DialogTitle>
@@ -868,7 +868,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
         {/* ── Header ── */}
         <div className="shrink-0 flex items-center justify-between px-6 py-[10px] bg-white border-b border-[#e5e7eb]">
           <div className="flex items-center gap-[8px]">
-            <div className="bg-[#faf5ff] rounded-[10px] size-[28px] flex items-center justify-center shrink-0">
+            <div className="bg-[#faf5ff] rounded-lg size-[28px] flex items-center justify-center shrink-0">
               <LayoutGrid className="size-[14px] text-[#7C3AED]" strokeWidth={1.75} />
             </div>
             <span className="text-[0.9375rem] font-semibold text-[#26064a]">{mode === 'edit' ? 'Edit Widget' : 'Add New Widget'}</span>
@@ -912,7 +912,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 {/* Scrollable content area */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
                   {/* ── CHART TYPE section ── */}
-                <div className=" bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                <div className=" bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setChartTypeCollapsed(!chartTypeCollapsed)}
@@ -958,10 +958,10 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 </div>
 
                 {/* ── DATA SOURCE section ── */}
-                <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                   <div className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white border-b border-[#f0f0f0]">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+                      <div className="size-[18px] rounded-xs flex items-center justify-center">
                         <Database className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
                       <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a] shrink-0">Data Source</span>
@@ -985,7 +985,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             placeholder={isSqlWidget ? 'Search columns…' : 'Search fields…'}
                             value={dataSearch}
                             onChange={e => setDataSearch(e.target.value)}
-                            className="w-full h-[32px] pl-8 pr-2.5 bg-white border border-[#e5e7eb] rounded-[6px] text-[0.75rem] text-[#26064a] placeholder:text-[#c4c9d4] outline-none focus:border-[#6a12cd]/40 transition-colors"
+                            className="w-full h-[32px] pl-8 pr-2.5 bg-white border border-[#e5e7eb] rounded-sm text-[0.75rem] text-[#26064a] placeholder:text-[#c4c9d4] outline-none focus:border-[#6a12cd]/40 transition-colors"
                           />
                         </div>
                       </div>
@@ -993,7 +993,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       {/* Empty state — SQL-bound but no published tables. Don't fall
                           through to Excel demos; ask the user to publish in KH. */}
                       {isSqlBound && !sqlBindingValid && (
-                        <div className="mx-2.5 mb-2.5 px-3 py-4 bg-white border border-dashed border-[#e5e7eb] rounded-[8px] text-center">
+                        <div className="mx-2.5 mb-2.5 px-3 py-4 bg-white border border-dashed border-[#e5e7eb] rounded-md text-center">
                           <Database size={20} className="text-[#b0b8c4] mx-auto mb-2" strokeWidth={1.5} />
                           <p className="text-[0.75rem] font-semibold text-[#26064a] mb-1">No published tables</p>
                           <p className="text-[0.6875rem] text-[#6b7280] mb-3 leading-relaxed">
@@ -1027,7 +1027,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                   </div>
 
                   {/* ── WIDGET INFO section (moved to last position) ── */}
-                <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setWidgetInfoCollapsed(!widgetInfoCollapsed)}
@@ -1053,7 +1053,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           value={widgetName}
                           onChange={(e) => setWidgetName(e.target.value)}
                           placeholder="Enter widget name"
-                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all"
+                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-sm focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all"
                         />
                       </div>
                       <div>
@@ -1063,7 +1063,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           onChange={(e) => setWidgetDescription(e.target.value)}
                           placeholder="Enter widget description"
                           rows={2}
-                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all resize-none"
+                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-sm focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all resize-none"
                         />
                       </div>
                     </div>
@@ -1101,13 +1101,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 {/* Scrollable content area */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 pb-2">
                   {/* ── General section with colors and text formatting ── */}
-                <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                   <button
                     onClick={() => setGeneralThemeOpen(!generalThemeOpen)}
                     className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+                      <div className="size-[18px] rounded-xs flex items-center justify-center">
                         <Palette className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
                       <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">General </span>
@@ -1144,7 +1144,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       </div>
 
                       {/* Text formatting options */}
-                      <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
+                      <div className="flex items-center bg-white rounded-sm border border-[#e5e7eb] overflow-hidden">
                         <button
                           onClick={() => setIsBold(!isBold)}
                           className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${
@@ -1194,13 +1194,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
                   {/* ── X AXIS section — hidden for Table, KPI, Pie ── */}
                   {selected && !isTable && selected.builderType !== 'kpi' && selected.builderType !== 'pie' && (
-                  <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                  <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                     <button
                       onClick={() => setXAxisFormatOpen(!xAxisFormatOpen)}
                       className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+                        <div className="size-[18px] rounded-xs flex items-center justify-center">
                           <ArrowRightLeft className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
                         <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">X axis</span>
@@ -1221,12 +1221,12 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             value={xAxisTitle}
                             onChange={(e) => setXAxisTitle(e.target.value)}
                             placeholder={resolvedXAxis || "Enter X Axis Title"}
-                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
 
                         {/* Text formatting options */}
-                        <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
+                        <div className="flex items-center bg-white rounded-sm border border-[#e5e7eb] overflow-hidden">
                           <button
                             onClick={() => setXAxisBold(!xAxisBold)}
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${
@@ -1274,13 +1274,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
                   {/* ── Y AXIS section — hidden for Table, KPI, Pie ── */}
                   {selected && !isTable && selected.builderType !== 'kpi' && selected.builderType !== 'pie' && (
-                  <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
+                  <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
                     <button
                       onClick={() => setYAxisFormatOpen(!yAxisFormatOpen)}
                       className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+                        <div className="size-[18px] rounded-xs flex items-center justify-center">
                           <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
                         <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y axis</span>
@@ -1301,12 +1301,12 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             value={yAxisTitle}
                             onChange={(e) => setYAxisTitle(e.target.value)}
                             placeholder={resolvedYAxis || "Enter Y Axis Title"}
-                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
 
                         {/* Text formatting options */}
-                        <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
+                        <div className="flex items-center bg-white rounded-sm border border-[#e5e7eb] overflow-hidden">
                           <button
                             onClick={() => setYAxisBold(!yAxisBold)}
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${
@@ -1354,13 +1354,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
                   {/* ── Y AXIS INDEX section — only for charts with secondaryY ── */}
                   {selected && (secondaryYFieldIds.length > 0 || yFieldIds.length > 1) && (
-                  <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
+                  <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
                     <button
                       onClick={() => setYIndexFormatOpen(!yIndexFormatOpen)}
                       className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+                        <div className="size-[18px] rounded-xs flex items-center justify-center">
                           <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
                         <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y Axis Index</span>
@@ -1379,10 +1379,10 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             value={yIndexTitle}
                             onChange={(e) => setYIndexTitle(e.target.value)}
                             placeholder="Enter Y Axis Index Title"
-                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
-                        <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
+                        <div className="flex items-center bg-white rounded-sm border border-[#e5e7eb] overflow-hidden">
                           <button
                             onClick={() => setYIndexBold(!yIndexBold)}
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${yIndexBold ? "bg-[#6a12cd] text-white" : "bg-white text-[#26064a] hover:bg-[#faf5ff]"}`}
@@ -1491,7 +1491,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                   }
                 }}
                 disabled={!canAdd}
-                className={`w-full h-[40px] px-4 rounded-[8px] text-[0.875rem] font-semibold transition-all ${
+                className={`w-full h-[40px] px-4 rounded-md text-[0.875rem] font-semibold transition-all ${
                   canAdd
                     ? "bg-[#6a12cd] text-white hover:bg-[#5a0ebd] shadow-sm"
                     : "bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed"
@@ -1529,7 +1529,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         key={dim.key}
                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
                         onDrop={(e) => { e.preventDefault(); const fieldId = e.dataTransfer.getData("fieldId"); if (fieldId) slot.add(fieldId); }}
-                        className="flex-1 min-h-[40px] bg-white border border-dashed border-[#d1d5db] hover:border-[#6a12cd] hover:bg-[#faf5ff] rounded-[6px] px-2.5 py-2 transition-all duration-200"
+                        className="flex-1 min-h-[40px] bg-white border border-dashed border-[#d1d5db] hover:border-[#6a12cd] hover:bg-[#faf5ff] rounded-sm px-2.5 py-2 transition-all duration-200"
                       >
                         {slot.ids.length === 0 ? (
                           <div className="flex items-center gap-2 h-full">
@@ -1543,7 +1543,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                               if (!field) return null;
                               const agg = yAggs[fid] || "";
                               return (
-                                <div key={fid} className="flex items-center gap-1.5 h-[28px] px-2.5 bg-[#faf5ff] rounded-[4px] border border-[#6a12cd]/30 shrink-0">
+                                <div key={fid} className="flex items-center gap-1.5 h-[28px] px-2.5 bg-[#faf5ff] rounded-xs border border-[#6a12cd]/30 shrink-0">
                                   <span className="text-[0.75rem] font-medium text-[#26064a] whitespace-nowrap">{field.label}</span>
                                   {slot.showAgg && <AggDropdown value={agg} onChange={(v) => changeAgg(fid, v)} fieldId={fid} />}
                                   <button onClick={() => slot.remove(fid)} className="p-0.5 rounded hover:bg-[rgba(38,6,74,0.1)] transition-colors">
@@ -1602,7 +1602,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 {/* SUGGESTION BANNER - Show when 2+ Y-axis fields */}
                 {yFieldIds.length >= 2 && (
                   <div className="flex items-center gap-4 ml-[80px] pl-4">
-                    <div className="flex items-center gap-4 px-4 py-2 bg-[#fafafa] rounded-[4px]">
+                    <div className="flex items-center gap-4 px-4 py-2 bg-[#fafafa] rounded-xs">
                       <Lightbulb className="size-[14px] text-[#6A12CD]" strokeWidth={2} />
                       <div className="flex items-center gap-2">
                         {[
@@ -1613,7 +1613,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           <button
                             key={id}
                             onClick={() => { const w = WIDGETS.find(w => w.id === id); if (w) setSelected(w); }}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-[4px] transition-colors ${selected?.id === id ? "bg-[#6A12CD] text-white" : "hover:bg-[#6A12CD]/10 text-[#26064A]"}`}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-xs transition-colors ${selected?.id === id ? "bg-[#6A12CD] text-white" : "hover:bg-[#6A12CD]/10 text-[#26064A]"}`}
                           >
                             <Icon className={`size-[12px] ${selected?.id === id ? "text-white" : "text-[#26064A]"}`} strokeWidth={2} />
                             <span className="text-[0.75rem]">{label}</span>
@@ -1687,7 +1687,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             const label = field?.label || fid;
                             const values = ["12,450", "94.2%", "₹4.2M", "23", "1.8d", "38d", "₹85L"];
                             return (
-                              <div key={fid} className="bg-white rounded-xl border-2 border-[#e5e7eb] p-6 shadow-sm hover:shadow-md transition-shadow w-[280px]">
+                              <div key={fid} className="bg-white rounded-lg border-2 border-[#e5e7eb] p-6 hover: transition-shadow w-[280px]">
                                 <p className="text-[1rem] font-semibold text-[#26064a] mb-3">
                                   {label}
                                 </p>

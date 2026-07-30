@@ -5,8 +5,10 @@
 // steps, manual override, and conclusion. The control conclusion rolls up from
 // both. Discussions are role-tagged threads anchored to a control or a track.
 
-export type Role = 'auditor' | 'risk-owner';
-export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner' };
+// Three hats, three lines: the owner remediates, the auditor tests, the reviewer
+// alone closes. One human may hold owner + reviewer; the auditor stays independent.
+export type Role = 'auditor' | 'risk-owner' | 'reviewer';
+export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner', reviewer: 'Reviewer' };
 
 export type Assertion =
   | 'Completeness' | 'Accuracy' | 'Existence / Occurrence'
@@ -22,7 +24,7 @@ export type TrackConclusion = 'Effective' | 'Ineffective' | 'Not tested';
 export type TrackStatus = 'Not started' | 'In progress' | 'Concluded';
 export type Conclusion = 'Effective' | 'Ineffective' | 'In progress' | 'Not started';
 
-export type Court = 'auditor' | 'risk-owner' | 'none';
+export type Court = 'auditor' | 'risk-owner' | 'reviewer' | 'none';
 export type Likelihood = 'Remote' | 'Reasonably possible' | 'Probable';
 export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakness';
 
@@ -44,13 +46,23 @@ export interface EvidenceFile {
 
 // ─── Design track (TOD) ─────────────────────────────────────────────────────────
 
-export type DesignDocKind = 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP';
+export type DesignDocKind =
+  | 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP'
+  | 'Precision & thresholds' | 'Segregation of duties'
+  // an element the auditor named themselves — its title is `name`, not the kind
+  | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+/** One design element — a completeness requirement evidenced by attached files. */
 export interface DesignDoc {
   id: string;
   kind: DesignDocKind;
   name: string;
+  /** What the auditor is asking for — only set on a Custom element. */
+  description?: string;
   status: DocStatus;
+  /** Required elements gate the design conclusion; optional ones don't. Default true. */
+  required?: boolean;
+  files?: EvidenceFile[];
   uploadedBy?: string;
   at?: string;
 }
@@ -122,6 +134,9 @@ export interface OperatingStep {
   attestation?: Attestation;
   result: TestResult;
   override?: Override;
+  // Per-drawn-sample results for THIS attribute (keyed by Sample.id) — the
+  // handbook grain: every attribute is tested against every sampled item.
+  sampleResults?: Record<string, TestResult>;
 }
 export interface Sample { id: string; ref: string; result: TestResult; }
 export interface Sampling {
@@ -135,6 +150,9 @@ export interface Population {
   count: number;
   tieOut: string;
   evidence: EvidenceFile[];
+  // IPE check — a system report must itself be validated (completeness against
+  // the GL tie-out, accuracy spot-check) before anything is sampled from it.
+  ipeValidated?: { by: string; at: string };
 }
 export interface OperatingTrack {
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
@@ -145,6 +163,16 @@ export interface OperatingTrack {
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
+}
+
+// ─── RACM row review — the auditor's approval / remark on one matrix row ─────────
+// Absent = the row is still pending the auditor's review.
+export type RacmRowStatus = 'Approved' | 'Remark';
+export interface RacmReview {
+  status: RacmRowStatus;
+  remark?: string;          // required when status is 'Remark'
+  by: string;
+  at: string;
 }
 
 // ─── Control ─────────────────────────────────────────────────────────────────────
@@ -159,13 +187,33 @@ export interface Control {
   type: ControlType;
   frequency: Frequency;
   isKey: boolean;
+  /** The RACM's Control Activity column — who does what, to which record, when,
+   *  and how, spelled out in full. `description` is the one-line control
+   *  statement the matrix and the register show; this is the narrative the
+   *  auditor tests against, and it is what the header carries. */
+  controlActivity?: string;
   precision: string;
+  // Management review control — precision must be structured: the rupee threshold
+  // at which the reviewer investigates, checked against performance materiality.
+  isMrc?: boolean;
+  mrcThreshold?: number;
   owner: string;
   riskId: string;
   riskDescription: string;
   assertions: Assertion[];
+  /** Days until the next scheduled test — 0 = due today, negative = overdue.
+   *  Optional: when absent it is derived from the control's frequency. */
+  testDueInDays?: number;
+  racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
+  /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
+   *  once the control is concluded; the reviewer countersigns. Separate from the
+   *  engagement-level opinion sign-off. */
+  wpSignoff?: { preparer?: SignoffEntry; reviewer?: SignoffEntry };
+  /** The reviewer sent the concluded paper back instead of countersigning —
+   *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
+  reviewReturn?: { reason: string; by: string; at: string };
 }
 
 // ─── Discussions (role-tagged threads) ──────────────────────────────────────────
@@ -186,10 +234,27 @@ export interface Discussion {
   comments: DiscussionComment[];
 }
 
+// ─── Review notes — the reviewer's formal channel on a working paper ─────────────
+// Lifecycle: the reviewer raises → the auditor resolves with a response → the
+// reviewer verifies & closes (or reopens). Role gates keep it four-eyes: the
+// raiser never resolves their own note, the resolver never verifies. A note that
+// isn't Closed blocks the paper's countersign. Discussions stay the informal channel.
+export type ReviewNoteStatus = 'Open' | 'Resolved' | 'Closed';
+export interface ReviewNote {
+  id: string;
+  controlId: string;
+  text: string;                                        // what the reviewer challenged
+  raisedBy: string;
+  raisedAt: string;
+  status: ReviewNoteStatus;
+  resolution?: { text: string; by: string; at: string };  // the auditor's response
+  verified?: { by: string; at: string };                   // the reviewer's close
+}
+
 // ─── Handoffs, deficiencies, scope, engagement ───────────────────────────────────
 
 export type TaskType = 'pbc' | 'query' | 'remediation';
-export type TaskStatus = 'open' | 'submitted' | 'cleared';
+export type TaskStatus = 'open' | 'cleared';
 export interface HandoffTask {
   id: string;
   type: TaskType;
@@ -215,16 +280,26 @@ export interface Deficiency {
   mwIndicators: string[];
   compensatingControlId?: string;
   aggregationGroup?: string;
-  remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done' };
+  // The owner's commitment: what will fix the ROOT CAUSE, who does it, by when —
+  // and the evidence they attach before declaring it done (submit for retest).
+  remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
   // exception lifecycle
   status: ExceptionStatus;
   retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
   signoff?: { by: string; at: string };
+  // Prudent-official judgment: severity can be argued UP (never down) with a
+  // recorded rationale — the handbook's judgment floor over the pure math.
+  prudentOverride?: { to: Severity; rationale: string; by: string; at: string };
 }
-export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Closed';
+// A passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Awaiting reviewer' | 'Closed';
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
+  // scoping front door: which business process covers this account, and the
+  // "what could go wrong" statements driving its relevant assertions
+  process?: string;
+  wcgw?: string[];
 }
 
 /** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */
@@ -235,6 +310,27 @@ export const MW_INDICATOR_CATALOGUE = [
   'Ineffective control environment / oversight',
   'Ineffective period-end financial reporting process',
 ] as const;
+// ─── Materiality basis — the benchmark worksheet behind the number ───────────────
+// Set in the engagement drawer, locked at go-live: the benchmark, its annualized
+// amount (from the uploaded one-month GL), the chosen %, and how performance
+// materiality allocates across the significant account groups.
+export interface BenchmarkAmounts { assets: number; revenue: number; pbt: number; cash: number; equity: number; }
+export type BenchmarkKey = keyof BenchmarkAmounts;
+export interface MaterialityAllocation { group: string; balance: number; sharePct: number; allocated: number; }
+export interface MaterialityBasis {
+  benchmark: BenchmarkKey;
+  amounts: BenchmarkAmounts;     // annualized (P&L ×12) / point-in-time (balance sheet)
+  pct: number;                   // chosen % of the benchmark
+  pmPct: number;                 // performance materiality as % of overall (50–75)
+  ctPct: number;                 // clearly-trivial as % of overall (usually 5)
+  source: string;                // e.g. 'GL Apr 2026 (AG01) · P&L annualized ×12'
+  allocation: MaterialityAllocation[];
+  lockedAt?: string;             // set at go-live — materiality can't change after
+}
+
+/** What the tool detected from the uploaded RACM / GL when the engagement was created. */
+export interface EntityDetection { name: string; companyCode: string; source: string; }
+
 export interface MaterialityRules {
   clearlyTrivial: number;        // de-minimis threshold (₹) — below this, an exception is clearly trivial
   sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
@@ -248,7 +344,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample';
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -262,17 +358,106 @@ export interface ExecutionEvent {
   at: string;
 }
 
+// ─── Runs (execution registry — the Runs tab) ────────────────────────────────────
+// One record per run: a bulk test across controls, a single control's test-all, a
+// workflow run pulled for an attribute, or an AI validation against a file. The
+// per-control `executions` trail above stays the fine-grained audit log.
+export type RunKind = 'bulk-test' | 'control-test' | 'workflow-run' | 'ai-validation';
+export interface RunControlOutcome {
+  controlId: string;
+  wpRef: string;
+  description: string;
+  outcome: 'Effective' | 'Ineffective';
+  checks: number;
+}
+export interface RunRecord {
+  id: string;
+  kind: RunKind;
+  label: string;            // headline, e.g. 'Bulk test — 12 controls'
+  detail?: string;          // supporting line — datasets, attribute code, run ref
+  controls: RunControlOutcome[];
+  datasets?: string[];      // unique datasets the run executed against
+  by: string;
+  role: Role;
+  at: string;
+}
+
+// ─── Audits (the Audit logs tab) ─────────────────────────────────────────────
+// One record per audit created from the "New audit" wizard: a period, what it
+// covers (entities OR RACMs — the wizard makes you pick a side), the TB / GL
+// files attached, and the materiality rule in force. Distinct from RunRecord
+// above: a run is one execution, an audit is the scoped piece of work.
+export type AuditScopeKind = 'entity' | 'racm';
+export interface AuditRecord {
+  id: string;
+  /** Cycle label the period step produced, e.g. 'FY 2026-27' or 'CY 2027'. */
+  period: string;
+  /** 'fy' | 'cy' — kept so the review step and the list can re-state the span. */
+  yearBasis: 'fy' | 'cy';
+  periodSpan: string;               // 'Apr 2026 – Mar 2027'
+  scopeKind: AuditScopeKind;
+  /** Names of the entities or RACM processes selected — display-ready. */
+  scopeNames: string[];
+  /** Entity ids behind those names (empty when scoped by RACM). Kept alongside
+   *  the names because filtering the workspace needs ids, not display text. */
+  scopeIds: string[];
+  /** The exact controls the audit tests, when they were picked one by one on the
+   *  RACM side of the scope step (including "key controls only"). Absent or
+   *  empty means the whole of every picked RACM — an audit scoped by entity
+   *  never sets it, because there the processes decide. */
+  controlIds?: string[];
+  /** Simulated TB / GL uploads; empty when the step was skipped. */
+  files: { name: string; kind: 'tb' | 'gl' }[];
+  /** The rule as set on the materiality step. Shape is inlined rather than
+   *  imported from soxTestingData — this module deliberately has no imports,
+   *  and the audit freezes its own copy anyway, so later edits to the
+   *  programme's rules don't rewrite history. */
+  materiality: { basisLabel: string; benchmark: number; pct: number };
+  /** ₹ Cr threshold the rule computes, frozen at creation. */
+  overall: number;
+  by: string;
+  role: Role;
+  at: string;
+}
+
+// ─── Ground-rules change log — materiality is set before testing; a mid-engagement
+// change is warned, previewed (which exceptions re-grade), and recorded here. ──────
+export interface RulesChangeEntry {
+  id: string;
+  changes: { field: string; from: string; to: string }[];
+  regraded: { defId: string; from: Severity; to: Severity }[];
+  reason: string;
+  by: string;
+  at: string;
+}
+
+// ─── Engagement sign-off — preparer signs, reviewer countersigns, engagement locks ─
+export interface SignoffEntry { by: string; at: string }
+// icfrConclusion is stamped at each signature from live state: open MW ⇒ 'Not effective'.
+export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry; icfrConclusion?: 'Effective' | 'Not effective' }
+
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
-  periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
+  // No Interim / Year-end round here — the period comes from the newest record
+  // in `audits` below, set when an audit is created on the Audit logs tab.
+  periodStart: string; periodEnd: string;
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
+  live?: boolean;
+  wentLiveAt?: string;
+  entityDetected?: EntityDetection;
+  materialityBasis?: MaterialityBasis;
   rules: MaterialityRules;
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];
   tasks: HandoffTask[];
   discussions: Discussion[];
+  reviewNotes: ReviewNote[];
   executions: ExecutionEvent[];
+  runs: RunRecord[];
+  audits: AuditRecord[];
+  signoff: EngagementSignoff;
+  rulesLog: RulesChangeEntry[];
 }
 
-export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];
+export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];

@@ -39,9 +39,9 @@ test('Create Workflow opens the chat builder in a new tab with Workflow pre-sele
   await enterWorkspace(newPage); // dismiss the login gate if the new tab shows it
   await newPage.waitForTimeout(400);
 
-  // Hero composer's Workflow toggle is selected by default; Query is not.
+  // Hero composer's Workflow toggle is selected by default; Chat is not.
   await expect(newPage.getByRole('radio', { name: 'Workflow' })).toBeChecked();
-  await expect(newPage.getByRole('radio', { name: 'Query' })).not.toBeChecked();
+  await expect(newPage.getByRole('radio', { name: 'Chat' })).not.toBeChecked();
   await newPage.screenshot({ path: 'test-results/link-wf-new-tab.png', fullPage: true });
 
   // Original modal closed in the first tab.

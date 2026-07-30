@@ -8,6 +8,7 @@
 // is indistinguishable from a hand-assembled one.
 
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
+import { sectionBlurb } from './reportShared';
 import type { WorkflowResult } from './reportShared';
 
 export type QuerySource = 'report';
@@ -228,42 +229,61 @@ export function arrangeForTemplate(templateId: string, defs: GeneratedQueryDef[]
  * Every string is editable placeholder content, composed from the attached
  * queries where the section maps to query data.
  */
+/** The rating a heading names, if it names one. "Detailed findings — medium"
+ *  is one section of a severity split, and it must speak only about its own
+ *  rating: a medium section reporting high-severity results is a lie the
+ *  reader can see. */
+const SECTION_SEVERITY = /\b(critical|high|medium|low)\b/i;
+
 export function composeSectionContent(sectionName: string, defs: GeneratedQueryDef[]): string {
-  const n = defs.length;
+  // Scope the numbers to the section's own rating before anything is counted,
+  // so no two sections of a split can end up with the same sentence.
+  const severity = sectionName.match(SECTION_SEVERITY)?.[1]?.toLowerCase();
+  const scoped = severity
+    ? defs.filter(d => (d.severity ?? '').toLowerCase() === severity)
+    : defs;
+  const n = scoped.length;
   const qWord = n === 1 ? 'query' : 'queries';
-  const risks = [...new Set(defs.map(d => d.risk))];
-  const high = defs.filter(d => d.severity === 'High').length;
-  if (/scope|objective/i.test(sectionName))
-    return `This review covers ${n} audit ${qWord} spanning ${risks.join(', ')}. Objective: validate that controls over the covered processes operate effectively and surface exceptions for remediation.`;
-  if (/methodology/i.test(sectionName))
-    return 'Design and operating effectiveness were assessed for each area in scope. Testing combined AI-assisted full-population scans with rule-based exception detection; flagged records are grouped into cases for auditor validation, and evidence is retained against each query.';
-  // Query body / anchor. `assessment` and `register` added so the Compliance and
-  // Risk anchors compose here too (PRD §4.6 name-mapping note), not the fallback.
-  if (/testing results|quer(y|ies)|findings|assessment|register/i.test(sectionName))
-    return `${n} ${qWord} executed${high > 0 ? ` — ${high} returned high-severity results` : ''}. Detailed results follow.`;
-  if (/deficienc|detailed description/i.test(sectionName))
-    return high > 0
-      ? `${high} of ${n} ${qWord} surfaced high-severity exceptions requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
-      : 'No high-severity exceptions surfaced by the attached queries. Classify any residual items during review.';
-  if (/gap|non-?compliance/i.test(sectionName))
-    return high > 0
-      ? `${high} of ${n} ${qWord} surfaced potential non-compliance requiring action. Each gap maps to its requirement and owner in the results above.`
-      : 'No material gaps identified against the assessed requirements. Record any minor observations during review.';
-  if (/remediation|treatment|mitigation|action plan/i.test(sectionName))
-    return 'Assign owners and due dates to each accepted item; re-testing or residual re-rating follows. Status rolls up here as the items progress.';
-  if (/recommendation|insight/i.test(sectionName)) {
-    const recs = defs.flatMap(d => d.observations).slice(0, 3);
-    return recs.length > 0 ? recs.join(' ') : 'Recommendations will be drafted from query observations.';
+  const high = scoped.filter(d => d.severity === 'High').length;
+
+  if (severity) {
+    // A severity-split section states its own count, or says plainly that it
+    // has nothing this time. It never borrows the report's totals.
+    if (/quer(y|ies)|findings|observations|results|register/i.test(sectionName)) {
+      return n > 0
+        ? `${n} ${qWord} rated ${severity}. The detail follows.`
+        : `No ${severity}-rated findings in this report.`;
+    }
   }
-  if (/conclusion|opinion|assertion/i.test(sectionName))
-    return high > 0
-      ? `Based on the ${n} ${qWord} reviewed, control weaknesses were identified (${high} high-severity). A qualified conclusion is warranted pending remediation of the exceptions above.`
-      : `Based on the ${n} ${qWord} reviewed, no significant exceptions were noted. Controls over the covered areas operated effectively for the period.`;
-  if (/sign-?off|approval/i.test(sectionName))
-    return 'Prepared, reviewed, and approved per the authorisation matrix. Digital sign-off is captured with name, role, and date on issue.';
-  if (/appendix/i.test(sectionName))
-    return `Source queries: ${defs.map(d => d.id).join(', ')}. Full query outputs, parameters, and evidence references are retained with this report.`;
-  return `${sectionName} — drafted for this report; edit to finalize.`;
+  // Data-anchored sections summarise the attached queries — richer, data-aware
+  // prose, but ONLY when queries are actually attached. With no data (e.g. a
+  // template applied before queries are added) these fall through to the section's
+  // descriptive one-liner, so nothing ever reads "0 queries".
+  if (n > 0) {
+    if (/testing results|quer(y|ies)|findings|assessment|register/i.test(sectionName))
+      return `${n} ${qWord} executed${high > 0 ? `, ${high} of them returning high-severity results` : ''}. Detailed results follow.`;
+    if (/deficienc|detailed description/i.test(sectionName))
+      return high > 0
+        ? `${high} of ${n} ${qWord} surfaced high-severity exceptions requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
+        : 'No high-severity exceptions surfaced by the attached queries. Classify any residual items during review.';
+    if (/gap|non-?compliance/i.test(sectionName))
+      return high > 0
+        ? `${high} of ${n} ${qWord} surfaced potential non-compliance requiring action. Each gap maps to its requirement and owner in the results above.`
+        : 'No material gaps identified against the assessed requirements. Record any minor observations during review.';
+    if (/recommendation|insight/i.test(sectionName)) {
+      const recs = scoped.flatMap(d => d.observations).slice(0, 3);
+      if (recs.length > 0) return recs.join(' ');
+    }
+    if (/conclusion|opinion|assertion/i.test(sectionName))
+      return high > 0
+        ? `Based on the ${n} ${qWord} reviewed, control weaknesses were identified (${high} high-severity). A qualified conclusion is warranted pending remediation of the exceptions above.`
+        : `Based on the ${n} ${qWord} reviewed, no significant exceptions were noted. Controls over the covered areas operated effectively for the period.`;
+    if (/appendix/i.test(sectionName))
+      return `Source queries: ${scoped.map(d => d.id).join(', ')}. Full query outputs, parameters, and evidence references are retained with this report.`;
+  }
+  // Everything else — and every section when no queries are attached — starts from
+  // the section's one-line description, matching the template preview.
+  return sectionBlurb(sectionName);
 }
 
 /** Deterministic executive-summary rollup composed from the selected queries. */

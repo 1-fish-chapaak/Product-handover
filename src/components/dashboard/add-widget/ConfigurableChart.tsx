@@ -461,7 +461,7 @@ function TrendTooltip({ active, payload, label, yAxis }: any) {
   if (!active || !payload?.length) return null;
   const fmt = makeYFmt(yAxis);
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
+    <div className="bg-white border border-canvas-border rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a] mb-2">
         {label}
       </p>
@@ -471,7 +471,7 @@ function TrendTooltip({ active, payload, label, yAxis }: any) {
             className="size-2 rounded-full"
             style={{ backgroundColor: p.color }}
           />
-          <span className="text-gray-500">{p.name}:</span>
+          <span className="text-ink-500">{p.name}:</span>
           <span className="font-semibold text-[#26064a]">
             {fmt(p.value)}
           </span>
@@ -484,7 +484,7 @@ function TrendTooltip({ active, payload, label, yAxis }: any) {
 function BarTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
+    <div className="bg-white border border-canvas-border rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a] mb-2">
         {label}
       </p>
@@ -494,7 +494,7 @@ function BarTooltip({ active, payload, label }: any) {
             className="size-2 rounded-full"
             style={{ backgroundColor: p.fill }}
           />
-          <span className="text-gray-500">{p.name}:</span>
+          <span className="text-ink-500">{p.name}:</span>
           <span className="font-semibold text-[#26064a]">
             {p.value}
           </span>
@@ -507,12 +507,12 @@ function BarTooltip({ active, payload, label }: any) {
 function PieTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
+    <div className="bg-white border border-canvas-border rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a]">
         {payload[0].name}
       </p>
       <div className="flex items-center gap-2 mt-1">
-        <span className="text-gray-500">Count:</span>
+        <span className="text-ink-500">Count:</span>
         <span className="font-semibold text-[#26064a]">
           {payload[0].value}
         </span>
@@ -728,7 +728,7 @@ function TablePreview() {
               {ALL_COLUMNS.map((col) => (
                 <label
                   key={col}
-                  className="flex items-center gap-2 px-3 py-1.5 text-[0.75rem] text-ink-600 hover:bg-gray-50 cursor-pointer"
+                  className="flex items-center gap-2 px-3 py-1.5 text-[0.75rem] text-ink-600 hover:bg-canvas cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -765,7 +765,7 @@ function TablePreview() {
 
       {/* ── Active filter rows ── */}
       {tableFilters.length > 0 && (
-        <div className="flex flex-col gap-1.5 px-4 py-2 border-b border-[#e5e7eb] bg-gray-50/50 shrink-0">
+        <div className="flex flex-col gap-1.5 px-4 py-2 border-b border-[#e5e7eb] bg-canvas/50 shrink-0">
           {tableFilters.map((f, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <select
@@ -788,11 +788,11 @@ function TablePreview() {
                   updateFilter(idx, "value", e.target.value)
                 }
                 placeholder="Select values..."
-                className="px-2 py-1 text-[0.75rem] text-ink-600 rounded-lg border border-canvas-border bg-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-400 w-40"
+                className="px-2 py-1 text-[0.75rem] text-ink-600 rounded-lg border border-canvas-border bg-white placeholder:text-ink-400 focus:outline-none focus:ring-1 focus:ring-brand-400 w-40"
               />
               <button
                 onClick={() => removeFilter(idx)}
-                className="p-1 text-ink-600 rounded hover:bg-gray-200 transition-colors"
+                className="p-1 text-ink-600 rounded hover:bg-canvas-border transition-colors"
               >
                 <X size={14} />
               </button>
@@ -805,11 +805,11 @@ function TablePreview() {
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-white z-10">
-            <tr className="border-b border-gray-200">
+            <tr className="border-b border-canvas-border">
               {displayedColumns.map((col) => (
                 <th
                   key={col}
-                  className="text-left py-2.5 px-3 text-[0.625rem] font-semibold text-gray-500 uppercase tracking-[0.5px] whitespace-nowrap"
+                  className="text-left py-2.5 px-3 text-[0.625rem] font-semibold text-ink-500 uppercase tracking-[0.5px] whitespace-nowrap"
                 >
                   {col}
                 </th>
@@ -820,42 +820,42 @@ function TablePreview() {
             {slice.map((r, i) => (
               <tr
                 key={i}
-                className="border-b border-gray-100 transition-colors hover:bg-gray-50"
+                className="border-b border-canvas-border transition-colors hover:bg-canvas"
               >
                 {displayedColumns.includes("INVOICE ID") && (
-                  <td className="py-2.5 px-3 text-gray-500 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-500 whitespace-nowrap">
                     {r.id}
                   </td>
                 )}
                 {displayedColumns.includes("PO NUMBER") && (
-                  <td className="py-2.5 px-3 text-gray-900 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-900 whitespace-nowrap">
                     {r.po}
                   </td>
                 )}
                 {displayedColumns.includes("DATE") && (
-                  <td className="py-2.5 px-3 text-gray-900 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-900 whitespace-nowrap">
                     {r.date}
                   </td>
                 )}
                 {displayedColumns.includes("VENDOR") && (
-                  <td className="py-2.5 px-3 text-gray-900 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-900 whitespace-nowrap">
                     {r.vendor}
                   </td>
                 )}
                 {displayedColumns.includes("CATEGORY") && (
-                  <td className="py-2.5 px-3 text-gray-900 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-900 whitespace-nowrap">
                     {r.cat}
                   </td>
                 )}
                 {displayedColumns.includes("VALUE") && (
-                  <td className="py-2.5 px-3 text-gray-900 whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-ink-900 whitespace-nowrap">
                     {r.value}
                   </td>
                 )}
                 {displayedColumns.includes("PERFORMANCE") && (
                   <td className="py-2.5 px-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-16 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-1.5 w-16 bg-canvas-border rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -878,11 +878,11 @@ function TablePreview() {
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-gray-100 shrink-0">
+      <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-canvas-border shrink-0">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page === 1}
-          className="px-3 py-1 text-[0.6875rem] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          className="px-3 py-1 text-[0.6875rem] text-ink-700 border border-ink-300 rounded hover:bg-canvas disabled:opacity-40 transition-colors"
         >
           Previous
         </button>
@@ -891,7 +891,7 @@ function TablePreview() {
             setPage((p) => Math.min(totalPages, p + 1))
           }
           disabled={page === totalPages}
-          className="px-3 py-1 text-[0.6875rem] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          className="px-3 py-1 text-[0.6875rem] text-ink-700 border border-ink-300 rounded hover:bg-canvas disabled:opacity-40 transition-colors"
         >
           Next
         </button>
@@ -1788,16 +1788,16 @@ export function ConfigurableChart({
                 style={{ backgroundColor: entryColor }}
                 title="Click to change color"
               />
-              <span className="text-[0.6875rem] text-gray-600">{entryName}</span>
+              <span className="text-[0.6875rem] text-ink-600">{entryName}</span>
               {legendPickerOpen === entryName && onSeriesColorChange && (
                 <>
                   <div className="fixed inset-0 z-[60]" onClick={(ev) => { ev.stopPropagation(); setLegendPickerOpen(null); }} />
-                  <div className="absolute left-0 bottom-full mb-1.5 z-[70] bg-white border border-gray-200 rounded-xl shadow-2xl p-2.5 flex flex-wrap gap-1.5 w-[148px]">
+                  <div className="absolute left-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border rounded-xl shadow-2xl p-2.5 flex flex-wrap gap-1.5 w-[148px]">
                     {EDITABLE_PALETTE.map(c => (
                       <button
                         key={c}
                         onClick={(ev) => { ev.stopPropagation(); onSeriesColorChange(entryName, c); setLegendPickerOpen(null); }}
-                        className={`size-5 rounded-full cursor-pointer transition-all ${entryColor === c ? 'ring-2 ring-purple-600 ring-offset-1 scale-110' : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-1 hover:scale-110'}`}
+                        className={`size-5 rounded-full cursor-pointer transition-all ${entryColor === c ? 'ring-2 ring-purple-600 ring-offset-1 scale-110' : 'hover:ring-2 hover:ring-ink-300 hover:ring-offset-1 hover:scale-110'}`}
                         style={{ background: c }}
                       />
                     ))}
@@ -1907,16 +1907,16 @@ export function ConfigurableChart({
                           style={{ backgroundColor: entryColor }}
                           title="Click to change color"
                         />
-                        <span className="text-[0.6875rem] text-gray-600" style={legendStyle}>{entryName}</span>
+                        <span className="text-[0.6875rem] text-ink-600" style={legendStyle}>{entryName}</span>
                         {legendPickerOpen === entryName && onSeriesColorChange && (
                           <>
                             <div className="fixed inset-0 z-[60]" onClick={(ev) => { ev.stopPropagation(); setLegendPickerOpen(null); }} />
-                            <div className="absolute left-0 bottom-full mb-1.5 z-[70] bg-white border border-gray-200 rounded-xl shadow-2xl p-2.5 flex flex-wrap gap-1.5 w-[148px]">
+                            <div className="absolute left-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border rounded-xl shadow-2xl p-2.5 flex flex-wrap gap-1.5 w-[148px]">
                               {EDITABLE_PALETTE.map(c => (
                                 <button
                                   key={c}
                                   onClick={(ev) => { ev.stopPropagation(); onSeriesColorChange(entryName, c); setLegendPickerOpen(null); }}
-                                  className={`size-5 rounded-full cursor-pointer transition-all ${entryColor === c ? 'ring-2 ring-purple-600 ring-offset-1 scale-110' : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-1 hover:scale-110'}`}
+                                  className={`size-5 rounded-full cursor-pointer transition-all ${entryColor === c ? 'ring-2 ring-purple-600 ring-offset-1 scale-110' : 'hover:ring-2 hover:ring-ink-300 hover:ring-offset-1 hover:scale-110'}`}
                                   style={{ background: c }}
                                 />
                               ))}
@@ -1942,14 +1942,14 @@ export function ConfigurableChart({
   return (
     <div className="w-full h-full flex items-center justify-center">
       <div className="text-center max-w-[240px]">
-        <div className="mx-auto mb-3 size-16 rounded-2xl bg-gray-50 flex items-center justify-center">
+        <div className="mx-auto mb-3 size-16 rounded-2xl bg-canvas flex items-center justify-center">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M3 15l4-4 4 4 4-6 6 6" />
           </svg>
         </div>
-        <p className="text-[0.8125rem] font-medium text-gray-500 mb-1">No Data to Display</p>
-        <p className="text-[0.6875rem] text-gray-400 leading-relaxed">Configure data fields to generate this chart.</p>
+        <p className="text-[0.8125rem] font-medium text-ink-500 mb-1">No Data to Display</p>
+        <p className="text-[0.6875rem] text-ink-400 leading-relaxed">Configure data fields to generate this chart.</p>
       </div>
     </div>
   );

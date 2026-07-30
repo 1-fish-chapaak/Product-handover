@@ -22,7 +22,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
   const SummaryRow = ({ label: l, value }: { label: string; value: string }) => (
     <div className="flex items-baseline gap-2 text-[0.6875rem]">
-      <span className="text-gray-400 w-32 shrink-0">{l}</span>
+      <span className="text-ink-400 w-32 shrink-0">{l}</span>
       <span className="text-text font-medium">{value || '—'}</span>
     </div>
   );
@@ -87,7 +87,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Work Type */}
       <div className="rounded-lg border border-border-light p-3 space-y-1.5">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Work Type</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Work Type</h5>
         <div className="flex items-center gap-2">
           <span className="text-[0.75rem] font-semibold text-text">{pattern.label}</span>
           <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-bold">{label}</span>
@@ -96,7 +96,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Common Details */}
       <div className="rounded-lg border border-border-light p-3 space-y-1">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">{label} Details</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">{label} Details</h5>
         <SummaryRow label="Name" value={details.name} />
         <SummaryRow label="Objective" value={details.description} />
         <SummaryRow label="Owner" value={details.owner} />
@@ -109,7 +109,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Pattern Config */}
       <div className="rounded-lg border border-border-light p-3 space-y-1">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Pattern Setup</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Pattern Setup</h5>
         {configEntries.map((e, i) => (
           <SummaryRow key={i} label={e.label} value={e.value} />
         ))}
@@ -117,7 +117,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Workspace Preview */}
       <div className="rounded-lg border border-border-light p-3">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Tabs</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Workspace Tabs</h5>
         <div className="flex flex-wrap gap-1.5">
           {pattern.workspaceTabs.map(tab => (
             <span key={tab.id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-semibold">{tab.label}</span>
@@ -127,11 +127,11 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Required Outputs */}
       <div className="rounded-lg border border-border-light p-3">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
+        <h5 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Required Outputs</h5>
         <div className="space-y-1">
           {pattern.requiredOutputs.map(o => (
             <div key={o} className="flex items-center gap-1.5 text-[0.625rem] text-text">
-              <CheckCircle2 size={10} className="text-gray-300" />
+              <CheckCircle2 size={10} className="text-ink-300" />
               {o}
             </div>
           ))}

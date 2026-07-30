@@ -26,46 +26,46 @@ export function ApprovalCard({ assignment: a, ex, onDone }: { assignment: Assign
   const visible = a.columnPermissions.filter(p => p.visible);
 
   return (
-    <div className="border border-canvas-border rounded-[12px] bg-canvas-elevated overflow-hidden">
+    <div className="border border-canvas-border rounded-lg bg-canvas-elevated overflow-hidden">
       <div className="px-5 py-3.5 border-b border-canvas-border flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">
-          <span className="font-mono text-[13px] font-semibold text-brand-700">{ex.id}</span>
-          <span className="text-[12.5px] text-ink-700 truncate max-w-[360px]">{ex.title}</span>
+          <span className="font-mono text-[0.8125rem] font-semibold text-brand-700">{ex.id}</span>
+          <span className="text-[0.78125rem] text-ink-700 truncate max-w-[360px]">{ex.title}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center h-6 px-2.5 text-[11px] font-semibold bg-brand-50 text-brand-700 rounded-full">{lvl.name}</span>
+          <span className="inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-semibold bg-brand-50 text-brand-700 rounded-full">{lvl.name}</span>
           <SLABadge startIso={a.assignedAt} slaHours={lvl.slaHours} />
         </div>
       </div>
 
       <div className="grid md:grid-cols-[1fr_240px]">
         <div className="p-5 space-y-4">
-          <div className="text-[11.5px] text-ink-500">Assigned by <span className="font-semibold text-ink-700">{userName(a.assignedBy)}</span> · worked by <span className="font-semibold text-ink-700">{userName(a.assigneeId)}</span> · {a.workflowName} v{a.workflowVersion}</div>
+          <div className="text-[0.71875rem] text-ink-500">Assigned by <span className="font-semibold text-ink-700">{userName(a.assignedBy)}</span> · worked by <span className="font-semibold text-ink-700">{userName(a.assigneeId)}</span> · {a.workflowName} v{a.workflowVersion}</div>
 
           <div className="grid grid-cols-2 gap-x-5 gap-y-2.5">
             {visible.map(p => (
               <div key={p.key}>
-                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 mb-0.5">{p.label}</div>
-                <div className="text-[12.5px] text-ink-800">{cellDisplay(ex, p.key)}</div>
+                <div className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 mb-0.5">{p.label}</div>
+                <div className="text-[0.78125rem] text-ink-800">{cellDisplay(ex, p.key)}</div>
               </div>
             ))}
           </div>
 
           {a.draft && (a.draft.classification || a.draft.actionName || a.draft.actionReview) && (
-            <div className="rounded-[8px] border border-canvas-border bg-[#FAFAFB] p-3 space-y-1.5">
-              <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-500">Submitted by assignee</div>
-              {a.draft.classification && <div className="text-[12px] text-ink-800"><span className="text-ink-500">Classification:</span> {a.draft.classification}</div>}
-              {a.draft.actionName && <div className="text-[12px] text-ink-800"><span className="text-ink-500">Action:</span> {a.draft.actionName}{a.draft.dueDate ? ` · due ${a.draft.dueDate}` : ''}</div>}
-              {a.draft.actionDetails && <div className="text-[12px] text-ink-700">{a.draft.actionDetails}</div>}
-              {a.draft.actionReview && <div className="text-[12px] text-ink-800"><span className="text-ink-500">Review:</span> {a.draft.actionReview}{a.draft.actionStatus ? ` · ${a.draft.actionStatus}` : ''}</div>}
+            <div className="rounded-md border border-canvas-border bg-[#FAFAFB] p-3 space-y-1.5">
+              <div className="text-[0.65625rem] font-semibold uppercase tracking-[0.1em] text-ink-500">Submitted by assignee</div>
+              {a.draft.classification && <div className="text-[0.75rem] text-ink-800"><span className="text-ink-500">Classification:</span> {a.draft.classification}</div>}
+              {a.draft.actionName && <div className="text-[0.75rem] text-ink-800"><span className="text-ink-500">Action:</span> {a.draft.actionName}{a.draft.dueDate ? ` · due ${a.draft.dueDate}` : ''}</div>}
+              {a.draft.actionDetails && <div className="text-[0.75rem] text-ink-700">{a.draft.actionDetails}</div>}
+              {a.draft.actionReview && <div className="text-[0.75rem] text-ink-800"><span className="text-ink-500">Review:</span> {a.draft.actionReview}{a.draft.actionStatus ? ` · ${a.draft.actionStatus}` : ''}</div>}
             </div>
           )}
 
           {priorComments.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-500">Prior approvals</div>
+              <div className="text-[0.65625rem] font-semibold uppercase tracking-[0.1em] text-ink-500">Prior approvals</div>
               {priorComments.map((c, i) => (
-                <div key={i} className="flex items-start gap-2 text-[12px]">
+                <div key={i} className="flex items-start gap-2 text-[0.75rem]">
                   <MessageSquare size={12} className="text-ink-400 mt-0.5 shrink-0" />
                   <div><span className="font-semibold text-ink-700">{c.by}</span> <span className="text-ink-400">· {c.level}</span><div className="text-ink-700">{c.comment}</div></div>
                 </div>
@@ -85,7 +85,7 @@ export function ApprovalCard({ assignment: a, ex, onDone }: { assignment: Assign
         </div>
 
         <div className="p-5 bg-[#FAFAFB] border-t md:border-t-0 md:border-l border-canvas-border">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-3 flex items-center gap-1">Chain <ArrowRight size={11} /></div>
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-3 flex items-center gap-1">Chain <ArrowRight size={11} /></div>
           <WorkflowPipelineView assignment={a} />
         </div>
       </div>
@@ -102,10 +102,10 @@ export default function ApprovalInbox({ exceptions }: { exceptions: GrcException
 
   if (pending.length === 0) {
     return (
-      <div className="border border-dashed border-canvas-border rounded-[12px] p-10 text-center">
+      <div className="border border-dashed border-canvas-border rounded-lg p-10 text-center">
         <Inbox size={22} className="text-ink-300 mx-auto mb-2" />
-        <p className="text-[13px] font-semibold text-ink-700">Nothing awaiting {userName(currentUserId)}</p>
-        <p className="text-[12px] text-ink-500 mt-1">Switch "Acting as" to an approver in an active route to see pending items.</p>
+        <p className="text-[0.8125rem] font-semibold text-ink-700">Nothing awaiting {userName(currentUserId)}</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1">Switch "Acting as" to an approver in an active route to see pending items.</p>
       </div>
     );
   }

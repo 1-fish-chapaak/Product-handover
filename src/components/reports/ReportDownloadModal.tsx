@@ -5,6 +5,7 @@ import {
   X, Download, FileText, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert, BarChart3, LayoutGrid, Loader2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml } from './reportExport';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
@@ -56,7 +57,19 @@ interface Props {
   templateName?: string;
   generatedBy: string;
   generatedAt: string;
+  /** Page numbers on the exported document — carried from the report's template.
+   *  Absent = on (reports paginate by default). */
+  pageNumbers?: boolean;
+  /** Custom brand colour (hex) — recolours the exported cover + accents. */
+  brandColor?: string;
+  /** Sign-off block — signatory slots + their sign state (rendered in exports). */
+  signatories?: import('./reportShared').SignatorySlot[];
+  signoffs?: Record<string, import('./reportShared').Signoff>;
   sections: DownloadPreviewSection[];
+  /** Sections still awaiting content (manual fill or a person's input) — named
+   *  here before download so nothing incomplete leaves quietly. Exporting
+   *  anyway stays allowed; the shape holds its place either way. */
+  incomplete?: string[];
   /** Optional spreadsheet export. When provided, an "Excel" tab is shown and the
    *  Download action delegates to this callback (the report owns the .xlsx
    *  composer — e.g. ATR / bulk-audit tabular exports). */
@@ -88,11 +101,17 @@ export default function ReportDownloadModal({
   templateName,
   generatedBy,
   generatedAt,
+  pageNumbers,
+  brandColor,
+  signatories,
+  signoffs,
   sections,
+  incomplete,
   onExcelExport,
   onClose,
 }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const FORMATS = useMemo(() => (onExcelExport ? [...BASE_FORMATS, EXCEL_FORMAT] : BASE_FORMATS), [onExcelExport]);
   const [format, setFormat] = useState<Format>('pdf');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -131,7 +150,7 @@ export default function ReportDownloadModal({
     // Brief preparing window so the in-place spinner registers visually
     // before the export fires and the modal closes.
     window.setTimeout(() => {
-      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections };
+      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, signoffs };
       if (format === 'xlsx') {
         onExcelExport?.();
         addToast({ type: 'success', message: `${reportName}.xlsx downloaded.` });
@@ -151,6 +170,12 @@ export default function ReportDownloadModal({
         setIsDownloading(false);
         return;
       }
+      logEvent({
+        action: 'Export',
+        description: `Downloaded report "${reportName}" as ${activeFormat.label}`,
+        module: 'Reports',
+        entity: 'Report',
+      });
       setIsDownloading(false);
       onClose();
     }, 700);
@@ -204,7 +229,7 @@ export default function ReportDownloadModal({
                     role="tab"
                     aria-selected={isActive}
                     onClick={() => setFormat(f.id)}
-                    className={`relative inline-flex items-center h-11 px-4 text-[0.8125rem] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px] ${
+                    className={`relative inline-flex items-center h-11 px-4 text-[0.8125rem] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-md ${
                       isActive ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'
                     }`}
                   >
@@ -221,6 +246,18 @@ export default function ReportDownloadModal({
               })}
             </div>
           </div>
+
+          {/* Export checklist — sections still awaiting content are named before
+              download. Export anyway stays allowed; nothing incomplete leaves
+              quietly. */}
+          {(incomplete?.length ?? 0) > 0 && (
+            <div className="shrink-0 px-7 py-2 border-b border-mitigated-200 bg-mitigated-50/60 flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-mitigated-600" />
+              <p className="text-[0.75rem] text-mitigated-800 leading-relaxed">
+                {incomplete!.length === 1 ? 'One section is' : `${incomplete!.length} sections are`} still awaiting content: {incomplete!.map(n => `“${n}”`).join(', ')}. {incomplete!.length === 1 ? 'It exports' : 'They export'} with the shape in place and an empty state.
+              </p>
+            </div>
+          )}
 
           {/* Preview Body — fixed-pixel-width PDF/PPT/DOCX page mockups need
               horizontal scroll + scale-down on narrow viewports so the preview
@@ -241,6 +278,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -250,6 +288,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -259,6 +298,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -274,7 +314,7 @@ export default function ReportDownloadModal({
               onClick={handleDownload}
               disabled={isDownloading}
               aria-busy={isDownloading || undefined}
-              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               {isDownloading ? 'Preparing…' : 'Download'}
@@ -294,12 +334,13 @@ export default function ReportDownloadModal({
 // printed-document feel.
 
 function PdfPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections,
+  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   // Group sections into page blocks. The Executive Summary shares its page
@@ -333,13 +374,13 @@ function PdfPreview({
       </PdfPage>
 
       {/* Contents page */}
-      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
-        <PdfContents sections={sections} />
+      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages — one PdfPage per block */}
       {blocks.map((block, i) => (
-        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
           <PageBlockBody block={block} typeface="serif" />
         </PdfPage>
       ))}
@@ -377,7 +418,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
   );
 }
 
-function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
+function PdfContents({ sections, showPageNo = true }: { sections: DownloadPreviewSection[]; showPageNo?: boolean }) {
   return (
     <div>
       <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
@@ -395,7 +436,7 @@ function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
               </span>
               <span className="text-ink-900 truncate">{label}</span>
               <span className="flex-1 border-b border-dotted border-ink-900/20 translate-y-[-3px]" />
-              <span className="font-mono tabular-nums text-ink-400">{pageNo}</span>
+              {showPageNo && <span className="font-mono tabular-nums text-ink-400">{pageNo}</span>}
             </li>
           );
         })}
@@ -476,12 +517,13 @@ function FooterChevronBand() {
   );
 }
 
-function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, children }: {
+function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, showPageNo = true, children }: {
   pageNo: number;
   totalPages: number;
   variant?: 'cover' | 'interior';
   reportName: string;
   reportTag?: string;
+  showPageNo?: boolean;
   children: React.ReactNode;
 }) {
   if (variant === 'cover') {
@@ -523,7 +565,7 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, childre
         <div className="flex items-center gap-3">
           <span className="text-[0.6875rem] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{pageNo} / {totalPages}</span>
+          {showPageNo && <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{pageNo} / {totalPages}</span>}
         </div>
       </div>
       <FooterChevronBand />
@@ -536,19 +578,20 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, childre
 // number bottom right. Primary-colored title bar.
 
 function PptPreview({
-  reportName, generatedBy, generatedAt, sections,
+  reportName, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   const total = sections.length + 2;
   return (
     <div className="flex flex-col items-center gap-5">
       {/* Title slide */}
-      <PptSlide slideNo={1} total={total} reportName={reportName}>
+      <PptSlide slideNo={1} total={total} reportName={reportName} showPageNo={showPageNo}>
         <div className="h-full flex flex-col justify-center">
           <h1 className="text-[2.125rem] leading-[1.1] font-semibold text-ink-900 tracking-tight mb-3">
             {reportName}
@@ -563,14 +606,14 @@ function PptPreview({
       </PptSlide>
 
       {/* Contents slide */}
-      <PptSlide slideNo={2} total={total} reportName={reportName}>
-        <PdfContents sections={sections} />
+      <PptSlide slideNo={2} total={total} reportName={reportName} showPageNo={showPageNo}>
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PptSlide>
 
       {/* Content slides — one section per slide, widgets included.
           Query slides use a 2-column split (chart left, meta/KPIs/findings right). */}
       {sections.map((s, i) => (
-        <PptSlide key={s.id} slideNo={i + 3} total={total} reportName={reportName}>
+        <PptSlide key={s.id} slideNo={i + 3} total={total} reportName={reportName} showPageNo={showPageNo}>
           <div className="h-full flex flex-col overflow-hidden">
             {s.kind === 'query'
               ? <PptQuerySlideBody section={s} />
@@ -582,10 +625,11 @@ function PptPreview({
   );
 }
 
-function PptSlide({ slideNo, total, reportName, children }: {
+function PptSlide({ slideNo, total, reportName, showPageNo = true, children }: {
   slideNo: number;
   total: number;
   reportName: string;
+  showPageNo?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -606,7 +650,7 @@ function PptSlide({ slideNo, total, reportName, children }: {
         <div className="flex items-center gap-3">
           <span className="text-[0.6875rem] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{slideNo} / {total}</span>
+          {showPageNo && <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{slideNo} / {total}</span>}
         </div>
       </div>
       <FooterChevronBand />
@@ -640,7 +684,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
       {/* 2-column body */}
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left: chart */}
-        <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 flex flex-col min-h-0">
+        <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 flex flex-col min-h-0">
           {firstChart ? (
             <>
               <div className="flex items-center gap-1.5 mb-1.5 text-[0.5625rem] font-bold uppercase tracking-[0.14em] text-ink-500 shrink-0">
@@ -701,12 +745,13 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
 // No page breaks visible — flows like a Word doc.
 
 function DocxPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections,
+  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   // Same pagination model as PDF: cover, contents, then summary pairs with
@@ -729,13 +774,13 @@ function DocxPreview({
       </PdfPage>
 
       {/* Contents page */}
-      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
-        <PdfContents sections={sections} />
+      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages */}
       {blocks.map((block, i) => (
-        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
           <PageBlockBody block={block} typeface="serif" />
         </PdfPage>
       ))}
@@ -758,7 +803,7 @@ function XlsxPreview({ reportName, sections }: { reportName: string; sections: D
   const cols = ['Ref', 'Title', 'Type', 'Severity / Status'];
   return (
     <div className="flex flex-col items-center">
-      <div className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.10)] overflow-hidden rounded-[4px]" style={{ width: 720 }}>
+      <div className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.10)] overflow-hidden rounded-xs" style={{ width: 720 }}>
         {/* Sheet tab bar */}
         <div className="flex items-center gap-2 px-4 h-10 bg-[#107C41] text-white">
           <LayoutGrid size={14} />
@@ -820,7 +865,7 @@ function SectionContent({ section, typeface, compact = false }: {
             {stats.map(st => (
               <div
                 key={st.label}
-                className="rounded-[10px] border border-canvas-border bg-white p-3"
+                className="rounded-lg border border-canvas-border bg-white p-3"
                 style={{ borderLeft: `3px solid ${st.accent ?? '#6A12CD'}` }}
               >
                 <div className="text-[1.125rem] font-bold tabular-nums leading-none mb-1" style={{ color: st.accent ?? '#6A12CD' }}>{st.value}</div>
@@ -866,7 +911,7 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Charts — render each available chart with the canonical renderer */}
         {!compact && charts.map(g => (
-          <div key={g.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+          <div key={g.id} className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
               <BarChart3 size={12} /> {g.title}
             </div>
@@ -885,11 +930,11 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Results tables — each attached table, dashboard styling via cellRender */}
         {!compact && tables.filter(t => t.rows.length > 0).map(t => (
-          <div key={t.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+          <div key={t.id} className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
               <LayoutGrid size={12} /> {t.title}
             </div>
-            <div className="overflow-hidden rounded-[12px] border border-canvas-border">
+            <div className="overflow-hidden rounded-lg border border-canvas-border">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-surface-2/50">

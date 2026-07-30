@@ -110,7 +110,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
           Basic Information
           <span className="text-[0.5625rem] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
         </h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Engagement Name</span><p className="text-[0.75rem] font-medium text-text">{eng.name || <span className="text-high-700 italic">Not set</span>}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Type</span><p className="text-[0.75rem] text-text">{eng.auditType}</p></div>
@@ -126,7 +126,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
           <Calendar size={11} />Audit Period & Timeline
           <span className="text-[0.5625rem] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
         </h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Audit Period Start</label>
@@ -155,7 +155,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
       {/* RACM Version */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM Version <span className="text-[0.5625rem] text-risk-700 font-bold">MANDATORY</span></h4>
-        <div className={`glass-card rounded-xl p-4 ${eng.sourceRacmVersionId && eng.controls > 0 ? 'border-compliant/20' : 'border-risk/30 bg-risk-50/10'}`}>
+        <div className={`glass-card p-4 ${eng.sourceRacmVersionId && eng.controls > 0 ? 'border-compliant/20' : 'border-risk/30 bg-risk-50/10'}`}>
           {eng.sourceRacmVersionId && eng.controls > 0 ? (
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -217,7 +217,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
           <span className="text-[0.625rem] text-text-muted font-normal ml-1">({eng.controls} controls · read-only)</span>
         </h4>
         {eng.controls > 0 ? (
-          <div className="glass-card rounded-xl overflow-hidden">
+          <div className="glass-card overflow-hidden">
             <button onClick={() => setShowControls(!showControls)} className="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-2/30 transition-colors">
               <span className="text-[0.75rem] font-medium text-text">{eng.controls} controls from {eng.sourceRacmVersionId}</span>
               <ChevronDown size={14} className={`text-text-muted transition-transform ${showControls ? 'rotate-180' : ''}`} />
@@ -241,7 +241,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
             )}
           </div>
         ) : (
-          <div className="glass-card rounded-xl p-4 border-risk/20 bg-risk-50/10">
+          <div className="glass-card p-4 border-risk/20 bg-risk-50/10">
             <div className="flex items-center gap-2"><XCircle size={14} className="text-risk-700" /><p className="text-[0.75rem] text-risk-700 font-medium">No controls mapped — link a RACM version first</p></div>
           </div>
         )}
@@ -250,7 +250,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
       {/* Assignment */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assignment</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="text-[0.625rem] text-text-muted uppercase">Owner / Lead Auditor</span>
@@ -267,7 +267,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
       {/* Description */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Description</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <p className={`text-[0.75rem] leading-relaxed ${eng.description ? 'text-text-secondary' : 'text-text-muted italic'}`}>{eng.description || 'No description provided yet.'}</p>
         </div>
       </div>
@@ -275,7 +275,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
       {/* Setup Checklist */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Setup Checklist</h4>
-        <div className="glass-card rounded-xl p-4 space-y-2">
+        <div className="glass-card p-4 space-y-2">
           {checklist.map(item => (
             <div key={item.label}>
               <div className="flex items-center gap-2.5">
@@ -343,7 +343,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       {/* Engagement Summary */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Engagement Summary</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Engagement</span><p className="text-[0.75rem] font-semibold text-text">{eng.name}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Type / Framework</span><p className="text-[0.75rem] text-text">{eng.auditType} / {eng.framework}</p></div>
@@ -357,7 +357,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       {/* Linked RACM */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 size={14} className="text-compliant-700" />
             <span className="text-[0.75rem] font-semibold text-text">{eng.sourceRacmVersionId}</span>
@@ -369,15 +369,15 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Scope & Resources</h4>
         <div className="grid grid-cols-4 gap-3">
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{eng.controls}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Total Controls</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-brand-700 tabular-nums">{keyControls}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Key Controls</div>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
+          <div className="glass-card p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{eng.plannedHours}</div>
             <div className="text-[0.5625rem] text-text-muted uppercase">Planned Hours</div>
           </div>
@@ -387,7 +387,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       {/* Timeline */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Calendar size={11} />Timeline</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Period</span><p className="text-[0.75rem] text-text">{eng.auditPeriodStart} — {eng.auditPeriodEnd}</p></div>
             <div><span className="text-[0.625rem] text-text-muted uppercase">Planned Dates</span><p className="text-[0.75rem] text-text">{eng.plannedStartDate || '—'} — {eng.plannedEndDate || '—'}</p></div>
@@ -398,7 +398,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       {/* Assigned Users */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assigned Team</h4>
-        <div className="glass-card rounded-xl p-4">
+        <div className="glass-card p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="text-[0.625rem] text-text-muted uppercase">Owner / Lead Auditor</span>
@@ -415,7 +415,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
       {/* Activation Checklist */}
       <div>
         <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Activation Checklist</h4>
-        <div className="glass-card rounded-xl p-4 space-y-2">
+        <div className="glass-card p-4 space-y-2">
           {checklist.map(item => (
             <div key={item.label}>
               <div className="flex items-center gap-2.5">

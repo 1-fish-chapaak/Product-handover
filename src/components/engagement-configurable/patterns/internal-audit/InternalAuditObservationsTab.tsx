@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { ConfigurableEngagement, InternalAuditConfig } from '../../configurableEngagementTypes';
 import type { InternalAuditAnalysisState, PotentialObservation } from './internalAuditAnalysisData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import {
   validateObservationForDiscussion, deriveObservationsSummary,
   CATEGORY_LABELS, CATEGORIES_LIST, SEVERITIES_LIST, SEVERITY_CLS, STATUS_CLS,
@@ -47,6 +48,7 @@ interface Props {
 }
 
 export default function InternalAuditObservationsTab({ engagement, analysisState, observationsState, onUpdateObservations, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const summary = deriveObservationsSummary(observationsState);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -82,6 +84,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       observations: [...observationsState.observations, obs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Converted potential observation "${po.title}" to observation`, module: 'Engagements', entity: 'Observation' });
   };
 
   const dismissPotObs = (poId: string) => {
@@ -91,6 +94,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
   const addManualObs = (obs: InternalAuditObservation) => {
     onUpdateObservations({ ...observationsState, observations: [...observationsState.observations, obs], noObservationsConfirmed: false });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created observation "${obs.title}" in "${engagement.name}"`, module: 'Engagements', entity: 'Observation' });
   };
 
   const updateObs = (updated: InternalAuditObservation) => {
@@ -111,6 +115,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
     }
     setValidationMessage(null);
     updateObs({ ...obs, status: 'READY_FOR_DISCUSSION', updatedAt: new Date().toISOString().slice(0, 10), history: [...obs.history, { id: `oh-${Date.now()}`, action: 'MARKED_READY', actor: engagement.owner, timestamp: now(), comments: '' }] });
+    logEvent({ action: 'Update', description: `Marked observation "${obs.title}" ready for discussion`, module: 'Engagements', entity: 'Observation' });
   };
 
   const dropObs = (id: string) => {
@@ -155,7 +160,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
             <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -179,11 +184,11 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
                     <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[po.severity]}`}>{po.severity}</span>
                     <span className="text-[0.6875rem] font-medium text-text">{po.title}</span>
                   </div>
-                  <div className="text-[0.5625rem] text-gray-400 mt-0.5">{po.linkedScopeLabel} · {po.description.slice(0, 60)}...</div>
+                  <div className="text-[0.5625rem] text-ink-400 mt-0.5">{po.linkedScopeLabel} · {po.description.slice(0, 60)}...</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0 ml-2">
                   <button onClick={() => convertPotObs(po)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Convert</button>
-                  <button onClick={() => dismissPotObs(po.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
+                  <button onClick={() => dismissPotObs(po.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-ink-500 bg-canvas hover:bg-canvas-border cursor-pointer transition-colors">Dismiss</button>
                 </div>
               </div>
             ))}
@@ -229,22 +234,22 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             <tr key={obs.id} className="border-b border-border-light/50">
               <td className="px-3 py-2">
                 <div className="font-medium text-text">{obs.title}</div>
-                <div className="text-[0.5625rem] text-gray-400 mt-0.5">
+                <div className="text-[0.5625rem] text-ink-400 mt-0.5">
                   {CATEGORY_LABELS[obs.observationCategory]}
                   {!groupByControl && <> · <span className="text-primary/70 font-medium">{ctrlName}</span></>}
                   {wfName && <> · Workflow: {wfName}</>}
                 </div>
               </td>
-              <td className="px-3 py-2 text-center text-[0.5625rem] text-gray-500">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? 'Analysis' : 'Manual'}</td>
+              <td className="px-3 py-2 text-center text-[0.5625rem] text-ink-500">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? 'Analysis' : 'Manual'}</td>
               <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[obs.severity]}`}>{obs.severity}</span></td>
-              <td className="px-3 py-2 text-gray-500">{obs.processOwner || '—'}</td>
-              <td className="px-3 py-2 text-center text-[0.625rem] font-mono text-gray-500">{obs.targetRemediationDate || '—'}</td>
+              <td className="px-3 py-2 text-ink-500">{obs.processOwner || '—'}</td>
+              <td className="px-3 py-2 text-center text-[0.625rem] font-mono text-ink-500">{obs.targetRemediationDate || '—'}</td>
               <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${STATUS_CLS[obs.status]}`}>{obs.status === 'READY_FOR_DISCUSSION' ? 'Ready' : obs.status.replace(/_/g, ' ')}</span></td>
               <td className="px-3 py-2 text-center">
                 <div className="flex items-center justify-center gap-1">
                   <button onClick={() => setEditingId(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Edit</button>
                   {obs.status === 'DRAFT' && <button onClick={() => markReady(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Ready</button>}
-                  {obs.status !== 'DROPPED' && <button onClick={() => dropObs(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Drop</button>}
+                  {obs.status !== 'DROPPED' && <button onClick={() => dropObs(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-ink-500 bg-canvas hover:bg-canvas-border cursor-pointer transition-colors">Drop</button>}
                   {obs.status === 'DROPPED' && <button onClick={() => reopenObs(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 cursor-pointer transition-colors">Reopen</button>}
                 </div>
               </td>
@@ -253,7 +258,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
         };
 
         const tableHeader = (
-          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
             <th className="px-3 py-1.5 text-left">Observation</th>
             <th className="px-3 py-1.5 text-center">Source</th>
             <th className="px-3 py-1.5 text-center">Severity</th>
@@ -272,11 +277,11 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
                 <h4 className="text-[0.6875rem] font-bold text-text">Formal Observations ({filteredObs.length})</h4>
                 <div className="flex items-center gap-1 ml-2">
                   <button onClick={() => { setGroupByControl(false); setControlFilter(''); }}
-                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${!groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${!groupByControl ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
                     All
                   </button>
                   <button onClick={() => setGroupByControl(true)}
-                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${groupByControl ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
                     Group by Control
                   </button>
                 </div>
@@ -284,12 +289,12 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
               {/* Control filter chips */}
               {controlNames.length > 1 && !groupByControl && (
                 <div className="flex items-center gap-1 flex-wrap">
-                  <span className="text-[0.5625rem] text-gray-400 font-medium mr-1">Control:</span>
+                  <span className="text-[0.5625rem] text-ink-400 font-medium mr-1">Control:</span>
                   <button onClick={() => setControlFilter('')}
-                    className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${!controlFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>All</button>
+                    className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${!controlFilter ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>All</button>
                   {controlNames.map(cn => (
                     <button key={cn} onClick={() => setControlFilter(controlFilter === cn ? '' : cn)}
-                      className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors truncate max-w-[140px] ${controlFilter === cn ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors truncate max-w-[140px] ${controlFilter === cn ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
                       {cn.length > 20 ? cn.slice(0, 19) + '…' : cn}
                     </button>
                   ))}
@@ -309,7 +314,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-[0.75rem] font-semibold text-text">{ctrlName}</span>
-                            <span className="text-[0.625rem] text-gray-400">{obs.length} observation{obs.length !== 1 ? 's' : ''}</span>
+                            <span className="text-[0.625rem] text-ink-400">{obs.length} observation{obs.length !== 1 ? 's' : ''}</span>
                           </div>
                           <div className="flex items-center gap-2 text-[0.5625rem]">
                             {highCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 font-semibold">{highCount} High/Critical</span>}
@@ -348,7 +353,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       {canConfirmNoObs && (
         <div className="rounded-lg border border-border-light p-4 text-center space-y-2">
           <h4 className="text-[0.75rem] font-semibold text-text">No Observations</h4>
-          <p className="text-[0.6875rem] text-gray-500">If no audit findings were identified, confirm below.</p>
+          <p className="text-[0.6875rem] text-ink-500">If no audit findings were identified, confirm below.</p>
           <button onClick={confirmNoObs}
             className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1.5">
             <CheckCircle2 size={13} />Confirm No Observations Noted
@@ -362,7 +367,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
         </div>
       )}
       {activeObs.length > 0 && !effectiveNoObsConfirmed && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-ink-500">
           <Info size={11} className="shrink-0 mt-0.5" />
           <span>Cannot confirm "No observations" while active observations exist.</span>
         </div>
@@ -372,7 +377,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-[0.6875rem] font-bold text-text">Discussion Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${canProceedToDiscussion ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{canProceedToDiscussion ? 'Ready' : 'Not Ready'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${canProceedToDiscussion ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-500'}`}>{canProceedToDiscussion ? 'Ready' : 'Not Ready'}</span>
         </div>
         <div className="space-y-1">
           {[
@@ -383,7 +388,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -430,7 +435,7 @@ function CreateObservationForm({ engagement, cfg, onSave, onCancel }: {
 
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create Observation</h4><button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
+      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create Observation</h4><button onClick={onCancel} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2"><label className={labelCls}>Title <span className="text-red-400">*</span></label><input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Approval matrix not consistently followed" className={inputCls} /></div>
         <div className="col-span-2"><label className={labelCls}>Description</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Describe the finding..." className={inputCls + ' resize-none'} /></div>
@@ -461,10 +466,10 @@ function EditObservationPanel({ obs, onSave, onClose, onMarkReady }: {
   const update = <K extends keyof InternalAuditObservation>(f: K, v: InternalAuditObservation[K]) => setDraft(prev => ({ ...prev, [f]: v }));
 
   return (
-    <div className="rounded-xl border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
+    <div className="rounded-lg border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
         <h4 className="text-[0.8125rem] font-bold text-text">Edit Observation</h4>
-        <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
+        <button onClick={onClose} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2"><label className={labelCls}>Title</label><input value={draft.title} onChange={e => update('title', e.target.value)} className={inputCls} /></div>
@@ -483,9 +488,9 @@ function EditObservationPanel({ obs, onSave, onClose, onMarkReady }: {
         </div>
       )}
       {obs.history.length > 0 && (
-        <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">History</h6>
+        <div><h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">History</h6>
           <div className="space-y-1">{obs.history.map(h => (
-            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-ink-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}

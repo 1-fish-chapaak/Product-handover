@@ -31,7 +31,7 @@ const MOCK_TRACE: TraceNode[] = [
   { level: 6, type: 'evidence', icon: FileText, label: 'Evidence', id: 'EVD-001', status: 'pass', detail: 'credit_approvals_q1.pdf', color: 'text-green-600', bg: 'bg-green-50', clickable: true },
   { level: 6, type: 'evidence', icon: FileText, label: 'Evidence', id: 'EVD-002', status: 'pass', detail: 'erp_activation_log.xlsx', color: 'text-green-600', bg: 'bg-green-50', clickable: true },
   { level: 7, type: 'working-paper', icon: Database, label: 'Working Paper', id: 'WP-001', status: 'pending', detail: 'Round 2 in progress, Round 1 locked', color: 'text-amber-600', bg: 'bg-amber-50', clickable: true },
-  { level: 8, type: 'finding', icon: AlertTriangle, label: 'Finding', id: '-', detail: 'No findings generated (all attributes passing)', color: 'text-gray-400', bg: 'bg-gray-50' },
+  { level: 8, type: 'finding', icon: AlertTriangle, label: 'Finding', id: '-', detail: 'No findings generated (all attributes passing)', color: 'text-ink-400', bg: 'bg-canvas' },
 ];
 
 function StatusIcon({ status }: { status?: string }) {
@@ -68,24 +68,24 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
             <Shield size={18} className="text-purple-600" />
           </div>
           <div>
-            <h2 className="text-[14px] font-bold text-text">Execution Trace</h2>
-            <p className="text-[11px] text-text-muted">End-to-end audit trail</p>
+            <h2 className="text-[0.875rem] font-bold text-text">Execution Trace</h2>
+            <p className="text-[0.6875rem] text-text-muted">End-to-end audit trail</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {onOpenWorkingPaper && (
-            <button onClick={onOpenWorkingPaper} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
+            <button onClick={onOpenWorkingPaper} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
               <FileText size={12} />
               Working Paper
             </button>
           )}
           {onOpenWorkflow && (
-            <button onClick={onOpenWorkflow} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
+            <button onClick={onOpenWorkflow} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
               <Workflow size={12} />
               Workflow
             </button>
           )}
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-text-muted cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-canvas text-text-muted cursor-pointer">
             <X size={16} />
           </button>
         </div>
@@ -93,7 +93,7 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
 
       {/* Breadcrumb */}
       <div className="px-6 py-2.5 border-b border-border-light bg-surface-2/20">
-        <div className="flex items-center gap-1.5 font-mono text-[12px]">
+        <div className="flex items-center gap-1.5 font-mono text-[0.75rem]">
           <span className="text-primary font-semibold cursor-pointer hover:underline">Execution</span>
           <ChevronRight size={10} className="text-text-muted" />
           <span className="text-primary font-semibold cursor-pointer hover:underline">ENG-2026-001</span>
@@ -142,12 +142,12 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-bold text-text">{node.label}</span>
-                      <span className="text-[11px] font-mono text-text-muted">{node.id}</span>
+                      <span className="text-[0.75rem] font-bold text-text">{node.label}</span>
+                      <span className="text-[0.6875rem] font-mono text-text-muted">{node.id}</span>
                       <StatusIcon status={node.status} />
                     </div>
                     {node.detail && (
-                      <p className="text-[11px] text-text-muted truncate">{node.detail}</p>
+                      <p className="text-[0.6875rem] text-text-muted truncate">{node.detail}</p>
                     )}
                   </div>
                   {node.clickable && (
@@ -161,7 +161,7 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
 
         {/* Legend */}
         <div className="mt-8 p-4 rounded-xl border border-border-light bg-surface-2/20">
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Status Legend</h4>
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Status Legend</h4>
           <div className="grid grid-cols-2 gap-2">
             {[
               { icon: <CheckCircle2 size={11} className="text-green-500" />, label: 'Pass / Complete' },
@@ -171,7 +171,7 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
             ].map(item => (
               <div key={item.label} className="flex items-center gap-1.5">
                 {item.icon}
-                <span className="text-[11px] text-text-muted">{item.label}</span>
+                <span className="text-[0.6875rem] text-text-muted">{item.label}</span>
               </div>
             ))}
           </div>
@@ -179,31 +179,31 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
 
         {/* Forward / Backward Trace Summary */}
         <div className="mt-4 p-4 rounded-xl border border-border-light bg-gradient-to-br from-indigo-50/30 to-purple-50/30">
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Trace Summary</h4>
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Trace Summary</h4>
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Total Attributes Tested</span>
               <span className="font-bold text-text">4</span>
             </div>
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Attributes Passed</span>
               <span className="font-bold text-green-600">3</span>
             </div>
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Attributes Pending</span>
               <span className="font-bold text-amber-600">1</span>
             </div>
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Evidence Items</span>
               <span className="font-bold text-text">2</span>
             </div>
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Testing Rounds</span>
               <span className="font-bold text-text">2 (1 locked, 1 active)</span>
             </div>
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[0.75rem]">
               <span className="text-text-secondary">Findings Generated</span>
-              <span className="font-bold text-gray-400">0</span>
+              <span className="font-bold text-ink-400">0</span>
             </div>
           </div>
         </div>

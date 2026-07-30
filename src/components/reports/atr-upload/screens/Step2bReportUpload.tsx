@@ -10,7 +10,7 @@ import type { ReportMeta } from '../types';
 
 // Match Step 2a's entrance + tokens so the two upload screens read as one family.
 const EASE = [0.22, 1, 0.36, 1] as const;
-const INPUT_CLS = 'w-full h-9 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
+const INPUT_CLS = 'w-full h-9 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 
 // ISO "yyyy-mm-dd" → "DD Mon YYYY".
 const fmtDate = (iso: string) => {
@@ -22,7 +22,7 @@ const fmtDate = (iso: string) => {
 function Field({ label, required, hint, children, className = '' }: { label: string; required?: boolean; hint?: string; children: ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <label className="block text-[12px] font-semibold text-ink-700 mb-1.5">
+      <label className="block text-[0.75rem] font-semibold text-ink-700 mb-1.5">
         {label}{required && <span className="text-risk-700"> *</span>}
         {hint && <span className="font-normal text-ink-400"> · {hint}</span>}
       </label>
@@ -34,9 +34,9 @@ function Field({ label, required, hint, children, className = '' }: { label: str
 // One uploaded file, as a compact removable row.
 function FileChip({ name, onRemove }: { name: string; onRemove: () => void }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
-      <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
-      <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{name}</span>
+    <div className="flex items-center gap-2.5 rounded-md border border-canvas-border bg-canvas px-2.5 py-1.5">
+      <span className="w-6 h-6 rounded-sm bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
+      <span className="text-[0.75rem] font-medium text-ink-800 truncate flex-1">{name}</span>
       <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
     </div>
   );
@@ -65,20 +65,20 @@ function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, file
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: EASE, delay }}
-      className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${files.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
+      className={`relative flex flex-col rounded-lg border bg-canvas-elevated p-4 transition-colors ${files.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
     >
-      <span className={`absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 ${badgeCls}`}>{badge}</span>
+      <span className={`absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 ${badgeCls}`}>{badge}</span>
       <div className="flex items-center gap-3 mb-3 pr-20">
-        <span className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${tint}`}><Icon size={19} aria-hidden="true" /></span>
+        <span className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${tint}`}><Icon size={19} aria-hidden="true" /></span>
         <div className="min-w-0">
-          <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">{title}</h3>
-          <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">{blurb}</p>
+          <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{title}</h3>
+          <p className="text-[0.71875rem] text-ink-400 mt-0.5 truncate">{blurb}</p>
         </div>
       </div>
 
       {files.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1.5 text-[11px] font-semibold text-ink-500 tabular-nums">{files.length} file{files.length === 1 ? '' : 's'} added</div>
+          <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-500 tabular-nums">{files.length} file{files.length === 1 ? '' : 's'} added</div>
           {/* Capped + internally scrollable so adding many files never grows the
               card unbounded (which broke the layout + forced a page scroll). */}
           <ul className="space-y-1.5 max-h-[92px] overflow-y-auto pr-1 -mr-1">
@@ -150,7 +150,7 @@ export default function Step2bReportUpload({ onExtract }: {
         className="text-left"
       >
         <div className="mb-3.5">
-          <h3 className="text-[13px] font-semibold text-ink-900">Report details</h3>
+          <h3 className="text-[0.8125rem] font-semibold text-ink-900">Report details</h3>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
@@ -225,7 +225,7 @@ export default function Step2bReportUpload({ onExtract }: {
 
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
-          <p className="text-[12px] text-ink-500">
+          <p className="text-[0.75rem] text-ink-500">
             {ready
               ? <span className="text-compliant-700 font-medium">Ready to extract.</span>
               : report.length === 0 ? 'Upload an audit report to continue.' : 'Fill every required detail to continue.'}

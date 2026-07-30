@@ -98,7 +98,7 @@ function AttrResultBadge({ result }: { result: string }) {
     pass: { bg: 'bg-green-50 border-green-200', text: 'text-green-700', icon: <CheckCircle2 size={11} /> },
     fail: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: <AlertTriangle size={11} /> },
     pending: { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: <Clock size={11} /> },
-    na: { bg: 'bg-gray-100 border-gray-200', text: 'text-gray-500', icon: null },
+    na: { bg: 'bg-canvas border-canvas-border', text: 'text-ink-500', icon: null },
   };
   const s = map[result] || map.pending;
   return (
@@ -156,7 +156,7 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
               Trace
             </button>
           )}
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-text-muted cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-canvas text-text-muted cursor-pointer">
             <X size={16} />
           </button>
         </div>
@@ -204,7 +204,7 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
                   <span className="text-[0.75rem] font-medium text-text">{src.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[0.6875rem] text-text-muted bg-gray-100 px-1.5 py-0.5 rounded">{src.type}</span>
+                  <span className="text-[0.6875rem] text-text-muted bg-canvas px-1.5 py-0.5 rounded">{src.type}</span>
                   <span className="text-[0.6875rem] text-text-muted tabular-nums">{src.rows} rows</span>
                 </div>
               </div>
@@ -297,7 +297,7 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
                 { icon: Filter, label: 'Attributes', detail: '4 test steps applied', color: 'text-cyan-600', bg: 'bg-cyan-50' },
                 { icon: CheckCircle2, label: 'Result', detail: '3 Pass / 1 Pending', color: 'text-green-600', bg: 'bg-green-50' },
                 { icon: Target, label: 'Conclusion', detail: 'Pending (Round 2)', color: 'text-amber-600', bg: 'bg-amber-50' },
-                { icon: AlertTriangle, label: 'Finding', detail: 'None generated', color: 'text-gray-500', bg: 'bg-gray-50' },
+                { icon: AlertTriangle, label: 'Finding', detail: 'None generated', color: 'text-ink-500', bg: 'bg-canvas' },
               ].map((step, i, arr) => (
                 <div key={step.label}>
                   <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-surface-2/40 transition-colors">

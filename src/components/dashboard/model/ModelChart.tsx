@@ -26,13 +26,13 @@ export default function ModelChart({
     return (
       <div className="h-full w-full flex flex-col items-center justify-center text-center gap-1.5 px-4">
         <AlertTriangle size={18} className="text-mitigated-700" />
-        <p className="text-[12px] font-semibold text-text">Needs attention</p>
-        <p className="text-[11px] text-text-muted">{data.error} Connect the tables to restore this widget.</p>
+        <p className="text-[0.75rem] font-semibold text-text">Needs attention</p>
+        <p className="text-[0.6875rem] text-text-muted">{data.error} Connect the tables to restore this widget.</p>
       </div>
     );
   }
   if (data.rows.length === 0) {
-    return <div className="h-full w-full flex items-center justify-center text-[12px] text-text-muted">No data for this selection.</div>;
+    return <div className="h-full w-full flex items-center justify-center text-[0.75rem] text-text-muted">No data for this selection.</div>;
   }
 
   const series = data.series;
@@ -47,8 +47,8 @@ export default function ModelChart({
     const total = data.rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
-        <div className="text-[28px] font-bold text-text tabular-nums">{fmt(total)}</div>
-        <div className="text-[11px] text-text-muted mt-1">{key}</div>
+        <div className="text-[1.75rem] font-bold text-text tabular-nums">{fmt(total)}</div>
+        <div className="text-[0.6875rem] text-text-muted mt-1">{key}</div>
       </div>
     );
   }
@@ -56,7 +56,7 @@ export default function ModelChart({
   if (t.includes('table')) {
     return (
       <div className="h-full w-full overflow-auto">
-        <table className="w-full text-[11.5px]">
+        <table className="w-full text-[0.71875rem]">
           <thead>
             <tr className="text-left text-text-muted border-b border-border-light">
               <th className="px-2 py-1.5 font-semibold">{data.xLabel}</th>
