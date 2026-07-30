@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Building2, ChevronRight, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp, Circle, History, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
@@ -510,6 +510,20 @@ export function DeficienciesView() {
   // …and a mistaken close comes back only with a recorded reason — same weight, same modal
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState('');
+  /* Every exception starts COLLAPSED (user ask). Expanded, one of these cards is
+     most of a screen — severity inputs, priced impact, MW indicators, the
+     remediation plan and the lifecycle actions — so a list of them buried the
+     one you came to find. Collapsed, the header still carries everything needed
+     to triage: which finding, on which control, how bad, and where it has got to.
+     A Set rather than a single id: this is not an accordion, because comparing
+     two findings side by side is a real thing an auditor does, and snapping one
+     shut to open another would take that away. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
   // three lines, three lanes: the owner remediates, the auditor evaluates &
   // retests, the reviewer closes — each hat only sees its own actions.
   const isAuditor = role === 'auditor';
@@ -593,22 +607,53 @@ export function DeficienciesView() {
             const sev = assess.final;
             const material = d.magnitude >= M;
             const stageIdx = STAGES.indexOf(d.status);
+            const open = expanded.has(d.id);
             return (
               <div key={d.id} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-                <div className="flex items-start justify-between gap-3 mb-2.5">
-                  <div className="inline-flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
-                    <button onClick={() => openControl(d.controlId)} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-                    <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
-                    {/* the gap taxonomy — a design gap needs a redesign, a testing
-                        gap needs discipline, so the label is what the fix follows */}
-                    {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
-                    {ct && <Pill tone="draft">Clearly trivial</Pill>}
-                    {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
+                {/* The whole header strip is the toggle — a card this tall needs a
+                    target bigger than a chevron. A div rather than a button because
+                    the control link inside it is itself a button, and a button
+                    inside a button is invalid; same role/tabIndex/onKeyDown pattern
+                    the audit register rows use. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={open}
+                  aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
+                  onClick={() => toggle(d.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(d.id); } }}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
+                      {/* Down to open, up to close. Deliberately NOT a rotating
+                          right-chevron: '›' is the app's drill-in mark (the handoff
+                          rows above use it to leave the page), and this opens in
+                          place. The pair also states which way the card is about to
+                          move, which one rotating glyph only implies. */}
+                      {open
+                        ? <ChevronUp size={15} className="shrink-0 text-brand-700" />
+                        : <ChevronDown size={15} className="shrink-0 text-ink-400" />}
+                      <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
+                      {/* stopPropagation: opening the control is a different journey
+                          from opening the card, and the two must not fire together */}
+                      <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
+                      <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
+                      {/* the gap taxonomy — a design gap needs a redesign, a testing
+                          gap needs discipline, so the label is what the fix follows */}
+                      {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
+                      {ct && <Pill tone="draft">Clearly trivial</Pill>}
+                      {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
+                    </div>
+                    <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
                   </div>
-                  <div className="inline-flex items-center gap-2"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
+                  {/* The finding itself stays on the collapsed row — clamped to one
+                      line. Without it the row reads as an id and some pills, and you
+                      would have to open every card to find the one you wanted. */}
+                  <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
                 </div>
-                <p className="text-[13px] text-ink-800 leading-relaxed">{d.description}</p>
+
+                {open && (<>
                 <p className="text-[12px] text-ink-500 mt-1"><span className="font-semibold">Root cause:</span> {d.rootCause}</p>
 
                 {/* lifecycle stepper */}
@@ -775,6 +820,7 @@ export function DeficienciesView() {
                       className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
                   )}
                 </div>
+                </>)}
               </div>
             );
           })}
