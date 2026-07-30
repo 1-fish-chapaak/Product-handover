@@ -1,6 +1,6 @@
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
-import { FIVE_W_1H, ipeChecklist } from './types';
+import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
   Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, GapType, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
@@ -94,13 +94,10 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
   population: popCount ? {
     source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
     sourceFile: popFile, sourceCount: popCount * 7,
-    criteria: `type ${popSource.split('—')[0].trim()} · full period`,
-    // Real dates, because the coverage check measures them against the audit
-    // window — 'full period' above is the label, these are the fact. The span
-    // deliberately covers every seeded round (year-end opens 2025-10-01, the
-    // roll-forward closes 2026-09-30): one seeded population is reached from all
-    // of them, and a window short of any one would read as a real coverage gap.
-    filterFrom: '2025-10-01', filterTo: '2026-12-31',
+    criteria: `type ${popSource.split('—')[0].trim()}`,
+    // filterFrom / filterTo / version are stamped by stampPopulationWindows once
+    // the audits exist — a population belongs to ONE round and carries that
+    // round's window, which cannot be known from in here.
     // What the auditor said to expect before pulling it. Rounded to the nearest
     // fifty because a stated expectation is an estimate, not a readback — it
     // lands just inside tolerance, which is what a healthy extract looks like.
@@ -1243,6 +1240,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // behind an audit that doesn't exist — and show an empty state on the
     // engagement with the most data in it.
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer.split(' · ')[0] }, base.controls);
+    stampPopulationWindows(base.controls, base.audits);
     return base;
   }
   // Any other engagement → a fresh engagement scoped to the picked process —
@@ -1285,6 +1283,8 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
   const deficiencies = rich ? alturaDeficiencies(controls) : [];
+  const audits = rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls);
+  stampPopulationWindows(controls, audits);
   return {
     ...base,
     // Scoping-derived engagements set materiality in the scoping wizard — the
@@ -1307,10 +1307,43 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // Every SOX engagement has at least one audit now: the Overview IS the audit
     // portfolio, so testing that belongs to no audit would be testing with no
     // home. Altura has run three rounds across two years; the rest have one.
-    audits: rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls),
+    audits,
     signoff: {},
     rulesLog: [],
   };
+}
+
+/** Give every seeded population the window of the round it was pulled for.
+ *
+ *  A population belongs to ONE round — that is what the POP-INT / POP-RF /
+ *  POP-YE stamp means, and why the tester says a later round re-versions rather
+ *  than editing. So it carries that round's window rather than a span stretched
+ *  wide enough to satisfy all of them: a 15-month filter sitting under a
+ *  six-month interim audit passes the coverage check by being vague, which is
+ *  the opposite of what the check is for.
+ *
+ *  Opening the same control under a DIFFERENT round will now flag the coverage,
+ *  and that is correct — a population pulled for the interim window genuinely
+ *  does not cover the year-end one, and the version stamp on screen says so.
+ *
+ *  Runs after the audits are built, because until then there is no window to
+ *  read. Mutates in place: these controls were just constructed here and are
+ *  not shared with anything yet. */
+function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): void {
+  if (!audits.length) return;
+  for (const c of controls) {
+    const pop = c.operating.population;
+    if (!pop) continue;
+    // Same order of preference the workspace uses to decide what an audit
+    // covers: controls picked one by one beat the process filter.
+    const audit = audits.find(a => a.controlIds?.includes(c.id))
+      ?? audits.find(a => a.scopeNames.includes(c.process))
+      ?? audits[0];
+    pop.filterFrom = audit.windowFrom;
+    pop.filterTo = audit.windowTo;
+    pop.version = `POP-${ROUND_TAG[audit.round]}`;
+    pop.criteria = `${pop.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}`;
+  }
 }
 
 /** The attributes a seeded control is tested against, in the order an auditor

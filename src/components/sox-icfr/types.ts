@@ -797,6 +797,13 @@ export type AuditScopeKind = 'entity' | 'racm';
  * places each audit from its window, so a gap in the period is visible.
  */
 export type AuditRound = 'interim' | 'rollforward' | 'yearend';
+/** The round's short stamp, used on the population version (POP-INT / POP-RF /
+ *  POP-YE). Shared so the seed and the tester cannot drift apart on it — a
+ *  population's tag is the only thing on screen that says which round it was
+ *  pulled for. */
+export const ROUND_TAG: Record<AuditRound, string> = { interim: 'INT', rollforward: 'RF', yearend: 'YE' };
+/** The same rounds in prose, for a filter line a human reads. */
+export const ROUND_WINDOW_LABEL: Record<AuditRound, string> = { interim: 'interim window', rollforward: 'roll-forward window', yearend: 'year-end window' };
 
 /** The audit tabs a read-only archive can be asked to render. A subset of the
  *  store's SoxTab, redeclared here because the store imports this module and not

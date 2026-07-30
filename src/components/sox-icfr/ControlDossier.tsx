@@ -22,7 +22,7 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeSuggestion } from './types';
+import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeSuggestion, ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
@@ -1136,7 +1136,6 @@ function FilePickerModal({ existing, onUpload, onChoose, slots, onClose }: {
 }
 
 // ── IPE gate 1 (inside step ①) — the entity-produced report is itself under test ──
-const ROUND_TAG: Record<AuditRound, string> = { interim: 'INT', rollforward: 'RF', yearend: 'YE' };
 
 /** Files this engagement already holds — the scoping trial balances, the open
  *  audit's own GL, the RACM uploads. Shared by step ①'s source picker and the
