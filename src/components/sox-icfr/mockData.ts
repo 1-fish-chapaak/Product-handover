@@ -1,7 +1,8 @@
+import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
 import { FIVE_W_1H, ipeChecklist } from './types';
 import type {
-  Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  Assertion, Attestation, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
   ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
@@ -800,12 +801,110 @@ const ENGAGEMENT: IcfrEngagement = {
   reviewNotes: REVIEW_NOTES,
   executions: EXECUTIONS,
   runs: RUNS,
-  // The Audit logs tab starts empty on purpose — audits only exist once someone
-  // runs the New audit wizard, so the empty state is the honest first view.
+  // Starts empty on purpose: an audit arrives when someone runs the New audit
+  // sheet from the Overview or the SOX audit tab, so the register's empty state
+  // is the honest first view. Until then every reader falls back to
+  // engagement-level defaults — useAuditControls returns the whole control set,
+  // periodLine reads the engagement's own span.
   audits: [],
   signoff: {},
   rulesLog: [],
 };
+
+// ── the library lens's seed: run history + the cycles it ran under ───────────────
+// The Control Library's library lens reads four facts off a control — how many
+// attributes it has, how many of them a workflow evidences, what has been run on
+// it, and which audits it sits in. The first two come off the control itself
+// (`rich` on racmTemplateForProcesses); these two build the last two.
+
+const outcomesFor = (cs: Control[], outcome: RunControlOutcome['outcome']): RunControlOutcome[] =>
+  cs.map(c => ({ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome, checks: c.design.points.length + c.operating.steps.length }));
+
+/** A run history with enough shape to be worth reading: the same control turns
+ *  up in runs of different kinds on different dates, so "last run" and "5 runs
+ *  in history" say something. Newest first, and all older than the 'live' bulk
+ *  run above so the array stays in order when these are appended to it. */
+function libraryRunHistory(controls: Control[]): RunRecord[] {
+  const processes = Array.from(new Set(controls.map(c => c.process)));
+  const mappedAttrs = (c: Control) => c.operating.steps.filter(s => s.workflowId).length;
+  const runs: RunRecord[] = [];
+
+  // ① the automated controls' own workflow runs — one record per process.
+  // Only controls the 'live' seed actually concluded: the one control per shelf
+  // left Not tested (so the RACM and Overview have something to chase) always
+  // lands Automated by the nature formula below, and a recent run cannot claim
+  // Effective on a control the testing lens still calls untested.
+  processes.forEach((p, pi) => {
+    const auto = controls.filter(c => c.process === p && c.nature === 'Automated' && mappedAttrs(c) > 0 && c.operating.conclusion !== 'Not tested');
+    if (!auto.length) return;
+    runs.push({
+      id: `run-wf-${pi + 1}`, kind: 'workflow-run',
+      label: `Workflow run — ${p} attribute checks`,
+      detail: `run #${4800 + pi} · ${auto.reduce((n, c) => n + mappedAttrs(c), 0)} attributes · 0 conflicts`,
+      controls: outcomesFor(auto, 'Effective'),
+      by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
+    });
+  });
+
+  // ② AI read the uploaded walkthroughs for the first process's key, CONCLUDED
+  //    controls — same reasoning as ①, against the design track this time.
+  const aiTargets = controls.filter(c => c.process === processes[0] && c.isKey && c.design.conclusion !== 'Not tested').slice(0, 3);
+  if (aiTargets.length) runs.push({
+    id: 'run-ai-1', kind: 'ai-validation',
+    label: `AI validation — ${processes[0]} design evidence`,
+    detail: `${aiTargets.length} controls · considerations read off the uploaded walkthroughs`,
+    controls: outcomesFor(aiTargets, 'Effective'),
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '1w ago',
+  });
+
+  // ③ one control that failed first time round — a history of only passes reads
+  //    as a seed, and the lens should be able to show a failed run
+  const retested = controls.find(c => c.nature === 'Manual' && c.operating.steps.length >= 3);
+  if (retested) runs.push({
+    id: 'run-ct-1', kind: 'control-test', label: 'Control test — all attributes',
+    detail: `${retested.wpRef} · failed on the first pass, retested after remediation`,
+    controls: outcomesFor([retested], 'Ineffective'),
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '2w ago',
+  });
+
+  // ④ last cycle's bulk test — only the two processes CY 2025 covered
+  const prior = controls.filter(c => processes.slice(0, 2).includes(c.process));
+  if (prior.length) runs.push({
+    id: 'run-prior-1', kind: 'bulk-test',
+    label: `Bulk test — ${prior.length} controls`,
+    detail: 'CY 2025 cycle · carried forward for reference',
+    controls: outcomesFor(prior, 'Effective'),
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '52w ago',
+  });
+
+  return runs;
+}
+
+/** The cycles this engagement has run. CY 2025 covered the two processes the
+ *  group started with, CY 2026 covers all four — and that difference is the
+ *  point: it is why a Treasury control sits in two audits and a Fixed Assets
+ *  control sits in one. Scoped by RACM rather than by entity so the record
+ *  needs no entity lookup (the entities live in another store). */
+function libraryAudits(processes: string[]): AuditRecord[] {
+  if (!processes.length) return [];
+  const basisLabel = 'Profit before tax (consolidated)';
+  const audits: AuditRecord[] = [{
+    id: 'audit-cy26', period: 'CY 2026', yearBasis: 'cy', periodSpan: 'Jan 2026 – Dec 2026',
+    scopeKind: 'racm', scopeNames: processes, scopeIds: [],
+    files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
+    materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '02 Jan 2026',
+  }];
+  const first = processes.slice(0, 2);
+  if (first.length) audits.push({
+    id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', periodSpan: 'Jan 2025 – Dec 2025',
+    scopeKind: 'racm', scopeNames: first, scopeIds: [],
+    files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
+    materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '03 Jan 2025',
+  });
+  return audits;
+}
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
 export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
@@ -833,11 +932,16 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // user adds the RACM from the RACM tab); only an absent list gets the
   // classic single-process default.
   const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
+  // The engagement the Control Library's library lens is built on carries the
+  // deeper seed: varied attribute counts, partial workflow mapping, a real run
+  // history and the audits those cycles ran under. Every other engagement is
+  // seeded exactly as before. See `rich` on racmTemplateForProcesses.
+  const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
   const controls = meta.processes
-    ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode) : [])
+    ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
   // A 'live' cycle claims tested controls — back that claim with the bulk run
-  // that produced them, so the Test runs registry isn't empty on arrival.
+  // that produced them, so the SOX audit registry isn't empty on arrival.
   const runs: RunRecord[] = [];
   if (meta.seedMode === 'live') {
     const tested = controls.filter(c => c.design.conclusion === 'Effective' && c.operating.conclusion === 'Effective');
@@ -853,6 +957,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
       });
     }
   }
+  // Appended, not prepended: every record these add is older than the bulk run
+  // above, so the array stays newest-first.
+  if (rich) runs.push(...libraryRunHistory(controls));
   return {
     ...base,
     // Scoping-derived engagements set materiality in the scoping wizard — the
@@ -872,10 +979,27 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     reviewNotes: [],
     executions: [],
     runs,
+    // Every other engagement still starts with no audits — the New audit sheet
+    // is how one arrives, and AuditLogsView's empty state is the honest first
+    // view. This engagement has run two cycles, so it states them.
+    audits: rich ? libraryAudits(meta.processes ?? []) : base.audits,
     signoff: {},
     rulesLog: [],
   };
 }
+
+/** The attributes a seeded control is tested against, in the order an auditor
+ *  would write them: does the check itself hold, are the exceptions dealt with,
+ *  was it done in time, is the evidence there, and was the person allowed to do
+ *  it. A control takes the first N of these — see `rich` on
+ *  racmTemplateForProcesses. */
+const ATTRIBUTE_SPINE: { suffix: string; assertion: Assertion; precision: string; procedures: TestProcedure[] }[] = [
+  { suffix: 'primary attribute tested', assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection', 'Reperformance'] },
+  { suffix: 'exceptions handled per policy', assertion: 'Existence / Occurrence', precision: 'Per exception', procedures: ['Inspection'] },
+  { suffix: 'performed within the required timeframe', assertion: 'Cut-off', precision: 'Per occurrence', procedures: ['Inspection'] },
+  { suffix: 'evidence retained and independently inspectable', assertion: 'Completeness', precision: 'Per item', procedures: ['Inspection'] },
+  { suffix: 'performed by someone independent of the transaction', assertion: 'Rights & Obligations', precision: 'Per approver', procedures: ['Inspection', 'Inquiry'] },
+];
 
 /**
  * One template RACM per scoping-derived process. Catalogue processes reuse
@@ -888,8 +1012,15 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
  * 'fresh' — nothing tested; 'live' — all but the last control per RACM
  * concluded effective (the scoping summary's n−1 story); 'carried' — design
  * conclusions carried from the prior cycle, operating retest pending.
+ *
+ * `rich` deepens the attribute layer for the engagement the Control Library's
+ * library lens is built on: two attributes per control tells that lens nothing
+ * (every card would read "2 attributes"), so a rich seed varies the count 2–5
+ * and maps workflows to only SOME of them, which is the real-world state the
+ * lens exists to show — partial automation coverage. Off by default, so every
+ * other scoping-derived engagement keeps the exact two-attribute seed it had.
  */
-export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live' | 'carried' = 'fresh'): Control[] {
+export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live' | 'carried' = 'fresh', rich = false): Control[] {
   const GENERIC_TITLES: Record<string, string[]> = {
     'Fixed Assets': [
       'Capex additions are approved per the delegation of authority',
@@ -937,13 +1068,27 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
         point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
       ];
-      const stepExtra = (k: number): Partial<OperatingStep> => nature === 'Automated'
-        ? wf(`wf-${c.id.toLowerCase()}-${k}`, `${title} — check ${k}`, opDone ? `run #${6000 + i * 3 + k}` : undefined)
-        : {};
-      const opSteps: OperatingStep[] = [
-        step(`${i + 1}.1`, `${title} — primary attribute tested.`, 'Accuracy', 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], opDone ? 'Pass' : 'Not tested', stepExtra(1)),
-        step(`${i + 1}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], opDone ? 'Pass' : 'Not tested', stepExtra(2)),
-      ];
+      // How many attributes this control carries, and how many of them a
+      // workflow evidences. An automated control is fully instrumented; a manual
+      // one is mapped partially or not at all, which is what makes "3 of 4
+      // workflows mapped" a fact worth putting on a card.
+      const attrCount = rich ? 2 + (i % 4) : 2;
+      const mapped = nature === 'Automated' ? attrCount
+        : rich ? (i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : attrCount - 1)
+        : 0;
+      const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
+        `${i + 1}.${k + 1}`,
+        `${title} — ${a.suffix}.`,
+        a.assertion,
+        a.precision,
+        // an automated control reperforms its primary attribute rather than
+        // inspecting it; the rest keep the spine's own procedures
+        nature === 'Automated' && k === 0 ? ['Reperformance'] : a.procedures,
+        opDone ? 'Pass' : 'Not tested',
+        k < mapped
+          ? wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined)
+          : {},
+      ));
       const frequency: Frequency = nature === 'Automated' ? 'Recurring' : c.frequency;
       return {
         ...c,

@@ -193,7 +193,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // Scoping can be skipped (user ask): the programme is created without RACMs
   // and the workspace Overview flags that until one is added on the RACM tab.
   // The GL / TBs are no longer asked for here — they arrive on the audit that
-  // tests them, from that audit's own Configuration tab.
+  // tests them, captured by the New audit wizard (the audit's Configuration tab
+  // is parked; see SOX_TABS in SoxIcfrApp).
   const [scopingSkipped, setScopingSkipped] = useState(false);
   const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 

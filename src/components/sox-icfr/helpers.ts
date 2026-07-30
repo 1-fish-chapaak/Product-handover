@@ -360,8 +360,12 @@ export function testsDueNow(controls: Control[]): Control[] {
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────
 
-export function engagementProgress(eng: IcfrEngagement) {
-  const cs = eng.controls;
+export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
+  // `controls` narrows the count to a subset — the open audit's scope, so the
+  // audit Dashboard reports its own six rather than the engagement's thirty-two.
+  // Omitted, it counts the whole engagement, which is what every other caller
+  // wants.
+  const cs = controls ?? eng.controls;
   const concl = cs.map(controlConclusion);
   return {
     total: cs.length,

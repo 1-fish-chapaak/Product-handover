@@ -221,8 +221,11 @@ interface IcfrCtx {
   /** Edit an audit from its own Configuration tab. The stamp (who / when) is
    *  left alone — it records creation, not the last touch. */
   updateAudit: (auditId: string, patch: Partial<Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>>) => void;
-  /** Which audit is open. null = the engagement level (Dashboard / Audit logs);
-   *  set = drilled into that audit's Overview / RACM / Control Library / Config. */
+  /** Which audit is open. Permanently null now that the audit level is removed
+   *  (see Inner in SoxIcfrApp) — nothing calls openAudit. Kept wired because the
+   *  readers below (useAuditControls, the dossier's file list) already handle
+   *  null by falling back to engagement-level defaults, and because restoring
+   *  the level should not mean rebuilding the store. */
   openAuditId: string | null;
   openAudit: (auditId: string) => void;
   closeAudit: () => void;
@@ -752,6 +755,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => {
     setEng(prev => {
       const audit: AuditRecord = { id: uid('audit'), by: me, role, at: 'just now', ...draft };
+      // Creating an audit OPENS it (user ask): the sheet closes onto the new
+      // audit's own workspace — Dashboard, Control Library, Deficiency
+      // management, Configuration — with its controls reset to Not started
+      // below. Set outside setEng's return so it lands with the same commit.
+      setOpenAuditId(audit.id);
+      setTabState('overview');
+      setView('overview');
       // Same precedence the workspace filter uses: controls picked one by one on
       // the scope step decide, and only when none were does the process filter.
       const picked = audit.controlIds?.length ? new Set(audit.controlIds) : null;
@@ -805,7 +815,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setTabState('overview');
     setView('overview');
   }, []);
-  const closeAudit = useCallback(() => setOpenAuditId(null), []);
+  // Leaving an audit lands on the engagement's own Overview. Without the reset,
+  // closing from the audit's Configuration or Deficiency management tab — neither
+  // of which the engagement level has — left the tab bar with nothing active and
+  // AuditConfigView rendering null: a blank page.
+  const closeAudit = useCallback(() => {
+    setOpenAuditId(null);
+    setTabState('overview');
+    setView('overview');
+  }, []);
 
   const controlOutcome = (c: Control): RunControlOutcome => ({
     controlId: c.id, wpRef: c.wpRef, description: c.description,

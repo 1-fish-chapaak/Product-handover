@@ -1,12 +1,19 @@
 /**
  * Which SOX engagement the reworked flow is being built on.
  *
- * The audit-first journey — an engagement holding Dashboard + Audit logs, audits
- * you drill into, controls that reset to zero when one is created — is not
- * finished being designed. Until it is signed off it runs on ONE engagement, and
- * every other SOX engagement keeps the shape it had before the work started
- * (commit 1a0fe4d): Overview · RACM · Risk Register · Control Library · Test
- * runs · Configuration, deficiencies as a drill-in, no audits at all.
+ * The audit level is GONE from both shells (user ask): every SOX engagement now
+ * opens on one level and the same four tabs — Overview · RACM · Control Library
+ * · SOX audit — with deficiencies as a drill-in. The SOX audit tab is the audit
+ * register: audits are created from there and from the Overview, and an audit
+ * sets a cycle's ground rules rather than opening a workspace of its own.
+ * Risk Register, Configuration, the run registry and, on the reworked shell,
+ * Dashboard are parked; see SOX_TABS in SoxClassicApp.tsx and SoxIcfrApp.tsx for
+ * what each park costs and how to undo it.
+ *
+ * So what still forks on this flag is the WORDING and the details, not the
+ * shape: a failed control is a deficiency here and an exception there (defWord
+ * below), and the reworked engagement carries the body class its portalled CSS
+ * hangs off.
  *
  * Read this rather than hard-coding the id: when the flow is finalised, the
  * rollout is deleting `isNewFlow`'s body and letting every engagement through,

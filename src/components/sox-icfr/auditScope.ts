@@ -25,6 +25,57 @@ export function entitiesFor(engagementId: string): GroupEntity[] {
   return programmeFor(engagementId)?.entities ?? SEED_ENTITIES;
 }
 
+/**
+ * Entities the audit's uploaded trial balance / GL turned out to contain.
+ *
+ * A SIMULATED parse — prototype uploads carry no bytes, so this stands in for
+ * reading entity names out of the file. What it models is the reason the New
+ * audit sheet shows two columns on its scope step: the register is maintained by
+ * hand and the trial balance is not, so an entity nobody remembered to add still
+ * shows up in the group's numbers, and an entity that hasn't filed its TB yet is
+ * in the register but absent from the data.
+ *
+ * The shape of the stand-in: every registered entity but the last one (its TB
+ * submission is late), plus whatever the group's file carries that the register
+ * has never heard of.
+ */
+const TB_ONLY_ENTITIES: Record<string, GroupEntity[]> = {
+  // FY26 ICFR — Altura Infra Group: the group TB carries a ninth company.
+  'sox-v2-fy26': [
+    { id: 'tb-a-h2', name: 'Altura Green Hydrogen Pvt Ltd', type: 'Subsidiary', ownership: 100 },
+  ],
+};
+
+export function entitiesInFiles(engagementId: string, hasFiles: boolean): GroupEntity[] {
+  if (!hasFiles) return [];
+  const registered = entitiesFor(engagementId);
+  return [...registered.slice(0, -1), ...(TB_ONLY_ENTITIES[engagementId] ?? [])];
+}
+
+/** One row of the scope step's entity matrix — the same entity seen from both
+ *  sides. `inRegister` without `inData` is a late TB; `inData` without
+ *  `inRegister` is the entity somebody forgot to add. */
+export interface ScopeEntityRow {
+  id: string;
+  name: string;
+  type: GroupEntity['type'];
+  inRegister: boolean;
+  inData: boolean;
+}
+
+/** Merge the engagement's entity register with what the files carry, by name —
+ *  names are what a trial balance actually gives you; ids are ours. */
+export function mergeScopeEntities(registered: GroupEntity[], inFiles: GroupEntity[]): ScopeEntityRow[] {
+  const rows = new Map<string, ScopeEntityRow>();
+  registered.forEach(e => rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: true, inData: false }));
+  inFiles.forEach(e => {
+    const hit = rows.get(e.name);
+    if (hit) hit.inData = true;
+    else rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: false, inData: true });
+  });
+  return Array.from(rows.values());
+}
+
 /** The processes an engagement has RACMs for, as the programme derived them. */
 export function processesFor(engagementId: string): string[] {
   return programmeFor(engagementId)?.racms.map(r => r.process) ?? [];
