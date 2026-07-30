@@ -1,3 +1,5 @@
+import type { TabDef } from '../audit/EngagementTabBar';
+
 /**
  * Which SOX engagement the reworked flow is being built on.
  *
@@ -19,6 +21,23 @@
  * rollout is deleting `isNewFlow`'s body and letting every engagement through,
  * and every call site is already pointing here.
  */
+/**
+ * The tabs an OPEN AUDIT has — the same four on both shells.
+ *
+ * Lives here rather than in either shell because both need it and a shell
+ * importing the other creates a cycle. Deliberately not the engagement's four:
+ * no RACM (the matrix is maintained once, not per cycle) and no audit register
+ * (you are inside one). 'overview' keeps its id and wears the label Dashboard —
+ * renaming the id would ripple through SoxTab, View, TAB_ROOT and RETURNABLE in
+ * store.tsx for no user-visible gain.
+ */
+export const AUDIT_TABS: TabDef[] = [
+  { id: 'overview', label: 'Dashboard' },
+  { id: 'controls', label: 'Control Library' },
+  { id: 'deficiencies', label: 'Deficiency management' },
+  { id: 'config', label: 'Configuration' },
+];
+
 export const NEW_FLOW_ENGAGEMENT_ID = 'sox-v2-fy26'; // FY26 ICFR — Altura Infra Group (SOX-104)
 
 /** True only for the engagement the new flow is being built on. */

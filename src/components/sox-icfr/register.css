@@ -32,6 +32,20 @@
   white-space: nowrap;
 }
 
+/* ── mapped-workflow tag — same idea as .wp-ref, in brand tones ─────────────────── */
+.wf-tag {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-brand-700);
+  padding: 2px 9px;
+  border: 1px solid var(--color-brand-100);
+  border-radius: 999px;
+  background: var(--color-brand-50);
+  white-space: nowrap;
+}
+
 /* ── Register table ─────────────────────────────────────────────────────────────── */
 .reg-wrap { border: 1px solid var(--color-canvas-border); border-radius: 14px; overflow-x: auto; overflow-y: hidden; background: var(--color-canvas-elevated); }
 .reg-head {

@@ -12,9 +12,10 @@ import {
   type GroupEntity, type MaterialityBasis,
 } from '../audit/sox-testing/soxTestingData';
 import { entitiesFor, entitiesInFiles, mergeScopeEntities } from './auditScope';
+import { roundWindow } from './auditPortfolio';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
-import type { AuditScopeKind, Control } from './types';
+import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -41,6 +42,15 @@ import { cn } from '../../lib/cn';
 
 const STEPS = ['Period', 'Materiality & files', 'Scope', 'Review'] as const;
 const REVIEW = STEPS.length - 1;
+
+/** The four calendar quarters offered when Year type is "Quarter" — one year's
+ *  worth, not a year picker of its own (this prototype's scope). */
+const QUARTERS = [
+  { id: 1, span: 'Jan – Mar', from: '01-01', to: '03-31' },
+  { id: 2, span: 'Apr – Jun', from: '04-01', to: '06-30' },
+  { id: 3, span: 'Jul – Sep', from: '07-01', to: '09-30' },
+  { id: 4, span: 'Oct – Dec', from: '10-01', to: '12-31' },
+] as const;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 /** Same derivation the scoping wizard uses — a FormSelect trigger wearing the
@@ -87,13 +97,43 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);
 
   // ── Period ───────────────────────────────────────────────────────────────
-  const [yearBasis, setYearBasis] = useState<'fy' | 'cy'>('fy');
+  const [yearBasis, setYearBasis] = useState<'fy' | 'cy' | 'quarter' | 'custom'>('fy');
   // Defaults to the financial year in progress, same as engagement creation —
   // the audit is almost always for the current cycle, and the picker below
   // stays available for the exceptions.
   const [year, setYear] = useState(currentFyEnd);
-  const periodLabel = yearBasis === 'fy' ? fyLabel(year) : cyLabel(year);
-  const periodSpan = spanOf(yearBasis, year);
+  /** Which round of the cycle this is. SOX is not tested once a year: interim
+   *  covers the first stretch, roll-forward extends it towards the year end, and
+   *  the year-end round tests as of the balance-sheet date. It is the auditor's
+   *  judgement, so it is asked rather than inferred — and it decides the window
+   *  the coverage timeline places this audit in. Only fy/cy ask this: a quarter
+   *  or a custom range already names one specific window, so those two skip the
+   *  question below and the audit is created with 'yearend' as a neutral
+   *  stand-in nothing reads back as a claim about rounds. */
+  const [round, setRound] = useState<AuditRound>('interim');
+
+  // Quarter — one of the current year's four calendar quarters.
+  const quarterYear = new Date().getFullYear();
+  const [quarter, setQuarter] = useState<1 | 2 | 3 | 4>(1);
+  const q = QUARTERS.find(x => x.id === quarter)!;
+
+  // Custom — an explicit from/to, for testing that doesn't fit a named cycle.
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const customValid = !!customFrom && !!customTo && customFrom <= customTo;
+  const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const periodLabel = yearBasis === 'fy' ? fyLabel(year)
+    : yearBasis === 'cy' ? cyLabel(year)
+    : yearBasis === 'quarter' ? `Q${quarter} ${quarterYear}`
+    : customValid ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}` : 'Custom period';
+  const periodSpan = yearBasis === 'fy' || yearBasis === 'cy' ? spanOf(yearBasis, year)
+    : yearBasis === 'quarter' ? `${q.span} ${quarterYear}`
+    : 'Custom range';
+  // Only computed for fy/cy — the round question those two ask decides it.
+  const cycleWindow = (yearBasis === 'fy' || yearBasis === 'cy') ? roundWindow(yearBasis, year, round) : null;
+  const windowFrom = cycleWindow ? cycleWindow.from : yearBasis === 'quarter' ? `${quarterYear}-${q.from}` : customFrom;
+  const windowTo = cycleWindow ? cycleWindow.to : yearBasis === 'quarter' ? `${quarterYear}-${q.to}` : customTo;
 
   // ── Files (optional) ─────────────────────────────────────────────────────
   const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
@@ -230,7 +270,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   // Files is skippable on purpose — everything else must be answered.
   // Materiality & files gates on the materiality half only: the TB / GL half is
   // optional, so an empty file list must never block Continue.
-  const canContinue = step === 0 ? true
+  const canContinue = step === 0 ? (yearBasis === 'custom' ? customValid : true)
     : step === 1 ? benchmark > 0 && (basis === 'custom' || pct > 0)
     // Scoping by RACM means picking controls: a RACM ticked with nothing
     // under it covers nothing, so Continue waits for at least one row.
@@ -238,10 +278,15 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     : true;
 
   const create = () => {
+    const hasRounds = yearBasis === 'fy' || yearBasis === 'cy';
     createAudit({
       period: periodLabel,
       yearBasis,
+      fiscalYear: yearBasis === 'quarter' ? quarterYear : yearBasis === 'custom' ? Number(customTo.slice(0, 4)) : year,
       periodSpan,
+      round: hasRounds ? round : 'yearend',
+      windowFrom,
+      windowTo,
       scopeKind,
       scopeNames: pickedNames,
       scopeIds: scopeKind === 'entity' ? picked : [],
@@ -288,10 +333,15 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="flex-1">
         {step === 0 && (
-          <StepShell title="Audit period" sub="An annual cycle, named by the year the group reports on — not a dated project.">
+          <StepShell title="Audit period" sub="An annual cycle, named by the year the group reports on. Or a single quarter, or a custom range, for testing that doesn't fit a named cycle.">
             <label className={labelCls}>Year type</label>
             <div className="grid grid-cols-2 gap-1.5 mb-4">
-              {([['fy', 'Financial year', 'Apr – Mar'], ['cy', 'Calendar year', 'Jan – Dec']] as const).map(([id, title, sub]) => (
+              {([
+                ['fy', 'Financial year', 'Apr – Mar'],
+                ['cy', 'Calendar year', 'Jan – Dec'],
+                ['quarter', 'Quarter', '3 months'],
+                ['custom', 'Custom range', 'Pick dates'],
+              ] as const).map(([id, title, sub]) => (
                 <button
                   key={id}
                   onClick={() => setYearBasis(id)}
@@ -307,21 +357,94 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 </button>
               ))}
             </div>
-            <label className={labelCls}>Audit period</label>
-            <FormSelect
-              value={String(year)}
-              options={cycleYears(yearBasis).map(y => ({ value: String(y), label: yearBasis === 'fy' ? fyLabel(y) : cyLabel(y) }))}
-              onChange={v => setYear(Number(v))}
-              className={selectCls}
-              ariaLabel="Audit period"
-              menuCls="w-full"
-            />
-            <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
-              <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
-              <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                Testing runs <span className="font-semibold text-ink-900">{periodSpan}</span>.
-              </p>
-            </div>
+
+            {(yearBasis === 'fy' || yearBasis === 'cy') && (
+              <>
+                <label className={labelCls}>Audit period</label>
+                <FormSelect
+                  value={String(year)}
+                  options={cycleYears(yearBasis).map(y => ({ value: String(y), label: yearBasis === 'fy' ? fyLabel(y) : cyLabel(y) }))}
+                  onChange={v => setYear(Number(v))}
+                  className={selectCls}
+                  ariaLabel="Audit period"
+                  menuCls="w-full"
+                />
+                <label className={`${labelCls} mt-4`}>Round</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {AUDIT_ROUNDS.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => setRound(r.id)}
+                      className={cn(
+                        'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all cursor-pointer',
+                        round === r.id
+                          ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
+                          : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
+                      )}
+                    >
+                      {r.label}
+                      <span className="block text-[10px] font-semibold opacity-70">{roundWindow(yearBasis, year, r.id).label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-ink-400 mt-1.5">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>
+
+                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
+                  <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
+                  <p className="text-[11.5px] text-ink-600 leading-relaxed">
+                    The cycle is <span className="font-semibold text-ink-900">{periodSpan}</span>; this round covers{' '}
+                    <span className="font-semibold text-ink-900">{cycleWindow!.label}</span>.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {yearBasis === 'quarter' && (
+              <>
+                <label className={labelCls}>Quarter</label>
+                <FormSelect
+                  value={String(quarter)}
+                  options={QUARTERS.map(x => ({ value: String(x.id), label: `Quarter ${x.id}` }))}
+                  onChange={v => setQuarter(Number(v) as 1 | 2 | 3 | 4)}
+                  className={selectCls}
+                  ariaLabel="Quarter"
+                  menuCls="w-full"
+                />
+                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
+                  <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
+                  <p className="text-[11.5px] text-ink-600 leading-relaxed">
+                    Testing covers <span className="font-semibold text-ink-900">{periodSpan}</span> — one pass, no separate rounds.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {yearBasis === 'custom' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>From</label>
+                    <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={inputCls} aria-label="From date" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>To</label>
+                    <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className={inputCls} aria-label="To date" />
+                  </div>
+                </div>
+                {customFrom && customTo && !customValid ? (
+                  <p className="text-[11.5px] text-risk-700 mt-2">The From date must be on or before the To date.</p>
+                ) : (
+                  <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
+                    <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
+                    <p className="text-[11.5px] text-ink-600 leading-relaxed">
+                      {customValid
+                        ? <>Testing covers <span className="font-semibold text-ink-900">{fmtDate(customFrom)} – {fmtDate(customTo)}</span> — one pass, no separate rounds.</>
+                        : 'Pick a From and To date to set the window this audit covers.'}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </StepShell>
         )}
 
@@ -616,6 +739,9 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               {/* Same order the steps ran in — Period, then materiality and its
                   files, then what they scoped. */}
               <ReviewRow label="Period" value={<>{periodLabel} <span className="font-normal text-ink-400">· {periodSpan}</span></>} />
+              {(yearBasis === 'fy' || yearBasis === 'cy') && (
+                <ReviewRow label="Round" value={<>{AUDIT_ROUNDS.find(r => r.id === round)!.label} <span className="font-normal text-ink-400">· {cycleWindow!.label}</span></>} />
+              )}
               <ReviewRow label="Materiality" value={<>₹{overall} Cr <span className="font-normal text-ink-400">· {basisOpt.label}</span></>} />
               <ReviewRow
                 label="TB / GL"

@@ -7,18 +7,22 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
-import { defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
+import type { SoxTabLike } from './types';
+import { AUDIT_TABS, defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
 import SoxClassicInner from './SoxClassicApp';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
+import EngagementOverview from './EngagementOverview';
 import Racm, { RacmLanding } from './Racm';
 import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlLibrary from './ControlLibrary';
 import ControlDossier from './ControlDossier';
+import ControlLibraryDetail from './ControlLibraryDetail';
 import AuditLogsView from './AuditLogsView';
 import AuditConfigView from './AuditConfigView';
+import AuditArchiveView from './AuditArchiveView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 /* Control Library — LENS SWAP (user ask, 30 Jul). The Control Library tab now
@@ -69,22 +73,6 @@ const SOX_TABS: TabDef[] = [
      in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
      cycle, so there is nothing engagement-wide left to configure here; the
      engagement's own ConfigurationView stays parked. */
-];
-
-/**
- * The audit's own tabs (user ask). Creating an audit opens it here.
- *
- * Four, and deliberately not the engagement's four: no RACM (the matrix is
- * maintained on the engagement, not per cycle) and no SOX audit (you are inside
- * one). 'overview' keeps its id and wears the label Dashboard — renaming the id
- * would ripple through SoxTab, View, TAB_ROOT and RETURNABLE in store.tsx for no
- * user-visible gain.
- */
-const AUDIT_TABS: TabDef[] = [
-  { id: 'overview', label: 'Dashboard' },
-  { id: 'controls', label: 'Control Library' },
-  { id: 'deficiencies', label: 'Deficiency management' },
-  { id: 'config', label: 'Configuration' },
 ];
 
 /**
@@ -211,15 +199,38 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const isDrillIn = isRacmMatrix || isScope || isHandoffs || isDeficiencies;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
     || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
-  const body = view === 'dossier' ? <ControlDossier />
+  // A CONCLUDED audit is read from its archive, not from the live controls —
+  // otherwise this year's figures would render under last year's breadcrumb. It
+  // takes over every one of the audit's four tabs.
+  const body = (inAudit && audit!.archive && isRoot)
+    ? <AuditArchiveView audit={audit!} tab={(tab === 'racm' || tab === 'risks' || tab === 'runs' ? 'overview' : tab) as SoxTabLike} />
+    // The engagement-root control page is the LIBRARY lens's own detail view —
+    // structure and workflow mapping, no testing. Inside an audit it is still
+    // the full testing page.
+    : view === 'dossier' ? (inAudit ? <ControlDossier /> : <ControlLibraryDetail />)
     : (view === 'deficiencies' || tab === 'deficiencies') ? <DeficienciesView />
     : view === 'handoffs' ? <HandoffsView />
     : view === 'scope' ? <ScopeView />
-    : tab === 'overview' ? <Overview />
+    // Two different pages behind one tab. Outside an audit the engagement's
+    // Overview is the AUDIT PORTFOLIO — audits as rows, cross-audit roll-ups,
+    // coverage. Inside one it is that audit's Dashboard: controls, materiality,
+    // sign-off. With several audits running, a single page could not answer
+    // "16/20 of what" without naming the audit.
+    // The risk owner never gets the portfolio: their engagement-level tabs are an
+    // inbox and their controls, and the inbox (RiskOwnerPortal, inside Overview)
+    // is engagement-wide anyway — their controls and their deficiencies, whichever
+    // audit is testing them. A portfolio of audits is an auditor's question.
+    : tab === 'overview' ? ((inAudit || role === 'risk-owner') ? <Overview /> : <EngagementOverview />)
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
     : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : null)
+    // Two different Control Library lenses (user ask, 30 Jul): the engagement
+    // root asks "what is this control made of" (ControlLibrary — attributes,
+    // workflow mapping). Inside an audit the question is "did it pass" — TOD
+    // and TOE results, Not tested/Effective/Ineffective — so that's always
+    // ControlRegister there, independent of LIBRARY_LENS.
+    : inAudit ? <ControlRegister />
     : LIBRARY_LENS ? <ControlLibrary />
     : <ControlRegister />;
 

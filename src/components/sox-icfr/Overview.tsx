@@ -58,7 +58,7 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, meOwner, openAuditId, setView, setTab, openRegister, signOffEngagement } = useIcfr();
+  const { eng, role, meOwner, openAuditId, setView, setTab, openRegister, signOffAudit } = useIcfr();
   const { addToast } = useToast();
   // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
@@ -94,8 +94,14 @@ export default function Overview() {
   // sign-off readiness — every control concluded AND its paper countersigned;
   // the reviewer's per-paper gate feeds the engagement-level one.
   const concludedCount = stats.effective + stats.ineffective;
-  const signoffReady = stats.total > 0 && stats.reviewed === stats.total;
-  const so = eng.signoff;
+  // Nothing to sign when no audit is open — the owner reaches this page at
+  // engagement level, and sign-off belongs to an audit.
+  const signoffReady = inAudit && stats.total > 0 && stats.reviewed === stats.total;
+  // Sign-off belongs to the AUDIT, not the engagement: this page is the audit's
+  // Dashboard, and the opinion covers the period the audit tested. Outside an
+  // audit there is nothing to sign, which is why the engagement's own Overview is
+  // a different page entirely (EngagementOverview.tsx).
+  const so = eng.audits.find(a => a.id === openAuditId)?.signoff ?? {};
   const isConcluded = !!(so.preparer && so.reviewer);
 
   const sev = useMemo(() => {
@@ -114,12 +120,12 @@ export default function Overview() {
   // Once signed, the stamped conclusion wins over the live derivation.
   const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
   const signPreparer = () => {
-    signOffEngagement('preparer');
+    signOffAudit('preparer');
     addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
   };
   const signReviewer = () => {
-    signOffEngagement('reviewer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Countersigned', message: signsEffective ? 'The engagement is concluded — ICFR effective.' : 'The engagement is concluded — ICFR not effective (material weakness open).' });
+    signOffAudit('reviewer');
+    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Countersigned', message: signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).' });
   };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');

@@ -1,6 +1,6 @@
 import { PROGRAMMES, SEED_ENTITIES, type GroupEntity, type SoxProgramme, entityShort } from '../audit/sox-testing/soxTestingData';
 import { V2C_PROGRAMMES } from '../audit/sox-testing/v2/v2ClassicStore';
-import type { AuditRecord } from './types';
+import type { AuditRecord, Control } from './types';
 
 /**
  * What a SOX audit covers — the bridge between an audit's scope selection and
@@ -74,6 +74,20 @@ export function mergeScopeEntities(registered: GroupEntity[], inFiles: GroupEnti
     else rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: false, inData: true });
   });
   return Array.from(rows.values());
+}
+
+/**
+ * Does this audit's scope cover this control?
+ *
+ * Same precedence useAuditControls applies: controls picked one by one on the
+ * scope step decide, and only when none were does the process filter. Lives here
+ * rather than in a view because three surfaces now ask it — the library, the
+ * portfolio selectors and the archive snapshot.
+ */
+export function auditCovers(a: AuditRecord, c: Control, engagementId: string): boolean {
+  if (a.controlIds?.length) return a.controlIds.includes(c.id);
+  const procs = processesForAudit(a, engagementId);
+  return !procs || procs.includes(normaliseProcess(c.process));
 }
 
 /** The processes an engagement has RACMs for, as the programme derived them. */

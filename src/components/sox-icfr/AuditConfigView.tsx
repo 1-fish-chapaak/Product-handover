@@ -57,6 +57,10 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
   const racms = useMemo(() => processesFor(eng.id), [eng.id]);
 
   const year = yearOf(audit);
+  // This view's Year type toggle only offers fy/cy (see below) — a quarter or
+  // custom audit falls back to 'fy' here rather than asserting a type the
+  // field no longer guarantees.
+  const cycleBasis: 'fy' | 'cy' = audit.yearBasis === 'cy' ? 'cy' : 'fy';
   // The audit froze its rule as a label, not an id — match back to the option.
   const basisOpt = BASIS_OPTIONS.find(b => b.label === audit.materiality.basisLabel) ?? BASIS_OPTIONS[0];
 
@@ -140,10 +144,13 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
             <label className={labelCls}>Cycle</label>
             <FormSelect
               value={String(year)}
-              options={cycleYears(audit.yearBasis).map(y => ({
-                value: String(y), label: audit.yearBasis === 'fy' ? fyLabel(y) : cyLabel(y),
+              // This edit view only offers Financial year / Calendar year — a
+              // quarter or custom audit's period is set once, on creation, and
+              // isn't re-editable into another quarter/range here.
+              options={cycleYears(cycleBasis).map(y => ({
+                value: String(y), label: cycleBasis === 'fy' ? fyLabel(y) : cyLabel(y),
               }))}
-              onChange={v => setPeriod(audit.yearBasis, Number(v))}
+              onChange={v => setPeriod(cycleBasis, Number(v))}
               className={selectCls}
               ariaLabel="Cycle"
               menuCls="w-full"

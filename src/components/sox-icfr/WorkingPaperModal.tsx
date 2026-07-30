@@ -126,10 +126,17 @@ function ControlSignoff({ eng, c, onAttest }: { eng: IcfrEngagement; c: Control;
   );
 }
 
-/** Engagement-level sign-off (the opinion) — same gate as the Overview card. */
+/**
+ * The AUDIT's sign-off (the opinion) — same gate as the audit Dashboard's card.
+ *
+ * Was engagement-level. Sign-off moved onto the audit: the paper covers the
+ * period the audit tested, so the opinion in the file has to be that audit's. A
+ * concluded audit's signatures live in its archive and can't be re-signed.
+ */
 function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (req: AttestReq) => void }) {
-  const { role, signOffEngagement } = useIcfr();
-  const so = eng.signoff;
+  const { role, openAuditId, signOffAudit } = useIcfr();
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const so = audit?.signoff ?? {};
   const conclusion = so.icfrConclusion ?? icfrConclusion(eng);
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
@@ -137,8 +144,8 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   // same gate as Overview: every paper concluded AND countersigned by the reviewer
   const reviewed = eng.controls.filter(isControlFinal).length;
   const ready = eng.controls.length > 0 && reviewed === eng.controls.length;
-  const canSign = role === 'auditor' && ready && !so.preparer;
-  const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer;
+  const canSign = role === 'auditor' && ready && !so.preparer && !!audit && !audit.archive;
+  const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer && !!audit && !audit.archive;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
       <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> Sign-off — included in the file</div>
@@ -147,7 +154,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
         <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so.preparer ? 'text-ink-800' : 'text-ink-400')}>{so.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
-          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffEngagement('preparer') })}
+          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffAudit('preparer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
@@ -159,7 +166,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
         <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
-          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffEngagement('reviewer') })}
+          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffAudit('reviewer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
       </div>
