@@ -13,11 +13,11 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, X, Check, RefreshCw, ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
-import InsightStack from './InsightStack';
+import InsightStack, { type StackRowNav } from './InsightStack';
 import { PipelineChecklist } from './InsightGenerator';
 import type { InsightStackRun } from './useInsightStackRun';
 
-export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeLabel, run }: {
+export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeLabel, run, rowNav }: {
   open: boolean;
   onClose: () => void;
   /** The engagement name — drawer header + clean-scan copy. */
@@ -25,6 +25,9 @@ export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeL
   /** Trailing phrase for the stack header, e.g. "across this engagement". */
   scopeLabel?: string;
   run: InsightStackRun;
+  /** Host row navigation — every card names the exact risk/control it resolves
+   *  to and can redirect there (the host closes this drawer + focuses the row). */
+  rowNav?: StackRowNav;
 }) {
   const { phase, step, steps, outcome, failedStep, stack } = run;
 
@@ -88,6 +91,7 @@ export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeL
                     scopeLabel={scopeLabel ?? ''}
                     foldLedger={false}
                     groupByAnchor
+                    rowNav={rowNav}
                   />
                   <div className="flex items-center gap-2 px-1">
                     <span className="text-[0.65625rem] text-ink-400 flex items-center gap-1"><Check size={11} className="text-compliant" /> Generated just now · cached for this session</span>

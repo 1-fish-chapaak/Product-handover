@@ -4,7 +4,7 @@
  * Workflows / Evidence / Sample cards. All side-effects are local + toasts.
  */
 
-import { useMemo, useState, useRef, type JSX } from 'react';
+import { useEffect, useMemo, useState, useRef, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
@@ -41,9 +41,14 @@ interface Props {
   onTestEvidence?: (controlId: string) => void;
   /** Open the Workflow Executor for an attribute's linked workflow (automated test). */
   onRunWorkflow?: (workflowId: string) => void;
+  /** Land on this control's row — expand it, scroll to it, pulse-highlight it.
+   *  Set by the engagement insights drawer's "go to control" redirect. */
+  focusControlId?: string | null;
+  /** The focus landed (or the id no longer exists) — clear it host-side. */
+  onFocusHandled?: () => void;
 }
 
-type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
+export type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
 type StatusFilter = 'All' | ControlStatus;
 /** Per-attribute test method — a control may be hybrid (mix of both). */
 type AttrType = 'Self-assessed' | 'Automated';
@@ -131,6 +136,13 @@ function rollupStatus(results: AttrResult[]): ControlStatus {
   return tested.some(r => r === 'Fail') ? 'Fail' : 'Pass';
 }
 
+/** The status a control row shows before any in-session edits — the same
+ *  seeded attribute results this tab renders, rolled up. Exported so the
+ *  engagement-level insight subjects quote the row the redirect lands on. */
+export function seededControlStatus(attributeIds: string[], engagementHealth: number): ControlStatus {
+  return rollupStatus(attributeIds.map(id => seedAttrResult(id, engagementHealth)));
+}
+
 function workingPaperFor(attributeId: string): WorkingPaperStatus {
   const r = hash(attributeId) % 100;
   if (r < 40) return 'Draft';
@@ -165,7 +177,7 @@ function kindForFile(name: string): EvidenceKind {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow }: Props): JSX.Element {
+export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow, focusControlId, onFocusHandled }: Props): JSX.Element {
   const { addToast, updateToast } = useToast();
   const { can } = useCan();
   const logEvent = useAuditLog();
@@ -444,6 +456,25 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     setSearch('');
   };
 
+  // ── Row focus — the landing half of the insight drawer's "go to control".
+  // Expand the row, scroll it to center, pulse a ring long enough to register,
+  // then hand the focus back. Filters that would hide the row are cleared: the
+  // redirect's intent ("show me this control") outranks stored filter state.
+  const [flashControlId, setFlashControlId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusControlId) return;
+    if (!controls.some(c => c.controlId === focusControlId)) { onFocusHandled?.(); return; }
+    if (!filteredControls.some(c => c.controlId === focusControlId)) clearAllFilters();
+    expandControl(focusControlId);
+    setFlashControlId(focusControlId);
+    const scrollT = window.setTimeout(() => {
+      document.getElementById(`eng-control-${focusControlId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 160);
+    const doneT = window.setTimeout(() => { setFlashControlId(null); onFocusHandled?.(); }, 2600);
+    return () => { window.clearTimeout(scrollT); window.clearTimeout(doneT); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusControlId]);
+
 
   // ─── Empty state ───────────────────────────────────────────────────────────
   if (controls.length === 0) {
@@ -601,7 +632,10 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
           return (
             <div
               key={c.controlId}
-              className="glass-card overflow-hidden"
+              id={`eng-control-${c.controlId}`}
+              className={`glass-card overflow-hidden transition-shadow duration-500 ${
+                flashControlId === c.controlId ? 'ring-2 ring-brand-500/60 shadow-lg shadow-brand-500/10' : ''
+              }`}
             >
               <button
                 onClick={() => toggleExpand(c.controlId)} aria-expanded={expanded}

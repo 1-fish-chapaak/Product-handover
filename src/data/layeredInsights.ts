@@ -308,6 +308,12 @@ export interface LayeredInsight {
   /** The entities below the anchor this insight draws from (Rule 1). Spanned
    *  rows show a one-line reflection pointing back here — never a copy. */
   spans?: EntityRef[];
+  /** Where the reader should go CHECK — the rows this finding resolves to,
+   *  used by rollup surfaces (the engagement drawer) to name the exact
+   *  risk/control and redirect there. Deliberately separate from `spans`:
+   *  spans drive row reflections everywhere; checkAt drives navigation only,
+   *  so adding it never changes what a risk/control row displays. */
+  checkAt?: EntityRef[];
 
   // ── Forward-looking ──
   checkMore: CheckMoreOption[];
@@ -478,6 +484,14 @@ const ENGAGEMENT_PRICING: LayeredInsight = {
   detectedOn: '07 Jul 2026',
   detectedBy: 'formula',
   rollupOf: { label: 'risks', count: 1 },
+  // Where to check — the risk and controls this escalation resolves to.
+  // Callers with real row ids (the engagement stack) override via input.checkAt.
+  checkAt: [
+    { kind: 'risk', id: 'R-PRICING', label: 'Pricing accuracy risk', note: 'Exposed — every mapped control tests the feed’s output, none its source.' },
+    { kind: 'control', id: 'C-CHARGEBACK-PRICING', label: 'Chargeback Pricing Validation', note: '70 of the 90 exception lines this run.' },
+    { kind: 'control', id: 'C-CONTRACT-COMPLIANCE', label: 'Contract Compliance Review', note: 'HPG12 WAC lagging the price master.' },
+    { kind: 'control', id: 'C-VENDOR-MASTER', label: 'Vendor Master Audit', note: 'Stale WAC ageing across contracts.' },
+  ],
   checkMore: [
     { kind: 'trace', label: 'Trace to the $3.75 line', detail: 'that should have been $27.75' },
     { kind: 'split', label: 'Slice by period' },
@@ -647,6 +661,9 @@ export interface BuildInsightInput {
   /** Override the insight's spans with the caller's REAL row entities, so
    *  reflections land on rows that actually exist on the caller's surface. */
   spans?: EntityRef[];
+  /** Override where-to-check with the caller's REAL row entities, so the
+   *  rollup surface's redirects land on rows that actually exist. */
+  checkAt?: EntityRef[];
 }
 
 // ─── AI recommendation library ──────────────────────────────────────────────
@@ -857,6 +874,7 @@ export function buildLayeredInsight(input: BuildInsightInput): LayeredInsight {
     base = pricing ? pin(ENGAGEMENT_PRICING, subjectId, subjectLabel) : engagementFallback(subjectId, subjectLabel, status);
   }
   if (input.spans) base = { ...base, spans: input.spans };
+  if (input.checkAt) base = { ...base, checkAt: input.checkAt };
 
   return { ...base, recommendations: buildRecommendations({ layer, flagship: pricing, status, priority, isKey }) };
 }

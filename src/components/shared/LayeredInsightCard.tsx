@@ -21,18 +21,19 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
-  Crosshair, MessageSquare, ArrowUpRight, Mail,
+  Crosshair, MessageSquare, ArrowUpRight, Mail, ArrowDown, Locate,
 } from 'lucide-react';
 import {
   LAYER_META,
   type LayeredInsight, type VerdictTone, type CheckMoreOption,
-  type RecPriority,
+  type RecPriority, type EntityRef,
 } from '../../data/layeredInsights';
 import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
 import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
 import RunTrajectoryBand from './RunTrajectoryBand';
 import InsightEmailModal from './InsightEmailModal';
+import InsightFeedback from './InsightFeedback';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
 
@@ -87,6 +88,63 @@ const LAYER_WORD: Record<LayeredInsight['layer'], string> = {
   control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement',
 };
 
+// ─── Entity navigation — "which risk/control, and take me there" ────────────
+// Rollup surfaces (the engagement insights drawer) pass `entityNav` so every
+// card names the exact row it resolves to and can redirect the reader there.
+// Row-level surfaces never pass it — a card sitting ON its own row would be
+// giving directions to where the reader already stands.
+
+/** How an entity opens: its own row elsewhere in the app ('row'), its full
+ *  card inside the surrounding stack ('insight'), or not at all (null). */
+export type EntityNavMode = 'row' | 'insight';
+
+export interface InsightEntityNav {
+  resolve: (ref: EntityRef) => EntityNavMode | null;
+  open: (ref: EntityRef) => void;
+}
+
+/** One entity reference chip: KIND · mono id · label. Navigable chips carry a
+ *  direction glyph — outward (↗) to the entity's row, downward (↓) to its full
+ *  card later in this report — so the reader knows where a click lands. */
+function EntityChip({ entity, mode, onOpen, title }: {
+  entity: EntityRef;
+  mode: EntityNavMode | null;
+  onOpen?: () => void;
+  title?: string;
+}) {
+  const body = (
+    <>
+      <span className="shrink-0 text-[8.5px] font-bold uppercase tracking-wider text-ink-400">{entity.kind}</span>
+      <span className="shrink-0 font-mono text-[10px] font-semibold text-brand-700">{entity.id}</span>
+      <span className="min-w-0 max-w-[220px] truncate text-[11px] font-semibold text-ink-700">{entity.label}</span>
+    </>
+  );
+  if (!mode) {
+    return (
+      <span
+        className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas px-2 py-1"
+        title={title ?? entity.note ?? entity.label}
+      >
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button" onClick={onOpen}
+      title={title ?? (mode === 'row'
+        ? `Open ${entity.kind} ${entity.id} — review and act on its row (new tab)`
+        : `Read this ${entity.kind}’s full insight further down this report`)}
+      className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-2 py-1 hover:border-brand-300 hover:bg-brand-50/60 transition-colors cursor-pointer"
+    >
+      {body}
+      {mode === 'row'
+        ? <ArrowUpRight size={11} className="shrink-0 text-brand-600" aria-hidden="true" />
+        : <ArrowDown size={11} className="shrink-0 text-brand-600" aria-hidden="true" />}
+    </button>
+  );
+}
+
 // A plain-string "what to do next" step. Same compaction as RecTile: clamped to
 // two lines, expandable inline for the full paragraph, chat button to act.
 function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
@@ -121,7 +179,7 @@ function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
 
 export default function LayeredInsightCard({
   insight, onCheckMore, collapsible = false, open = true, onToggleOpen,
-  headerLabel, evidenceLabel, evidenceExtra, onRec,
+  headerLabel, evidenceLabel, evidenceExtra, onRec, entityNav,
 }: {
   insight: LayeredInsight;
   /** Optional override for a "check more" chip; defaults to opening it in chat. */
@@ -140,6 +198,10 @@ export default function LayeredInsightCard({
   evidenceExtra?: React.ReactNode;
   /** Optional override for opening a recommended action; defaults to Ask IRA in a new tab. */
   onRec?: (title: string) => void;
+  /** Rollup-surface navigation: name the exact risk/control this card resolves
+   *  to and redirect there. Only the engagement drawer passes this — row-level
+   *  surfaces render exactly as before. */
+  entityNav?: InsightEntityNav;
 }) {
   const meta = LAYER_META[insight.layer];
   const sevTone = TONE[SEV_TONE[insight.severity]];
@@ -161,6 +223,18 @@ export default function LayeredInsightCard({
   // Recommended actions honour the caller's handler (e.g. seed a follow-up composer).
   const openRec = (title: string) => (onRec ? onRec(title) : openInChat(title));
 
+  // ── Entity navigation (rollup surfaces only) ──
+  // The anchor is this card's own subject; its only meaningful destination is a
+  // real row elsewhere ('insight' would just point the card at itself). The
+  // engagement anchor is the surface the reader is already on — no chip.
+  const anchorRef: EntityRef = { kind: insight.layer, id: insight.subjectId, label: insight.subjectLabel };
+  const showAnchorRef = !!entityNav && insight.layer !== 'engagement';
+  const anchorNavigable = showAnchorRef && entityNav!.resolve(anchorRef) === 'row';
+  const openAnchor = () => entityNav?.open(anchorRef);
+  // Where to check — navigation refs when the caller set them, else the spans
+  // (for a risk card the spanned controls ARE the rows to check).
+  const checkEntities: EntityRef[] = entityNav ? (insight.checkAt ?? insight.spans ?? []) : [];
+
   // ── Collapsed — a sleek single-row summary, so a stack of ten reads like a
   //    scannable list and doesn't push the engagement detail off-screen. Brand
   //    chrome and the full anatomy are reserved for the expanded card. ──
@@ -169,16 +243,22 @@ export default function LayeredInsightCard({
     return (
       <motion.section
         initial={false}
-        className="rounded-xl border border-canvas-border bg-canvas-elevated hover:border-brand-200 transition-colors"
+        className="flex items-stretch rounded-xl border border-canvas-border bg-canvas-elevated hover:border-brand-200 transition-colors"
       >
         <button
           type="button" onClick={onToggleOpen} aria-expanded={false}
           aria-label={`Expand insight: ${insight.takeaway}`}
-          className="group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer"
+          className="group flex flex-1 min-w-0 items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer"
         >
           <ChevronDown size={15} className="shrink-0 -rotate-90 text-ink-300 group-hover:text-ink-500 transition-colors" aria-hidden="true" />
           <span className={`size-2 rounded-full shrink-0 ${sevTone.dot}`} title={`Severity: ${SEV_LABEL[insight.severity]}`} />
           <span className="hidden sm:inline shrink-0 text-[9px] font-bold uppercase tracking-wider text-ink-400">{layerWord}</span>
+          {/* The mapping the rollup reader scans for: WHICH risk/control. */}
+          {showAnchorRef && (
+            <span className="hidden sm:inline shrink-0 font-mono text-[10px] font-semibold text-brand-700" title={insight.subjectLabel}>
+              {insight.subjectId}
+            </span>
+          )}
           <FreshnessTag insight={insight} />
           {(insight.spans?.length ?? 0) > 0 && (
             <span
@@ -197,6 +277,17 @@ export default function LayeredInsightCard({
             {SEV_LABEL[insight.severity]}
           </span>
         </button>
+        {/* Straight to the row — the redirect without opening the card first. */}
+        {anchorNavigable && (
+          <button
+            type="button" onClick={openAnchor}
+            aria-label={`Open ${layerWord.toLowerCase()} ${insight.subjectId} in a new tab`}
+            title={`Open ${layerWord.toLowerCase()} ${insight.subjectId} — review and act on its row (new tab)`}
+            className="shrink-0 self-stretch px-2.5 rounded-r-xl border-l border-canvas-border text-ink-300 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+          >
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </button>
+        )}
       </motion.section>
     );
   }
@@ -218,7 +309,20 @@ export default function LayeredInsightCard({
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-100/70 text-brand-700 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider shrink-0">
             <Sparkles size={9} aria-hidden="true" /> IRA Insight
           </span>
-          <span className="text-[12.5px] font-bold text-ink-600">{scopeText}</span>
+          {/* On rollup surfaces the scope word becomes the exact entity — the
+              reader should never have to ask "which control is 'this control'?" */}
+          {showAnchorRef ? (
+            <EntityChip
+              entity={anchorRef}
+              mode={anchorNavigable ? 'row' : null}
+              onOpen={openAnchor}
+              title={anchorNavigable
+                ? `Open ${insight.layer} ${insight.subjectId} — review and act on its row (new tab)`
+                : `${insight.subjectLabel} — no row of its own in this engagement`}
+            />
+          ) : (
+            <span className="text-[12.5px] font-bold text-ink-600">{scopeText}</span>
+          )}
           <span className="text-[11.5px] text-ink-400">· {timeAgo(insight.generatedAt)}</span>
           <div className="ml-auto flex items-center gap-2.5">
             {/* Severity, spelled out plain — label overrides like "Readiness: At
@@ -321,10 +425,33 @@ export default function LayeredInsightCard({
                 </div>
               </div>
 
-              {/* Spans — the entities below this anchor the finding draws from.
-                  This card is their single record; each spanned row shows a
-                  one-line reflection pointing back here, never a copy. */}
-              {(insight.spans?.length ?? 0) > 0 && (
+              {/* Where to check — rollup surfaces turn the span/checkAt refs
+                  into the answer to "which risk/control do I open, exactly?".
+                  Each chip redirects to its row (↗) or, when the entity has no
+                  row of its own, to its full card further down the report (↓). */}
+              {entityNav && checkEntities.length > 0 ? (
+                <div className="mt-3.5 rounded-xl border border-brand-100 bg-brand-50/30 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700">
+                    <Locate size={12} aria-hidden="true" /> Where to check · {checkEntities.length}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {checkEntities.map(e => (
+                      <EntityChip
+                        key={`${e.kind}:${e.id}`}
+                        entity={e}
+                        mode={entityNav.resolve(e)}
+                        onOpen={() => entityNav.open(e)}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-ink-400">
+                    One finding, counted once — open a row to make the change there.
+                  </p>
+                </div>
+              ) : (insight.spans?.length ?? 0) > 0 && (
+                // Spans — the entities below this anchor the finding draws from.
+                // This card is their single record; each spanned row shows a
+                // one-line reflection pointing back here, never a copy.
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mr-0.5">Spans</span>
                   {insight.spans!.map(s => (
@@ -346,6 +473,7 @@ export default function LayeredInsightCard({
               <EvidenceDisclosure
                 evidence={insight.evidence}
                 label={evidenceLabel ?? EVIDENCE_LABEL[insight.layer]}
+                note={insight.evidenceNote}
                 checkMore={insight.checkMore}
                 onCheckMore={onCheckMore}
                 evidenceExtra={evidenceExtra}
@@ -371,6 +499,26 @@ export default function LayeredInsightCard({
                   </ul>
                 </div>
               )}
+
+              {/* The redirect, restated where the reader lands after the fix:
+                  having read what to do, go do it on the row itself. */}
+              {anchorNavigable && (
+                <button
+                  type="button" onClick={openAnchor}
+                  title={`Opens in a new tab — this report stays where it is.`}
+                  className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50/50 h-9 text-[12.5px] font-semibold text-brand-700 hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer"
+                >
+                  Open {LAYER_WORD[insight.layer].toLowerCase()}
+                  <span className="font-mono text-[11.5px]">{insight.subjectId}</span>
+                  to act
+                  <ArrowUpRight size={13} aria-hidden="true" />
+                </button>
+              )}
+
+              {/* Signal back — the card's last line. Rating sits below the fix
+                  because that's the first point the reader can judge the
+                  finding; the header stays status + dispatch. */}
+              <InsightFeedback insightId={insight.id} />
             </motion.div>
           )}
         </AnimatePresence>

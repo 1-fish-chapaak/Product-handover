@@ -217,6 +217,10 @@ const getInitialView = (): View => {
   if (v === 'engagement-detail') return 'engagement-detail';
   if (v === 'workflow-executor') return 'workflow-executor';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
+  // New-tab deep link from the engagement insights drawer's "go to control"
+  // chips — lands on the engagement workspace (EngagementOverviewView), which
+  // consumes the optional ?tab= and ?focusControl= params itself.
+  if (v === 'engagement-overview' && params.get('eng')) return 'engagement-overview';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
 };

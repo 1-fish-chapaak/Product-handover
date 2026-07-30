@@ -35,6 +35,7 @@ import {
 } from '../../data/insightMemory';
 import type { LayeredInsight, VerdictTone, CheckMoreOption } from '../../data/layeredInsights';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
+import InsightFeedback from '../shared/InsightFeedback';
 import RunSelector from '../shared/RunSelector';
 import {
   RecommendedActions, EvidenceDisclosure,
@@ -541,6 +542,12 @@ export function OutputComparePanel({
           recs={recs}
           onOpen={(title) => onAction?.(title)}
         />
+
+        {/* Signal back — same row, same place, same language as every other
+            insight card. Keyed on the runs actually in view: change the
+            selection and the comparison is a different claim, so the previous
+            rating no longer applies to what's on screen. */}
+        <InsightFeedback insightId={`output-compare:${runs.map(r => r.id).join('+')}`} />
       </div>
     </motion.section>
   );
