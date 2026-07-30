@@ -21,7 +21,7 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
+import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
 import { sampleRefs } from './mockData';
 import type {
   Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
@@ -588,6 +588,99 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
   );
 }
 
+// ── design judgements — the questions the working paper has to answer ─────────────
+// Not evidence, and not a conclusion: the four judgements a reviewer expects to
+// find stated. Does the control description answer the six questions; if this
+// control fails, does anything else catch it; is the frequency right for the risk;
+// is preventive-or-detective the right shape. Left blank they print as "not
+// stated", which is honest — but they no longer print as though never asked.
+function DesignJudgementsCard({ control, canEdit }: { control: Control; canEdit: boolean }) {
+  const { eng, role, setDesignJudgements } = useIcfr();
+  const j = control.design.judgements;
+  const settable = canEdit && role === 'auditor';
+  const covered = FIVE_W_1H.filter(a => j?.coverage?.[a.k] === true).length;
+  const gaps = FIVE_W_1H.filter(a => j?.coverage?.[a.k] === false);
+  // the same picker the deficiency card offers — any other control in the register
+  const others = eng.controls.filter(c => c.id !== control.id);
+  const comp = others.find(c => c.id === j?.compensatingControlId);
+
+  const yesNo = (label: string, value: boolean | undefined, onSet: (v: boolean) => void, hint: string) => (
+    <div className="flex items-start gap-2 py-1.5">
+      <span className="text-[0.71875rem] text-ink-700 flex-1 min-w-0">{label}<span className="block text-[0.625rem] text-ink-400 mt-0.5">{hint}</span></span>
+      <div className="flex items-center gap-1 shrink-0">
+        <button disabled={!settable} onClick={() => onSet(true)}
+          className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', value === true ? 'bg-compliant-50 text-compliant-700 border border-compliant-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Yes</button>
+        <button disabled={!settable} onClick={() => onSet(false)}
+          className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', value === false ? 'bg-risk-50 text-risk-700 border border-risk-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>No</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="subcard px-3.5 py-3 mb-5">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <h5 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5">
+          <Scale size={14} /> Design judgements
+          <span className="font-normal text-ink-400">· stated on the working paper</span>
+        </h5>
+        <Pill tone={gaps.length > 0 ? 'risk' : covered === FIVE_W_1H.length ? 'compliant' : 'draft'}>{covered}/{FIVE_W_1H.length} answered</Pill>
+      </div>
+
+      {/* 5W+1H — a description that misses one fails design however good the evidence */}
+      <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400 mb-1">Does the control description answer…</div>
+      <div className="space-y-0.5 mb-3">
+        {FIVE_W_1H.map(a => {
+          const v = j?.coverage?.[a.k];
+          return (
+            <div key={a.k} className="flex items-center gap-2.5 py-1">
+              <span className="w-11 text-[0.625rem] font-bold uppercase tracking-wide text-brand-700 shrink-0">{a.k}</span>
+              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">{a.q}</span>
+              <div className="flex items-center gap-1 shrink-0">
+                <button disabled={!settable} onClick={() => setDesignJudgements(control.id, { coverage: { ...j?.coverage, [a.k]: true } })}
+                  className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', v === true ? 'bg-compliant-50 text-compliant-700 border border-compliant-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Present</button>
+                <button disabled={!settable} onClick={() => setDesignJudgements(control.id, { coverage: { ...j?.coverage, [a.k]: false } })}
+                  className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', v === false ? 'bg-risk-50 text-risk-700 border border-risk-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Missing</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* is anything else catching this failure, and is the control the right shape */}
+      <div className="border-t border-canvas-border pt-2">
+        <div className="flex items-start gap-2 py-1.5">
+          <span className="text-[0.71875rem] text-ink-700 flex-1 min-w-0">Is there a compensating control?
+            <span className="block text-[0.625rem] text-ink-400 mt-0.5">Another control that would catch the same failure if this one doesn’t.</span>
+          </span>
+          <select disabled={!settable} value={j?.compensatingControlId ?? ''} aria-label="Compensating control"
+            onChange={e => setDesignJudgements(control.id, { compensatingControlId: e.target.value })}
+            className="h-7 max-w-[220px] px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.65625rem] text-ink-700 disabled:opacity-70 enabled:cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+            <option value="">None identified</option>
+            {others.map(c => <option key={c.id} value={c.id}>{c.id} — {c.description.slice(0, 60)}</option>)}
+          </select>
+        </div>
+        {yesNo('Is the frequency appropriate?', j?.frequencyAppropriate, v => setDesignJudgements(control.id, { frequencyAppropriate: v }), `Runs ${control.frequency.toLowerCase()} — often enough for the risk it carries?`)}
+        {yesNo('Is the control type appropriate?', j?.typeAppropriate, v => setDesignJudgements(control.id, { typeAppropriate: v }), `${control.type} — should it prevent the error, or is detecting it after the fact enough?`)}
+      </div>
+
+      {comp && <p className="text-[0.65625rem] text-ink-500 mt-1.5">Compensating — <b className="font-semibold text-ink-700">{comp.id}</b> {comp.description}</p>}
+      {gaps.length > 0 && (
+        <div className="mt-2 text-[0.6875rem] text-risk-700 bg-risk-50/60 border border-risk-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          <span>The description doesn’t answer {gaps.map(g => g.k).join(', ')} — a control description that misses one of the six fails design however good the evidence is.</span>
+        </div>
+      )}
+      <label className="block mt-2.5">
+        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Basis for these judgements</span>
+        <textarea rows={2} value={j?.note ?? ''} disabled={!settable} onChange={e => setDesignJudgements(control.id, { note: e.target.value })}
+          placeholder="Why the frequency and type are right — or what would have to change."
+          className="mt-0.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      </label>
+      {j?.by && <p className="text-[0.625rem] text-ink-400 mt-1">Recorded by {j.by}, {j.at}</p>}
+    </div>
+  );
+}
+
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
   const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
@@ -940,6 +1033,9 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
           {/* the walkthrough — the design proved on one live transaction */}
           <WalkthroughCard control={control} canEdit={canEdit} />
+
+          {/* the judgements the paper has to state, not just the evidence behind them */}
+          <DesignJudgementsCard control={control} canEdit={canEdit} />
 
           {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence, request it from the control owner, or mark it not applicable.</div>}
           {/* effective needs every gate: evidence accounted for, every design check

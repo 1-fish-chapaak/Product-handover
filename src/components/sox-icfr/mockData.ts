@@ -1,9 +1,9 @@
 import { validationQA } from './helpers';
-import { ipeChecklist } from './types';
+import { FIVE_W_1H, ipeChecklist } from './types';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -493,7 +493,32 @@ const WALKED: Record<string, { attendees: string[]; notes: string; failCode?: st
   // asks whether it prevents the misstatement fails on a real transaction.
   'P2P-C-05': { attendees: ['D. Rao · Controller', 'A. Fernandes · Financial Reporting'], notes: 'Walked a month-end manual journal. The reviewer signed the reporting pack after the journal had already hit the ledger, so the control detects rather than prevents — and on this transaction it detected nothing.', failCode: 'E1' },
 };
+/** The four judgements the paper states, per row. Only the rows whose design has
+ *  been concluded carry them — a judgement recorded before the work is a default
+ *  dressed as an opinion. The manual-journal row is the interesting one: its
+ *  description never answers WHEN the review happens relative to the posting, and
+ *  a detective control cannot prevent the misstatement, which is precisely why its
+ *  design concluded ineffective. */
+const JUDGED: Record<string, { missing?: FiveWOneH[]; freq: boolean; type: boolean; comp?: string; note: string }> = {
+  'P2P-C-01': { freq: true, type: true, note: 'Runs on every change, blocks before the change takes effect — a preventive control at the point the risk arises.' },
+  'P2P-C-02': { freq: true, type: true, note: 'Release is blocked until the correct tier approves, so the money is never committed at the wrong level.' },
+  'P2P-C-03': { freq: true, type: true, comp: 'P2P-C-04', note: 'Runs per invoice at the point of payment. The duplicate block catches a different failure on the same population, so the two read together.' },
+  'P2P-C-04': { freq: true, type: true, comp: 'P2P-C-03', note: 'Automated block on every posting. The three-way match covers the price and quantity exposure the block does not.' },
+  'P2P-C-05': { missing: ['When'], freq: true, type: false, note: 'The description does not say the review happens before posting, and on the walked transaction it did not — the journal was already in the ledger. A detective control cannot prevent this misstatement; the design has to become preventive.' },
+};
 for (const c of DETAILED) {
+  const j = JUDGED[c.id];
+  if (j && c.design.conclusion !== 'Not tested') {
+    c.design.judgements = {
+      coverage: Object.fromEntries(FIVE_W_1H.map(a => [a.k, !(j.missing ?? []).includes(a.k)])),
+      compensatingControlId: j.comp,
+      frequencyAppropriate: j.freq,
+      typeAppropriate: j.type,
+      note: j.note,
+      by: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+      at: '11 Apr',
+    };
+  }
   const w = WALKED[c.id];
   if (!w || c.design.conclusion === 'Not tested' || c.operating.steps.length === 0) continue;
   c.design.walkthrough = {

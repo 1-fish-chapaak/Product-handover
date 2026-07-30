@@ -139,9 +139,46 @@ export interface Walkthrough {
   startedAt: string;
 }
 
+/** The six questions a control description has to answer before its design can be
+ *  called adequate: who performs it, what the check is, when it runs, where it is
+ *  evidenced, why it addresses the risk, how it is performed. A description that
+ *  misses one fails design however good the evidence behind it looks. One
+ *  definition, shared with the V2 test bench, so both surfaces ask the same six
+ *  questions in the same words. */
+export const FIVE_W_1H = [
+  { k: 'Who', q: 'Performer and approver are named — and the right person signed' },
+  { k: 'What', q: 'The check itself is stated, and it happened as described' },
+  { k: 'When', q: 'Frequency is stated — and was met on the walkthrough sample' },
+  { k: 'Where', q: 'Evidenced somewhere inspectable — system, report or document' },
+  { k: 'Why', q: 'The risk it mitigates is addressed — no open or unexplained items' },
+  { k: 'How', q: 'Method of performance is clear — signature, approval, tie-out' },
+] as const;
+export type FiveWOneH = (typeof FIVE_W_1H)[number]['k'];
+
+/** The judgements the working paper has to state about the DESIGN itself, as
+ *  against the evidence behind it. The reviewer walked their own workbook and
+ *  these were the questions on it that this tool never asked: does the control
+ *  description cover the six, is there a compensating control if this one fails,
+ *  is the frequency appropriate to the risk, and is the type — preventive or
+ *  detective — the right one. A paper that doesn't answer them leaves the reader
+ *  to guess whether they were considered. */
+export interface DesignJudgements {
+  /** 5W+1H coverage of the control description — present or missing per question. */
+  coverage?: Partial<Record<FiveWOneH, boolean>>;
+  /** A control elsewhere that would catch the same failure. Empty = none identified. */
+  compensatingControlId?: string;
+  frequencyAppropriate?: boolean;
+  typeAppropriate?: boolean;
+  note?: string;
+  by?: string;
+  at?: string;
+}
+
 export interface DesignTrack {
   documents: DesignDoc[];
   points: DesignPoint[];
+  /** The design judgements above — printed in the working paper. */
+  judgements?: DesignJudgements;
   /** The one-transaction walkthrough behind the design conclusion. Absent until
    *  the auditor starts it; once started, an untested attribute holds the
    *  conclusion, because a half-walked transaction proves nothing. */

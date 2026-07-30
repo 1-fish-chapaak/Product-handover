@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
-import { exposureTotal, GAP_LABEL } from './types';
+import { assessSeverity, controlConclusion, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -17,6 +17,22 @@ export type PaperBlock =
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';
 export const IPE_TITLE = 'Information produced by the entity (IPE)';
+export const WALKTHROUGH_TITLE = 'Walkthrough — design tested on one transaction';
+export const WALKTHROUGH_TABLE = 'Walkthrough — attributes on the walked transaction';
+export const JUDGEMENTS_TITLE = 'Design judgements';
+export const DESIGN_ELEMENTS_TABLE = 'Design elements — evidence & waivers';
+
+/** How the drawn sample falls across the quarters. A quarterly-or-less control is
+ *  stated as its own cadence; anything sampled gets an even spread, which is what
+ *  the reviewer's workbook shows and what a reader checks the coverage against. */
+function quarterlySplit(c: Control): string {
+  const n = c.operating.sampling?.samples.length ?? 0;
+  if (!n) return 'No sample drawn';
+  if (c.frequency === 'Annual') return 'Annual control — single occurrence, no quarterly split';
+  const per = Math.floor(n / 4), rem = n % 4;
+  const q = [0, 1, 2, 3].map(i => per + (i < rem ? 1 : 0));
+  return `Q1 ${q[0]} · Q2 ${q[1]} · Q3 ${q[2]} · Q4 ${q[3]} (${n} items)`;
+}
 
 /** P / r ticks, as real working papers mark them. */
 const tick = (r: TestResult | 'Effective' | 'Ineffective' | undefined): string =>
@@ -33,7 +49,7 @@ const letter = (i: number): string => String.fromCharCode(65 + i);
  *  Until an audit exists there is nothing to read, so this falls back to the
  *  engagement's own start/end dates: a paper exported early still states the
  *  span it covers instead of going blank. */
-function periodLine(eng: IcfrEngagement): string {
+export function periodLine(eng: IcfrEngagement): string {
   const latest = eng.audits[0];   // createAudit prepends, so [0] is newest
   return latest
     ? `${latest.periodSpan} · ${latest.period}`
@@ -65,14 +81,25 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
 
   blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — Test of Design & Operating Effectiveness`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
+  const guide = sampleSizeGuide(c);
   blocks.push({
     kind: 'kv', title: 'Control', rows: [
       ['Control owner', c.owner],
       ['Control number', c.id],
+      // what the control is FOR, above what it does and how it is worded
+      ['Control objective', c.objective ?? '—'],
       ['Control description', c.description],
       ['Control activity', c.controlActivity ?? '—'],
+      ['Classification', c.clazz ?? '—'],
       ['Control frequency', c.frequency],
-      ['Nature / type', `${c.nature} · ${c.type}${c.isKey ? ' · Key control' : ''}`],
+      ['Nature / type', `${c.nature} · ${c.type} · ${c.isKey ? 'Key control' : 'Non-key control'}`],
+      // the rating and the size it drives, side by side — the reviewer sizes on
+      // frequency AND rating, so a paper that prints one without the other is
+      // asking the reader to take the number on trust
+      ['Risk rating', c.riskRating ?? 'Not rated'],
+      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
+      ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
+      ['Quarterly split', quarterlySplit(c)],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
       ['Root cause', c.rootCause ?? '—'],
       ['Assertions', c.assertions.join(', ')],
@@ -102,13 +129,83 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
 
   // Test of design — documents received + each consideration ticked
   const docsIn = c.design.documents.filter(d => d.status === 'Received').length;
-  const outstanding = c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind);
+  const waived = c.design.documents.filter(d => d.waiver && d.status !== 'Received');
+  const outstanding = designOutstanding(c).map(d => d.kind);
   blocks.push({
     kind: 'table', title: 'Test of design',
-    note: `${docsIn}/${c.design.documents.length} design documents received${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
+    note: `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
     headers: ['', 'Design consideration', 'Tick'],
     rows: c.design.points.map((p, i) => [String(i + 1), p.text, tick(p.override?.result ?? p.result)]),
     tickFrom: 2,
+  });
+
+  // Every design element with what backs it — and, where nothing does, the reason
+  // it was waived. A waiver the paper doesn't show is an unexplained hole in the
+  // completeness the conclusion rests on.
+  if (c.design.documents.length) {
+    blocks.push({
+      kind: 'table', title: DESIGN_ELEMENTS_TABLE,
+      note: `${docsIn} evidenced · ${waived.length} waived · ${outstanding.length} outstanding`,
+      headers: ['', 'Element', 'Required', 'Status', 'Evidence / reason', 'Recorded by'],
+      rows: c.design.documents.map((d, i) => [
+        String(i + 1),
+        d.kind === 'Custom' ? d.name : d.kind,
+        d.required === false ? 'Optional' : 'Required',
+        d.status === 'Received' ? 'Evidenced' : d.waiver ? 'Waived' : d.status,
+        d.status === 'Received'
+          ? (d.files?.map(f => f.name).join(' · ') || d.name)
+          : d.waiver ? `${d.waiver.reason} — ${d.waiver.note}` : 'Not provided',
+        d.status === 'Received' ? `${d.uploadedBy ?? '—'}${d.at ? `, ${d.at}` : ''}` : d.waiver ? `${d.waiver.by}, ${d.waiver.at}` : '—',
+      ]),
+    });
+  }
+
+  // The walkthrough — who was in the room, which transaction was walked, and what
+  // each attribute showed on it. Captured on the control page, printed from there.
+  const w = c.design.walkthrough;
+  if (w) {
+    blocks.push({
+      kind: 'kv', title: WALKTHROUGH_TITLE, rows: [
+        ['Transaction walked', w.sampleRef],
+        ['Date walked', w.date],
+        ['Performed by', w.tester],
+        ['Attended by (client)', w.attendees.length ? w.attendees.join(' · ') : 'Not recorded'],
+        ['What it showed', w.notes?.trim() || '—'],
+      ],
+    });
+    if (steps.length) {
+      const walkTested = steps.filter(s => (w.attributeResults[s.id] ?? 'Not tested') !== 'Not tested').length;
+      blocks.push({
+        kind: 'table', title: WALKTHROUGH_TABLE,
+        note: `${walkTested}/${steps.length} attributes tested on ${w.sampleRef} — the same attributes the sample tests, proved once on a live transaction`,
+        headers: ['', 'Attribute', 'Assertion', 'Result on ' + w.sampleRef, 'Tick'],
+        rows: steps.map((s, i) => {
+          const r = w.attributeResults[s.id] ?? 'Not tested';
+          return [letter(i), `${s.description} (${s.code})`, s.assertion, r, tick(r)];
+        }),
+        tickFrom: 4,
+      });
+    }
+  } else {
+    blocks.push({ kind: 'note', label: 'Walkthrough', text: 'No walkthrough recorded — the design has not been tested against a live transaction.', tone: 'neutral' });
+  }
+
+  // The four judgements the paper has to state rather than imply.
+  const j = c.design.judgements;
+  const compensating = j?.compensatingControlId ? eng.controls.find(x => x.id === j.compensatingControlId) : undefined;
+  const stated = (v: boolean | undefined): string => v === true ? 'Yes' : v === false ? 'No' : 'Not stated';
+  blocks.push({
+    kind: 'kv', title: JUDGEMENTS_TITLE, rows: [
+      ...FIVE_W_1H.map(a => [
+        `Description answers “${a.k}”`,
+        j?.coverage?.[a.k] === true ? 'Present' : j?.coverage?.[a.k] === false ? 'MISSING' : 'Not stated',
+      ] as [string, string]),
+      ['Compensating control', compensating ? `${compensating.id} — ${compensating.description}` : j?.compensatingControlId ? j.compensatingControlId : 'None identified'],
+      ['Frequency appropriate to the risk', stated(j?.frequencyAppropriate)],
+      [`Control type appropriate (${c.type})`, stated(j?.typeAppropriate)],
+      ['Basis', j?.note?.trim() || '—'],
+      ['Recorded by', j?.by ? `${j.by}, ${j.at}` : 'Not recorded'],
+    ],
   });
 
   // IPE — the report the population came out of, and the three checks that proved
@@ -238,15 +335,19 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
       if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'Operating Testing';
+      // the walkthrough and the judgements are the design's own work, so they read
+      // on the design tab beside the considerations they support
+      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'Design Testing';
       return 'Results'; // linked exception
     }
     if (b.kind === 'table') {
-      if (b.title === 'Test of design') return 'Design Testing';
+      if (b.title === 'Test of design' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'Design Testing';
       // the programme is what the auditor was instructed to do, so it reads with
       // the control it belongs to rather than inside one track's results
       if (b.title === 'Audit programme — steps performed') return 'Control';
       return 'Operating Testing';
     }
+    if (b.label === 'Walkthrough') return 'Design Testing';
     return b.label === 'Samples' || b.label === 'IPE' ? 'Operating Testing' : 'Results'; // notes
   };
   const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));

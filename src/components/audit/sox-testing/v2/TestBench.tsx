@@ -14,14 +14,10 @@ import { SAMPLE_SIZES, type ChaseRow, type V2Control, type V2PeopleRow } from '.
  * control effective date (the auditor samples the effective window only).
  */
 
-const FIVE_W_1H = [
-  { k: 'Who', q: 'Performer and approver are named — and the right person signed' },
-  { k: 'What', q: 'The check itself is stated, and it happened as described' },
-  { k: 'When', q: 'Frequency is stated — and was met on the walkthrough sample' },
-  { k: 'Where', q: 'Evidenced somewhere inspectable — system, report or document' },
-  { k: 'Why', q: 'The risk it mitigates is addressed — no open or unexplained items' },
-  { k: 'How', q: 'Method of performance is clear — signature, approval, tie-out' },
-] as const;
+// The six questions now live with the design-track types in the SOX/ICFR module,
+// which is where they are also recorded and printed on the working paper. One
+// definition, so this bench and that paper can never drift apart.
+import { FIVE_W_1H } from '../../../sox-icfr/types';
 
 export interface TestResult {
   tod: 'Pass' | 'Fail';
