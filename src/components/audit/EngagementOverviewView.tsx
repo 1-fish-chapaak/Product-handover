@@ -13,9 +13,10 @@ import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
-import InsightGenerator from '../shared/InsightGenerator';
-import AIRecommendsPopover from '../shared/AIRecommendsPopover';
-import { actionableWorkflowRecs, isPricingSubject, type BuildInsightInput } from '../../data/layeredInsights';
+import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
+import { getGeneratedInsight, useInsightCacheVersion } from '../shared/insightCache';
+import LayeredInsightCard from '../shared/LayeredInsightCard';
+import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -161,7 +162,17 @@ function engagementInsightSubjects(eng: Engagement): BuildInsightInput[] {
   if (isPricing) {
     subs.push(
       { layer: 'control', subjectId: 'C-CHARGEBACK-PRICING', subjectLabel: 'Chargeback Pricing Validation', status: 'Fail', isKey: true, flagship: true },
-      { layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true },
+      {
+        layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true,
+        // Anchor rule: this finding spans three controls, so it lives here.
+        // Spans use REAL Controls-tab row ids so each spanned row shows its
+        // one-line reflection (its slice + a link up) — never a copy.
+        spans: [
+          { kind: 'control', id: 'C-CHARGEBACK-PRICING', label: 'Chargeback Pricing Validation', note: '70 of the 90 exception lines this run — both sample rows trace to the feed.' },
+          { kind: 'control', id: 'P2P-C-06', label: 'Three-way match enforced (PO · GRN · Invoice) before AP posting', note: 'MCKESSON invoice lines fail the price match against the stale master.' },
+          { kind: 'control', id: 'P2P-C-07', label: 'Duplicate-invoice detection on PAN + invoice-number + amount + date', note: 'Re-billed MCKESSON lines resurface as near-duplicates at AP posting.' },
+        ],
+      },
     );
   } else {
     subs.push({ layer: 'risk', subjectId: `${eng.id}-risk`, subjectLabel: `${eng.process ?? 'Process'} control risk`, priority: eng.openIssues > 0 ? 'High' : 'Low' });
@@ -574,6 +585,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
                 onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
                 onRunWorkflow={onRunWorkflow}
+                onOpenInsightsHub={tabPrefs.hidden.includes('insights') ? undefined : () => setActiveTab('insights')}
               />
             )}
 
@@ -1355,6 +1367,7 @@ function AIInsightsTab({ eng }: { eng: Engagement }) {
       subjects={insightSubjects}
       stackScopeLabel="across this engagement"
       stackFoldLedger={false}
+      stackGroupByAnchor
     />
   );
 }
@@ -2283,6 +2296,13 @@ function WorkflowsBySubProcess({
   const allWorkflows = useMemo(() => [...workflows, ...linked], [workflows, linked]);
   const ws = useEngagementWorkspace();
 
+  // Row CTAs are gated on the engagement's insights having been generated
+  // (Overview / AI Insights tab) — the registry re-renders us when that lands.
+  useInsightCacheVersion();
+  const engagementInsight = getGeneratedInsight('engagement', engagementId);
+  // Which workflow's insight card is expanded inline under its row.
+  const [openInsightWfId, setOpenInsightWfId] = useState<string | null>(null);
+
   /** Control-attributes linked to a workflow (shared with the Controls tab). */
   const linkedAttributesFor = (workflowId: string): { id: string; description: string }[] =>
     ws.attributeIdsForWorkflow(workflowId).map(id => ({ id, description: ws.attributeById(id)?.description ?? id }));
@@ -2492,6 +2512,9 @@ function WorkflowsBySubProcess({
                             onToggleSelect={() => toggleSelect(wf.id)}
                             onOpen={() => onOpenWorkflow?.(wf.libraryId)}
                             onConfigure={() => onConfigureWorkflow?.(wf.id)}
+                            engagementInsight={engagementInsight}
+                            insightOpen={openInsightWfId === wf.id}
+                            onToggleInsight={() => setOpenInsightWfId(prev => (prev === wf.id ? null : wf.id))}
                           />
                         ))}
                       </div>
@@ -2515,6 +2538,9 @@ function WorkflowsBySubProcess({
               onToggleSelect={() => toggleSelect(wf.id)}
               onOpen={() => onOpenWorkflow?.(wf.libraryId)}
               onConfigure={() => onConfigureWorkflow?.(wf.id)}
+              engagementInsight={engagementInsight}
+              insightOpen={openInsightWfId === wf.id}
+              onToggleInsight={() => setOpenInsightWfId(prev => (prev === wf.id ? null : wf.id))}
             />
           ))}
         </div>
@@ -2547,6 +2573,7 @@ function WorkflowsBySubProcess({
 
 function WorkflowRow({
   wf, openCount, linkedAttributes, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
+  engagementInsight, insightOpen, onToggleInsight,
 }: {
   wf: MockWorkflow;
   openCount: number;
@@ -2556,15 +2583,36 @@ function WorkflowRow({
   onToggleSelect: () => void;
   onOpen: () => void;
   onConfigure: () => void;
+  /** The engagement's generated insight — null until Generate has run. Gates the
+   *  row CTA and stamps the workflow card's "generated N min ago". */
+  engagementInsight: LayeredInsight | null;
+  /** Whether this row's insight card is expanded inline under the row. */
+  insightOpen: boolean;
+  onToggleInsight: () => void;
 }) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
-  const wfRecs = actionableWorkflowRecs({ subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount, cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type });
+  // Metric-derived insight for this workflow — deterministic, so it's built on
+  // render once the engagement generation has happened (which also stamps it).
+  const wfInsight = engagementInsight
+    ? {
+        ...buildWorkflowInsight({
+          subjectId: wf.code, subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount,
+          cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type,
+        }),
+        generatedAt: engagementInsight.generatedAt,
+      }
+    : null;
+  const wfInsightRecs = wfInsight?.recommendations ?? [];
+  const wfPriority = wfInsightRecs.some(r => r.priority === 'do-now')
+    ? 'do-now' as const
+    : wfInsightRecs.some(r => r.priority === 'this-period') ? 'this-period' as const : undefined;
   const handleRowClick = () => {
     if (bulkMode) onToggleSelect();
     else onOpen();
   };
   return (
+    <div>
     <div
       onClick={handleRowClick}
       className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all cursor-pointer group ${
@@ -2585,9 +2633,13 @@ function WorkflowRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
           <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
-          {wfRecs.length > 0 && (
+          {wfInsight && (
             <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
-              <AIRecommendsPopover recs={wfRecs} subjectLabel={wf.code} subjectSub={wf.name} />
+              <AIRecommendsBadge
+                priority={wfPriority}
+                count={wfInsightRecs.length || wfInsight.recommendedActions.length}
+                onClick={onToggleInsight}
+              />
             </span>
           )}
         </div>
@@ -2652,6 +2704,28 @@ function WorkflowRow({
         </button>
       )}
       <ChevronRight size={15} className="text-text-muted shrink-0" />
+    </div>
+    {/* Inline insight — the row CTA expands the workflow's card right here,
+        same anatomy as the control rows' expanded insight. */}
+    <AnimatePresence initial={false}>
+      {wfInsight && insightOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+          className="overflow-hidden"
+        >
+          <div className="pt-2">
+            <LayeredInsightCard
+              insight={wfInsight}
+              headerLabel="this workflow"
+              evidenceLabel="Evidence · run metrics"
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </div>
   );
 }

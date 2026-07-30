@@ -402,6 +402,47 @@ export const ENTITY_MEMORY: Record<string, EntityMemory> = {
 // Diff of THIS run vs the previous run of the same workflow: what's new, what
 // resolved, and how the headline KPIs moved.
 
+/** How a KPI's value is rendered. */
+export type KpiFormat = 'int' | 'usd2';
+
+/** One KPI the compare card trends across. Carried in the OutputCompare so a
+ *  workflow can expose its own metric set (3, 5, …) without any UI change —
+ *  the card renders whatever it's given and scrolls once the row overflows. */
+export interface KpiDef {
+  /** Matches a key in RunSnapshot.kpis. */
+  key: string;
+  label: string;
+  /** The metric the verdict + headline hang on (there should be exactly one). */
+  headline?: boolean;
+  format: KpiFormat;
+  /** Drives delta colour: 'lowerBetter' (exceptions, dollars) vs 'neutral'
+   *  volume metrics (rows processed). Defaults to 'lowerBetter'. */
+  polarity?: 'lowerBetter' | 'neutral';
+}
+
+/** One point in a workflow's run history — the raw KPI values as of that run.
+ *  The compare card reads these numbers directly (never re-parses formatted
+ *  strings), so a single-run delta and an N-run trend derive from one source.
+ *  `kpis` always carries the three core metrics and may carry more, keyed to
+ *  match the workflow's KpiDef set. */
+export interface RunSnapshot {
+  id: string;
+  /** Full run label, e.g. "Jun 2026". */
+  label: string;
+  /** Short axis label, e.g. "Jun". */
+  month: string;
+  /** Human date, e.g. "02 Jun 2026". */
+  date: string;
+  /** True for the run being viewed (always the last element of `history`). */
+  current?: boolean;
+  kpis: {
+    exceptions: number;
+    rowsProcessed: number;
+    /** $ under-recovered, sampled. */
+    underRecovered: number;
+  } & Record<string, number>;
+}
+
 export interface OutputCompare {
   previousRunLabel: string;
   previousRunDate: string;
@@ -420,6 +461,18 @@ export interface OutputCompare {
         (e.g. "1", "341", "₹2.5L"). Rendered as the coloured delta chip. */
     delta: string;
   }[];
+  /** The KPI set to trend, in display order. Optional — the compare card falls
+   *  back to its default three (Exceptions / Rows processed / $ under-recovered)
+   *  when absent. A workflow that tracks more simply lists them here. */
+  kpiDefs?: KpiDef[];
+  /** Ordered run history (oldest→newest, INCLUDING the current run as the last
+   *  element). The follow-up compare card lets the user pick which prior runs to
+   *  compare against and trends the KPIs across the selection. Optional so other
+   *  consumers of RUN_OUTPUT_COMPARE (e.g. WorkflowMemoryPanel) are unaffected. */
+  history?: RunSnapshot[];
+  /** # still-open items that have persisted across 3+ runs — the "chronic" count
+   *  surfaced only in multi-run (trend) mode. */
+  chronicOpen?: number;
 }
 
 export const RUN_OUTPUT_COMPARE: OutputCompare = {
@@ -438,7 +491,56 @@ export const RUN_OUTPUT_COMPARE: OutputCompare = {
     { label: 'Rows processed', current: '12,480', previous: '11,900', direction: 'up', sentiment: 'neutral', delta: '580' },
     { label: '$ under-recovered (sampled)', current: '$60.28', previous: '$41.10', direction: 'up', sentiment: 'bad', delta: '$19.18' },
   ],
+  chronicOpen: 12,
+  // Six months of the same workflow, oldest→newest. Jul is the current run; the
+  // Jun snapshot matches previousRun*/kpiDeltas above so the single-run compare
+  // is identical whichever way it's derived. Exceptions climb every run — the
+  // trend the multi-run view is built to expose.
+  history: [
+    { id: 'r-feb', label: 'Feb 2026', month: 'Feb', date: '04 Feb 2026', kpis: { exceptions: 58, rowsProcessed: 11_020, underRecovered: 24.60 } },
+    { id: 'r-mar', label: 'Mar 2026', month: 'Mar', date: '03 Mar 2026', kpis: { exceptions: 61, rowsProcessed: 11_200, underRecovered: 28.40 } },
+    { id: 'r-apr', label: 'Apr 2026', month: 'Apr', date: '01 Apr 2026', kpis: { exceptions: 68, rowsProcessed: 11_480, underRecovered: 33.10 } },
+    { id: 'r-may', label: 'May 2026', month: 'May', date: '05 May 2026', kpis: { exceptions: 71, rowsProcessed: 11_720, underRecovered: 39.05 } },
+    { id: 'r-jun', label: 'Jun 2026', month: 'Jun', date: '02 Jun 2026', kpis: { exceptions: 76, rowsProcessed: 11_900, underRecovered: 41.10 } },
+    { id: 'r-jul', label: 'Jul 2026', month: 'Jul', date: '07 Jul 2026', current: true, kpis: { exceptions: 90, rowsProcessed: 12_480, underRecovered: 60.28 } },
+  ],
 };
+
+// A 5-KPI variant used by the sandbox "Consolidated file testing" workflows so
+// the KPI carousel (horizontal scroll + ‹ › controls) can be exercised with a
+// set that overflows three-up. Same findings/verdict as the default; only the
+// tracked metric set is wider.
+export const RUN_OUTPUT_COMPARE_5KPI: OutputCompare = {
+  ...RUN_OUTPUT_COMPARE,
+  kpiDefs: [
+    { key: 'exceptions', label: 'Exceptions', headline: true, format: 'int', polarity: 'lowerBetter' },
+    { key: 'rowsProcessed', label: 'Rows processed', format: 'int', polarity: 'neutral' },
+    { key: 'duplicateRows', label: 'Duplicate rows', format: 'int', polarity: 'lowerBetter' },
+    { key: 'validationErrors', label: 'Validation errors', format: 'int', polarity: 'lowerBetter' },
+    { key: 'underRecovered', label: '$ variance (sampled)', format: 'usd2', polarity: 'lowerBetter' },
+  ],
+  history: [
+    { id: 'r-feb', label: 'Feb 2026', month: 'Feb', date: '04 Feb 2026', kpis: { exceptions: 58, rowsProcessed: 11_020, underRecovered: 24.60, duplicateRows: 12, validationErrors: 5 } },
+    { id: 'r-mar', label: 'Mar 2026', month: 'Mar', date: '03 Mar 2026', kpis: { exceptions: 61, rowsProcessed: 11_200, underRecovered: 28.40, duplicateRows: 14, validationErrors: 6 } },
+    { id: 'r-apr', label: 'Apr 2026', month: 'Apr', date: '01 Apr 2026', kpis: { exceptions: 68, rowsProcessed: 11_480, underRecovered: 33.10, duplicateRows: 15, validationErrors: 6 } },
+    { id: 'r-may', label: 'May 2026', month: 'May', date: '05 May 2026', kpis: { exceptions: 71, rowsProcessed: 11_720, underRecovered: 39.05, duplicateRows: 17, validationErrors: 8 } },
+    { id: 'r-jun', label: 'Jun 2026', month: 'Jun', date: '02 Jun 2026', kpis: { exceptions: 76, rowsProcessed: 11_900, underRecovered: 41.10, duplicateRows: 19, validationErrors: 9 } },
+    { id: 'r-jul', label: 'Jul 2026', month: 'Jul', date: '07 Jul 2026', current: true, kpis: { exceptions: 90, rowsProcessed: 12_480, underRecovered: 60.28, duplicateRows: 23, validationErrors: 13 } },
+  ],
+};
+
+// Workflow IDs whose output-compare card uses the wider 5-KPI set (testing).
+export const FIVE_KPI_TEST_WORKFLOWS = new Set<string>([
+  'lw-consolidated-file',
+  'lw-consolidated-file-multi',
+  'lw-consolidated-file-reference',
+]);
+
+/** The output-compare dataset for a given workflow — the wider 5-KPI set for the
+ *  sandbox test workflows, else the default three. */
+export function compareForWorkflow(workflowId?: string): OutputCompare {
+  return workflowId && FIVE_KPI_TEST_WORKFLOWS.has(workflowId) ? RUN_OUTPUT_COMPARE_5KPI : RUN_OUTPUT_COMPARE;
+}
 
 // ─── STAGE_3 insight payload (backend format) ─────────────────────────────
 // The exact object the Stage-3 pipeline emits and persists as
