@@ -100,6 +100,30 @@ export interface ValidationResult {
   at: string;
 }
 
+/** How something was proven, weakest to strongest.
+ *
+ *  Asking someone is not evidence that a control worked — it is evidence that
+ *  they say it did. Watching is better, inspecting the record better still, and
+ *  doing it again yourself is the only one that proves the outcome. The order
+ *  matters because a conclusion is only as strong as the weakest thing under it,
+ *  so every piece of evidence carries its type and inquiry alone never concludes. */
+export type EvidenceType = 'Inquiry' | 'Observation' | 'Inspection' | 'Reperformance';
+export const EVIDENCE_TYPES: EvidenceType[] = ['Inquiry', 'Observation', 'Inspection', 'Reperformance'];
+export const EVIDENCE_RANK: Record<EvidenceType, number> = { Inquiry: 0, Observation: 1, Inspection: 2, Reperformance: 3 };
+/** Inquiry on its own supports nothing. Design warns; operating refuses. */
+export const isInquiryOnly = (t?: EvidenceType): boolean => t === 'Inquiry';
+
+/** What the design conclusion actually rests on. The field exists so the working
+ *  paper cannot overstate itself: a design called effective off documents and a
+ *  conversation reads very differently from one walked end to end, and the
+ *  reviewer is entitled to know which they are looking at. */
+export type DesignBasis = 'Walkthrough performed' | 'Documentation, inquiry and observation only' | 'Reperformance included';
+export const DESIGN_BASES: { id: DesignBasis; hint: string }[] = [
+  { id: 'Walkthrough performed', hint: 'One transaction followed from origination to the financial records.' },
+  { id: 'Documentation, inquiry and observation only', hint: 'No transaction walked — the narrative and what was said and seen.' },
+  { id: 'Reperformance included', hint: 'The control was performed again independently and the outcome agreed.' },
+];
+
 /** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
@@ -108,6 +132,8 @@ export interface DesignPoint {
   workflowName?: string;
   workflowRunRef?: string;
   validation?: ValidationResult;
+  /** How this consideration was proven. Inquiry alone earns a warning. */
+  evidenceType?: EvidenceType;
   result: TestResult;
   override?: Override;
 }
@@ -177,6 +203,12 @@ export interface DesignJudgements {
 export interface DesignTrack {
   documents: DesignDoc[];
   points: DesignPoint[];
+  /** The design conclusion answers two questions, not one: is the control
+   *  designed to work, and is it actually in operation? A control that exists
+   *  only on the narrative is not implemented however well it is designed. */
+  implemented?: boolean;
+  /** What the conclusion rests on — see DesignBasis. */
+  basis?: DesignBasis;
   /** The design judgements above — printed in the working paper. */
   judgements?: DesignJudgements;
   /** The one-transaction walkthrough behind the design conclusion. Absent until
@@ -214,6 +246,9 @@ export interface OperatingStep {
   precision: string;
   procedures: TestProcedure[];
   evidenceMode?: EvidenceMode;
+  /** How this attribute was proven. Operating refuses to pass on inquiry alone —
+   *  "the owner confirmed it happens" is not evidence that it happened. */
+  evidenceType?: EvidenceType;
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
@@ -228,18 +263,147 @@ export interface OperatingStep {
   // handbook grain: every attribute is tested against every sampled item.
   sampleResults?: Record<string, TestResult>;
 }
-export interface Sample { id: string; ref: string; result: TestResult; }
+/** One sampled item. `extension` marks an item drawn in the extension round that
+ *  followed an exception, so the paper can show the original draw and what was
+ *  added to it without holding two lists. */
+export interface Sample { id: string; ref: string; result: TestResult; extension?: boolean; }
 export interface Sampling {
   basis: string;
-  method: 'Random' | 'Statistical' | 'Targeted' | 'Full population';
+  method: 'Random' | 'Systematic' | 'Statistical' | 'Targeted' | 'Full population';
   size: number;
+  /** The seed behind a random or systematic draw — what makes the selection
+   *  reperformable. Without it "we picked at random" is not a procedure anyone
+   *  else can walk, and the reviewer cannot land on the same items. */
+  seed?: number;
   samples: Sample[];
 }
+
+/** Transaction-based counts rows; occurrence-based counts times the control ran.
+ *  A monthly reconciliation is twelve occurrences however many lines it clears,
+ *  and sizing it off the line count is the commonest population error there is. */
+export type PopulationBasis = 'Occurrence-based' | 'Transaction-based';
+/** What the population IS, settled before anything is pulled into it.
+ *
+ *  The answer comes out of the control's design — "what is one instance" can only
+ *  be answered once you know what the control does — so this is recorded here and
+ *  printed on the paper, rather than left implicit in a row count. */
+export interface PopulationDefinition {
+  basis: PopulationBasis;
+  /** One instance, in words — "one month's completed reconciliation". */
+  instance: string;
+  /** How many instances the period should hold. Derived from the control's
+   *  frequency for occurrence-based work, and overridable — a control that only
+   *  ran nine of twelve months has a population of nine, not twelve. */
+  expectedCount: number;
+  /** True once the auditor typed over the derived count. */
+  countOverridden?: boolean;
+  /** Do rejected / failed items belong in the population? Rejections that never
+   *  reach the control are out; rejections the control produced are in. */
+  includeRejected: boolean;
+  rejectedNote?: string;
+  by: string;
+  at: string;
+}
+/** PARKED — the three pre-lock checks, when they were three tick boxes.
+ *
+ *  Retired because two of the three were things the application already knew.
+ *  It holds the filtered count, the control's frequency and the audit window, so
+ *  asking a human to tick "count matches expected" and "date range covers the
+ *  full period" was asking them to agree with arithmetic the machine had already
+ *  done — a signature standing in for a calculation. Both are computed now (see
+ *  `countVerdict` / `coverageVerdict` in helpers.ts) and only argued with when
+ *  they fail.
+ *
+ *  The third, "source is the production system", is genuinely outside what the
+ *  application can see, so it became `Population.provenance` — the facts of the
+ *  extract rather than an attestation about it. Kept here because seeded
+ *  populations still carry the field. */
+export interface PopulationChecks {
+  countMatches: boolean;
+  dateRangeFull: boolean;
+  productionSource: boolean;
+}
+
+/** Where an extract actually came from.
+ *
+ *  Not derivable: a file's name says nothing about the system that produced it,
+ *  who ran the export or when. So it is asked for as three facts and printed on
+ *  the working paper verbatim. Nobody attests that the source was production —
+ *  they say which system it was, and the paper carries the claim with a name and
+ *  a date against it. */
+export interface PopulationProvenance {
+  /** 'SAP S/4HANA — Production', 'Oracle Fusion — PROD'. */
+  system: string;
+  /** Whoever ran the export — usually client IT, not the auditor. */
+  extractedBy: string;
+  /** When they ran it. */
+  extractedOn: string;
+}
+
 export interface Population {
   source: string;
+  /** Instances of THIS control — what the filter produced, not what the file held. */
   count: number;
   tieOut: string;
   evidence: EvidenceFile[];
+  /** The file the instances were filtered out of, and how many rows it held.
+   *  Both are printed: a population that is the same size as its source file is
+   *  a file that was copied rather than filtered. */
+  sourceFile?: string;
+  sourceCount?: number;
+  /** The filter that turned those rows into this control's instances —
+   *  transaction type, account, date range. Saved beside the population because
+   *  a population nobody can reproduce is a number nobody can check. */
+  criteria?: string;
+  /** The filter window as ISO dates, kept apart from the `criteria` prose. The
+   *  coverage check measures this against the audit window, and prose cannot be
+   *  measured — 'full period' is a claim, '2026-01-01' is a date. */
+  filterFrom?: string;
+  filterTo?: string;
+  /** What the count should have been, for controls whose frequency gives no
+   *  answer. Asked only in that case; derived everywhere else. */
+  expectedCount?: number;
+  /** Why a computed check did not hold. Asked only when one fails — a population
+   *  that reads short is either wrong or explainable, and either way the reason
+   *  belongs on the paper. */
+  countNote?: string;
+  coverageNote?: string;
+  provenance?: PopulationProvenance;
+  /** PARKED — see PopulationChecks. Seeded populations still carry it. */
+  checks?: PopulationChecks;
+  locked?: { by: string; at: string };
+  /** Version stamp — each round re-versions the population rather than editing
+   *  the one the last round's conclusion was drawn from. */
+  version?: string;
+}
+
+/** A failure on one sampled item, judged.
+ *
+ *  A deviation is the control not working; an anomaly is a one-off with a cause
+ *  that cannot recur. The distinction changes what the sample means, so it is
+ *  recorded per exception with the auditor's reason — never inferred. */
+export type ExceptionKind = 'Deviation' | 'Anomaly';
+export interface SampleException {
+  sampleId: string;
+  stepId: string;
+  kind: ExceptionKind;
+  reason: string;
+  by: string;
+  at: string;
+}
+
+/** A report standing behind the evidence — IPE gate 3.
+ *
+ *  `insideControl` marks the report the control itself reads. That one matters
+ *  most: a perfect review performed over a wrong report is zero protection, and
+ *  the control cannot be effective while the report it runs on is unproven. */
+export interface EvidenceReport {
+  id: string;
+  name: string;
+  /** What it is used for — "A2 evidence", "approval threshold". */
+  usedFor: string;
+  insideControl?: boolean;
+  proven?: { by: string; at: string; note?: string };
 }
 
 // ─── IPE — Information Produced by the Entity ────────────────────────────────────
@@ -287,12 +451,25 @@ export interface IpeTest {
 
 export interface OperatingTrack {
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
-  /** The report the population is drawn from, and its validation. Tested BEFORE
-   *  the population exists — hence here rather than inside Population. */
+  /** The report the population is drawn from, and its validation — IPE gate 1.
+   *  Lives on the operating track because the sample it feeds does, but it is
+   *  worked in step ① alongside the population it proves. */
   ipe?: IpeTest;
+  /** What the population is, before anything is pulled into it. */
+  definition?: PopulationDefinition;
   population?: Population;
   sampling?: Sampling;
+  /** IPE gate 2 — the auditor confirmed the drawn items trace to the locked
+   *  population and that the method and seed are on the paper. */
+  extractionConfirmed?: { by: string; at: string };
+  /** Attributes reviewed and frozen before the sample is drawn. What each item
+   *  is tested against cannot keep moving once testing is under way. */
+  attributesLocked?: { by: string; at: string };
   steps: OperatingStep[];
+  /** Failures judged deviation or anomaly, one entry per failed item × attribute. */
+  exceptions?: SampleException[];
+  /** IPE gate 3 — the reports standing behind the evidence. */
+  evidenceReports?: EvidenceReport[];
   conclusion: TrackConclusion;
   override?: Override;
   testedBy: string | null;

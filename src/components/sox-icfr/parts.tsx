@@ -235,41 +235,49 @@ export const ragColor = (m: RagMeterDef): string =>
   m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
 const ragWord = (m: RagMeterDef): string => (ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
 
-/** Confidence scores in a 3-column grid — each card carries the big ring with
- *  the status word beside it, then a bold "label — detail" title and a
- *  one-line explainer; the whole card tints with its RAG state. */
+/** Confidence scores in a 3-column grid — a ring carrying the percentage, then
+ *  the score's name, its fraction and a one-line explainer.
+ *
+ *  Colour is spent on exceptions only: a red or amber score tints its whole card
+ *  so it pulls the eye out of the row, while a healthy score sits on the plain
+ *  card surface. Three green washes side by side used to shout as loudly as the
+ *  one card that actually needed reading. */
 export function RagStrip({ meters }: { meters: RagMeterDef[] }) {
   return (
     <div className="grid gap-2.5 sm:grid-cols-3">
       {meters.map(m => {
         const state = ragWord(m);
         const tint = state === 'red' ? 'border-risk-200 bg-risk-50/50'
-          : state === 'amber' ? 'border-high-200 bg-high-50/50'
-          : 'border-compliant-200 bg-compliant-50/50';
+          : state === 'amber' ? 'border-high-200 bg-high-50/40'
+          : 'border-canvas-border bg-canvas-elevated';
         const statusCls = state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
         const StatusIcon = state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
         const statusWord = state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
+        // r=16 → circumference 100.5, so the dash length is all but the
+        // percentage itself. A round cap on a zero-length arc draws a floating
+        // dot, so a score of nothing draws no arc at all.
+        const C = 2 * Math.PI * 16;
         return (
           <div key={m.label} role="img" aria-label={`${m.label} ${m.pct}% — ${state}`}
-            className={cn('rounded-2xl border p-4 flex items-start gap-3.5', tint)}>
-            <div className="relative w-14 h-14 shrink-0">
-              <svg viewBox="0 0 44 44" className="w-14 h-14 -rotate-90">
-                <circle cx="22" cy="22" r="18" fill="var(--color-canvas-elevated)" stroke="var(--color-paper-200)" strokeWidth="5.5" />
-                <circle cx="22" cy="22" r="18" fill="none" stroke={ragColor(m)} strokeWidth="5.5" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * 113} 113`} />
+            className={cn('rounded-xl border p-3.5 flex items-start gap-3', tint)}>
+            <div className="relative w-12 h-12 shrink-0">
+              <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
+                <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
+                {m.pct > 0 && (
+                  <circle cx="20" cy="20" r="16" fill="none" stroke={ragColor(m)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
+                )}
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold tabular-nums text-ink-900">{m.pct}%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-[0.6875rem] font-bold tabular-nums text-ink-900">{m.pct}%</span>
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[13px] font-bold text-ink-900 leading-snug">{m.label}</div>
-                  <div className="text-[12px] font-semibold text-ink-700 mt-0.5">{m.detail}</div>
-                </div>
-                <span className={cn('inline-flex items-center gap-1.5 text-[12.5px] font-bold shrink-0', statusCls)}>
-                  <StatusIcon size={14} /> {statusWord}
+                <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug min-w-0">{m.label}</div>
+                <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold shrink-0 mt-px', statusCls)}>
+                  <StatusIcon size={12} /> {statusWord}
                 </span>
               </div>
-              {m.explainer && <p className="text-[11.5px] text-ink-500 mt-1 leading-relaxed">{m.explainer}</p>}
+              <div className="text-[0.75rem] font-semibold text-ink-700 mt-1">{m.detail}</div>
+              {m.explainer && <p className="text-[0.71875rem] text-ink-500 mt-1.5 leading-relaxed">{m.explainer}</p>}
             </div>
           </div>
         );

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
@@ -82,6 +82,20 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — Test of Design & Operating Effectiveness`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
   const guide = sampleSizeGuide(c);
+  // The two population checks are computed, not attested — so the paper prints
+  // what the application concluded and, where it disagreed, the reason it was
+  // overridden. A row that only ever said "ticked" told a reviewer nothing.
+  const audit = eng.audits.find(a => a.controlIds?.includes(c.id)) ?? eng.audits[0];
+  const cv = countVerdict(c);
+  const gv = coverageVerdict(c, audit?.windowFrom, audit?.windowTo);
+  // 'Variance' and 'Failed' are not interchangeable on a paper a reviewer reads:
+  // an overshoot is a filter that swept wide, a shortfall is a population with a
+  // hole in it, and only the second is a completeness problem.
+  const VERDICT_WORD = { pass: 'Passed', warn: 'Variance', fail: 'Failed' } as const;
+  const verdictLine = (v: typeof cv, note?: string) =>
+    v ? `${VERDICT_WORD[v.level]} — ${v.headline}. ${v.detail}${v.blocks ? (note ? ` Accepted with reason: ${note}` : ' NOT RESOLVED.') : ''}` : null;
+  const popCheck = verdictLine(cv, pop?.countNote);
+  const coverCheck = verdictLine(gv, pop?.coverageNote);
   blocks.push({
     kind: 'kv', title: 'Control', rows: [
       ['Control owner', c.owner],
@@ -99,6 +113,32 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Risk rating', c.riskRating ?? 'Not rated'],
       ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
+      // The two facts that make a draw reperformable. A reviewer who cannot
+      // re-run the selection cannot check that it was not steered.
+      ['Selection method / seed', c.operating.sampling
+        ? `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`
+        : '—'],
+      ['Population filter', c.operating.population?.criteria ?? '—'],
+      ['Filtered from', c.operating.population?.sourceFile ? `${c.operating.population.sourceFile}${c.operating.population.sourceCount != null ? ` · ${c.operating.population.sourceCount.toLocaleString()} rows` : ''}` : '—'],
+      ['Population locked', c.operating.population?.locked ? `${c.operating.population.locked.by}, ${c.operating.population.locked.at}` : 'Not locked'],
+      // What the population IS. The on-screen definition form was dropped, so
+      // this only prints where a definition actually exists — an always-"Not
+      // defined" row would read as an outstanding item nobody can clear.
+      ...(c.operating.definition
+        ? [['Population definition', `${c.operating.definition.basis} · one instance = ${c.operating.definition.instance} · ${c.operating.definition.expectedCount} expected${c.operating.definition.countOverridden ? ' (overridden)' : ''} · rejected items ${c.operating.definition.includeRejected ? 'counted' : 'excluded'}`]] as [string, string][]
+        : []),
+      ['Population version', c.operating.population?.version ?? '—'],
+      // Where the extract came from — the one part of the population the
+      // application cannot see for itself, so it is carried verbatim as stated
+      // rather than reduced to "checks passed".
+      ['Source system', c.operating.population?.provenance?.system ?? '—'],
+      ['Extracted by / on', c.operating.population?.provenance
+        ? `${c.operating.population.provenance.extractedBy} · ${c.operating.population.provenance.extractedOn}`
+        : '—'],
+      // The two checks the application ran itself, and the auditor's answer
+      // where one of them did not hold.
+      ...(popCheck ? [['Count check', popCheck]] as [string, string][] : []),
+      ...(coverCheck ? [['Period coverage', coverCheck]] as [string, string][] : []),
       ['Quarterly split', quarterlySplit(c)],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
       ['Root cause', c.rootCause ?? '—'],
@@ -131,9 +171,15 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const docsIn = c.design.documents.filter(d => d.status === 'Received').length;
   const waived = c.design.documents.filter(d => d.waiver && d.status !== 'Received');
   const outstanding = designOutstanding(c).map(d => d.kind);
+  // The evidence TYPE column is the honest column: a consideration ticked off
+  // somebody's word reads very differently from one the auditor reperformed, and
+  // a paper that prints only the tick invites the reader to assume the stronger.
   blocks.push({
     kind: 'table', title: 'Test of design',
-    note: `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
+    note: [
+      `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
+      `basis: ${c.design.walkthrough ? `one transaction traced (${c.design.walkthrough.sampleRef})` : 'documents on file only'}`,
+    ].join(' · '),
     headers: ['', 'Design consideration', 'Tick'],
     rows: c.design.points.map((p, i) => [String(i + 1), p.text, tick(p.override?.result ?? p.result)]),
     tickFrom: 2,
@@ -274,12 +320,16 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
 
   // The heart of the paper: every sampled item × every attribute, ticked
   if (samples.length) {
+    const tally = combinedSample(c);
     blocks.push({
       kind: 'table', title: 'Details of samples tested',
-      note: `${c.operating.sampling!.method} sample of ${samples.length} — each item tested against every attribute`,
-      headers: ['S.No', 'Sample', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
-      rows: samples.map((smp, i) => [String(i + 1), smp.ref, ...steps.map(s => tick(s.sampleResults?.[smp.id]))]),
-      tickFrom: 2,
+      // The extension round is marked rather than merged silently: the combined
+      // evaluation is what the conclusion rests on, and the reader has to be able
+      // to see which items were the second bite.
+      note: `${c.operating.sampling!.method}${c.operating.sampling!.seed ? ` (seed ${c.operating.sampling!.seed})` : ''} sample of ${samples.length}${tally.ext ? ` — ${tally.orig} original + ${tally.ext} drawn after an exception` : ''} — each item tested against every attribute`,
+      headers: ['S.No', 'Sample', 'Round', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
+      rows: samples.map((smp, i) => [String(i + 1), smp.ref, smp.extension ? 'Extension' : 'Original', ...steps.map(s => tick(s.sampleResults?.[smp.id]))]),
+      tickFrom: 3,
     });
   } else {
     blocks.push({ kind: 'note', label: 'Samples', text: 'No samples drawn — evidence is attribute-level (automated / full-population / attestation).', tone: 'neutral' });

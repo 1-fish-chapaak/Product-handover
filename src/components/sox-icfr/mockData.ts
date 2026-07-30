@@ -65,8 +65,9 @@ const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'D
   ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
-const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep =>
-  ({ id: `os${++_s}`, code, description, assertion, precision, procedures, result, ...extra });
+const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
+  return { id: `os${++_s}`, code, description, assertion, precision, procedures, result, ...extra };
+};
 
 let _f = 0;
 const file = (name: string, by = 'Risk Owner', kind: EvidenceFile['kind'] = 'PDF'): EvidenceFile => ({ id: `f${++_f}`, name, kind, uploadedBy: by, uploadedAt: '12 Apr' });
@@ -74,12 +75,45 @@ const wf = (id: string, name: string, runRef?: string): Partial<OperatingStep> =
 const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestEnabled: true, attestation: { result: 'Pass', note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
 
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
-  ({ documents, points, conclusion, testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null, testedAt: conclusion !== 'Not tested' ? '14 Apr' : null });
+  ({
+    documents, points, conclusion,
+    testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null,
+    testedAt: conclusion !== 'Not tested' ? '14 Apr' : null,
+  });
 
 const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx'): OperatingTrack => ({
   method: 'Manual',
-  population: popCount ? { source: popSource, count: popCount, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }] } : undefined,
-  sampling,
+  // What the population IS, recorded before it was pulled in — the row count on
+  // its own never says whether it counted the right things.
+  definition: popCount ? {
+    basis: 'Transaction-based', instance: `One ${popSource.includes('journal') ? 'journal entry' : 'transaction'} recorded in the period`,
+    expectedCount: popCount, includeRejected: false,
+    rejectedNote: 'Rejections are held before the control sees them, so the control never operated on those items.',
+    by: 'A. Mehta · Auditor', at: '12 Apr',
+  } : undefined,
+  population: popCount ? {
+    source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
+    sourceFile: popFile, sourceCount: popCount * 7,
+    criteria: `type ${popSource.split('—')[0].trim()} · full period`,
+    // Real dates, because the coverage check measures them against the audit
+    // window — 'full period' above is the label, these are the fact. The span
+    // deliberately covers every seeded round (year-end opens 2025-10-01, the
+    // roll-forward closes 2026-09-30): one seeded population is reached from all
+    // of them, and a window short of any one would read as a real coverage gap.
+    filterFrom: '2025-10-01', filterTo: '2026-12-31',
+    // What the auditor said to expect before pulling it. Rounded to the nearest
+    // fifty because a stated expectation is an estimate, not a readback — it
+    // lands just inside tolerance, which is what a healthy extract looks like.
+    expectedCount: Math.round(popCount / 50) * 50,
+    // Where it came from. Not derivable from the file, so it was recorded.
+    provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair · IT', extractedOn: '2026-04-12' },
+    checks: { countMatches: true, dateRangeFull: true, productionSource: true },
+    locked: { by: 'A. Mehta · Auditor', at: '13 Apr' }, version: 'POP-YE',
+    evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
+  } : undefined,
+  // A draw nobody can reperform is not a procedure — every seeded sample carries
+  // the method and the seed that produced it.
+  sampling: sampling ? { ...sampling, seed: sampling.seed ?? 40817 } : undefined,
   steps,
   conclusion,
   testedBy: conclusion !== 'Not tested' ? 'A. Mehta · Auditor' : null,
@@ -983,6 +1017,176 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
 }
 
 /**
+ * The findings Altura's live cycle has raised — and the controls they came from.
+ *
+ * A deficiency is a conclusion about a control that FAILED, so seeding one
+ * without failing its control would leave the Control Library reading Effective
+ * while Deficiency management shows a finding against it. This flips the five
+ * controls it names to Ineffective as it goes, which is why it takes the control
+ * array and edits it rather than returning findings on their own.
+ *
+ * Which controls: only ones the 'live' seed has actually tested. Every process's
+ * LAST control is left Not tested by racmTemplateForProcesses, so nothing here
+ * may sit on index 4 — a finding against an untested control is a contradiction.
+ *
+ * The spread is chosen to exercise every rule the tab implements:
+ *   Treasury 1     MW by magnitude, CAPPED to Significant Deficiency by a
+ *                  compensating control that is itself effective
+ *   Procure 3      MW by INDICATOR — the cap is blocked (helpers.assessSeverity),
+ *                  so this one stays a material weakness and drives the audit's
+ *                  ICFR conclusion to "not effective"
+ *   Order 3        Significant Deficiency in its own right, out for retest
+ *   Order 4        a Deficiency that AGGREGATES with the one above — same group,
+ *                  combined ₹6.4 Cr against a ₹2.4 Cr band
+ *   Fixed 4        clearly trivial (₹45 L, under the ₹60 L floor) and closed —
+ *                  logged, and deliberately never aggregated
+ *
+ * Priced against Altura's own thresholds, not the flagship's: materiality
+ * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
+ * engagement record. Change those and these grades move, which is the point.
+ */
+function alturaDeficiencies(controls: Control[]): Deficiency[] {
+  /** The nth control of a process, in RACM order. Undefined when the process
+   *  was never scoped — the caller skips rather than inventing a control id. */
+  const pick = (process: string, i: number): Control | undefined =>
+    controls.filter(c => c.process === process)[i];
+
+  /* Fail the track the finding came from, so the control page, the register and
+     this tab agree on WHY the control is ineffective — a track concluded
+     Ineffective with every attribute still passing reads as a data error. */
+  const fail = (c: Control, track: 'design' | 'operating') => {
+    if (track === 'operating') {
+      c.operating = {
+        ...c.operating,
+        conclusion: 'Ineffective',
+        steps: c.operating.steps.map((s, i) => (i === 0 ? { ...s, result: 'Fail' as TestResult } : s)),
+      };
+    } else {
+      c.design = {
+        ...c.design,
+        conclusion: 'Ineffective',
+        points: c.design.points.map((p, i) => (i === 0 ? { ...p, result: 'Fail' as TestResult } : p)),
+      };
+    }
+  };
+
+  const payments = pick('Treasury', 0);          // Payment runs approved by two authorisers
+  const bankRecs = pick('Treasury', 1);          // Bank reconciliations reviewed monthly — the compensating control
+  const vendorMaster = pick('Procure to Pay', 2);
+  const revenueCutoff = pick('Order to Cash', 2);
+  const creditNotes = pick('Order to Cash', 3);
+  const disposals = pick('Fixed Assets', 3);
+
+  const out: Deficiency[] = [];
+
+  if (payments) {
+    fail(payments, 'operating');
+    out.push({
+      id: 'DEF-A-01', controlId: payments.id, track: 'operating', gapType: 'TG', reportRef: '4.1',
+      description: 'Nine of forty sampled payment runs were released on a single authorisation; the second approver was applied after the bank file had been sent.',
+      rootCause: 'The payment run releases on the first approval and holds the second as a review step, so dual authorisation is sequential rather than preventive.',
+      likelihood: 'Probable', magnitude: 168_000_000, mwIndicators: [],
+      // Priced by magnitude, not by loss: every payment tested was valid and owed.
+      // What failed is the authorisation, so nothing is recoverable — the number
+      // is the value that could have moved on one signature.
+      aggregationGroup: 'Treasury payments',
+      // Bank reconciliations are monthly, independent and concluded effective —
+      // they would catch an unauthorised payment within the cycle. That is a
+      // genuine cap: MW down to SD, and never to nothing.
+      compensatingControlId: bankRecs?.id,
+      remediation: {
+        action: 'Reconfigure the payment run to hold release until both authorisations are recorded; re-test a fresh sample of runs after the change.',
+        date: '30 Sep', owner: 'A. Verma · Treasury', status: 'In progress',
+      },
+      status: 'Remediation',
+    });
+  }
+
+  if (vendorMaster) {
+    fail(vendorMaster, 'operating');
+    out.push({
+      id: 'DEF-A-02', controlId: vendorMaster.id, track: 'operating', gapType: 'TG', reportRef: '4.2',
+      description: 'Vendor master changes were reviewed by the same team that raised them for the whole period; no independent review took place at any point in the cycle.',
+      rootCause: 'The reviewer role was granted to the shared services team during a staffing gap in February and never withdrawn.',
+      likelihood: 'Probable', magnitude: 132_000_000,
+      // An indicator, not a number — this is a control-environment failure, so
+      // the compensating-control cap is blocked outright and it stays an MW.
+      mwIndicators: ['Ineffective control environment / oversight'],
+      aggregationGroup: 'Procure to Pay',
+      exposure: {
+        recovery: 0, workingCapital: 0, leakage: 4_100_000,
+        basis: 'No fraudulent payee identified on inspection of the period\'s 214 master changes. Priced at the two payments (₹41 L) made to bank details amended in the same week the vendor was created — value that left the group and has not been recovered.',
+      },
+      remediation: {
+        action: 'Withdraw the reviewer role from shared services, re-perform an independent review of every master change made in the period, and confirm the segregation in the access matrix.',
+        date: null, owner: 'S. Iyer · Finance', status: 'Open',
+      },
+      status: 'Identified',
+    });
+  }
+
+  if (revenueCutoff) {
+    fail(revenueCutoff, 'operating');
+    out.push({
+      id: 'DEF-A-03', controlId: revenueCutoff.id, track: 'operating', gapType: 'TG', reportRef: '4.3',
+      description: 'Six invoices raised in the last three days of the quarter were not agreed to a dispatch document; three related to goods dispatched in the following period.',
+      rootCause: 'The cut-off check samples the dispatch log rather than reconciling it to invoices raised, so an invoice with no dispatch never surfaces.',
+      likelihood: 'Reasonably possible', magnitude: 46_000_000, mwIndicators: [],
+      aggregationGroup: 'Order to Cash',
+      exposure: {
+        recovery: 0, workingCapital: 0, leakage: 0,
+        basis: 'The three invoices were reversed and re-raised in the correct period before the close was signed. A timing error corrected within the cycle — no value has left the group and none is trapped.',
+      },
+      remediation: {
+        action: 'Reconcile invoices raised in the cut-off window to dispatch documents in both directions, rather than sampling one side.',
+        date: '15 Aug', owner: 'P. Sharma · Revenue', status: 'Done',
+      },
+      status: 'Retest',
+    });
+  }
+
+  if (creditNotes) {
+    fail(creditNotes, 'design');
+    out.push({
+      id: 'DEF-A-04', controlId: creditNotes.id, track: 'design', gapType: 'MDG', reportRef: '4.4',
+      description: 'Credit notes below ₹2 L are issued without approval by design; the walkthrough confirmed the threshold is applied per note rather than per customer per month.',
+      rootCause: 'The approval threshold was set per document when the policy was written, so a series of small notes to one customer never reaches it.',
+      likelihood: 'Reasonably possible', magnitude: 18_000_000, mwIndicators: [],
+      // Individually a Deficiency. It shares a group with DEF-A-03, and the two
+      // together clear the SD band — which is exactly what aggregation is for.
+      aggregationGroup: 'Order to Cash',
+      remediation: {
+        action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
+        date: '31 Oct', owner: 'P. Sharma · Revenue', status: 'Open',
+      },
+      status: 'Identified',
+    });
+  }
+
+  if (disposals) {
+    fail(disposals, 'operating');
+    out.push({
+      id: 'DEF-A-05', controlId: disposals.id, track: 'operating', gapType: 'TG', reportRef: '4.5',
+      description: 'Two disposals were derecognised in the month after sale; the gain on both was recorded in the correct quarter.',
+      rootCause: 'Disposal paperwork reaches finance with the following month\'s asset run.',
+      likelihood: 'Reasonably possible', magnitude: 4_500_000, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: {
+        action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
+        date: '30 Jun', owner: 'S. Iyer · Finance', status: 'Done',
+      },
+      // Retested and closed by the reviewer — the terminal four-eyes act, so the
+      // tab has one row showing the end of the lifecycle rather than only its start.
+      status: 'Closed',
+      retest: { result: 'Pass', at: '18 Jul 2026', by: 'A. Mehta · Auditor' },
+      signoff: { by: 'J. Fernandes · Audit Manager', at: '19 Jul 2026' },
+    });
+  }
+
+  return out;
+}
+
+/**
  * The one cycle a plain SOX engagement has under way.
  *
  * Every SOX engagement's Overview is the audit portfolio now, so an engagement
@@ -1076,6 +1280,11 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // Appended, not prepended: every record these add is older than the run
   // above, so the array stays newest-first.
   if (rich) runs.push(...libraryRunHistory(controls));
+  // Findings — Altura only. Built AFTER the run history above on purpose: this
+  // fails five of the controls those runs concluded on, and a run record states
+  // the outcome as it stood when it ran, so re-reading it here would be wrong.
+  // Every other engagement stays clean, as before.
+  const deficiencies = rich ? alturaDeficiencies(controls) : [];
   return {
     ...base,
     // Scoping-derived engagements set materiality in the scoping wizard — the
@@ -1089,7 +1298,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     periodEnd: meta.periodEnd ?? base.periodEnd,
     preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
     controls,
-    deficiencies: [],
+    deficiencies,
     tasks: [],
     discussions: [],
     reviewNotes: [],
@@ -1159,7 +1368,7 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           `${name} period-end cut-off is reviewed`,
           `${name} exceptions are escalated and resolved per policy`,
         ]).map((title, i) => ({
-          id: `${prefix}-NEW-${i + 1}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
+          id: `${prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
           process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
           isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
           riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
@@ -1228,7 +1437,7 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
 export function racmTemplate(process: string): Control[] {
   const sp = SPREADS.find(s => s.process === process) ?? SPREADS[0];
   return sp.titles.slice(0, 5).map((title, i) => ({
-    id: `${sp.prefix}-NEW-${i + 1}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
+    id: `${sp.prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
     isKey: i % 4 !== 3, clazz: classOf(sp.process), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
     riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,

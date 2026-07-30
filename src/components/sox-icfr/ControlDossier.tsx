@@ -6,25 +6,26 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
+  Database, Dices, Circle, PenLine, Eye,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR, isControlLocked, operatingProgress,
-  sampleSizeGuide, trackResult, pointResult, stepResult, walkthroughUntested,
+  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR,
+  isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, type PopVerdict,
 } from './helpers';
 import { programmeFor } from './auditScope';
-import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { ConclusionPill, CourtBadge, NatureChip, Toggle, TrackPill, Tickmark, Stamp, RagStrip, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeReliable, ipeSuggestion } from './types';
+import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeSuggestion } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
+  AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -361,7 +362,7 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
           {samples.length === 0
             ? <p className="text-[0.78125rem] text-ink-500 leading-relaxed">
                 No sample has been extracted for this control yet, so the run has nothing to report per item — it recorded an overall result only.
-                Extract a sample in step 2 and re-pull the run to see it item by item.
+                Draw a sample in step ③ and re-pull the run to see it item by item.
               </p>
             : <SampleResultsTable control={control} step={step} />}
         </div>
@@ -594,93 +595,13 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
 // control fails, does anything else catch it; is the frequency right for the risk;
 // is preventive-or-detective the right shape. Left blank they print as "not
 // stated", which is honest — but they no longer print as though never asked.
-function DesignJudgementsCard({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { eng, role, setDesignJudgements } = useIcfr();
-  const j = control.design.judgements;
-  const settable = canEdit && role === 'auditor';
-  const covered = FIVE_W_1H.filter(a => j?.coverage?.[a.k] === true).length;
-  const gaps = FIVE_W_1H.filter(a => j?.coverage?.[a.k] === false);
-  // the same picker the deficiency card offers — any other control in the register
-  const others = eng.controls.filter(c => c.id !== control.id);
-  const comp = others.find(c => c.id === j?.compensatingControlId);
-
-  const yesNo = (label: string, value: boolean | undefined, onSet: (v: boolean) => void, hint: string) => (
-    <div className="flex items-start gap-2 py-1.5">
-      <span className="text-[0.71875rem] text-ink-700 flex-1 min-w-0">{label}<span className="block text-[0.625rem] text-ink-400 mt-0.5">{hint}</span></span>
-      <div className="flex items-center gap-1 shrink-0">
-        <button disabled={!settable} onClick={() => onSet(true)}
-          className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', value === true ? 'bg-compliant-50 text-compliant-700 border border-compliant-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Yes</button>
-        <button disabled={!settable} onClick={() => onSet(false)}
-          className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', value === false ? 'bg-risk-50 text-risk-700 border border-risk-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>No</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="subcard px-3.5 py-3 mb-5">
-      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-        <h5 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5">
-          <Scale size={14} /> Design judgements
-          <span className="font-normal text-ink-400">· stated on the working paper</span>
-        </h5>
-        <Pill tone={gaps.length > 0 ? 'risk' : covered === FIVE_W_1H.length ? 'compliant' : 'draft'}>{covered}/{FIVE_W_1H.length} answered</Pill>
-      </div>
-
-      {/* 5W+1H — a description that misses one fails design however good the evidence */}
-      <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400 mb-1">Does the control description answer…</div>
-      <div className="space-y-0.5 mb-3">
-        {FIVE_W_1H.map(a => {
-          const v = j?.coverage?.[a.k];
-          return (
-            <div key={a.k} className="flex items-center gap-2.5 py-1">
-              <span className="w-11 text-[0.625rem] font-bold uppercase tracking-wide text-brand-700 shrink-0">{a.k}</span>
-              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">{a.q}</span>
-              <div className="flex items-center gap-1 shrink-0">
-                <button disabled={!settable} onClick={() => setDesignJudgements(control.id, { coverage: { ...j?.coverage, [a.k]: true } })}
-                  className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', v === true ? 'bg-compliant-50 text-compliant-700 border border-compliant-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Present</button>
-                <button disabled={!settable} onClick={() => setDesignJudgements(control.id, { coverage: { ...j?.coverage, [a.k]: false } })}
-                  className={cn('h-6 px-2 rounded-md text-[0.65625rem] font-semibold transition-colors', v === false ? 'bg-risk-50 text-risk-700 border border-risk-200' : 'bg-canvas-elevated border border-canvas-border text-ink-500', settable ? 'cursor-pointer hover:text-ink-900' : 'cursor-default opacity-70')}>Missing</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* is anything else catching this failure, and is the control the right shape */}
-      <div className="border-t border-canvas-border pt-2">
-        <div className="flex items-start gap-2 py-1.5">
-          <span className="text-[0.71875rem] text-ink-700 flex-1 min-w-0">Is there a compensating control?
-            <span className="block text-[0.625rem] text-ink-400 mt-0.5">Another control that would catch the same failure if this one doesn’t.</span>
-          </span>
-          <select disabled={!settable} value={j?.compensatingControlId ?? ''} aria-label="Compensating control"
-            onChange={e => setDesignJudgements(control.id, { compensatingControlId: e.target.value })}
-            className="h-7 max-w-[220px] px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.65625rem] text-ink-700 disabled:opacity-70 enabled:cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
-            <option value="">None identified</option>
-            {others.map(c => <option key={c.id} value={c.id}>{c.id} — {c.description.slice(0, 60)}</option>)}
-          </select>
-        </div>
-        {yesNo('Is the frequency appropriate?', j?.frequencyAppropriate, v => setDesignJudgements(control.id, { frequencyAppropriate: v }), `Runs ${control.frequency.toLowerCase()} — often enough for the risk it carries?`)}
-        {yesNo('Is the control type appropriate?', j?.typeAppropriate, v => setDesignJudgements(control.id, { typeAppropriate: v }), `${control.type} — should it prevent the error, or is detecting it after the fact enough?`)}
-      </div>
-
-      {comp && <p className="text-[0.65625rem] text-ink-500 mt-1.5">Compensating — <b className="font-semibold text-ink-700">{comp.id}</b> {comp.description}</p>}
-      {gaps.length > 0 && (
-        <div className="mt-2 text-[0.6875rem] text-risk-700 bg-risk-50/60 border border-risk-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
-          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          <span>The description doesn’t answer {gaps.map(g => g.k).join(', ')} — a control description that misses one of the six fails design however good the evidence is.</span>
-        </div>
-      )}
-      <label className="block mt-2.5">
-        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Basis for these judgements</span>
-        <textarea rows={2} value={j?.note ?? ''} disabled={!settable} onChange={e => setDesignJudgements(control.id, { note: e.target.value })}
-          placeholder="Why the frequency and type are right — or what would have to change."
-          className="mt-0.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-      </label>
-      {j?.by && <p className="text-[0.625rem] text-ink-400 mt-1">Recorded by {j.by}, {j.at}</p>}
-    </div>
-  );
-}
-
+/** The two things the design conclusion has to state besides effective-or-not:
+ *  is the control actually in operation, and what does the conclusion rest on.
+ *
+ *  The basis field is the honest-paper field. A design called effective off the
+ *  narrative and a conversation is a different animal from one walked end to end,
+ *  and while the walkthrough is parked this is what stops the paper claiming the
+ *  stronger of the two. */
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
   const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
@@ -699,7 +620,8 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
 
   const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, tone: string) => (
-    <button onClick={() => setStepResult(control.id, step.id, target)} className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300 hover:text-ink-900')}><Icon size={13} />{label}</button>
+    <button onClick={() => setStepResult(control.id, step.id, target)}
+      className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300 hover:text-ink-900')}><Icon size={13} />{label}</button>
   );
 
   return (
@@ -919,13 +841,15 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   );
   const completeness = designCompleteness(control);
   const complete = completeness.total > 0 && completeness.pct === 100;
+  const docsIn = d.documents.filter(x => x.status === 'Received').length;
   const unvalidated = d.points.filter(p => pointResult(p) === 'Not tested').length;
   // outstanding = neither evidenced nor waived. A waived element is accounted for,
   // so it must not read as missing or push the suggestion to Ineffective.
   const missing = designOutstanding(control);
   // Soft gate: once the auditor commits to walking a transaction, every attribute
   // has to be settled. Before that the walkthrough doesn't hold anything up.
-  const walkPending = walkthroughUntested(control);
+  // Parked with the walkthrough card — nothing reads it while that card is hidden.
+  // const walkPending = walkthroughUntested(control);   // helpers.ts
   // A failed walkthrough attribute is a design failure in the reviewer's model —
   // the control as built didn't do what it claims on a real transaction.
   const walkFailed = d.walkthrough ? control.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
@@ -1031,25 +955,38 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
             <div className="space-y-2 mb-5">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
           )}
 
-          {/* the walkthrough — the design proved on one live transaction */}
-          <WalkthroughCard control={control} canEdit={canEdit} />
+          {/* the walkthrough — the design proved on one live transaction.
+              Parked 30 Jul (user ask): hidden from TOD. WalkthroughCard and
+              its helper stay in place, and the conclude gate below
+              drops its walkthrough clause to match — a gate the tester can't
+              see is a gate they can't clear.
+          <WalkthroughCard control={control} canEdit={canEdit} /> */}
 
-          {/* the judgements the paper has to state, not just the evidence behind them */}
-          <DesignJudgementsCard control={control} canEdit={canEdit} />
+          {/* What the conclusion rests on, DERIVED rather than asked: a control
+              with a traced transaction was walked; one without was read. Nobody
+              types this, so nobody can overstate it. */}
+          <p className="mt-3 text-[0.71875rem] text-ink-500 leading-relaxed">
+            <span className="text-ink-400">Basis</span> · {control.design.walkthrough
+              ? <>one transaction traced end-to-end on <span className="font-mono text-ink-700">{control.design.walkthrough.sampleRef}</span>, plus the documents</>
+              : <>the documents on file — no transaction traced</>}
+            <span className="text-ink-300"> · </span>
+            <span className="text-ink-400">In operation</span> · {control.design.walkthrough ? 'yes — seen running on a live transaction' : docsIn > 0 ? 'evidenced by the documents on file' : 'not yet evidenced'}
+          </p>
 
           {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence, request it from the control owner, or mark it not applicable.</div>}
-          {/* effective needs every gate: evidence accounted for, every design check
-              validated — an unvalidated check is an untested opinion — and, once a
-              walkthrough is under way, every attribute settled on the transaction */}
+          {/* Effective needs every gate: evidence accounted for, every design check
+              validated — an unvalidated check is an untested opinion — the control
+              confirmed in operation, and the basis on the record. Inquiry-only
+              considerations WARN rather than block here (the standard treats a
+              walkthrough's inquiry and observation as ordinarily sufficient for
+              design); operating is where inquiry alone actually refuses. */}
           <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit}
-            disableEffective={!complete || unvalidated > 0 || walkPending.length > 0}
+            disableEffective={!complete || unvalidated > 0}
             disableEffectiveNote={!complete
               ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
               : unvalidated > 0
                 ? `Locked — ${unvalidated} design check${unvalidated === 1 ? '' : 's'} not validated yet`
-                : walkPending.length > 0
-                  ? `Locked — ${walkPending.length} walkthrough attribute${walkPending.length === 1 ? '' : 's'} not tested on ${d.walkthrough?.sampleRef}`
-                  : undefined} />
+                : undefined} />
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>
@@ -1057,7 +994,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   );
 }
 
-// ── sample extraction (step 2) — population → logic → filters → approve ───────────
+// ── sample extraction (step ③) — attributes → ITGC gate → size/method/seed → gate 2 ───
 /** Deterministic mock row facts so filters and specs are stable across runs. */
 function sampleRowFacts(i: number): { date: string; amountL: number } {
   const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -1066,11 +1003,10 @@ function sampleRowFacts(i: number): { date: string; amountL: number } {
   return { date: `${day} ${MONTHS[(i * 5) % 12]} FY26`, amountL };
 }
 
-/** The two inputs the sample step needs — the sample is drawn from the master
- *  population, and the transactions tested against each drawn item come from
- *  the transactions file. Mirrors the creation flow's required-files card. */
-const REQUIRED_SAMPLE_FILES: { id: 'pop' | 'txn'; name: string; formats: string; tag: string }[] = [
-  { id: 'pop', name: 'Population (master data)', formats: 'XLSX', tag: 'Population' },
+/** What the sample step still asks for. The population moved to step ① — it is
+ *  locked before anything is drawn from it — so all that is left here is the
+ *  transaction detail each drawn item is tested against. */
+const REQUIRED_SAMPLE_FILES: { id: 'txn'; name: string; formats: string; tag: string }[] = [
   { id: 'txn', name: 'Transactions', formats: 'XLSX / CSV', tag: 'Transactions' },
 ];
 
@@ -1199,276 +1135,23 @@ function FilePickerModal({ existing, onUpload, onChoose, slots, onClose }: {
   );
 }
 
-// ── IPE (step 2) — the entity-produced report is itself the thing under test ──────
-/** A plausible report identity per sub-process, so the auditor edits rather than
- *  authors. The transaction code matters as much as the name: it is how anyone
- *  re-runs the report and lands on the same population. */
-const IPE_SUGGESTION: Record<string, { reportName: string; reportRef: string }> = {
-  'Vendor master': { reportName: 'Vendor master change log', reportRef: 'S_ALR_87012089' },
-  Purchasing: { reportName: 'PO release log', reportRef: 'ME2N' },
-  'Invoice processing': { reportName: 'Invoice register', reportRef: 'MIR5' },
-  'Period close': { reportName: 'Manual journal register', reportRef: 'FB03' },
-};
+// ── IPE gate 1 (inside step ①) — the entity-produced report is itself under test ──
+const ROUND_TAG: Record<AuditRound, string> = { interim: 'INT', rollforward: 'RF', yearend: 'YE' };
 
-/** One labelled input in the registration grid. */
-function IpeField({ label, value, onChange, hint, wide, numeric }: { label: string; value: string; onChange: (v: string) => void; hint?: string; wide?: boolean; numeric?: boolean }) {
-  return (
-    <label className={cn('block min-w-0', wide && 'col-span-2')}>
-      <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">{label}</span>
-      <input value={value} onChange={e => onChange(e.target.value)} inputMode={numeric ? 'numeric' : undefined}
-        className={cn('w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200', numeric && 'tabular-nums')} />
-      {hint && <span className="block text-[0.65625rem] text-ink-400 mt-1">{hint}</span>}
-    </label>
-  );
-}
-
-function IpeSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, registerIpe, setIpeCheck, concludeIpe, clearIpe } = useIcfr();
-  const logEvent = useAuditLog();
-  const { addToast } = useToast();
-  const ipe = control.operating.ipe;
-  const suggested = IPE_SUGGESTION[control.subProcess] ?? { reportName: `${control.subProcess} listing`, reportRef: 'Custom report' };
-  const span = eng.audits[0]?.periodSpan ?? `${eng.periodStart} – ${eng.periodEnd}`;
-
-  const [form, setForm] = useState({
-    reportName: suggested.reportName,
-    system: 'SAP S/4HANA',
-    reportRef: suggested.reportRef,
-    parameters: `Company code AG01 · ${span} · all document types`,
-    generatedBy: control.owner,
-    generatedAt: '02 May',
-    recordCount: '2640',
-    controlTotal: '₹ 412.6 Cr — agreed to the GL control account',
-  });
-  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }));
-  const [withdrawing, setWithdrawing] = useState(false);
-
-  if (locked) {
-    return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title="Report testing is locked" hint="Conclude the Test of Design as effective first — there is no point proving a report for a control that isn't designed to work.">
-          <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
-        </EmptyState>
-      </div>
-    );
-  }
-
-  // Nothing registered yet — name the report and how it was run. Every field is
-  // pre-filled from the control, because the auditor's job here is to check the
-  // facts against the parameter screen, not to type them out.
-  if (!ipe) {
-    if (!canEdit || isControlLocked(control)) {
-      return <div className="p-5"><p className="text-[0.75rem] text-ink-400">No report registered yet — the auditor records the report the population comes from, then tests it.</p></div>;
-    }
-    return (
-      <div className="p-5">
-        <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-3.5 py-3 mb-3.5 flex items-start gap-2">
-          <AlertTriangle size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
-          <p className="text-[0.75rem] text-ink-700 leading-relaxed">
-            The population comes out of a report <b className="font-semibold">the client ran</b>. Until that report is proven — right source, nothing missing, nothing wrong — a sample drawn from it proves nothing either.
-          </p>
-        </div>
-        <div className="subcard p-3.5">
-          <div className="text-[0.71875rem] font-bold text-ink-700 mb-3 inline-flex items-center gap-1.5"><FileSpreadsheet size={12} /> Register the report</div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-            <IpeField label="Report name" value={form.reportName} onChange={set('reportName')} />
-            <IpeField label="Source system" value={form.system} onChange={set('system')} />
-            <IpeField label="Transaction / report ref" value={form.reportRef} onChange={set('reportRef')} hint="How anyone re-runs it" />
-            <IpeField label="Run by (at the client)" value={form.generatedBy} onChange={set('generatedBy')} hint="What makes it entity-produced" />
-            <IpeField label="Parameters" value={form.parameters} onChange={set('parameters')} wide hint="Company code, date range, document types — a report run over the wrong window is a wrong population" />
-            <IpeField label="Run on" value={form.generatedAt} onChange={set('generatedAt')} />
-            <IpeField label="Records" value={form.recordCount} onChange={set('recordCount')} numeric />
-            <IpeField label="Control total" value={form.controlTotal} onChange={set('controlTotal')} wide hint="The number it totals to, and what it was agreed against" />
-          </div>
-          <div className="flex items-center justify-end gap-2 mt-3.5">
-            <button
-              disabled={!form.reportName.trim() || !form.reportRef.trim()}
-              onClick={() => {
-                registerIpe(control.id, {
-                  reportName: form.reportName.trim(),
-                  system: form.system.trim(),
-                  reportRef: form.reportRef.trim(),
-                  parameters: form.parameters.trim(),
-                  generatedBy: form.generatedBy.trim(),
-                  generatedAt: form.generatedAt.trim(),
-                  recordCount: Number(form.recordCount.replace(/\D/g, '')) || 0,
-                  controlTotal: form.controlTotal.trim(),
-                });
-                logEvent({ action: 'Create', description: `Registered "${form.reportName.trim()}" (${form.reportRef.trim()}) as IPE for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-              }}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
-              <ClipboardCheck size={14} /> Register and start testing
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const suggestion = ipeSuggestion(ipe);
-  const concluded = ipe.conclusion !== 'Not tested';
-  const reliable = ipe.conclusion === 'Reliable';
-  const canWrite = canEdit && !isControlLocked(control);
-
-  return (
-    <div className="p-5">
-      {/* the report's identity — the facts a reviewer re-runs it from */}
-      <div className={cn('rounded-xl border p-3.5 mb-3', reliable ? 'border-compliant-200 bg-compliant-50/30' : ipe.conclusion === 'Not reliable' ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-canvas-elevated')}>
-        <div className="flex items-start justify-between gap-3 mb-2.5">
-          <div className="min-w-0">
-            <div className="text-[0.8125rem] font-bold text-ink-900">{ipe.reportName}</div>
-            <p className="text-[0.71875rem] text-ink-500 mt-0.5">{ipe.system} · <span className="font-mono">{ipe.reportRef}</span> · run by {ipe.generatedBy} on {ipe.generatedAt}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Pill tone={reliable ? 'compliant' : ipe.conclusion === 'Not reliable' ? 'risk' : 'draft'}>{ipe.conclusion}</Pill>
-            {canWrite && (
-              <button onClick={() => setWithdrawing(true)} title="Withdraw this report and start again"
-                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer" aria-label="Withdraw report"><RotateCcw size={12} /></button>
-            )}
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[0.71875rem]">
-          <span className="text-ink-700"><span className="text-ink-400">Parameters</span> · {ipe.parameters}</span>
-          <span className="text-ink-700"><span className="text-ink-400">Records</span> · <span className="tabular-nums">{ipe.recordCount.toLocaleString()}</span></span>
-          <span className="text-ink-700 sm:col-span-2"><span className="text-ink-400">Control total</span> · {ipe.controlTotal}</span>
-        </div>
-      </div>
-
-      {/* the three checks — what is claimed, how it was proven, what was found */}
-      <div className="space-y-2">
-        {ipe.checks.map(k => {
-          const pass = k.result === 'Pass';
-          const fail = k.result === 'Fail';
-          return (
-            <div key={k.id} className={cn('subcard p-3.5', fail && 'border-risk-200')}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Tickmark result={k.result} size={15} />
-                    <span className="text-[0.78125rem] font-bold text-ink-900">{k.dimension}</span>
-                  </div>
-                  <p className="text-[0.75rem] text-ink-700 mt-1 leading-relaxed">{k.description}</p>
-                  <p className="text-[0.71875rem] text-ink-400 mt-1 leading-relaxed"><b className="font-semibold text-ink-500">How</b> — {k.method}</p>
-                </div>
-                {canWrite && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => setIpeCheck(control.id, k.id, { result: 'Pass' })}
-                      className={cn('h-7 px-2.5 rounded-md border text-[0.71875rem] font-semibold cursor-pointer transition-colors', pass ? 'bg-compliant-50 border-compliant-200 text-compliant-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>Pass</button>
-                    <button onClick={() => setIpeCheck(control.id, k.id, { result: 'Fail' })}
-                      className={cn('h-7 px-2.5 rounded-md border text-[0.71875rem] font-semibold cursor-pointer transition-colors', fail ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>Fail</button>
-                  </div>
-                )}
-              </div>
-              {/* the finding IS the working paper — the tie-out numbers, the variance */}
-              {canWrite ? (
-                <textarea rows={2} value={k.note ?? ''} onChange={e => setIpeCheck(control.id, k.id, { note: e.target.value })}
-                  placeholder={k.dimension === 'Completeness' ? 'What it tied to — the report total against the GL control account, and the difference' : k.dimension === 'Accuracy' ? 'What was vouched, and what came back' : 'What the parameter screen showed against the test scope'}
-                  className="mt-2.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-              ) : k.note ? (
-                <p className="mt-2.5 text-[0.75rem] text-ink-700 bg-paper-50 border border-canvas-border rounded-lg px-2.5 py-1.5">{k.note}</p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* conclude — one failed check sinks the report, and says so */}
-      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[0.71875rem] text-ink-500 max-w-[420px]">
-          {suggestion === 'Reliable' ? 'All three checks pass — the report can be relied on, and the sample step opens.'
-            : suggestion === 'Not reliable' ? 'A check failed. An incomplete or inaccurate report is the wrong population, so nothing can be sampled from it until a corrected extract is registered.'
-            : 'Work all three checks to conclude on the report.'}
-        </p>
-        {concluded ? (
-          <span className="text-[0.71875rem] font-semibold text-ink-500 inline-flex items-center gap-1.5">
-            <Tickmark result={reliable ? 'Pass' : 'Fail'} size={14} /> Concluded {ipe.conclusion.toLowerCase()} — {ipe.testedBy}, {ipe.testedAt}
-          </span>
-        ) : canWrite && (
-          <div className="flex items-center gap-2">
-            <button disabled={suggestion === 'Not tested'} onClick={() => { concludeIpe(control.id, 'Not reliable'); addToast({ type: 'warning', title: 'Report not reliable', message: 'The sample step stays closed until a corrected extract is registered and proven.' }); }}
-              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={13} /> Not reliable</button>
-            <button disabled={suggestion !== 'Reliable'}
-              title={suggestion === 'Reliable' ? undefined : 'Every check has to pass before a report can be relied on'}
-              onClick={() => { concludeIpe(control.id, 'Reliable'); addToast({ type: 'success', title: 'Report reliable', message: 'The sample can now be drawn from it.' }); }}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable — continue</button>
-          </div>
-        )}
-      </div>
-
-      {withdrawing && createPortal(
-        <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>
-          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
-            <div className="px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
-                <div>
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Withdraw this report?</h3>
-                  <p className="text-[0.75rem] text-ink-500 mt-1">The three checks proved <span className="font-semibold text-ink-700">{ipe.reportName}</span> as it was run. Withdrawing it clears them, because a different extract has to be proven on its own.</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
-              <button onClick={() => { clearIpe(control.id); setWithdrawing(false); logEvent({ action: 'Delete', description: `Withdrew the registered IPE report for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw and restart</button>
-            </div>
-          </motion.div>
-        </div>,
-        document.body)}
-    </div>
-  );
-}
-
-function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, racmDocs, openAuditId, setPopulation, setSampling, me } = useIcfr();
-  const logEvent = useAuditLog();
-  const { addToast } = useToast();
-  const o = control.operating;
-
-  // 'upload' covers everything before Send — the files card and the logic card
-  // are gated on the files themselves, not on a stage
-  type Stage = 'upload' | 'extracting' | 'review';
-  const [stage, setStage] = useState<Stage>('upload');
-  // two inputs, two jobs: samples are drawn from the master population, and the
-  // transactions tested against each of them come from the transactions file
-  const [popFile, setPopFile] = useState<{ name: string; count: number } | null>(null);
-  const [txnFile, setTxnFile] = useState<{ name: string; count: number } | null>(null);
-  const [uploading, setUploading] = useState<'pop' | 'txn' | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [logic, setLogic] = useState('');
-  const [sentLogic, setSentLogic] = useState('');
-  // how many to draw is the system's call, not a free guess — the handbook sizes
-  // it from the control's nature and frequency; the auditor picks off that ladder
-  const guide = sampleSizeGuide(control);
-  const [rows, setRows] = useState(guide.suggested);
-  const [drawn, setDrawn] = useState<string[]>([]);
-  const [rejecting, setRejecting] = useState(false);
-  // sending with no filter rule is the one thing that can't be guessed — IRA
-  // asks for it rather than silently pulling everything
-  const [askedForLogic, setAskedForLogic] = useState(false);
-  const filesReady = !!popFile && !!txnFile;
-  const attachedFiles = REQUIRED_SAMPLE_FILES
-    .map(d => { const f = d.id === 'pop' ? popFile : txnFile; return f ? { id: d.id, name: f.name, tag: d.tag } : null; })
-    .filter(Boolean) as { id: 'pop' | 'txn'; name: string; tag: string }[];
-
-  // The journey stays LOCAL until approval — nothing is written to the control,
-  // so "Reject and try again" is a pure state reset with no store cleanup.
-  // What the engagement already holds — the scoping uploads are usually the
-  // very transaction data being asked for here, so they're offered for reuse.
-  const existingFiles = useMemo(() => {
+/** Files this engagement already holds — the scoping trial balances, the open
+ *  audit's own GL, the RACM uploads. Shared by step ①'s source picker and the
+ *  sample step, because both are asking for data the engagement usually has. */
+function useEngagementFiles(): { name: string; kind: string; rows: number; from: string }[] {
+  const { eng, racmDocs, openAuditId } = useIcfr();
+  return useMemo(() => {
     // programmeFor, not PROGRAMMES: the Altura group's record lives in the V2
-    // store, and reading only the classic one left this list empty — "Choose
-    // existing" then claimed the engagement had no files at all.
+    // store, and reading only the classic one leaves this list empty.
     const prog = programmeFor(eng.id);
     const out: { name: string; kind: string; rows: number; from: string }[] = [];
-    // The open audit's own TB / GL come first — they are this cycle's files,
-    // so they are the ones most likely being asked for.
     const audit = eng.audits.find(a => a.id === openAuditId);
     audit?.files.forEach(f => out.push({
-      name: f.name,
-      kind: f.kind === 'tb' ? 'Trial balance' : 'General ledger',
-      rows: f.kind === 'tb' ? 1240 : 18432,
-      from: `${audit.period} audit`,
+      name: f.name, kind: f.kind === 'tb' ? 'Trial balance' : 'General ledger',
+      rows: f.kind === 'tb' ? 1240 : 18432, from: `${audit.period} audit`,
     }));
     prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) out.push({ name: en.tbFile, kind: 'Trial balance', rows: en.tbLines ?? 1240, from: `${en.name} · engagement scoping` });
@@ -1478,107 +1161,622 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     // A file can reach the list twice (an audit TB that is also the scoping TB).
     return out.filter((f, i) => out.findIndex(x => x.name === f.name) === i);
   }, [eng.id, eng.audits, openAuditId, racmDocs]);
+}
 
-  // The file is matched to the requirement it satisfies — by what it's called,
-  // falling back to whichever slot is still open. The auditor never picks.
-  const classify = (name: string): 'pop' | 'txn' => {
-    const n = name.toLowerCase();
-    if (/popul|master/.test(n)) return 'pop';
-    if (/transact|txn|ledger|\bgl\b|journal|invoice|payment/.test(n)) return 'txn';
-    return popFile ? 'txn' : 'pop';
+/** '2026-01-31' → '31 Jan 2026'. Left alone if it isn't a date. */
+function shortDate(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** One thing the application checked for itself.
+ *
+ *  There is no tick box here on purpose. The row states what the numbers say and
+ *  the auditor either accepts it or writes down why it is wrong — which is a
+ *  fact on the paper, where a tick was only ever a signature standing in for a
+ *  calculation somebody else had already done. */
+function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter, children }: {
+  label: string; v: PopVerdict | null; note?: string; canWrite: boolean; placeholder: string;
+  onNote: (t: string) => void; onRefilter?: () => void; children?: React.ReactNode;
+}) {
+  const [draft, setDraft] = useState(note ?? '');
+  const [open, setOpen] = useState(false);
+  if (!v) return null;
+  const answered = !!note?.trim();
+  // A blocking check that has been answered reads as settled, not as still
+  // wrong — the disagreement stands, but it is no longer holding anything up.
+  const tone = v.level === 'pass' ? 'pass' : answered ? 'settled' : v.level;
+  // Written out rather than built from a `text-${tone}-700` template — Tailwind
+  // only generates classes it can see as literals in the source. 700 is the
+  // darkest shade the GRC ramps define; -800 resolves to nothing.
+  const shell = tone === 'pass' ? 'border-compliant-200 bg-compliant-50/40'
+    : tone === 'settled' ? 'border-canvas-border bg-paper-50/60'
+      : tone === 'warn' ? 'border-mitigated-200 bg-mitigated-50/40' : 'border-risk-200 bg-risk-50/40';
+  const accent = tone === 'pass' ? 'text-compliant-700'
+    : tone === 'settled' ? 'text-ink-500'
+      : tone === 'warn' ? 'text-mitigated-700' : 'text-risk-700';
+  return (
+    <div className={cn('rounded-lg border px-3 py-2.5', shell)}>
+      <div className="flex items-start gap-2.5">
+        <span className={cn('mt-0.5 shrink-0', accent)}>
+          {v.level === 'pass' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">{label}</span>
+            <span className={cn('text-[0.78125rem] font-semibold', accent)}>{v.headline}</span>
+            {v.level === 'warn' && !answered && <span className="text-[0.625rem] font-bold uppercase tracking-wider text-mitigated-700">Variance</span>}
+            {v.level === 'fail' && !answered && <span className="text-[0.625rem] font-bold uppercase tracking-wider text-risk-700">Completeness</span>}
+          </div>
+          <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5">{v.detail}</p>
+
+          {/* Where the surplus sits. Only an overshoot has this — missing rows
+              are not in the extract to be grouped. */}
+          {v.breakdown && v.breakdown.length > 0 && (
+            <div className="mt-2 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Where the extra rows sit</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {v.breakdown.map(b => (
+                  <span key={b.label} className="text-[0.6875rem] text-ink-600">
+                    {b.label} <span className="tabular-nums font-semibold text-ink-900">{b.n.toLocaleString()}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {v.causes && !answered && <p className="mt-1.5 text-[0.65625rem] text-ink-400 leading-relaxed">{v.causes}</p>}
+
+          {children}
+          {v.blocks && !children && (
+            answered && !open ? (
+              <p className="mt-1.5 text-[0.6875rem] text-ink-600 leading-relaxed">
+                <span className="text-ink-400">Accepted</span> · {note}
+                {canWrite && <button onClick={() => { setDraft(note ?? ''); setOpen(true); }} className="ml-2 text-brand-600 font-semibold hover:underline cursor-pointer">Edit</button>}
+              </p>
+            ) : canWrite ? (
+              /* Two ways out, both legitimate: fix the filter, or say why the
+                 expectation was the number that was wrong. */
+              <div className="mt-2">
+                {onRefilter && (
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <button onClick={onRefilter}
+                      className="h-7 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Refilter</button>
+                    <span className="text-[0.625rem] text-ink-400">Adjust the filter and extract again — the comparison re-runs.</span>
+                  </div>
+                )}
+                <span className="block text-[0.625rem] text-ink-400 mb-1">{onRefilter ? 'Or accept it, and say why:' : 'Say why:'}</span>
+                <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2} placeholder={placeholder}
+                  className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <button disabled={!draft.trim()} onClick={() => { onNote(draft.trim()); setOpen(false); }}
+                    className="h-7 px-3 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Accept with reason</button>
+                  <span className="text-[0.625rem] text-ink-400">This prints on the working paper beside the figure.</span>
+                </div>
+              </div>
+            ) : <p className="mt-1.5 text-[0.6875rem] text-ink-400">Not resolved.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A look at the population itself.
+ *
+ *  A locked population is otherwise a single number, and a number nobody has
+ *  looked at is a number nobody has checked. The rows are generated from the
+ *  control's own id so the same population always shows the same items — this
+ *  prototype holds no file bytes, and inventing a different set on every open
+ *  would make the preview useless for exactly the thing it is for. */
+function PopulationPreviewModal({ control, onClose }: { control: Control; onClose: () => void }) {
+  const pop = control.operating.population!;
+  const SHOWN = 25;
+  const rows = useMemo(() => {
+    // Deterministic — a tiny LCG seeded off the control id.
+    let s = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+    const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const start = pop.filterFrom ? new Date(pop.filterFrom).getTime() : Date.parse('2026-01-01');
+    const end = pop.filterTo ? new Date(pop.filterTo).getTime() : Date.parse('2026-12-31');
+    const span = Math.max(1, end - start);
+    const who = ['R. Nair', 'S. Kulkarni', 'A. Verma', 'P. Desai', 'M. Iyer'];
+    const kind = ['Vendor payment run', 'Payroll disbursement', 'Inter-company transfer', 'Utility settlement', 'Treasury sweep'];
+    return Array.from({ length: Math.min(SHOWN, pop.count) }, (_, i) => ({
+      ref: `${control.id}-${String(i + 1).padStart(5, '0')}`,
+      date: new Date(start + next() * span).toISOString().slice(0, 10),
+      description: kind[Math.floor(next() * kind.length)],
+      account: `${2100 + Math.floor(next() * 6) * 10} — ${['Trade payables', 'Bank — current', 'Payroll clearing', 'Inter-company', 'Accruals', 'Treasury'][Math.floor(next() * 6)]}`,
+      amount: Math.round((next() * 480 + 12) * 1000),
+      approver: who[Math.floor(next() * who.length)],
+    })).sort((a, b) => a.date.localeCompare(b.date));
+  }, [control.id, pop.count, pop.filterFrom, pop.filterTo]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <motion.div className="modal" style={{ maxWidth: 940 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+        <div className="px-5 py-4 border-b border-canvas-border flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-[0.875rem] font-bold text-ink-900">The population</h3>
+              {pop.version && <span className="wp-ref">{pop.version}</span>}
+              {pop.locked && <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold text-compliant-700"><Lock size={11} /> Locked</span>}
+            </div>
+            <p className="text-[0.71875rem] text-ink-500 mt-1">
+              First {rows.length} of <span className="tabular-nums font-semibold text-ink-700">{pop.count.toLocaleString()}</span> instances
+              {pop.sourceFile && <> · filtered out of <span className="font-mono text-[0.6875rem] text-ink-600">{pop.sourceFile}</span></>}
+            </p>
+            <p className="text-[0.6875rem] text-ink-400 mt-0.5">Filter · {pop.criteria ?? '—'}</p>
+          </div>
+          <button onClick={onClose} className="shrink-0 h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Close</button>
+        </div>
+        <div className="max-h-[60vh] overflow-auto">
+          <table className="w-full border-collapse text-[0.71875rem]">
+            <thead className="sticky top-0 bg-canvas-elevated">
+              <tr>
+                {['Reference', 'Date', 'Description', 'Account', 'Amount', 'Approved by'].map(h => (
+                  <th key={h} className={cn('px-3 py-2 font-semibold text-ink-500 whitespace-nowrap border-b border-canvas-border text-left', h === 'Amount' && 'text-right')}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.ref} className="border-b border-canvas-border last:border-b-0 hover:bg-paper-50">
+                  <td className="px-3 py-1.5 font-mono text-[0.6875rem] text-ink-700 whitespace-nowrap">{r.ref}</td>
+                  <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap tabular-nums">{shortDate(r.date)}</td>
+                  <td className="px-3 py-1.5 text-ink-800">{r.description}</td>
+                  <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap">{r.account}</td>
+                  <td className="px-3 py-1.5 text-ink-900 text-right tabular-nums whitespace-nowrap">₹{r.amount.toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-1.5 text-ink-600 whitespace-nowrap">{r.approver}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-canvas-border">
+          <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+            {pop.locked ? 'This is what the sample is drawn from. Changing it means withdrawing the population and starting again.' : 'Not locked yet — check it reads like this control\'s work before locking.'}
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/** STEP 1 — POPULATION.
+ *
+ *  Pick the file, filter it down to THIS control's instances, check three things,
+ *  lock. The filter is the point: 18,432 general-ledger rows are not 340 payment
+ *  approvals, and a "population" the same size as the file it came out of is a
+ *  file somebody copied rather than a population somebody defined — which is why
+ *  that case gets a warning rather than a silent pass.
+ */
+function PopulationSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
+  const { eng, openAuditId, role, me, setPopulation, clearPopulation, setPopulationFacts, lockPopulation } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const files = useEngagementFiles();
+  const pop = control.operating.population;
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const version = `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`;
+  const canWrite = canEdit && !isControlLocked(control);
+  const isAuditor = role === 'auditor' && canWrite;
+  // The window the audit actually tests, as real dates. The coverage check
+  // measures the filter against this, and prose like 'Jan 2026' cannot be
+  // measured — so the filter asks for dates rather than a label.
+  const winFrom = audit?.windowFrom ?? '';
+  const winTo = audit?.windowTo ?? '';
+
+  const [picked, setPicked] = useState<string | null>(null);
+  const [txnType, setTxnType] = useState(control.subProcess);
+  const [account, setAccount] = useState('');
+  const [from, setFrom] = useState(winFrom);
+  const [to, setTo] = useState(winTo);
+  const [extracting, setExtracting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  // What the auditor expects the filter to return, stated BEFORE it runs. An
+  // expectation recorded afterwards is an expectation fitted to the answer, so
+  // it is asked for here and the extract will not run without it.
+  const [expected, setExpected] = useState('');
+  const chosen = files.find(f => f.name === picked);
+  // What the application can offer towards that number: how many times the
+  // control itself runs over the window. Not the same thing as how many
+  // instances it touches, so it is a hint beside the field, never the value.
+  const runsInWindow = derivedRunCount(control, from, to);
+
+  const criteria = [txnType && `type ${txnType}`, account && `account ${account}`, (from || to) && `${shortDate(from) || '…'} – ${shortDate(to) || '…'}`].filter(Boolean).join(' · ');
+
+  const extract = () => {
+    if (!chosen || !Number(expected)) return;
+    setExtracting(true);
+    window.setTimeout(() => {
+      // The filter narrows the file to this control's instances. Deterministic so
+      // the number is stable across runs, and never below one.
+      const narrowed = criteria.trim().length === 0
+        ? chosen.rows
+        : Math.max(1, Math.round(chosen.rows / (7 + (control.id.length % 40))));
+      setPopulation(control.id, {
+        version,
+        source: `${chosen.name} · ${chosen.from}`,
+        sourceFile: chosen.name, sourceCount: chosen.rows,
+        criteria: criteria || 'No filter applied',
+        filterFrom: from || undefined, filterTo: to || undefined,
+        expectedCount: Number(expected),
+        count: narrowed,
+        tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
+        evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
+      });
+      setExtracting(false);
+      logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}, against ${Number(expected).toLocaleString()} expected`, module: 'SOX ICFR', entity: 'Evidence' });
+    }, 1500);
   };
-  const attach = (file: { name: string; count: number }) => {
-    const which = classify(file.name);
-    if (which === 'pop') setPopFile(file); else setTxnFile(file);
-    return which;
+
+  // Put the old filter back in the form and drop the population, so fixing an
+  // over-inclusive filter is a tweak to what was already there rather than
+  // starting the whole step again. The confirm only appears when a sample would
+  // go with it — otherwise there is nothing to lose by re-running.
+  const refilter = () => {
+    if (!pop) return;
+    setPicked(pop.sourceFile ?? null);
+    if (pop.filterFrom) setFrom(pop.filterFrom);
+    if (pop.filterTo) setTo(pop.filterTo);
+    setExpected(pop.expectedCount != null ? String(pop.expectedCount) : '');
+    if (control.operating.sampling) { setWithdrawing(true); return; }
+    clearPopulation(control.id);
+    logEvent({ action: 'Update', description: `Refiltering the population for ${control.id} — the extract did not agree with the expected count`, module: 'SOX ICFR', entity: 'Evidence' });
   };
+
+  const locked = !!pop?.locked;
+  // A filter that changed nothing didn't filter.
+  const unfiltered = !!pop && pop.sourceCount != null && pop.count === pop.sourceCount;
+
+  // The two sums the application does for itself, and what is still missing
+  // before the population can be locked.
+  const cv = countVerdict(control);
+  const gv = coverageVerdict(control, winFrom, winTo);
+  const needsExpected = pop?.expectedCount == null && derivedRunCount(control, pop?.filterFrom, pop?.filterTo) == null;
+  const [expectedDraft, setExpectedDraft] = useState('');
+  const prov = pop?.provenance ?? { system: '', extractedBy: '', extractedOn: '' };
+  const ready = populationReady(control, winFrom, winTo);
+  const missing = !prov.system.trim() || !prov.extractedBy.trim() || !prov.extractedOn.trim()
+    ? 'Record where the data came from before locking.'
+    : needsExpected ? 'Record how many instances were expected before locking.'
+      : cv?.blocks && !pop?.countNote?.trim() ? 'Refilter, or accept the count difference with a reason, before locking.'
+        : 'A check that did not hold needs resolving before locking.';
+
+  return (
+    <div className="p-5">
+      {!pop ? (
+        canWrite ? (
+          <>
+            <div className="mb-3">
+              <h4 className="text-[0.8125rem] font-bold text-ink-900">Select the source file</h4>
+              <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">Then filter it down to this control's instances. The file is the raw data; the population is what this control actually operated on.</p>
+            </div>
+            <div className="rounded-xl border border-canvas-border overflow-hidden mb-4">
+              {files.length === 0 ? (
+                <p className="px-3 py-3 text-[0.75rem] text-ink-400">No files on this engagement yet.</p>
+              ) : files.map(f => {
+                const on = picked === f.name;
+                return (
+                  <button key={f.name} onClick={() => setPicked(f.name)}
+                    className={cn('w-full text-left flex items-center gap-2.5 px-3 py-2.5 border-b border-canvas-border last:border-b-0 transition-colors cursor-pointer', on ? 'bg-brand-50' : 'hover:bg-paper-50')}>
+                    <span className={cn('w-3.5 h-3.5 rounded-full border-[3px] shrink-0', on ? 'border-brand-600' : 'border-ink-300')} />
+                    <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
+                    <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
+                    <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{f.rows.toLocaleString()} rows</span>
+                    <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Filter criteria</span>
+            <div className="grid sm:grid-cols-2 gap-x-3 gap-y-2.5">
+              <label className="block min-w-0">
+                <span className="block text-[0.65625rem] text-ink-400 mb-1">Transaction type</span>
+                <input value={txnType} onChange={e => setTxnType(e.target.value)} placeholder="e.g. Payment run"
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </label>
+              <label className="block min-w-0">
+                <span className="block text-[0.65625rem] text-ink-400 mb-1">Account</span>
+                <input value={account} onChange={e => setAccount(e.target.value)} placeholder="e.g. 2100 — Trade payables"
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </label>
+              <label className="block min-w-0">
+                <span className="block text-[0.65625rem] text-ink-400 mb-1">Date from</span>
+                <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </label>
+              <label className="block min-w-0">
+                <span className="block text-[0.65625rem] text-ink-400 mb-1">Date to</span>
+                <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </label>
+            </div>
+
+            {/* ── the expectation, before the answer ──────────────────────────
+                The only way to tell whether the right number of rows came back
+                is to have said what the right number was first. Written down
+                afterwards it is not a check, it is a caption. */}
+            <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
+              <div className="flex items-start gap-3 flex-wrap">
+                <label className="block shrink-0">
+                  <span className="block text-[0.65625rem] text-ink-400 mb-1">Expected instances</span>
+                  <input type="number" min={1} value={expected} onChange={e => setExpected(e.target.value)} placeholder="e.g. 1,400"
+                    className="w-32 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                </label>
+                <p className="text-[0.65625rem] text-ink-400 leading-relaxed flex-1 min-w-[15rem] sm:mt-5">
+                  {runsInWindow != null
+                    ? <>This control runs <span className="tabular-nums font-semibold text-ink-600">{runsInWindow.toLocaleString()}</span> times over the window you have set. If each run covers many transactions, expect a larger number than that.</>
+                    : <>A {control.frequency.toLowerCase()} control has no fixed rhythm, so there is nothing to work this out from — the figure has to come from you.</>}
+                </p>
+              </div>
+              <p className="text-[0.625rem] text-ink-400 mt-2 leading-relaxed">Say it before extracting. Once the extract has run, the two numbers are compared for you — a figure written down afterwards would only ever agree with itself.</p>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                {!chosen ? 'Pick the source file first.'
+                  : !Number(expected) ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows — say how many instances you expect before extracting.</>
+                    : <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'} · expecting <span className="tabular-nums font-semibold text-ink-600">{Number(expected).toLocaleString()}</span></>}
+              </p>
+              <button disabled={!chosen || !Number(expected) || extracting} onClick={extract}
+                title={!chosen ? 'Pick a source file first' : !Number(expected) ? 'Record how many instances you expect first' : undefined}
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                {extracting ? <><Loader2 size={14} className="animate-spin" /> Extracting…</> : <><Database size={14} /> Extract</>}
+              </button>
+            </div>
+          </>
+        ) : <p className="text-[0.75rem] text-ink-400">No population yet — the auditor filters it out of the source data.</p>
+      ) : (
+        <>
+          {/* what the filter produced */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="text-[0.8125rem] font-bold text-ink-900">{locked ? 'Population locked' : 'Population extracted'}</span>
+                {pop.version && <span className="wp-ref">{pop.version}</span>}
+              </div>
+              <p className="text-[1.0625rem] font-bold text-ink-900 tabular-nums leading-none">
+                {pop.count.toLocaleString()} <span className="text-[0.75rem] font-medium text-ink-500">instances</span>
+                {pop.sourceCount != null && <span className="text-[0.75rem] font-medium text-ink-400"> from {pop.sourceCount.toLocaleString()} rows</span>}
+              </p>
+              <p className="text-[0.71875rem] text-ink-500 mt-1.5"><span className="text-ink-400">Source</span> · {pop.sourceFile ?? pop.source}</p>
+              <p className="text-[0.71875rem] text-ink-500 mt-0.5"><span className="text-ink-400">Filter</span> · {pop.criteria ?? '—'}</p>
+              {locked && <p className="text-[0.6875rem] text-ink-400 mt-1.5">Locked by {pop.locked!.by}, {pop.locked!.at}</p>}
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              {/* the population is a number until somebody can look at it */}
+              <button onClick={() => setPreviewing(true)}
+                className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Eye size={11} /> Preview</button>
+              {isAuditor && (
+                <button onClick={() => setWithdrawing(true)}
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Withdraw</button>
+              )}
+            </div>
+          </div>
+
+          {unfiltered && (
+            <p className="mt-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>The population is the same size as the file it came from — nothing was filtered out. Unless this control really does operate on every row, withdraw and filter it down first.</span>
+            </p>
+          )}
+
+          <div className="ac-div my-4" />
+
+          {/* ── what the application worked out for itself ──────────────────
+              Nobody is asked to agree with arithmetic. The count and the period
+              are both things it already holds the numbers for, so it does the
+              sum and states the answer. A failed sum is argued with in writing,
+              not ticked past. */}
+          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Checked automatically</span>
+          <div className="space-y-1.5">
+            <VerdictRow label="Count" v={cv} note={pop.countNote} canWrite={canWrite && !locked}
+              placeholder="e.g. the expected figure was last year's estimate — volumes rose after the new vendor onboarding"
+              onNote={t => setPopulationFacts(control.id, { countNote: t })}
+              onRefilter={isAuditor ? refilter : undefined}>
+              {cv && cv.blocks && needsExpected && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input type="number" min={1} value={expectedDraft} onChange={e => setExpectedDraft(e.target.value)} placeholder="expected"
+                    disabled={!canWrite || locked}
+                    className="w-28 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+                  <button disabled={!canWrite || locked || !Number(expectedDraft)}
+                    onClick={() => setPopulationFacts(control.id, { expectedCount: Number(expectedDraft) })}
+                    className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 enabled:hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Record</button>
+                  <span className="text-[0.65625rem] text-ink-400">then the comparison is ours to make</span>
+                </div>
+              )}
+            </VerdictRow>
+            <VerdictRow label="Period covered" v={gv} note={pop.coverageNote} canWrite={canWrite && !locked}
+              placeholder="e.g. the system was cut over on 1 Mar — pre-cutover instances are in the legacy extract, tested separately"
+              onNote={t => setPopulationFacts(control.id, { coverageNote: t })}
+              onRefilter={isAuditor ? refilter : undefined} />
+          </div>
+
+          {/* ── the facts it cannot work out ────────────────────────────────
+              A file name says nothing about the system that produced it, who ran
+              the export or when. So those three are asked for as facts and
+              printed on the paper — not compressed into a tick box that says
+              "production, trust me". */}
+          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mt-4 mb-1">Where this data came from</span>
+          <p className="text-[0.65625rem] text-ink-400 mb-2 leading-relaxed">Nothing here can be worked out from the file, so it is recorded rather than assumed. It prints on the working paper as stated.</p>
+          <div className="grid sm:grid-cols-3 gap-x-3 gap-y-2.5">
+            <label className="block min-w-0">
+              <span className="block text-[0.65625rem] text-ink-400 mb-1">System of record</span>
+              <input value={prov.system} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, system: e.target.value } })}
+                placeholder="e.g. SAP S/4HANA — Production"
+                className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
+            </label>
+            <label className="block min-w-0">
+              <span className="block text-[0.65625rem] text-ink-400 mb-1">Extracted by</span>
+              <input value={prov.extractedBy} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, extractedBy: e.target.value } })}
+                placeholder="e.g. R. Nair · IT"
+                className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
+            </label>
+            <label className="block min-w-0">
+              <span className="block text-[0.65625rem] text-ink-400 mb-1">Extracted on</span>
+              <input type="date" value={prov.extractedOn} disabled={!canWrite || locked} onChange={e => setPopulationFacts(control.id, { provenance: { ...prov, extractedOn: e.target.value } })}
+                className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60" />
+            </label>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[0.65625rem] text-ink-400 min-w-0">
+              {locked ? 'Every later step draws off this version. A later round re-versions rather than editing it.'
+                : ready ? 'Nothing downstream runs until the population is locked.'
+                  : missing}
+            </p>
+            {!locked && isAuditor && (
+              <button disabled={!ready} title={ready ? undefined : missing}
+                onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); addToast({ type: 'success', title: 'Population locked', message: `${pop.count.toLocaleString()} instances — the sample draws from this.` }); }}
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Lock size={14} /> Lock the population</button>
+            )}
+            {locked && <span className="shrink-0 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold text-compliant-700"><Lock size={13} /> Locked</span>}
+          </div>
+        </>
+      )}
+
+      {previewing && pop && createPortal(<PopulationPreviewModal control={control} onClose={() => setPreviewing(false)} />, document.body)}
+
+      {withdrawing && createPortal(
+        <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>
+          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div>
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Withdraw this population?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">A different filter is a different population. The sample drawn from this one{control.operating.sampling ? ` — ${control.operating.sampling.size} items — ` : ' '}and every result recorded against it go with it.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => { clearPopulation(control.id); setWithdrawing(false); setPicked(null); logEvent({ action: 'Delete', description: `Withdrew the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+    </div>
+  );
+}
+
+function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
+  const { eng, racmDocs, openAuditId, role, setSampling } = useIcfr();
+  // Drawing a sample is the auditor's act — the store refuses it from anyone
+  // else, so the journey is not offered to anyone else either.
+  const canDraw = canEdit && role === 'auditor';
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const o = control.operating;
+
+  // 'upload' covers everything before Send — the files card and the logic card
+  // are gated on the files themselves, not on a stage
+  type Stage = 'upload' | 'extracting' | 'review';
+  const [stage, setStage] = useState<Stage>('upload');
+  // The population is already in and locked (step ①). All this step still asks
+  // for is the transaction detail each drawn item is tested against.
+  const [txnFile, setTxnFile] = useState<{ name: string; count: number } | null>(null);
+  const [uploading, setUploading] = useState<'txn' | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [logic, setLogic] = useState('');
+  const [sentLogic, setSentLogic] = useState('');
+  // How many to draw is the table's call, not a free guess — sized from the
+  // control's frequency, nature and risk rating, and reduced to sizing-like-a-
+  // manual-control the moment an ITGC underneath it fails.
+  const holds = itgcHolds(eng, control);
+  const guide = sampleSizeGuide(control, holds);
+  const [rows, setRows] = useState(guide.suggested);
+  // Random or systematic, and the seed behind it — the two facts that let anyone
+  // else land on the same items. A draw nobody can reperform is not a procedure.
+  const [method, setMethod] = useState<Sampling['method']>('Random');
+  const [seed, setSeed] = useState(74812);
+  const [drawn, setDrawn] = useState<string[]>([]);
+  const [rejecting, setRejecting] = useState(false);
+  // sending with no filter rule is the one thing that can't be guessed — IRA
+  // asks for it rather than silently pulling everything
+  const [askedForLogic, setAskedForLogic] = useState(false);
+  const filesReady = !!txnFile;
+  const attachedFiles = REQUIRED_SAMPLE_FILES
+    .map(d => (txnFile ? { id: d.id, name: txnFile.name, tag: d.tag } : null))
+    .filter(Boolean) as { id: 'txn'; name: string; tag: string }[];
+
+  // The journey stays LOCAL until approval — nothing is written to the control,
+  // so "Reject and try again" is a pure state reset with no store cleanup.
+  // What the engagement already holds — the scoping uploads are usually the
+  // very transaction data being asked for here, so they're offered for reuse.
+  // The engagement's own files — same list the population picker offers, so a
+  // file uploaded at scoping is reusable from either step.
+  const existingFiles = useEngagementFiles();
+
+  // One slot left, so a chosen file lands in it whatever it is called.
   const uploadFile = () => {
     setPicking(false);
-    // the simulated pick fills whichever requirement is still open
-    const which: 'pop' | 'txn' = popFile ? 'txn' : 'pop';
-    setUploading(which);
+    setUploading('txn');
     window.setTimeout(() => {
-      const f = which === 'pop' ? { name: 'population.xlsx', count: 2640 } : { name: 'transactions.xlsx', count: 18432 };
-      attach(f);
+      const f = { name: 'transactions.xlsx', count: 18432 };
+      setTxnFile(f);
       setUploading(null);
-      logEvent({ action: 'Upload', description: `Added "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
+      logEvent({ action: 'Upload', description: `Added "${f.name}" for ${control.id} — transaction detail for the drawn items`, module: 'SOX ICFR', entity: 'Evidence' });
     }, 1400);
   };
-  /** Attach several chosen files at once.
-   *
-   *  Slots are walked in local variables rather than by calling attach() per
-   *  file: classify() falls back to "whichever slot is still open", and in one
-   *  tick every call would still see the old state and land on the same slot. */
   const chooseFiles = (files: { name: string; rows: number }[]) => {
     setPicking(false);
-    let pop = popFile;
-    let txn = txnFile;
-    for (const f of files) {
-      const file = { name: f.name, count: f.rows };
-      const n = f.name.toLowerCase();
-      const which: 'pop' | 'txn' = /popul|master/.test(n) ? 'pop'
-        : /transact|txn|ledger|\bgl\b|journal|invoice|payment/.test(n) ? 'txn'
-        : pop ? 'txn' : 'pop';
-      if (which === 'pop') pop = file; else txn = file;
-      logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — matched to ${which === 'pop' ? 'population' : 'transactions'}`, module: 'SOX ICFR', entity: 'Evidence' });
-    }
-    setPopFile(pop);
-    setTxnFile(txn);
+    const f = files[0];
+    if (!f) return;
+    setTxnFile({ name: f.name, count: f.rows });
+    logEvent({ action: 'Update', description: `Reused "${f.name}" for ${control.id} — transaction detail for the drawn items`, module: 'SOX ICFR', entity: 'Evidence' });
   };
   const sendLogic = () => {
     if (!logic.trim()) { setAskedForLogic(true); return; }
     setAskedForLogic(false);
     setSentLogic(logic.trim());
     setStage('extracting');
-    logEvent({ action: 'Run', description: `Extracted sample for ${control.id} — ${rows} items from the population, transactions filtered by logic`, module: 'SOX ICFR', entity: 'Test Result' });
+    logEvent({ action: 'Run', description: `Drew ${rows} items for ${control.id} — ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { setDrawn(sampleRefs(control.process, rows)); setStage('review'); }, 1800);
   };
   const visible = drawn.map((ref, i) => ({ ref, i }));
 
   const approve = () => {
     const kept = visible.map(v => v.ref);
-    setPopulation(control.id, {
-      source: `Uploaded — ${popFile?.name ?? 'population.xlsx'}`, count: popFile?.count ?? 2640,
-      tieOut: 'Agreed to GL control account',
-      evidence: [
-        { id: 'pop-ev', name: popFile?.name ?? 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' },
-        { id: 'txn-ev', name: txnFile?.name ?? 'transactions.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' },
-      ],
-    });
+    // The population is already in and locked — this step only records the draw
+    // off it, and the two facts that make the draw reperformable.
     const s: Sampling = {
-      basis: `${kept.length} items drawn from ${popFile?.name ?? 'the population'} — transactions filtered by: “${sentLogic}”`,
-      method: 'Targeted', size: kept.length,
+      basis: `${kept.length} items drawn from ${o.population?.version ?? 'the locked population'} · ${method.toLowerCase()}, seed ${seed} · spread across the period — transactions filtered by: “${sentLogic}”`,
+      method, size: kept.length, seed,
       samples: kept.map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })),
     };
     setSampling(control.id, s);
-    logEvent({ action: 'Update', description: `Approved extracted sample for ${control.id} — ${kept.length} items`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Sample approved', message: `${kept.length} items locked in — continue to the test of operating effectiveness.` });
-    document.getElementById('vstep-toe')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    logEvent({ action: 'Update', description: `Approved the sample for ${control.id} — ${kept.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
+    addToast({ type: 'success', title: 'Sample drawn', message: `${kept.length} items — confirm the extraction, then test them.` });
   };
   const restart = () => {
     setRejecting(false);
-    setStage('upload'); setPopFile(null); setTxnFile(null); setLogic(''); setSentLogic(''); setRows(guide.suggested); setDrawn([]); setAskedForLogic(false);
-    logEvent({ action: 'Delete', description: `Rejected extracted sample for ${control.id} — journey restarted`, module: 'SOX ICFR', entity: 'Test Result' });
+    setStage('upload'); setTxnFile(null); setLogic(''); setSentLogic(''); setRows(guide.suggested); setDrawn([]); setAskedForLogic(false);
+    logEvent({ action: 'Delete', description: `Rejected the drawn sample for ${control.id} — draw restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
 
-  // Two gates stand in front of the sample, and they fail for different reasons —
+  // Two gates stand in front of the draw, and they fail for different reasons —
   // so the locked state names the one actually holding it up.
   if (locked) {
     const designBlocked = trackResult(control.design) !== 'Effective';
     return (
       <div className="p-5">
         {designBlocked ? (
-          <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked" hint="Conclude the Test of Design as effective first — the sample is only worth pulling for a control that is designed effectively.">
+          <EmptyState icon={<Lock size={18} />} title="The draw is locked" hint="Conclude the Test of Design as effective first — a sample is only worth pulling for a control that is designed to work.">
             <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>Design is currently</span><TrackPill c={trackResult(control.design)} /></span>
           </EmptyState>
         ) : (
-          <EmptyState icon={<Lock size={18} />} title="Sample extraction is locked"
-            hint={o.ipe
-              ? 'The report the population comes from is not concluded reliable — a sample drawn from it would prove nothing. Finish the report testing above.'
-              : 'Register and test the report the population comes from first — a sample is only as good as the report it was drawn out of.'}>
+          <EmptyState icon={<Lock size={18} />} title="The draw is locked"
+            hint={o.population
+              ? 'The population is extracted but not locked. Settle the checks at step ① and lock it — a sample drawn from a population that can still change proves nothing.'
+              : 'No population yet. Pick the source file and filter it down at step ① — the draw comes off a locked population, never off a file.'}>
             <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
-              <span>Report is currently</span>
-              <Pill tone={o.ipe?.conclusion === 'Not reliable' ? 'risk' : 'draft'}>{o.ipe?.conclusion ?? 'Not registered'}</Pill>
+              <span>Population is currently</span>
+              <Pill tone="draft">{!o.population ? 'Not extracted' : 'Not locked'}</Pill>
             </span>
           </EmptyState>
         )}
@@ -1586,96 +1784,93 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     );
   }
 
-  // Already approved (this session or seeded) — read-only summary.
+  // Already drawn (this session or seeded) — read-only, plus IPE gate 2, which is
+  // the one thing still outstanding once the items exist.
   if (o.sampling) {
+    const s = o.sampling;
+    const origCount = s.samples.filter(x => !x.extension).length;
+    const extCount = s.samples.length - origCount;
     return (
       <div className="p-5">
-        <div className="rounded-xl border border-compliant-200 bg-compliant-50/30 p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-compliant-200 bg-compliant-50/30 p-4 flex items-start gap-3 mb-3">
           <CheckCircle2 size={16} className="text-compliant-700 mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-bold text-ink-900">Sample approved — {o.sampling.size} items</div>
-            <p className="text-[11.5px] text-ink-500 mt-0.5">{o.sampling.method} · {o.sampling.basis}</p>
-            {o.population && <p className="text-[11px] text-ink-400 mt-1">Population {o.population.count.toLocaleString()} · {o.population.source} · {o.population.tieOut}</p>}
+            <div className="text-[0.8125rem] font-bold text-ink-900">Sample drawn — {s.size} items{extCount > 0 && <span className="font-medium text-ink-500"> · {origCount} original + {extCount} extension</span>}</div>
+            <p className="text-[0.71875rem] text-ink-500 mt-0.5">{s.basis}</p>
+            {o.population && <p className="text-[0.6875rem] text-ink-400 mt-1">Drawn from {o.population.version ?? 'the population'} · {o.population.count.toLocaleString()} records · {o.population.tieOut}</p>}
           </div>
         </div>
       </div>
     );
   }
 
-  // A frozen (concluded + signed) control never re-opens the journey.
-  if (!canEdit || isControlLocked(control)) {
-    return <div className="p-5"><p className="text-[0.75rem] text-ink-400">No sample extracted yet — the auditor or risk owner pulls it from the uploaded population.</p></div>;
+  // A frozen (concluded + signed) control never re-opens the journey, and nor
+  // does a risk owner — the draw is the auditor's to make.
+  if (!canDraw || isControlLocked(control)) {
+    return <div className="p-5"><p className="text-[0.75rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p></div>;
   }
 
   return (
     <div className="p-5">
-      {/* 1 — the two required files, in the creation flow's card language:
-          requirement chips that tick off, one bulk button, attached list below */}
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated mb-3">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <FileText size={14} className="text-brand-600 shrink-0" />
-          <span className="text-[13px] font-bold text-ink-900">Required files</span>
-          <span className="text-[11.5px] text-ink-400">{REQUIRED_SAMPLE_FILES.length} required · {REQUIRED_SAMPLE_FILES.length} total</span>
-          {/* one button for both slots — the picker asks which, and offers the
-              engagement's own files as well as a fresh upload */}
-          <button onClick={() => setPicking(true)}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[11.5px] font-semibold transition-colors cursor-pointer">
-            <Upload size={12} /> {attachedFiles.length > 0 ? 'Add more' : 'Upload'}
-          </button>
+      {/* 1 — the transaction detail. Flat: the step is already a card, and a
+          card inside a card just draws a second border around the same idea.
+          A rule between the two halves says "different thing" just as well. */}
+      <div className="flex items-center gap-2">
+        <FileText size={14} className="text-brand-600 shrink-0" />
+        <span className="text-[0.8125rem] font-bold text-ink-900">Transaction detail</span>
+        <span className="text-[0.71875rem] text-ink-400">what each drawn item is tested against</span>
+        <button onClick={() => setPicking(true)}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.71875rem] font-semibold transition-colors cursor-pointer">
+          <Upload size={12} /> {attachedFiles.length > 0 ? 'Replace' : 'Upload'}
+        </button>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {/* the population is no longer asked for here — it is already in and
+            locked upstream, and shown as the fact the draw comes off */}
+        <div className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border border-compliant-100 bg-compliant-50/40">
+          <Lock size={12} className="text-compliant-700 shrink-0" />
+          <span className="text-[0.78125rem] font-semibold text-ink-900">Population {o.population?.version ?? 'locked'}</span>
+          <span className="text-[0.6875rem] text-ink-500 tabular-nums">{o.population?.count.toLocaleString()} records</span>
+          <Check size={13} className="text-compliant-600 shrink-0" />
         </div>
-        <div className="px-4 pb-3.5 flex flex-wrap gap-2">
-          {REQUIRED_SAMPLE_FILES.map(d => {
-            const done = !!(d.id === 'pop' ? popFile : txnFile);
-            return (
-              <div key={d.id} className={cn('inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border', done ? 'border-compliant-100 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated')}>
-                <span className="text-[12.5px] font-semibold text-ink-900">{d.name}</span>
-                <span className="px-1.5 py-0.5 rounded-md border border-canvas-border text-[10px] font-bold text-ink-400">{d.formats}</span>
-                {done && <Check size={13} className="text-compliant-600 shrink-0" />}
-              </div>
-            );
-          })}
-        </div>
+        {REQUIRED_SAMPLE_FILES.map(d => (
+          <div key={d.id} className={cn('inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border', txnFile ? 'border-compliant-100 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated')}>
+            <span className="text-[0.78125rem] font-semibold text-ink-900">{d.name}</span>
+            <span className="px-1.5 py-0.5 rounded-md border border-canvas-border text-[0.625rem] font-bold text-ink-400">{d.formats}</span>
+            {txnFile && <Check size={13} className="text-compliant-600 shrink-0" />}
+          </div>
+        ))}
       </div>
 
       {attachedFiles.length > 0 && (
-        <div className="mb-3">
+        <div className="mt-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-400">
+            <span className="inline-flex items-center gap-1.5 text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">
               Attached
-              <span className="w-[18px] h-[18px] rounded-full bg-ink-900 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">{attachedFiles.length}</span>
+              <span className="w-[18px] h-[18px] rounded-full bg-ink-900 text-white text-[0.625rem] font-bold inline-flex items-center justify-center tabular-nums">{attachedFiles.length}</span>
             </span>
-            <span className="text-[11.5px] text-ink-400 tabular-nums">{attachedFiles.length}/{REQUIRED_SAMPLE_FILES.length} required inputs satisfied</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {attachedFiles.map(a => (
               <span key={a.id} className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-9 rounded-lg border border-canvas-border bg-canvas-elevated min-w-0">
                 <FileText size={12} className="text-ink-400 shrink-0" />
-                <span className="text-[12px] text-ink-800 truncate">{a.name}</span>
-                <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{a.tag}</span>
-                <button onClick={() => (a.id === 'pop' ? setPopFile(null) : setTxnFile(null))} aria-label={`Remove ${a.name}`}
+                <span className="text-[0.75rem] text-ink-800 truncate">{a.name}</span>
+                <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{a.tag}</span>
+                <button onClick={() => setTxnFile(null)} aria-label={`Remove ${a.name}`}
                   className="ml-auto p-1 rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} /></button>
               </span>
             ))}
           </div>
-          {uploading && <span className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</span>}
         </div>
       )}
+      {uploading && <p className="mt-3 inline-flex items-center gap-1.5 text-[0.71875rem] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</p>}
 
-      {/* something's been added but a requirement is still open — say which,
-          without waiting for the auditor to try and move on */}
-      {attachedFiles.length > 0 && !filesReady && !uploading && (
-        <div className="mb-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-start gap-1.5">
-          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          <span>
-            {REQUIRED_SAMPLE_FILES.find(d => !(d.id === 'pop' ? popFile : txnFile))!.name} is still missing — the sample can't be pulled until both files are in.
-          </span>
-        </div>
-      )}
+      <div className="ac-div my-4" />
 
       {/* 2 — how many to draw, and the rule that filters the transactions */}
       {/* always here — the logic can be written before the files land; only
           sending waits on them */}
-      <div className="subcard p-3.5 mb-3">
+      <div>
           <div className="text-[0.71875rem] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><MessageSquare size={12} /> Extraction logic {txnFile && <span className="font-normal text-ink-400">· filters {txnFile.name}</span>}</div>
           {sentLogic ? (
             <div className="flex items-start gap-2 mb-2">
@@ -1701,33 +1896,63 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
                 placeholder="Explain how to filter the transactions — e.g. payment runs above ₹10L, weighted to quarter-ends, excluding intercompany"
                 className={cn('w-full px-3 py-2 rounded-lg border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 resize-none',
                   askedForLogic ? 'border-mitigated-300 focus:ring-mitigated-200' : 'border-canvas-border focus:ring-brand-200')} />
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <span className="text-[0.71875rem] text-ink-500">Sample rows</span>
-                <select value={rows} onChange={e => setRows(+e.target.value)} aria-label="Sample rows"
-                  className="h-8 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
-                  {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
-                    <option key={n} value={n}>{n}{n === guide.suggested ? ' — suggested' : ''}</option>
-                  ))}
-                </select>
-                <span className="text-[0.6875rem] text-ink-400">{control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — {guide.range}. {guide.note}</span>
-                <div className="flex-1" />
+              {/* size, then HOW — frequency sets the floor, the control's risk
+                  raises it, and the method plus its seed are what let anyone
+                  else land on the same items */}
+              <div className="grid sm:grid-cols-3 gap-x-3 gap-y-2.5 mt-3">
+                <label className="block min-w-0">
+                  <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Items to draw</span>
+                  <select value={rows} onChange={e => setRows(+e.target.value)}
+                    className="w-full h-8 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                    {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
+                      <option key={n} value={n}>{n}{n === guide.suggested ? ' — suggested' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Selection method</span>
+                  <select value={method} onChange={e => setMethod(e.target.value as Sampling['method'])}
+                    className="w-full h-8 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                    {(['Random', 'Systematic', 'Statistical', 'Targeted', 'Full population'] as Sampling['method'][]).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Seed</span>
+                  <div className="flex items-center gap-1.5">
+                    <input value={seed} onChange={e => setSeed(Number(e.target.value.replace(/\D/g, '')) || 0)} inputMode="numeric"
+                      className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                    <button onClick={() => setSeed(10000 + ((seed * 7919 + 104729) % 89999))} title="New seed"
+                      className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer" aria-label="New seed"><Dices size={13} /></button>
+                  </div>
+                </label>
+              </div>
+              <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
+                {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
+                {method === 'Random' || method === 'Systematic' ? ' The seed is stored on the paper, so the reviewer can reperform the draw and land on these same items.' : ' A targeted selection has no seed to reperform — the basis has to carry the reasoning instead.'}
+              </p>
+              <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">Spread across the whole period and stratified across the significant classes of transactions.</p>
+              <div className="flex items-center justify-end mt-2.5">
                 {/* the logic can be written first — sending needs the data */}
                 <button disabled={!filesReady || stage === 'extracting'} onClick={sendLogic}
-                  title={filesReady ? undefined : 'Add the required files first — there is nothing to draw from yet'}
+                  title={filesReady ? undefined : 'Add the transaction detail first — there is nothing to test the drawn items against yet'}
                   className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                  {stage === 'extracting' ? <><Loader2 size={13} className="animate-spin" /> Extracting…</> : <><Send size={13} /> Send</>}
+                  {stage === 'extracting' ? <><Loader2 size={13} className="animate-spin" /> Drawing…</> : <><Send size={13} /> Draw the sample</>}
                 </button>
               </div>
             </>
           )}
           {stage === 'extracting' && (
-            <div className="flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {popFile!.count.toLocaleString()} and filtering {txnFile!.count.toLocaleString()} transactions…</div>
+            <div className="flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {o.population?.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
           )}
       </div>
 
-      {/* 3 — extracted result + approve / reject */}
+      {/* 3 — extracted result + approve / reject. Flat too, for the same reason:
+          once the draw lands this sits directly under the logic that produced
+          it, and a box here would be the only one left on the step. */}
       {stage === 'review' && (
-        <div className="subcard p-3.5">
+        <>
+        <div className="ac-div my-4" />
+        <div>
           <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
             <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Extracted sample <span className="font-normal text-ink-400">· {drawn.length} rows</span></div>
           </div>
@@ -1756,6 +1981,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
             </button>
           </div>
         </div>
+        </>
       )}
 
       {picking && (
@@ -1763,7 +1989,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           existing={existingFiles}
           onUpload={uploadFile}
           onChoose={chooseFiles}
-          slots={(popFile ? 0 : 1) + (txnFile ? 0 : 1)}
+          slots={1}
           onClose={() => setPicking(false)}
         />
       )}
@@ -1787,6 +2013,78 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           </motion.div>
         </div>,
         document.body)}
+    </div>
+  );
+}
+
+/** STEP 5 — SIGN-OFF. Preparer signs, reviewer countersigns, the paper locks.
+ *
+ *  Four-eyes is the whole point, so the person who prepared the work can never be
+ *  the person who countersigns it — and an open review note holds the countersign
+ *  until it closes. Both rules live in the store too; this only shows why the
+ *  button isn't there.
+ */
+function SignOffSection({ control }: { control: Control }) {
+  const { eng, role, me, signOffControlWp } = useIcfr();
+  const logEvent = useAuditLog();
+  const so = control.wpSignoff;
+  const concluded = isControlLocked(control);
+  const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
+  const canSign = role === 'auditor' && concluded && !so?.preparer;
+  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
+  const done = !!so?.preparer && !!so?.reviewer;
+
+  const Row = ({ label, entry, waiting }: { label: string; entry?: { by: string; at: string }; waiting: string }) => (
+    <div className="flex items-center gap-2.5 py-2">
+      {entry ? <CheckCircle2 size={16} className="text-compliant-700 shrink-0" /> : <Circle size={15} className="text-ink-300 shrink-0" />}
+      <span className="text-[0.71875rem] text-ink-400 w-[110px] shrink-0">{label}</span>
+      <span className={cn('text-[0.78125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+        {entry ? `${entry.by} · ${entry.at}` : waiting}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="p-5">
+      {!concluded ? (
+        <EmptyState icon={<Lock size={18} />} title="Sign-off is locked" hint="Both tracks have to conclude first. A signature on a half-tested control says the work is finished when it isn't." />
+      ) : (
+        <>
+          <div className="rounded-xl border border-canvas-border overflow-hidden">
+            <div className="px-3.5 py-1.5">
+              <Row label="Prepared by" entry={so?.preparer} waiting={`${eng.preparer} — not yet signed`} />
+              <div className="ac-div" />
+              <Row label="Countersigned" entry={so?.reviewer} waiting={`${eng.reviewer} — not yet countersigned`} />
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[0.6875rem] text-ink-400 leading-relaxed min-w-0">
+              {done ? 'Control done — the working paper is locked and downloadable.'
+                : canSign ? 'Signing states that the testing above is complete and the conclusions are yours.'
+                : role === 'reviewer' && !so?.preparer ? 'Waits for the preparer’s signature.'
+                : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign.`
+                : so?.preparer?.by === me ? 'You prepared this paper, so you can’t countersign it — four-eyes.'
+                : 'Waits for the reviewer.'}
+            </p>
+            {canSign && (
+              <button onClick={() => { signOffControlWp(control.id, 'preparer'); logEvent({ action: 'Update', description: `Signed off the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
+            )}
+            {canCounter && (
+              <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+            )}
+          </div>
+
+          {done && (
+            <div className="mt-3 rounded-xl border border-compliant-200 bg-compliant-50/40 px-3.5 py-3 flex items-start gap-2">
+              <BadgeCheck size={15} className="text-compliant-700 mt-0.5 shrink-0" />
+              <p className="text-[0.75rem] text-ink-700 leading-relaxed"><b className="font-semibold">Control done.</b> Working paper locked — it can be downloaded, and nothing on it changes without reopening the control.</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1819,7 +2117,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   return (
     <div className="p-5">
-      {/* sample context — extraction happens in step 2; this is read-only.
+      {/* sample context — the draw happens in step ③; this is read-only.
           Every control tests against a sample now, whatever its evidence mode. */}
       <div className="mb-5">
         {o.sampling ? (
@@ -1830,7 +2128,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           </div>
         ) : !isControlLocked(control) && (
           <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.71875rem] text-ink-500 inline-flex items-center gap-1.5">
-            <FlaskConical size={12} className="text-ink-400" /> No sample yet — extract and approve one in step 2 to test against sampled items.
+            <FlaskConical size={12} className="text-ink-400" /> No sample yet — draw one in step ③ to test against sampled items.
           </div>
         )}
       </div>
@@ -1855,13 +2153,14 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           {canEdit && <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer"><Plus size={13} /> Add the first attribute</button>}
         </EmptyState>
       ) : (
-        <div className="space-y-3 mb-1">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
+        <div className="space-y-3 mb-5">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
       )}
 
-      {/* no sample, no opinion — TOE can't conclude effective on an untested population */}
+      {/* No sample, no opinion. A failing attribute concludes ineffective and the
+          exception is raised — remediation and retest happen outside this flow. */}
       {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit}
         disableEffective={!o.sampling}
-        disableEffectiveNote={o.sampling ? undefined : 'Locked — extract and approve a sample in step 2 first'} />}
+        disableEffectiveNote={o.sampling ? undefined : 'Locked — draw the sample in step ③ first'} />}
     </div>
   );
 }
@@ -1895,7 +2194,8 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
             <ChevronDown size={16} className={cn('mt-0.5 text-ink-400 shrink-0 transition-transform', !open && '-rotate-90')} />
             <div className="min-w-0">
               <h3 className="text-[0.9375rem] font-bold text-ink-900">{title}</h3>
-              {open && <p className="text-[0.71875rem] text-ink-500 mt-0.5 max-w-[520px]">{subtitle}</p>}
+              {/* fills the container — a 520px cap wrapped these to more rows than they needed */}
+              {open && <p className="text-[0.71875rem] text-ink-500 mt-0.5">{subtitle}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">{right}{hideStatus ? null : concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} animate={false} /> : <TrackPill c={status} />}</div>
@@ -1919,7 +2219,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
 
 // ── discussion rail ──────────────────────────────────────────────────────────────
 const ANCHORS: { id: DiscussionAnchor | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' },
+  { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '② Design' }, { id: 'operating', label: '④ Operating' },
 ];
 // the two hands on the working paper — auditor (purple/gavel) and risk owner (amber/check)
 const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string; label: string }> = {
@@ -1928,7 +2228,7 @@ const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string
   // our branch carries a third persona — the reviewer who countersigns
   reviewer: { Icon: UserCheck, accent: 'var(--color-evidence-500)', chip: 'bg-evidence-50 text-evidence-700', label: 'Reviewer' },
 };
-const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' }] as const;
+const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '② Design' }, { id: 'operating', label: '④ Operating' }] as const;
 
 function ExecResult({ result }: { result?: TestResult | TrackConclusion }) {
   if (!result || result === 'Not tested') return null;
@@ -2040,10 +2340,13 @@ function ActivityRail({ control }: { control: Control }) {
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
   const logEvent = useAuditLog();
   // preview-before-download for this control's working paper
   const [wpPreview, setWpPreview] = useState(false);
+  // the way back into a concluded control — reason required, trail recorded
+  const [reopening, setReopening] = useState(false);
+  const [reopenWhy, setReopenWhy] = useState('');
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // Both personas can now execute TOD and TOE; the shared trail records who did what.
@@ -2052,12 +2355,15 @@ export default function ControlDossier() {
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
   const toeLocked = designResult !== 'Effective';
-  const ipe = control.operating.ipe;
-  // The sample sits behind two gates: design has to conclude effective, and the
-  // report the population comes out of has to be proven reliable. An already-drawn
-  // sample is never re-locked — that work is done, and its own IPE is on the paper.
-  const ipeBlocked = !control.operating.sampling && !ipeReliable(control.operating);
-  const sampleLocked = toeLocked || ipeBlocked;
+  // Step ① stands on its own — nothing gates it, and it gates nothing until the
+  // draw. Design can be worked in parallel: reading narratives and validating
+  // considerations needs no data, and what "one instance" means only becomes
+  // answerable once you understand the control anyway.
+  const popLocked = populationLocked(control);
+  // The draw sits behind two gates: design has to conclude effective, and the
+  // population has to have cleared gate 1. An already-drawn sample is never
+  // re-locked — that work is done, and its own gate is on the paper.
+  const sampleLocked = toeLocked || (!control.operating.sampling && !popLocked);
   const def = eng.deficiencies.find(d => d.controlId === control.id);
 
   return (
@@ -2092,7 +2398,9 @@ export default function ControlDossier() {
                 </p>
               )}
               {control.controlActivity && (
-                <p className="text-[0.78125rem] text-ink-500 mt-1.5 max-w-[680px] leading-relaxed">
+                /* fills the container — it is the longest line on the page and a
+                   680px cap was breaking it into more rows than it needed */
+                <p className="text-[0.78125rem] text-ink-500 mt-1.5 leading-relaxed">
                   <b className="text-ink-700 font-semibold">Control activity —</b> {control.controlActivity}
                 </p>
               )}
@@ -2106,9 +2414,11 @@ export default function ControlDossier() {
                 {control.rootCause && <span><span className="text-ink-400">Root cause</span> · {control.rootCause}</span>}
               </div>
             </div>
-            <div className="shrink-0 flex flex-col items-end gap-2">
-              <div className="leadsheet-stamp">W/P<br />{control.wpRef}</div>
+            {/* one row, right-aligned: whose court it is sits beside the stamp
+                rather than stacked under it, and the stamp reads on one line */}
+            <div className="shrink-0 flex items-center justify-end gap-2">
               <CourtBadge court={courtFor(control, eng.tasks)} fromRole={role} />
+              <div className="leadsheet-stamp whitespace-nowrap">W/P {control.wpRef}</div>
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3.5 pt-3 border-t border-canvas-border flex-wrap">
@@ -2120,6 +2430,9 @@ export default function ControlDossier() {
             <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
+              {role === 'auditor' && isControlLocked(control) && (
+                <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
+              )}
               <span className="text-[0.6875rem] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
             </div>
           </div>
@@ -2167,36 +2480,43 @@ export default function ControlDossier() {
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
-          <VStep n={1} title="Test of design" subtitle="Is the control designed to prevent or detect the risk? Grounded in the documents and walkthrough — each consideration validated by a workflow." status={designResult}>
+          <VStep n={1} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
+            status={popLocked ? 'Effective' : 'Not tested'}
+            right={popLocked
+              ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
+              : control.operating.population
+                ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
+                : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
+            <PopulationSection control={control} canEdit={canEdit} />
+          </VStep>
+          <VStep n={2} title="Test of design" subtitle="The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective." status={designResult}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
-          <VStep n={2} title="Test the report (IPE)" subtitle="The population comes out of a report the client ran. Prove that report first — right source and parameters, nothing missing, nothing wrong — before a single item is sampled from it." hideStatus
-            status={ipe ? (ipe.conclusion === 'Reliable' ? 'Effective' : ipe.conclusion === 'Not reliable' ? 'Ineffective' : 'Not tested') : 'Not tested'} locked={toeLocked}
-            right={toeLocked
-              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
-              : !ipe
-                ? <span className="text-[0.6875rem] font-semibold text-ink-400">No report registered</span>
-                : ipe.conclusion === 'Reliable'
-                  ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Reliable · {ipe.recordCount.toLocaleString()} records</span>
-                  : ipe.conclusion === 'Not reliable'
-                    ? <span className="text-[0.6875rem] font-bold text-risk-700 inline-flex items-center gap-1"><XCircle size={12} /> Not reliable</span>
-                    : <span className="text-[0.6875rem] font-semibold text-ink-400">{ipe.checks.filter(k => k.result !== 'Not tested').length}/{ipe.checks.length} checks worked</span>}>
-            <IpeSection control={control} canEdit={canEdit} locked={toeLocked} />
-          </VStep>
-          <VStep n={3} title="Extract sample" subtitle="Pull the testing sample out of the proven population — add the population and transaction files, explain the extraction logic, then approve it for testing." hideStatus
+          <VStep n={3} title="Sample" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span>
               : control.operating.sampling
-                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Sample approved · {control.operating.sampling.size} items</span>
-                : ipeBlocked
-                  ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the report is reliable</span>
-                  : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting extraction</span>}>
+                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.sampling.size} items{control.operating.extractionConfirmed ? ' · confirmed' : ' · awaiting gate 2'}</span>
+                : !popLocked
+                  ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the population locks</span>
+                  : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
-          <VStep n={4} id="vstep-toe" title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={4} id="vstep-toe" title="Test of operating" subtitle="Each sampled item against each attribute — pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
+          </VStep>
+          <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
+            status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!isControlLocked(control)}
+            right={control.wpSignoff?.reviewer
+              ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>
+              : control.wpSignoff?.preparer
+                ? <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting countersign</span>
+                : isControlLocked(control)
+                  ? <span className="text-[0.6875rem] font-semibold text-ink-400">Ready to sign</span>
+                  : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once both tracks conclude</span>}>
+            <SignOffSection control={control} />
           </VStep>
           {concl === 'Ineffective' && (
             <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
@@ -2221,6 +2541,36 @@ export default function ControlDossier() {
         </motion.div>
         <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}><ActivityRail control={control} /></motion.div>
       </div>
+
+      {reopening && createPortal(
+        <div className="modal-backdrop" onClick={() => setReopening(false)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><RotateCcw size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reopen this control?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">
+                    Both conclusions go back to <b className="font-semibold text-ink-700">not tested</b> and the sign-off clears — a reopened paper is no longer the paper anybody signed. The evidence, the sample and the results stay where they are; it is the conclusions that have to be reached again.
+                  </p>
+                </div>
+              </div>
+              <label className="block mt-3.5">
+                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Why — recorded on the trail</span>
+                <textarea autoFocus rows={2} value={reopenWhy} onChange={e => setReopenWhy(e.target.value)}
+                  placeholder="e.g. the FX rate feed changed in November — Q3 onwards has to be retested"
+                  className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => { setReopening(false); setReopenWhy(''); }} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it closed</button>
+              <button disabled={!reopenWhy.trim()} title={reopenWhy.trim() ? undefined : 'A reopened conclusion needs a reason on the trail'}
+                onClick={() => { reopenControl(control.id, reopenWhy.trim()); logEvent({ action: 'Update', description: `Reopened ${control.id} — ${reopenWhy.trim()}`, module: 'SOX ICFR', entity: 'Control' }); setReopening(false); setReopenWhy(''); }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
 
       {wpPreview && (
         <WorkingPaperModal eng={eng} control={control} onClose={() => setWpPreview(false)}
