@@ -47,7 +47,7 @@ import { CACHE, MULTI_CACHE, EMPTY_CACHE, cacheKey, notifyCacheChanged } from '.
 
 type Outcome = 'insight' | 'empty' | 'error';
 
-function demoOutcome(): 'empty' | 'error' | 'error-once' | null {
+export function demoOutcome(): 'empty' | 'error' | 'error-once' | null {
   if (typeof window === 'undefined') return null;
   const v = new URLSearchParams(window.location.search).get('insightDemo');
   return v === 'empty' || v === 'error' || v === 'error-once' ? v : null;
@@ -62,14 +62,43 @@ const PIPELINE: Record<InsightLayer, string[]> = {
   engagement: ['Reading every risk and control', 'Collapsing findings that share a driver', 'Weighing the total against readiness', 'Writing the escalation'],
 };
 
-const stackSteps = (n: number | null): string[] => [
+export const stackSteps = (n: number | null): string[] => [
   'Reading every risk and control in scope',
   'Correlating findings across the scope',
   'Collapsing findings that share a driver',
   n == null ? 'Writing the insights' : `Writing ${n} insight${n === 1 ? '' : 's'}`,
 ];
 
-const STEP_MS = 520;
+export const STEP_MS = 520;
+
+/** The honest step list — done / active-or-failed / pending rows. Shared by
+ *  the generating and error phases here and by any surface that renders the
+ *  pipeline outside this component (the engagement insights drawer). */
+export function PipelineChecklist({ steps, current, failedAt }: {
+  steps: string[];
+  /** Index of the step currently running (ignored when `failedAt` is set). */
+  current: number;
+  /** Freeze the pipeline at this step and mark it failed. */
+  failedAt?: number;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {steps.map((s, i) => {
+        const done = failedAt != null ? i < failedAt : i < current;
+        const failed = failedAt != null && i === failedAt;
+        const active = failedAt == null && i === current;
+        return (
+          <div key={s} className={`flex items-center gap-2 text-[0.75rem] transition-colors ${done ? 'text-ink-700' : failed ? 'text-risk font-medium' : active ? 'text-brand-700 font-medium' : 'text-ink-300'}`}>
+            <span className="size-4 shrink-0 flex items-center justify-center">
+              {done ? <Check size={13} className="text-compliant" /> : failed ? <X size={13} /> : active ? <Loader2 size={12} className="animate-spin" /> : <span className="size-1.5 rounded-full bg-ink-300" />}
+            </span>
+            {s}{failed && ' — stopped here'}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 interface Props {
   layer: InsightLayer;
@@ -304,19 +333,8 @@ export default function InsightGenerator({
           </span>
           <span className="text-[10px] font-bold uppercase tracking-wider text-risk-700">Generation failed · {label}</span>
         </div>
-        <div className="space-y-1.5 mb-3">
-          {steps.map((s, i) => {
-            const done = i < failedStep;
-            const failed = i === failedStep;
-            return (
-              <div key={s} className={`flex items-center gap-2 text-[12px] ${done ? 'text-ink-700' : failed ? 'text-risk font-medium' : 'text-ink-300'}`}>
-                <span className="size-4 shrink-0 flex items-center justify-center">
-                  {done ? <Check size={13} className="text-compliant" /> : failed ? <X size={13} /> : <span className="size-1.5 rounded-full bg-ink-300" />}
-                </span>
-                {s}{failed && ' — stopped here'}
-              </div>
-            );
-          })}
+        <div className="mb-3">
+          <PipelineChecklist steps={steps} current={failedStep} failedAt={failedStep} />
         </div>
         <p className="text-[12px] text-ink-700 leading-relaxed">
           The engine stopped before reaching a conclusion, so this is not a clean result — treat {label} as unanalyzed, not insight-free. This attempt wasn’t billed.
@@ -349,20 +367,7 @@ export default function InsightGenerator({
             ))}
           </span>
         </div>
-        <div className="space-y-1.5">
-          {shownSteps.map((s, i) => {
-            const done = i < step;
-            const active = i === step;
-            return (
-              <div key={s} className={`flex items-center gap-2 text-[12px] transition-colors ${done ? 'text-ink-700' : active ? 'text-brand-700 font-medium' : 'text-ink-300'}`}>
-                <span className="size-4 shrink-0 flex items-center justify-center">
-                  {done ? <Check size={13} className="text-compliant" /> : active ? <Loader2 size={12} className="animate-spin" /> : <span className="size-1.5 rounded-full bg-ink-300" />}
-                </span>
-                {s}
-              </div>
-            );
-          })}
-        </div>
+        <PipelineChecklist steps={shownSteps} current={step} />
       </div>
     );
   }

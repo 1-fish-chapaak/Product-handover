@@ -41,8 +41,6 @@ interface Props {
   onTestEvidence?: (controlId: string) => void;
   /** Open the Workflow Executor for an attribute's linked workflow (automated test). */
   onRunWorkflow?: (workflowId: string) => void;
-  /** Navigate to the AI Insights tab — where a reflection's anchor card lives. */
-  onOpenInsightsHub?: () => void;
 }
 
 type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
@@ -898,10 +896,17 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       />
 
       {/* Full-card slide-over behind every "View full insight". */}
+      {/* A control-anchored insight edits ITS control (expand the row in
+          place); only higher-level anchors still offer creating a new one. */}
       <InsightDrawer
         insight={insightDetail}
         onClose={() => setInsightDetail(null)}
-        onCreateControl={can('ctrl_create') ? () => setAddControlOpen(true) : undefined}
+        controlCtaVariant={insightDetail?.layer === 'control' ? 'edit' : 'create'}
+        onCreateControl={
+          insightDetail?.layer === 'control'
+            ? () => expandControl(insightDetail.subjectId)
+            : can('ctrl_create') ? () => setAddControlOpen(true) : undefined
+        }
         onCreateWorkflow={createWorkflow}
       />
     </div>

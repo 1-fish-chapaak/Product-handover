@@ -24,7 +24,7 @@
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpRight, Brain, Sparkles, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { ArrowUpRight, Brain, Sparkles, ChevronDown } from 'lucide-react';
 import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness } from '../../data/layeredInsights';
 import LayeredInsightCard from './LayeredInsightCard';
 
@@ -105,12 +105,6 @@ export default function InsightStack({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  const setAll = (open: boolean) => {
-    setOpenIds(open ? new Set(sorted.map(i => i.id)) : new Set());
-    setLedgerOpen(open);
-  };
-  const allOpen = openIds.size === sorted.length && sorted.length > 0;
-
   // Preview only when there is actually more than the preview shows.
   const preview = !!onSeeAll && previewCount != null && previewCount < sorted.length;
 
@@ -135,7 +129,7 @@ export default function InsightStack({
 
   return (
     <section aria-label="AI insights">
-      {/* Rollup header — title · engine badge · one expand/collapse control */}
+      {/* Rollup header — title · engine badge */}
       <div className="flex items-start gap-3 flex-wrap">
         <span className="size-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
           <Brain size={16} aria-hidden="true" />
@@ -148,15 +142,6 @@ export default function InsightStack({
             </span>
           </div>
         </div>
-        {!preview && sorted.length > 1 && (
-          <button
-            type="button" onClick={() => setAll(!allOpen)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 h-8 text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
-          >
-            {allOpen ? <ChevronsDownUp size={13} aria-hidden="true" /> : <ChevronsUpDown size={13} aria-hidden="true" />}
-            {allOpen ? 'Collapse all' : 'Expand all'}
-          </button>
-        )}
       </div>
 
       {/* Hero + tail — the attention budget, spent. Anchor-grouped surfaces

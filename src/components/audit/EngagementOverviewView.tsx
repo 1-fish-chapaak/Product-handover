@@ -6,7 +6,7 @@ import {
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
-  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2, Loader2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
@@ -14,8 +14,10 @@ import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
-import { getGeneratedInsight, useInsightCacheVersion } from '../shared/insightCache';
-import LayeredInsightCard from '../shared/LayeredInsightCard';
+import { useInsightStackRun, type InsightStackRun } from '../shared/useInsightStackRun';
+import InsightStackDrawer from '../shared/InsightStackDrawer';
+import { InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/TargetedActions';
+import { getGeneratedInsight, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
 import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
@@ -55,7 +57,7 @@ import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'insights' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
+type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
@@ -80,7 +82,6 @@ interface Props {
  */
 const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
   overview:        { icon: LayoutDashboard, chip: 'bg-blue-50 text-blue-600' },
-  insights:        { icon: Sparkles,        chip: 'bg-purple-50 text-purple-600' },
   racm:            { icon: Table2,          chip: 'bg-violet-50 text-violet-600' },
   controls:        { icon: ShieldCheck,     chip: 'bg-emerald-50 text-emerald-600' },
   workflows:       { icon: Workflow,        chip: 'bg-cyan-50 text-cyan-600' },
@@ -95,14 +96,14 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
   const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
     case 'SOX / ICFR':
       // SOX/ICFR opens its own dedicated experience; this fallback keeps the type exhaustive.
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
-      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [mk('overview', 'Overview'), mk('insights', 'AI Insights'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
 }
 
@@ -210,8 +211,8 @@ interface MockWorkflow {
 const MOCK_WORKFLOWS: MockWorkflow[] = [
   { id: 'wf1', code: 'WF-P2P-001', name: 'Three-Way Match (PO · GRN · Invoice)', type: 'Reconciliation', inputs: ['Excel', 'PDF'], cadence: { kind: 'Frequency', label: 'Daily 6 AM' }, lastRun: '2h ago', status: 'Success', subProcess: 'Invoice Processing', truePositives: 38, totalFires: 47, libraryId: 'lw-006' },
   { id: 'wf2', code: 'WF-P2P-002', name: 'Duplicate Invoice Detector',           type: 'Detection',      inputs: ['SQL'],          cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '8m ago',  status: 'Success', subProcess: 'Invoice Processing',         truePositives: 52, totalFires: 84, libraryId: 'lw-010' },
-  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28, libraryId: 'lw-009' },
-  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-001' },
+  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28, libraryId: 'lw-011' },
+  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-012' },
 ];
 
 /** Engagement workflow set shared with the Controls/RACM tabs via the workspace store. */
@@ -294,6 +295,24 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
   // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
   const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
+
+  // Engagement-wide AI insights — gated from the header (the roll-up spans the
+  // whole engagement, so its trigger lives in engagement chrome, not a tab).
+  // Results land in the right-side drawer; the same run seeds every row-level
+  // surface below (Controls-tab chips) via the shared session cache.
+  const insightSubjects = useMemo<BuildInsightInput[]>(
+    () => engagement ? engagementInsightSubjects(engagement) : [],
+    [engagement],
+  );
+  const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const insightRun = useInsightStackRun({
+    layer: 'engagement',
+    subjectId: engagement?.id ?? '',
+    subjects: insightSubjects,
+    // A finished run opens the drawer — including a clean scan (that's a
+    // result, not an absence). Errors stay in the header pill with retry.
+    onSettled: (p) => { if (p === 'generated' || p === 'empty') setInsightsPanelOpen(true); },
+  });
 
   // Tab order + hidden set — drag to reorder, toggle visibility from Configuration; persisted per type.
   const [tabPrefs, setTabPrefs] = useState<TabPrefs>(() => engagement ? loadTabPrefs(engagement.type) : { order: [], hidden: [] });
@@ -460,8 +479,10 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-3xl">{eng.description}</p>
           </div>
 
-          {/* Health */}
-          <div className="flex items-center gap-4 shrink-0">
+          {/* AI insights launcher + Health — engagement-level chrome */}
+          <div className="flex items-center gap-5 shrink-0">
+            <EngagementInsightsLauncher run={insightRun} onOpen={() => setInsightsPanelOpen(true)} />
+            <div className="h-10 w-px bg-border-light" aria-hidden="true" />
             <div className="text-center min-w-[80px]">
               <div className={`text-3xl font-bold tabular-nums ${notStarted ? 'text-text-muted' : health.text}`}>
                 {notStarted ? '—' : `${eng.health}%`}
@@ -563,15 +584,10 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                 onOpenWorkflow={onOpenWorkflow}
                 hideWorkflowConfig={eng.type === 'Automation'}
-                // If the AI Insights tab is hidden from Configuration, don't
-                // preview — fall back to the full stack inline so "See all"
-                // never routes to a tab that instantly bounces back.
-                onSeeAllInsights={tabPrefs.hidden.includes('insights') ? undefined : () => setActiveTab('insights')}
+                // Insights moved to engagement chrome: generated from the
+                // header, read in the right-side drawer — not on this tab.
+                hideInsightGenerator
               />
-            )}
-            {/* ═══ AI INSIGHTS (all types) — the full insight stack ═══ */}
-            {activeTab === 'insights' && (
-              <AIInsightsTab eng={eng} />
             )}
             {/* ═══ RACM (Compliance / IA) ═══ */}
             {activeTab === 'racm' && (
@@ -585,7 +601,6 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
                 onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
                 onRunWorkflow={onRunWorkflow}
-                onOpenInsightsHub={tabPrefs.hidden.includes('insights') ? undefined : () => setActiveTab('insights')}
               />
             )}
 
@@ -596,6 +611,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
+                onRunWorkflow={onRunWorkflow}
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
               />
@@ -643,8 +659,109 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           />
         )}
       </AnimatePresence>
+
+      {/* Engagement AI insights drawer — results of the header-gated run */}
+      <InsightStackDrawer
+        open={insightsPanelOpen}
+        onClose={() => setInsightsPanelOpen(false)}
+        subjectLabel={eng.name}
+        scopeLabel="across this engagement"
+        run={insightRun}
+      />
     </div>
     </EngagementWorkspaceProvider>
+  );
+}
+
+// ─── Engagement insights launcher — the header's compact cost gate ──────────
+// The roll-up spans the whole engagement, so its trigger lives in engagement
+// chrome (next to the health metric), not inside any one tab. The pill walks
+// the run's phases honestly in ~300px: named pipeline pass while generating,
+// count + severity mix when done (never a bare count), compliant receipt on a
+// clean scan, retry with "unanalyzed" framing on failure.
+
+function EngagementInsightsLauncher({ run, onOpen }: { run: InsightStackRun; onOpen: () => void }) {
+  const { phase, step, steps, outcome, stack } = run;
+
+  if (phase === 'generating') {
+    const shown = outcome === 'empty' ? [...steps.slice(0, -1), 'Deciding what needs to be raised'] : steps;
+    const label = shown[Math.min(step, shown.length - 1)]!;
+    return (
+      <div className="w-[300px] rounded-xl border border-brand-200/70 bg-brand-50/50 px-3 py-2" role="status" aria-live="polite">
+        <div className="flex items-center gap-1.5">
+          <Loader2 size={12} className="animate-spin text-brand-700 shrink-0" aria-hidden="true" />
+          <span className="text-[0.6875rem] font-bold text-brand-700">Generating AI insights</span>
+          <span className="ml-auto text-[0.625rem] text-ink-400 tabular-nums">{Math.min(step + 1, shown.length)}/{shown.length}</span>
+        </div>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={label}
+            initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.15 }}
+            className="mt-0.5 text-[0.65625rem] text-ink-500 truncate"
+          >
+            {label}…
+          </motion.p>
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  if (phase === 'generated' && stack) {
+    const high = stack.filter(i => i.severity === 'high').length;
+    const med = stack.filter(i => i.severity === 'med').length;
+    const low = stack.filter(i => i.severity === 'low').length;
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button" onClick={onOpen}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/60 px-3 h-9 text-[0.78125rem] font-semibold text-brand-700 hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer"
+        >
+          <Sparkles size={13} aria-hidden="true" /> AI insights
+          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold tabular-nums">{stack.length}</span>
+        </button>
+        <span className="text-[0.625rem] text-ink-400 tabular-nums">{high} High · {med} Medium · {low} Low</span>
+      </div>
+    );
+  }
+
+  if (phase === 'empty') {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button" onClick={onOpen}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-compliant-200 bg-compliant-50/60 px-3 h-9 text-[0.78125rem] font-semibold text-compliant-700 hover:bg-compliant-50 transition-colors cursor-pointer"
+        >
+          <ShieldCheck size={13} aria-hidden="true" /> Scan clean
+        </button>
+        <span className="text-[0.625rem] text-ink-400">Nothing to raise · cached for this session</span>
+      </div>
+    );
+  }
+
+  if (phase === 'error') {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button" onClick={run.run}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-risk/25 bg-risk-50 px-3 h-9 text-[0.75rem] font-semibold text-risk hover:bg-risk-50/70 transition-colors cursor-pointer"
+        >
+          <RefreshCw size={12} aria-hidden="true" /> Retry generation
+        </button>
+        <span className="text-[0.625rem] text-risk-700">Engine stopped — scope unanalyzed · not billed</span>
+      </div>
+    );
+  }
+
+  // Idle — the cost gate, compressed. The full explainer rides the tooltip.
+  return (
+    <button
+      type="button" onClick={run.run}
+      title="Rolls up every risk and control across the engagement, correlates the findings, and prices the consequence — with a recommended action. Won’t run automatically; you trigger it so it only bills when you need it."
+      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white px-3.5 h-9 text-[0.78125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+    >
+      <Sparkles size={13} aria-hidden="true" /> Generate AI insights
+    </button>
   );
 }
 
@@ -1349,29 +1466,6 @@ function heatmapCellCls(count: number): string {
   return 'bg-risk-100 border-risk-100/80';
 }
 
-// ─── AI INSIGHTS TAB — the full stack, one card per subject ──────────────────
-// The Overview previews only the hero insight; its "See all insights" CTA lands
-// here. Same subjects + session cache as the Overview, so one Generate fills
-// both surfaces without re-billing the engine. No ledger fold on this surface —
-// the user explicitly asked for all of them.
-
-function AIInsightsTab({ eng }: { eng: Engagement }) {
-  const insightSubjects = useMemo(() => engagementInsightSubjects(eng), [eng]);
-  return (
-    <InsightGenerator
-      layer="engagement"
-      subjectId={eng.id}
-      subjectLabel={eng.name}
-      status={eng.status}
-      labelOverride={eng.name}
-      subjects={insightSubjects}
-      stackScopeLabel="across this engagement"
-      stackFoldLedger={false}
-      stackGroupByAnchor
-    />
-  );
-}
-
 export function HealthOverviewTab({
   eng,
   onDrillToExceptions,
@@ -1379,7 +1473,7 @@ export function HealthOverviewTab({
   onConfigureWorkflow,
   onOpenWorkflow,
   hideWorkflowConfig,
-  onSeeAllInsights,
+  hideInsightGenerator,
 }: {
   eng: Engagement;
   /** Navigate to the Exception Management sub-tab (same browser tab). */
@@ -1389,9 +1483,10 @@ export function HealthOverviewTab({
   onConfigureWorkflow: (workflowId: string) => void;
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
   hideWorkflowConfig?: boolean;
-  /** Navigate to the AI Insights sub-tab. When wired, the Overview shows only
-   *  the hero insight + a "See all" CTA; omit it to keep the full stack here. */
-  onSeeAllInsights?: () => void;
+  /** Hide the inline insight generator — for hosts that gate generation from
+   *  engagement chrome instead (header launcher + right-side drawer). Hosts
+   *  without that chrome (the engagement-final module) keep the inline banner. */
+  hideInsightGenerator?: boolean;
 }) {
   // ─── Type-aware copy + funnel stages ────────────────────────────────────
   const isAutomation = eng.type === 'Automation';
@@ -1541,19 +1636,19 @@ export function HealthOverviewTab({
   return (
     <div className="space-y-5">
       {/* ─── AI insights · engagement roll-up (generate-on-demand, stacked).
-          With `onSeeAllInsights` wired, only the hero shows here — the full
-          stack lives in the AI Insights tab. ─── */}
-      <InsightGenerator
-        layer="engagement"
-        subjectId={eng.id}
-        subjectLabel={eng.name}
-        status={eng.status}
-        labelOverride={eng.name}
-        subjects={insightSubjects}
-        stackScopeLabel="across this engagement"
-        previewCount={onSeeAllInsights ? 1 : undefined}
-        onSeeAll={onSeeAllInsights}
-      />
+          Hidden for hosts that gate generation from engagement chrome — the
+          header launcher + right-side drawer own this surface there. ─── */}
+      {!hideInsightGenerator && (
+        <InsightGenerator
+          layer="engagement"
+          subjectId={eng.id}
+          subjectLabel={eng.name}
+          status={eng.status}
+          labelOverride={eng.name}
+          subjects={insightSubjects}
+          stackScopeLabel="across this engagement"
+        />
+      )}
 
       {/* ─── KPI strip ─── */}
       <div className="grid grid-cols-4 gap-3">
@@ -2282,6 +2377,7 @@ function WorkflowsBySubProcess({
   engagementId,
   engagementName,
   onOpenWorkflow,
+  onRunWorkflow,
   onConfigureWorkflow,
   onCreateWorkflow,
 }: {
@@ -2289,6 +2385,8 @@ function WorkflowsBySubProcess({
   engagementId: string;
   engagementName: string;
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
+  /** Open the Workflow Executor — the insight drawer's primary follow-through. */
+  onRunWorkflow?: (workflowId: string) => void;
   onConfigureWorkflow?: (workflowId: string) => void;
   onCreateWorkflow?: () => void;
 }) {
@@ -2302,6 +2400,10 @@ function WorkflowsBySubProcess({
   const engagementInsight = getGeneratedInsight('engagement', engagementId);
   // Which workflow's insight card is expanded inline under its row.
   const [openInsightWfId, setOpenInsightWfId] = useState<string | null>(null);
+  // Full-card slide-over + act-in-place drawer behind the rows' compact strips
+  // (parity with the Controls tab: the row shows the takeaway, not the essay).
+  const [insightDetail, setInsightDetail] = useState<LayeredInsight | null>(null);
+  const [drawerAction, setDrawerAction] = useState<TargetedAction | null>(null);
 
   /** Control-attributes linked to a workflow (shared with the Controls tab). */
   const linkedAttributesFor = (workflowId: string): { id: string; description: string }[] =>
@@ -2515,6 +2617,8 @@ function WorkflowsBySubProcess({
                             engagementInsight={engagementInsight}
                             insightOpen={openInsightWfId === wf.id}
                             onToggleInsight={() => setOpenInsightWfId(prev => (prev === wf.id ? null : wf.id))}
+                            onViewInsight={setInsightDetail}
+                            onOpenAction={setDrawerAction}
                           />
                         ))}
                       </div>
@@ -2541,6 +2645,8 @@ function WorkflowsBySubProcess({
               engagementInsight={engagementInsight}
               insightOpen={openInsightWfId === wf.id}
               onToggleInsight={() => setOpenInsightWfId(prev => (prev === wf.id ? null : wf.id))}
+              onViewInsight={setInsightDetail}
+              onOpenAction={setDrawerAction}
             />
           ))}
         </div>
@@ -2567,13 +2673,34 @@ function WorkflowsBySubProcess({
           />
         )}
       </AnimatePresence>
+
+      {/* Full-card slide-over behind every workflow "View full insight".
+          Primary follow-through runs THIS workflow (the insight reasons over
+          its runs); creating a new workflow is the secondary path. */}
+      <InsightDrawer
+        insight={insightDetail}
+        onClose={() => setInsightDetail(null)}
+        cardHeaderLabel="this workflow"
+        cardEvidenceLabel="Evidence · run metrics"
+        onRunWorkflow={(() => {
+          const wf = insightDetail ? allWorkflows.find(w => w.code === insightDetail.subjectId) : undefined;
+          return wf && onRunWorkflow ? () => onRunWorkflow(wf.libraryId) : undefined;
+        })()}
+        onCreateWorkflow={onCreateWorkflow}
+      />
+      {/* Act-in-place drawer for a targeted AI action. */}
+      <ActionDrawer
+        action={drawerAction}
+        onClose={() => setDrawerAction(null)}
+        onViewAnchor={() => { if (drawerAction) setInsightDetail(drawerAction.source); }}
+      />
     </div>
   );
 }
 
 function WorkflowRow({
   wf, openCount, linkedAttributes, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
-  engagementInsight, insightOpen, onToggleInsight,
+  engagementInsight, insightOpen, onToggleInsight, onViewInsight, onOpenAction,
 }: {
   wf: MockWorkflow;
   openCount: number;
@@ -2586,9 +2713,13 @@ function WorkflowRow({
   /** The engagement's generated insight — null until Generate has run. Gates the
    *  row CTA and stamps the workflow card's "generated N min ago". */
   engagementInsight: LayeredInsight | null;
-  /** Whether this row's insight card is expanded inline under the row. */
+  /** Whether this row's insight strip is expanded inline under the row. */
   insightOpen: boolean;
   onToggleInsight: () => void;
+  /** Open the full card in the right-side slide-over. */
+  onViewInsight: (insight: LayeredInsight) => void;
+  /** Open a targeted action in the act-in-place drawer. */
+  onOpenAction: (action: TargetedAction) => void;
 }) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
@@ -2705,8 +2836,9 @@ function WorkflowRow({
       )}
       <ChevronRight size={15} className="text-text-muted shrink-0" />
     </div>
-    {/* Inline insight — the row CTA expands the workflow's card right here,
-        same anatomy as the control rows' expanded insight. */}
+    {/* Inline insight — the compact strip (takeaway + targeted-action grid),
+        same anatomy as the control rows. The full card lives one click away
+        in the right-side slide-over, never inline. */}
     <AnimatePresence initial={false}>
       {wfInsight && insightOpen && (
         <motion.div
@@ -2717,10 +2849,11 @@ function WorkflowRow({
           className="overflow-hidden"
         >
           <div className="pt-2">
-            <LayeredInsightCard
+            <InsightSummaryStrip
               insight={wfInsight}
-              headerLabel="this workflow"
-              evidenceLabel="Evidence · run metrics"
+              anchorLabel="this workflow"
+              onViewFull={() => onViewInsight(wfInsight)}
+              onOpenAction={onOpenAction}
             />
           </div>
         </motion.div>
