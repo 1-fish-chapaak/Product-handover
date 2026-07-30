@@ -1,5 +1,5 @@
 import { test, expect } from './_helpers';
-import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
+import { concludeIpeReliable, createSoxEngagement, openFromLibrary } from './_sox_helpers';
 
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/b428675a-455c-4a0e-9017-16bd4ea1aa22/scratchpad/sample-extract-shots';
 
@@ -36,6 +36,10 @@ test('extract-sample step: two files → logic → reject → redo → approve',
   await page.getByRole('button', { name: 'Conclude effective' }).first().click();
   await page.waitForTimeout(600);
 
+  // The sample now sits behind a second gate: the report the population comes out
+  // of has to be proven reliable first.
+  await concludeIpeReliable(page);
+
   // ── Both requirements stated up front, neither satisfied ──────────────────
   await expect(page.getByText('Required files')).toBeVisible();
   await expect(page.getByText('2 required · 2 total')).toBeVisible();
@@ -62,12 +66,15 @@ test('extract-sample step: two files → logic → reject → redo → approve',
   await expect(page.getByText(/Transactions is still missing/)).toBeVisible();
   await expect(send).toBeDisabled();
 
-  // ── File 2: reuse a file the engagement already holds ─────────────────────
+  // ── File 2: a second fresh upload ─────────────────────────────────────────
+  // "Choose existing" used to reuse a general-ledger file the engagement picked up
+  // during scoping. Scoping is parked, so an engagement created through this
+  // journey holds no files of its own and there is nothing to reuse — the picker's
+  // existing list is legitimately empty here. Reuse is covered where files exist.
   await page.getByRole('button', { name: 'Add more' }).click();
   await expect(picker).toBeVisible();
-  await picker.getByRole('button', { name: /^Choose existing/ }).click();
-  await picker.getByText(/general_ledger/).click();
-  await page.waitForTimeout(400);
+  await picker.getByRole('button', { name: /^Upload/ }).click();
+  await page.waitForTimeout(1700);
   await expect(page.getByText('2/2 required inputs satisfied')).toBeVisible();
   await expect(page.getByText(/is still missing/)).toHaveCount(0);
   await expect(send).toBeEnabled();
