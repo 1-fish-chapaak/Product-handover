@@ -1525,50 +1525,61 @@ export function passClassifyBlocks(section: SpineSection, bodySize: number): Raw
     if (run > 1) {
       const rows = lines.slice(i, i + run);
       const head = rows[0];
-      // Column names come from the header row only when it reads like one:
-      // short labels, no numbers, no sentences. A first data row would
-      // otherwise be saved as the column names, which is worse than none.
-      const looksLikeHeader = head.cells.every(c =>
-        c.text.split(/\s+/).length <= 4 && c.text.length <= 40 && !isNumeric(c.text));
-      let columns = looksLikeHeader && (head.bold || head.text === head.text.toUpperCase() || rows.length > 2)
-        ? head.cells.map(c => titleCaseIfCaps(c.text)).filter(Boolean)
-        : undefined;
 
-      // A MERGED header hides the real column names one row down: "Rating"
-      // spanning three columns, with High / Medium / Low underneath it. Keeping
-      // only the top row would lose exactly the names that say what the table
-      // holds, so a spanned cell takes its names from the row below.
-      const spans = head.spans;
-      if (columns && spans?.some(n => n > 1) && rows[1]) {
-        // Positional, blanks and all: the cell under a merged header is empty,
-        // and dropping it shifts every sub-name one column left.
-        const sub = rows[1].cells.map(c => titleCaseIfCaps(c.text));
-        const flat: string[] = [];
-        let si = 0;
-        columns.forEach((name, ci) => {
-          const span = spans[ci] ?? 1;
-          if (span <= 1) { flat.push(name || sub[si] || ''); si += 1; return; }
-          for (let k = 0; k < span; k++) flat.push(sub[si + k] || `${name} ${k + 1}`);
-          si += span;
-        });
-        const clean = flat.filter(Boolean);
-        if (clean.length >= columns.length) columns = clean;
-      }
-
-      // A header WRAPPED ABOVE THE TABLE. A narrow column makes its name wrap
-      // onto two or three lines — "Rating" over "High/Medium/Low)" over the row
-      // of "# · Observation · Repeat/New" — and each of those lines lands in the
-      // prose above the table instead of in its header row. The table then has
-      // no column names at all, which is what left a findings table looking like
-      // an unclaimable grid. The names are recovered by POSITION: a cell sitting
-      // over a column belongs to that column.
-      if (!columns) {
-        const recovered = headerAbove(prose, head);
+      // A header WRAPPED ABOVE THE TABLE, TRIED FIRST. A narrow column makes
+      // its name wrap onto two or three lines — "Rating" over
+      // "High/Medium/Low)" over the row of "# · Observation · Repeat/New" —
+      // and each of those lines lands in the prose above the table instead of
+      // in its header row, so the table's OWN first row is really its first
+      // ROW OF DATA. Tried first rather than as a fallback, because the
+      // fallback order used to let a short-celled data row win first: a wide
+      // wrapped table's first data row is often JUST as short-and-plain as a
+      // real header ("H", "Finance", "October 2024" all pass "≤4 words, not a
+      // number"), and once that row was accepted as the header this recovery
+      // never ran at all. The recommendations table on Cumberland's
+      // Appendix A is the caught case — "Recommendation 1 H Insufficient..."
+      // was kept as the column names while the real header, wrapped across
+      // three short lines directly above ("Recommendations · Priority · Risk
+      // Exposure · Agreed Action", "Responsible · Implementation",
+      // "Manager · Date"), sat unclaimed in the prose beside it.
+      const recovered = headerAbove(prose, head);
+      let columns: string[] | undefined;
+      if (recovered) {
+        columns = recovered.columns;
         // Those lines were the header, so they leave the prose. Whatever came
         // before them is still prose and keeps its place above the table.
-        if (recovered) {
-          columns = recovered.columns;
-          prose = prose.slice(0, prose.length - recovered.used);
+        prose = prose.slice(0, prose.length - recovered.used);
+      } else {
+        // No wrapped header above it — fall back to reading the table's own
+        // first row, but only when it reads like a header: short labels, no
+        // numbers, no sentences. A first data row would otherwise be saved as
+        // the column names, which is worse than none.
+        const looksLikeHeader = head.cells.every(c =>
+          c.text.split(/\s+/).length <= 4 && c.text.length <= 40 && !isNumeric(c.text));
+        columns = looksLikeHeader && (head.bold || head.text === head.text.toUpperCase() || rows.length > 2)
+          ? head.cells.map(c => titleCaseIfCaps(c.text)).filter(Boolean)
+          : undefined;
+
+        // A MERGED header hides the real column names one row down: "Rating"
+        // spanning three columns, with High / Medium / Low underneath it.
+        // Keeping only the top row would lose exactly the names that say what
+        // the table holds, so a spanned cell takes its names from the row
+        // below.
+        const spans = head.spans;
+        if (columns && spans?.some(n => n > 1) && rows[1]) {
+          // Positional, blanks and all: the cell under a merged header is
+          // empty, and dropping it shifts every sub-name one column left.
+          const sub = rows[1].cells.map(c => titleCaseIfCaps(c.text));
+          const flat: string[] = [];
+          let si = 0;
+          columns.forEach((name, ci) => {
+            const span = spans[ci] ?? 1;
+            if (span <= 1) { flat.push(name || sub[si] || ''); si += 1; return; }
+            for (let k = 0; k < span; k++) flat.push(sub[si + k] || `${name} ${k + 1}`);
+            si += span;
+          });
+          const clean = flat.filter(Boolean);
+          if (clean.length >= columns.length) columns = clean;
         }
       }
       pushNarrative(prose); prose = [];
