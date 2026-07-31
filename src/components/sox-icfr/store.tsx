@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { assessSeverity, controlConclusion, formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
-  Assertion, Attestation, AuditArchive, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
+  Assertion, Attestation, AuditArchive, AuditFileRecord, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, SignificantAccount, TestResult, TrackConclusion,
@@ -197,7 +197,14 @@ interface IcfrCtx {
   /** Record what the application cannot derive: where the extract came from, the
    *  expected count where the frequency gives none, and the reason a computed
    *  check was overridden. */
-  setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'expectedCount' | 'countNote' | 'coverageNote'>>) => void;
+  setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'countConfirmed' | 'expectedCount' | 'countNote' | 'coverageNote'>>) => void;
+  /** Put a file into the audit's registry — name, size, who brought it in and
+   *  where it came from. Answered once here; every population inherits it. */
+  registerFile: (rec: AuditFileRecord) => void;
+  /** Correct a file's provenance. The only place it can be changed: it belongs
+   *  to the file, not to any control that read it. Concluded controls sourced
+   *  from the file are flagged for review rather than silently restated. */
+  setFileOrigin: (name: string, origin: FileOrigin) => void;
   /** Lock it. Nothing downstream runs until this has happened. */
   lockPopulation: (controlId: string) => void;
   /** Step ③ — freeze the attributes the sample will be tested against, or reopen
@@ -704,6 +711,60 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       ? { ...c, operating: { ...c.operating, population: { ...c.operating.population, ...patch } } }
       : c));
   }, [patchControl, role]);
+
+  // ── The file registry ─────────────────────────────────────────────────────
+  // Provenance is a property of the FILE, settled once when it enters the audit.
+  // Registering is how a file a control uploaded becomes reusable by every other
+  // control without anybody being asked the same question twice.
+  const registerFile = useCallback<IcfrCtx['registerFile']>((rec) => {
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const reg = prev.fileRegistry ?? [];
+      return { ...prev, fileRegistry: [...reg.filter(f => f.name !== rec.name), rec] };
+    });
+  }, []);
+
+  /**
+   * Correct a file's provenance — the ONLY place it can be changed.
+   *
+   * Two consequences, both required: every control that drew a population off
+   * this file now reads the new answer (they hold no copy of it, so that is
+   * automatic), and any of those controls that had already CONCLUDED gets a
+   * review note. A concluded paper whose evidence quietly changed underneath it
+   * is the thing an external reviewer is entitled to be told about, so it is
+   * raised rather than silently restated.
+   */
+  const setFileOrigin = useCallback<IcfrCtx['setFileOrigin']>((name, origin) => {
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const reg = prev.fileRegistry ?? [];
+      const existing = reg.find(f => f.name === name);
+      if (existing?.origin === origin) return prev;
+      const rec: AuditFileRecord = existing
+        ? { ...existing, origin, originBy: me, originAt: 'just now' }
+        // A derived file (scoping TB, GL, RACM upload) has no record until the
+        // first time somebody says something about it. This is that moment.
+        : { name, kind: 'Source file', rows: 0, from: 'Engagement files', uploadedBy: '—', uploadedAt: '—', origin, originBy: me, originAt: 'just now' };
+      // Concluded controls sourced from this file — flagged, not rewritten. A
+      // control still in progress needs no note: its conclusion has not been
+      // reached yet, so it will be reached on the corrected basis.
+      const affected = prev.controls.filter(c => {
+        const concl = controlConclusion(c);
+        return c.operating.population?.sourceFile === name && (concl === 'Effective' || concl === 'Ineffective');
+      });
+      const notes = affected.map(c => ({
+        id: uid('rn'),
+        controlId: c.id,
+        text: `The source file "${name}" was re-recorded as ${origin.toLowerCase()} by ${me} after this control concluded. Confirm the conclusion still holds on that basis.`,
+        raisedBy: 'System', raisedAt: 'just now', status: 'Open' as const,
+      }));
+      return {
+        ...prev,
+        fileRegistry: [...reg.filter(f => f.name !== name), rec],
+        reviewNotes: [...notes, ...prev.reviewNotes],
+      };
+    });
+  }, [me]);
 
   // Locking is the auditor's act — it is the moment the population stops being a
   // proposal and becomes the thing every later conclusion rests on.
@@ -1688,7 +1749,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
-    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, lockPopulation, lockAttributes, confirmExtraction, recordException,
+    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
     registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
@@ -1699,7 +1760,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

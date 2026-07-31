@@ -1,11 +1,15 @@
 import { Building2, CalendarRange, Check, FileSpreadsheet, Grid3x3, Paperclip, Scale, Trash2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { FormSelect } from '../shared/FilterSelect';
 import { BASIS_OPTIONS, cycleYears, ruleOverall, type MaterialityBasis } from '../audit/sox-testing/soxTestingData';
 import { entitiesFor, processesFor } from './auditScope';
-import type { AuditRecord, AuditScopeKind } from './types';
+import { useAuditFiles } from './useAuditFiles';
+import { OriginPicker } from './parts';
+
+import type { AuditRecord, AuditScopeKind, FileOrigin } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -35,6 +39,136 @@ const yearOf = (a: AuditRecord): number => {
   return a.yearBasis === 'fy' ? first + 1 : first;
 };
 
+/**
+ * The audit's file registry — every file that entered, and where each came from.
+ *
+ * This is the ONLY place provenance can be changed. It is a property of the
+ * file: a general ledger forty controls extract from has one answer, recorded
+ * when it arrived, and correcting it here corrects it for all forty at once
+ * rather than forty times over. Controls that already CONCLUDED on the old
+ * answer are flagged for review — a concluded paper whose evidence changed
+ * underneath it is something a reviewer is entitled to be told about.
+ */
+function FileRegistrySection({ audit, addFile }: {
+  audit: AuditRecord;
+  addFile: (kind: 'tb' | 'gl', name: string, origin: FileOrigin) => void;
+}) {
+  const { setFileOrigin, updateAudit } = useIcfr();
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  const files = useAuditFiles();
+  const [adding, setAdding] = useState<{ kind: 'tb' | 'gl'; name: string } | null>(null);
+  const [origin, setOrigin] = useState<FileOrigin | undefined>();
+
+  const pick = (kind: 'tb' | 'gl') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = () => { const f = input.files?.[0]; if (f) { setAdding({ kind, name: f.name }); setOrigin(undefined); } };
+    input.click();
+  };
+
+  const change = (f: { name: string; usedBy: { id: string }[] }, next: FileOrigin) => {
+    setFileOrigin(f.name, next);
+    logEvent({ action: 'Update', description: `Re-recorded the origin of "${f.name}" as ${next.toLowerCase()} — ${f.usedBy.length} control${f.usedBy.length === 1 ? '' : 's'} draw on it`, module: 'SOX ICFR', entity: 'Evidence' });
+    addToast({ type: 'success', title: 'Origin updated', message: `${f.name} — ${next.toLowerCase()}. Every control reading this file now shows it.` });
+  };
+
+  return (
+    <Section icon={FileSpreadsheet} title="Source files" sub="Every file this audit holds, and where each one came from. Provenance is answered once, here — never per control.">
+      <div className="flex gap-2 mb-4">
+        {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, t]) => (
+          <button
+            key={kind}
+            onClick={() => pick(kind)}
+            className="px-3 py-2 rounded-lg border border-dashed border-canvas-border bg-white hover:border-brand-400 hover:bg-brand-50/40 transition-all cursor-pointer text-[12px] font-semibold text-ink-700 inline-flex items-center gap-1.5"
+          >
+            <FileSpreadsheet size={14} className="text-brand-600" /> Add {t.toLowerCase()}
+          </button>
+        ))}
+      </div>
+
+      {/* the question, inline, before the file is attached */}
+      {adding && (
+        <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50/30 p-3.5">
+          <div className="flex items-center gap-2">
+            <Paperclip size={13} className="text-brand-600 shrink-0" />
+            <span className="text-[12.5px] font-semibold text-ink-900 truncate min-w-0">{adding.name}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">{adding.kind}</span>
+          </div>
+          <span className="block text-[10.5px] font-bold uppercase tracking-wider text-ink-400 mt-3 mb-2">Where did this file come from?</span>
+          <OriginPicker value={origin} onPick={setOrigin} />
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button onClick={() => { setAdding(null); setOrigin(undefined); }} className="h-8 px-3 text-[12px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+            <button disabled={!origin} title={origin ? undefined : 'Say where it came from first'}
+              onClick={() => { if (origin) { addFile(adding.kind, adding.name, origin); setAdding(null); setOrigin(undefined); } }}
+              className="h-8 px-3.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Attach file</button>
+          </div>
+        </div>
+      )}
+
+      {files.length === 0 ? (
+        <p className="text-[11.5px] text-ink-400">Nothing attached.</p>
+      ) : (
+        <div className="border border-canvas-border rounded-xl overflow-hidden">
+          {files.map(f => {
+            const attached = audit.files.findIndex(x => x.name === f.name);
+            return (
+              <div key={f.name} className="px-3.5 py-3 border-b border-canvas-border last:border-b-0">
+                <div className="flex items-center gap-2.5">
+                  <Paperclip size={13} className="text-ink-400 shrink-0" />
+                  <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">{f.kind}</span>
+                  {attached >= 0 && (
+                    <button
+                      onClick={() => updateAudit(audit.id, { files: audit.files.filter((_, x) => x !== attached) })}
+                      className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
+                      aria-label={`Remove ${f.name}`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-400">
+                  <span>{f.rows.toLocaleString()} rows</span>
+                  <span>{f.from}</span>
+                  <span>Added by {f.uploadedBy}, {f.uploadedAt}</span>
+                  {/* what changing the answer would reach */}
+                  <span className={cn(f.usedBy.length > 0 && 'text-ink-600 font-semibold')}>
+                    {f.usedBy.length === 0 ? 'No control draws on it yet' : `${f.usedBy.length} control${f.usedBy.length === 1 ? '' : 's'} draw on it`}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-ink-400">Origin</span>
+                  {f.systemFetched ? (
+                    <span className="text-[11.5px] font-semibold text-ink-700">Fetched by the system — nothing to answer</span>
+                  ) : (
+                    <>
+                      {(['System export', 'Client-prepared'] as FileOrigin[]).map(o => (
+                        <button key={o} onClick={() => change(f, o)}
+                          className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5',
+                            f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
+                          {f.origin === o && <Check size={11} />}{o}
+                        </button>
+                      ))}
+                      <span className="text-[10.5px] text-ink-400">
+                        {f.originBy ? `Recorded by ${f.originBy}, ${f.originAt}` : f.recorded ? 'Recorded at upload' : 'Taken from the file’s kind — correct it if that is wrong'}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-[11px] text-ink-400 mt-3 leading-relaxed">
+        Changing an origin re-states it everywhere the file is read, and is written to the audit trail. Any control that already concluded on the old answer gets a review note rather than a silently rewritten working paper.
+      </p>
+    </Section>
+  );
+}
+
 function Section({ icon: Icon, title, sub, children }: {
   icon: typeof Scale; title: string; sub: string; children: React.ReactNode;
 }) {
@@ -50,8 +184,9 @@ function Section({ icon: Icon, title, sub, children }: {
 }
 
 export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
-  const { eng, updateAudit } = useIcfr();
+  const { eng, updateAudit, registerFile, me } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   const entities = useMemo(() => entitiesFor(eng.id), [eng.id]);
   const racms = useMemo(() => processesFor(eng.id), [eng.id]);
@@ -100,18 +235,18 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
     });
   };
 
-  const addFile = (kind: 'tb' | 'gl') => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = () => {
-      const f = input.files?.[0];
-      if (f) {
-        updateAudit(audit.id, { files: [...audit.files, { name: f.name, kind }] });
-        addToast({ type: 'success', message: `${f.name} attached` });
-      }
-    };
-    input.click();
+  /** Attach a trial balance or general ledger — and answer, in the same breath,
+   *  where it came from. The question is put at the moment the file enters the
+   *  audit because that is the only moment anyone reliably knows the answer. */
+  const addFile = (kind: 'tb' | 'gl', name: string, origin: FileOrigin) => {
+    updateAudit(audit.id, { files: [...audit.files, { name, kind }] });
+    registerFile({
+      name, kind: kind === 'tb' ? 'Trial balance' : 'General ledger',
+      rows: kind === 'tb' ? 1240 : 18432, from: `${audit.period} audit`,
+      uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now',
+    });
+    logEvent({ action: 'Upload', description: `Attached "${name}" to ${audit.period} — ${origin.toLowerCase()}`, module: 'SOX ICFR', entity: 'Evidence' });
+    addToast({ type: 'success', title: 'File attached', message: `${name} — ${origin.toLowerCase()}.` });
   };
 
   return (
@@ -210,39 +345,7 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
         )}
       </Section>
 
-      <Section icon={FileSpreadsheet} title="Trial balance & general ledger" sub="The files this audit was scoped against.">
-        <div className="flex gap-2 mb-4">
-          {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, t]) => (
-            <button
-              key={kind}
-              onClick={() => addFile(kind)}
-              className="px-3 py-2 rounded-lg border border-dashed border-canvas-border bg-white hover:border-brand-400 hover:bg-brand-50/40 transition-all cursor-pointer text-[12px] font-semibold text-ink-700 inline-flex items-center gap-1.5"
-            >
-              <FileSpreadsheet size={14} className="text-brand-600" /> Add {t.toLowerCase()}
-            </button>
-          ))}
-        </div>
-        {audit.files.length === 0 ? (
-          <p className="text-[11.5px] text-ink-400">Nothing attached.</p>
-        ) : (
-          <div className="border border-canvas-border rounded-xl overflow-hidden">
-            {audit.files.map((f, i) => (
-              <div key={`${f.name}-${i}`} className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0">
-                <Paperclip size={13} className="text-ink-400 shrink-0" />
-                <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">{f.kind}</span>
-                <button
-                  onClick={() => updateAudit(audit.id, { files: audit.files.filter((_, x) => x !== i) })}
-                  className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
-                  aria-label={`Remove ${f.name}`}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+      <FileRegistrySection audit={audit} addFile={addFile} />
 
       <Section icon={Scale} title="Materiality rule" sub="The threshold this audit measures its exceptions against.">
         <div className="flex gap-3 flex-wrap items-end">

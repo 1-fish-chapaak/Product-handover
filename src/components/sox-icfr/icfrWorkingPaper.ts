@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
@@ -128,17 +128,30 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         ? [['Population definition', `${c.operating.definition.basis} · one instance = ${c.operating.definition.instance} · ${c.operating.definition.expectedCount} expected${c.operating.definition.countOverridden ? ' (overridden)' : ''} · rejected items ${c.operating.definition.includeRejected ? 'counted' : 'excluded'}`]] as [string, string][]
         : []),
       ['Population version', c.operating.population?.version ?? '—'],
-      // Where the extract came from — the one part of the population the
-      // application cannot see for itself, so it is carried verbatim as stated
-      // rather than reduced to "checks passed".
+      // Where the data came from — read off the FILE record, not off this
+      // population. The paper therefore always prints what the file says today:
+      // a provenance corrected on the file record reaches every paper drawn off
+      // it, which is the point of holding it in one place.
+      ['File origin', (() => {
+        const p = c.operating.population;
+        if (!p?.sourceFile) return '—';
+        const o = fileOriginOf(eng, p.sourceFile, p.provenance?.system);
+        if (o.systemFetched) return 'Fetched by the system';
+        if (!o.origin) return 'Not answered';
+        return `${o.origin}${o.by ? ` · recorded by ${o.by}, ${o.at}` : ' · recorded at upload'}`;
+      })()],
       ['Source system', c.operating.population?.provenance?.system ?? '—'],
-      ['Extracted by / on', c.operating.population?.provenance
-        ? `${c.operating.population.provenance.extractedBy} · ${c.operating.population.provenance.extractedOn}`
-        : '—'],
-      // The two checks the application ran itself, and the auditor's answer
-      // where one of them did not hold.
+      // Either half can be blank — the extract stamps whoever ran it and nothing
+      // else, so an empty half must not print as a trailing separator.
+      ['Extracted by / on', [c.operating.population?.provenance?.extractedBy, c.operating.population?.provenance?.extractedOn]
+        .map(x => x?.trim()).filter(Boolean).join(' · ') || '—'],
+      // The two checks the application ran itself, the auditor's answer where
+      // one of them did not hold, and the agreement that the count reads right.
       ...(popCheck ? [['Count check', popCheck]] as [string, string][] : []),
       ...(coverCheck ? [['Period coverage', coverCheck]] as [string, string][] : []),
+      ['Count agreed', c.operating.population?.countConfirmed
+        ? `${c.operating.population.countConfirmed.by}, ${c.operating.population.countConfirmed.at}`
+        : '—'],
       ['Quarterly split', quarterlySplit(c)],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
       ['Root cause', c.rootCause ?? '—'],

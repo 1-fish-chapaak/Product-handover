@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
+import type { Conclusion, Court, FileOrigin, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
@@ -235,51 +235,93 @@ export const ragColor = (m: RagMeterDef): string =>
   m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
 const ragWord = (m: RagMeterDef): string => (ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
 
-/** Confidence scores in a 3-column grid — a ring carrying the percentage, then
- *  the score's name, its fraction and a one-line explainer.
+/** One confidence score as a card — a ring carrying the percentage, then the
+ *  score's name, its fraction and a one-line explainer.
  *
  *  Colour is spent on exceptions only: a red or amber score tints its whole card
  *  so it pulls the eye out of the row, while a healthy score sits on the plain
  *  card surface. Three green washes side by side used to shout as loudly as the
- *  one card that actually needed reading. */
+ *  one card that actually needed reading.
+ *
+ *  `stacked` drops the status word under the fraction rather than beside the
+ *  title — the narrow right rail leaves a title and a status word on one line
+ *  with room for neither. */
+export function RagCard({ m, stacked = false }: { m: RagMeterDef; stacked?: boolean }) {
+  const state = ragWord(m);
+  const tint = state === 'red' ? 'border-risk-200 bg-risk-50/50'
+    : state === 'amber' ? 'border-high-200 bg-high-50/40'
+    : 'border-canvas-border bg-canvas-elevated';
+  const statusCls = state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
+  const StatusIcon = state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
+  const statusWord = state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
+  const status = (
+    <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold shrink-0', statusCls)}>
+      <StatusIcon size={12} /> {statusWord}
+    </span>
+  );
+  // r=16 → circumference 100.5, so the dash length is all but the percentage
+  // itself. A round cap on a zero-length arc draws a floating dot, so a score
+  // of nothing draws no arc at all.
+  const C = 2 * Math.PI * 16;
+  return (
+    <div role="img" aria-label={`${m.label} ${m.pct}% — ${state}`}
+      className={cn('rounded-xl border p-3.5 flex items-start gap-3', tint)}>
+      <div className="relative w-12 h-12 shrink-0">
+        <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
+          <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
+          {m.pct > 0 && (
+            <circle cx="20" cy="20" r="16" fill="none" stroke={ragColor(m)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
+          )}
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[0.6875rem] font-bold tabular-nums text-ink-900">{m.pct}%</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug min-w-0">{m.label}</div>
+          {!stacked && <span className="mt-px">{status}</span>}
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <div className="text-[0.75rem] font-semibold text-ink-700 min-w-0">{m.detail}</div>
+          {stacked && status}
+        </div>
+        {m.explainer && <p className="text-[0.71875rem] text-ink-500 mt-1.5 leading-relaxed">{m.explainer}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** The scores side by side, one column each. */
 export function RagStrip({ meters }: { meters: RagMeterDef[] }) {
   return (
     <div className="grid gap-2.5 sm:grid-cols-3">
-      {meters.map(m => {
-        const state = ragWord(m);
-        const tint = state === 'red' ? 'border-risk-200 bg-risk-50/50'
-          : state === 'amber' ? 'border-high-200 bg-high-50/40'
-          : 'border-canvas-border bg-canvas-elevated';
-        const statusCls = state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
-        const StatusIcon = state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
-        const statusWord = state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
-        // r=16 → circumference 100.5, so the dash length is all but the
-        // percentage itself. A round cap on a zero-length arc draws a floating
-        // dot, so a score of nothing draws no arc at all.
-        const C = 2 * Math.PI * 16;
+      {meters.map(m => <RagCard key={m.label} m={m} />)}
+    </div>
+  );
+}
+
+/** The two-answer question, wherever a file enters the audit.
+ *
+ *  Deliberately not a dropdown: two answers, both weighty, neither a default.
+ *  Shared by the control-level upload here and the audit-level upload on
+ *  Configuration, so the question reads identically wherever it is put. */
+export function OriginPicker({ value, onPick, disabled }: { value?: FileOrigin; onPick: (o: FileOrigin) => void; disabled?: boolean }) {
+  const OPTIONS: { id: FileOrigin; hint: string }[] = [
+    { id: 'System export', hint: 'Pulled straight out of the system of record' },
+    { id: 'Client-prepared', hint: 'Assembled by the client before it reached you' },
+  ];
+  return (
+    <div className="grid sm:grid-cols-2 gap-2">
+      {OPTIONS.map(o => {
+        const on = value === o.id;
         return (
-          <div key={m.label} role="img" aria-label={`${m.label} ${m.pct}% — ${state}`}
-            className={cn('rounded-xl border p-3.5 flex items-start gap-3', tint)}>
-            <div className="relative w-12 h-12 shrink-0">
-              <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
-                <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
-                {m.pct > 0 && (
-                  <circle cx="20" cy="20" r="16" fill="none" stroke={ragColor(m)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
-                )}
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[0.6875rem] font-bold tabular-nums text-ink-900">{m.pct}%</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug min-w-0">{m.label}</div>
-                <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold shrink-0 mt-px', statusCls)}>
-                  <StatusIcon size={12} /> {statusWord}
-                </span>
-              </div>
-              <div className="text-[0.75rem] font-semibold text-ink-700 mt-1">{m.detail}</div>
-              {m.explainer && <p className="text-[0.71875rem] text-ink-500 mt-1.5 leading-relaxed">{m.explainer}</p>}
-            </div>
-          </div>
+          <button key={o.id} type="button" disabled={disabled} onClick={() => onPick(o.id)}
+            className={cn('text-left rounded-lg border px-3 py-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+              on ? 'border-brand-300 bg-brand-50' : 'border-canvas-border bg-canvas-elevated enabled:hover:border-ink-300 cursor-pointer')}>
+            <span className={cn('flex items-center gap-1.5 text-[0.78125rem] font-semibold', on ? 'text-brand-700' : 'text-ink-800')}>
+              {on && <Check size={12} className="shrink-0" />}{o.id}
+            </span>
+            <span className="block text-[0.65625rem] text-ink-400 mt-0.5 leading-snug">{o.hint}</span>
+          </button>
         );
       })}
     </div>
