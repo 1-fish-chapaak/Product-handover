@@ -188,7 +188,10 @@ function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCan
  * the spreadsheet editor stays one click away per RACM.
  */
 export function RacmLanding() {
-  const { eng, role, openRacmMatrix, createRacm } = useIcfr();
+  // openRacmMatrix is deliberately not read here any more — the row opens the
+  // spreadsheet editor. The action stays on the store (parked, house
+  // convention), and with it the drilled matrix page it used to reach.
+  const { eng, role, createRacm } = useIcfr();
   const { addToast } = useToast();
 
   // The matrix shows what the OPEN audit covers — its entities' processes.
@@ -293,8 +296,13 @@ export function RacmLanding() {
             const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
             const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
             return (
-              <tr key={name} className="reg-row" role="button" tabIndex={0} aria-label={`Open ${name} RACM`}
-                onClick={() => openRacmMatrix(name)} onKeyDown={e => { if (e.key === 'Enter') openRacmMatrix(name); }}>
+              /* One destination, and it is the spreadsheet editor. The row used
+                 to drill into a read-only matrix table that showed the same rows
+                 the editor shows — two surfaces for one matrix, and the table was
+                 the one you could not edit in. Engagement-level RACM only: the
+                 Process Hub and Concierge matrices keep their own journeys. */
+              <tr key={name} className="reg-row" role="button" tabIndex={0} aria-label={`Open the ${name} RACM in the spreadsheet editor — opens in a new tab`}
+                onClick={() => openEditorTab(eng.id, name)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(eng.id, name); }}>
                 <td>
                   <span className="flex items-center gap-2.5 min-w-0">
                     <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
@@ -315,13 +323,13 @@ export function RacmLanding() {
                     <span className="text-[11px] tabular-nums text-ink-400 whitespace-nowrap">{approved}/{rows.length} approved</span>
                   </span>
                 </td>
+                {/* Where the row goes, said out loud rather than left to be
+                    discovered. Not a button any more: it would be a second
+                    control doing exactly what clicking the row does, and the
+                    whole row is the target. */}
                 <td>
-                  <span className="flex items-center justify-end">
-                    <button onClick={e => { e.stopPropagation(); openEditorTab(eng.id, name); }}
-                      title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
-                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer whitespace-nowrap">
-                      <FileSpreadsheet size={13} /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
-                    </button>
+                  <span className="flex items-center justify-end gap-1.5 text-[12px] font-semibold text-ink-500 whitespace-nowrap">
+                    <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
                   </span>
                 </td>
               </tr>

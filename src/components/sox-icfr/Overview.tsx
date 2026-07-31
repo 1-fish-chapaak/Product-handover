@@ -326,7 +326,17 @@ export default function Overview() {
               </div>
             ))}
           </div>
-          <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
+          {/* Configuration's materiality section, not a page of its own (user
+              ask). The scroll waits a beat for the tab to mount. */}
+          <button
+            onClick={() => {
+              setTab('config');
+              setTimeout(() => document.getElementById('materiality-ground-rules')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 140);
+            }}
+            className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+          >
+            Materiality &amp; scope <ArrowRight size={13} />
+          </button>
         </div>
       </div>}
 

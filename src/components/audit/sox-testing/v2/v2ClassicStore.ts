@@ -42,7 +42,10 @@ const TB_FILES: Record<string, { file: string; lines: number }> = {
   'a-meter': { file: 'altura-smart-metering-tb.xlsx', lines: 58 },
 };
 
-const CAPTIONS: TbCaption[] = [
+/** Exported so the New audit wizard's scope step can total a company's
+ *  trial-balance lines and weigh them against materiality — the derivation is
+ *  per entity, and this is the only place the group's balances live. */
+export const CAPTIONS: TbCaption[] = [
   { id: 'v-h-01', entityId: 'a-hold', caption: 'Investments in SPVs', balance: 412, process: 'Treasury' },
   { id: 'v-h-02', entityId: 'a-hold', caption: 'Borrowings — group facilities', balance: 186, process: 'Treasury' },
   { id: 'v-h-03', entityId: 'a-hold', caption: 'EPC contractor payables', balance: 24, process: 'Procure to Pay' },

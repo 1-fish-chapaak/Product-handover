@@ -1,5 +1,8 @@
-import { PROGRAMMES, SEED_ENTITIES, type GroupEntity, type SoxProgramme, entityShort } from '../audit/sox-testing/soxTestingData';
-import { V2C_PROGRAMMES } from '../audit/sox-testing/v2/v2ClassicStore';
+import {
+  PROGRAMMES, SEED_CAPTIONS, SEED_ENTITIES,
+  type GroupEntity, type SoxProgramme, type TbCaption, entityShort,
+} from '../audit/sox-testing/soxTestingData';
+import { CAPTIONS as V2C_CAPTIONS, V2C_PROGRAMMES } from '../audit/sox-testing/v2/v2ClassicStore';
 import type { AuditRecord, Control } from './types';
 
 /**
@@ -74,6 +77,142 @@ export function mergeScopeEntities(registered: GroupEntity[], inFiles: GroupEnti
     else rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: false, inData: true });
   });
   return Array.from(rows.values());
+}
+
+// ─── Derived entity scope — the numbers decide, the auditor overrules ────────
+//
+// Scope is not a blank list to tick through. The trial balance already says
+// which companies carry enough to matter, so the wizard works that out and the
+// auditor overrules it where judgement differs. Three ways in, in order:
+//
+//   1. the company's trial-balance total clears performance materiality;
+//   2. it is pulled in to reach the group coverage target, largest first;
+//   3. the auditor toggles it in by hand.
+//
+// A company the trial balance never mentioned takes no part in this — it can't
+// be weighed, so it is excluded outright rather than judged as "too small".
+
+/** How much of the group's balance the entities in scope must cover before the
+ *  derivation stops pulling more in. */
+export const COVERAGE_TARGET = 60;
+
+/** Every trial-balance caption belonging to an engagement's group. */
+export function captionsFor(engagementId: string): TbCaption[] {
+  if (V2C_PROGRAMMES.some(p => p.engagementId === engagementId)) return V2C_CAPTIONS;
+  return SEED_CAPTIONS;
+}
+
+/** Each company's trial-balance total, ₹ Cr, keyed by entity id. A company with
+ *  no captions totals zero — which is the honest answer, not a missing one. */
+export function entityTotals(engagementId: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  captionsFor(engagementId).forEach(c => { out[c.entityId] = (out[c.entityId] ?? 0) + c.balance; });
+  return out;
+}
+
+export type ScopeStatus = 'tb' | 'coverage' | 'out' | 'absent';
+
+export interface DerivedScopeRow extends ScopeEntityRow {
+  /** Trial-balance total, ₹ Cr. */
+  total: number;
+  /** Share of the group's total balance, %. */
+  sharePct: number;
+  status: ScopeStatus;
+  /** Plain-English why, written for someone who did not do the maths. */
+  reason: string;
+}
+
+/**
+ * Work out what belongs in the audit.
+ *
+ * `pm` is performance materiality in ₹ Cr — the threshold testing actually runs
+ * against, which is why it decides scope rather than overall materiality does.
+ */
+export function deriveEntityScope(
+  rows: ScopeEntityRow[],
+  totals: Record<string, number>,
+  pm: number,
+  fmt: (cr: number) => string,
+  /** Whether a trial balance was actually attached. "Not in the trial balance"
+   *  is only a thing you can say once there IS one — with the file step skipped
+   *  every company is still weighed, or an optional step would silently empty
+   *  the audit. */
+  filesAttached: boolean,
+): { rows: DerivedScopeRow[]; coveragePct: number; groupTotal: number } {
+  const withTotals = rows.map(r => ({ ...r, total: totals[r.id] ?? 0 }));
+  const groupTotal = withTotals.reduce((s, r) => s + r.total, 0);
+  const share = (t: number) => (groupTotal ? Math.round((t / groupTotal) * 1000) / 10 : 0);
+
+  // A company the file never mentioned can't be weighed against anything.
+  const weighable = filesAttached ? withTotals.filter(r => r.inData) : withTotals;
+  const clears = new Set(weighable.filter(r => pm > 0 && r.total >= pm).map(r => r.id));
+
+  // Coverage top-up: biggest first, until the target is met. Ordering by size
+  // means the fewest extra companies are pulled in to get there.
+  const coveragePulled = new Set<string>();
+  if (groupTotal > 0) {
+    let covered = withTotals.filter(r => clears.has(r.id)).reduce((s, r) => s + r.total, 0);
+    const spare = weighable.filter(r => !clears.has(r.id)).sort((a, b) => b.total - a.total);
+    for (const r of spare) {
+      if ((covered / groupTotal) * 100 >= COVERAGE_TARGET) break;
+      clears.add(r.id);
+      coveragePulled.add(r.id);
+      covered += r.total;
+    }
+  }
+
+  const derived: DerivedScopeRow[] = withTotals.map(r => {
+    const sharePct = share(r.total);
+    if (filesAttached && !r.inData) {
+      return {
+        ...r, sharePct, status: 'absent' as const,
+        reason: 'Not in the trial balance — excluded from this audit',
+      };
+    }
+    if (coveragePulled.has(r.id)) {
+      return {
+        ...r, sharePct, status: 'coverage' as const,
+        reason: `Added to reach ${COVERAGE_TARGET}% coverage of the group`,
+      };
+    }
+    if (clears.has(r.id)) {
+      return {
+        ...r, sharePct, status: 'tb' as const,
+        reason: `${fmt(r.total)} clears performance materiality`,
+      };
+    }
+    return {
+      ...r, sharePct, status: 'out' as const,
+      reason: r.inRegister
+        ? `${fmt(r.total)} is below ${fmt(pm)}`
+        : 'Found in the data only — not on the engagement',
+    };
+  });
+
+  const inScopeTotal = derived.filter(r => r.status === 'tb' || r.status === 'coverage').reduce((s, r) => s + r.total, 0);
+  return {
+    rows: derived,
+    coveragePct: groupTotal ? Math.round((inScopeTotal / groupTotal) * 1000) / 10 : 0,
+    groupTotal,
+  };
+}
+
+/**
+ * The RACMs a set of companies feeds.
+ *
+ * The programme's RACMs carry entity SHORT names ('Holdings', 'Solar') because
+ * that is what the trial-balance derivation wrote; audits carry ids. Same
+ * translation processesForAudit does — factored out so the New audit wizard can
+ * pre-tick the RACM side from whatever entities are in scope.
+ */
+export function racmsForEntities(engagementId: string, entityIds: string[]): string[] {
+  const prog = programmeFor(engagementId);
+  if (!prog) return [];
+  const shorts = new Set(entityIds.map(id => entityShort(id, prog.entities)));
+  if (!shorts.size) return [];
+  return Array.from(new Set(
+    prog.racms.filter(r => r.entities.some(e => shorts.has(e))).map(r => normaliseProcess(r.process)),
+  ));
 }
 
 /**
