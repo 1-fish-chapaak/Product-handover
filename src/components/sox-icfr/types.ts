@@ -340,6 +340,47 @@ export interface PopulationProvenance {
   extractedOn: string;
 }
 
+/** Where a file came from. Two answers, both meaningful: an export pulled out of
+ *  the system of record is as complete as the system is, while a file the client
+ *  assembled is only as complete as whoever assembled it chose to make it — and
+ *  sampling can never reveal a row that was left out.
+ *
+ *  There is deliberately no third "unknown": a file nobody can place cannot be
+ *  used as a population source at all, so it is a question with an answer rather
+ *  than a state to sit in. */
+export type FileOrigin = 'System export' | 'Client-prepared';
+
+/** One file the audit holds, and everything known about it.
+ *
+ *  Provenance lives HERE and nowhere else. It is a property of the FILE, settled
+ *  the moment the file enters the audit — so a general ledger forty controls
+ *  extract from is answered once, at upload, not forty times at forty
+ *  extractions. Every population that draws off it inherits the answer, and a
+ *  later round inherits it again.
+ */
+export interface AuditFileRecord {
+  name: string;
+  /** 'Trial balance' | 'General ledger' | 'RACM / SOP' | free text for a file a
+   *  control brought in itself. */
+  kind: string;
+  rows: number;
+  /** Where it entered from — the audit period, engagement scoping, or the
+   *  control that uploaded it. */
+  from: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  /** Answered at upload. Absent only on a file that entered before anyone was
+   *  asked — and a file with no answer cannot be used as a population source. */
+  origin?: FileOrigin;
+  /** The platform pulled this data itself: provenance is known from the fetch,
+   *  so the question is never put. */
+  systemFetched?: boolean;
+  /** Who answered, and when. Re-stamped when the answer is changed on the file
+   *  record — the only place it can be changed. */
+  originBy?: string;
+  originAt?: string;
+}
+
 export interface Population {
   source: string;
   /** Instances of THIS control — what the filter produced, not what the file held. */
@@ -360,9 +401,23 @@ export interface Population {
    *  measured — 'full period' is a claim, '2026-01-01' is a date. */
   filterFrom?: string;
   filterTo?: string;
+  /** The filter's own dimensions, held apart from the `criteria` prose. An
+   *  over-extraction is diagnosed by breaking the surplus down along the thing
+   *  that was filtered on, and prose cannot be grouped by. */
+  filterType?: string;
+  filterAccount?: string;
   /** What the count should have been, for controls whose frequency gives no
    *  answer. Asked only in that case; derived everywhere else. */
   expectedCount?: number;
+  /** NOTE — there is no provenance field here on purpose. Where the data came
+   *  from belongs to the FILE (see AuditFileRecord), is answered once when the
+   *  file enters the audit, and is inherited by every population drawn off it.
+   *  A copy taken at extraction time would go stale the moment the file record
+   *  was corrected, and would ask forty controls the same question. */
+  /** The count is context the application assembles and a human agrees with —
+   *  the per-month shape and the prior round are what make "this looks right" a
+   *  judgement rather than a shrug. */
+  countConfirmed?: { by: string; at: string };
   /** Why a computed check did not hold. Asked only when one fails — a population
    *  that reads short is either wrong or explainable, and either way the reason
    *  belongs on the paper. */
@@ -938,6 +993,12 @@ export interface IcfrEngagement {
   audits: AuditRecord[];
   signoff: EngagementSignoff;
   rulesLog: RulesChangeEntry[];
+  /** The audit's file registry — every file that entered, with where it came
+   *  from. Holds the files uploaded through the app and any answer corrected
+   *  afterwards; files the engagement derives from scoping are merged in on
+   *  read (see useAuditFiles) so a record only has to exist where somebody
+   *  actually said something. */
+  fileRegistry?: AuditFileRecord[];
 }
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];

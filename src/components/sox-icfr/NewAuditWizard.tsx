@@ -15,7 +15,7 @@ import { entitiesFor, entitiesInFiles, mergeScopeEntities } from './auditScope';
 import { roundWindow } from './auditPortfolio';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
-import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control } from './types';
+import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -92,7 +92,7 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
-  const { eng, createAudit } = useIcfr();
+  const { eng, createAudit, registerFile, me } = useIcfr();
   const { addToast } = useToast();
   const [step, setStep] = useState(0);
 
@@ -136,7 +136,9 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   const windowTo = cycleWindow ? cycleWindow.to : yearBasis === 'quarter' ? `${quarterYear}-${q.to}` : customTo;
 
   // ── Files (optional) ─────────────────────────────────────────────────────
-  const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
+  // Provenance rides with the file from the moment it is picked — it is a
+  // property of the FILE, and this is where the file enters the audit.
+  const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
   const addFile = (kind: 'tb' | 'gl') => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -293,9 +295,19 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
       // Only the RACM side picks control by control; scoping by entity lets the
       // entities' processes decide, so it leaves this empty on purpose.
       controlIds: scopeKind === 'racm' ? pickedControls : [],
-      files,
+      files: files.map(f => ({ name: f.name, kind: f.kind })),
       materiality: { basisLabel: basisOpt.label, benchmark, pct },
       overall,
+    });
+    // The answers given upstairs become the files' records, so every control on
+    // this audit inherits them and none is asked again.
+    files.forEach(f => {
+      if (!f.origin) return;
+      registerFile({
+        name: f.name, kind: f.kind === 'tb' ? 'Trial balance' : 'General ledger',
+        rows: f.kind === 'tb' ? 1240 : 18432, from: `${periodLabel} audit`,
+        uploadedBy: me, uploadedAt: 'just now', origin: f.origin, originBy: me, originAt: 'just now',
+      });
     });
     addToast({
       type: 'success',
@@ -482,19 +494,35 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
             {files.length > 0 && (
               <div className="border border-canvas-border rounded-xl overflow-hidden">
                 {files.map((f, i) => (
-                  <div key={`${f.name}-${i}`} className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0">
-                    <Paperclip size={13} className="text-ink-400 shrink-0" />
-                    <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">
-                      {f.kind}
-                    </span>
-                    <button
-                      onClick={() => setFiles(prev => prev.filter((_, x) => x !== i))}
-                      className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
-                      aria-label={`Remove ${f.name}`}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                  <div key={`${f.name}-${i}`} className="px-3.5 py-2.5 border-b border-canvas-border last:border-b-0">
+                    <div className="flex items-center gap-2.5">
+                      <Paperclip size={13} className="text-ink-400 shrink-0" />
+                      <span className="text-[12.5px] text-ink-900 flex-1 min-w-0 truncate">{f.name}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 rounded px-1.5 py-0.5 shrink-0">
+                        {f.kind}
+                      </span>
+                      <button
+                        onClick={() => setFiles(prev => prev.filter((_, x) => x !== i))}
+                        className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                    {/* Where it came from, asked as the file enters — the audit
+                        carries the answer from here, and no control is ever
+                        asked it again. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[10.5px] font-bold uppercase tracking-wider text-ink-400">Came from</span>
+                      {(['System export', 'Client-prepared'] as FileOrigin[]).map(o => (
+                        <button key={o} onClick={() => setFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
+                          className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5',
+                            f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
+                          {f.origin === o && <Check size={11} />}{o}
+                        </button>
+                      ))}
+                      {!f.origin && <span className="text-[10.5px] text-mitigated-800 font-semibold">Needed before a control can draw on it</span>}
+                    </div>
                   </div>
                 ))}
               </div>

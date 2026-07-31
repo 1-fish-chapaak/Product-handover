@@ -4,11 +4,12 @@ import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/b428675a-455c-4a0e-9017-16bd4ea1aa22/scratchpad/wp-preview-shots';
 
 /**
- * Confidence scores as tinted cards in a 3-column grid: the Overview tab
- * rolls up RACM, control effectiveness and sample testing engagement-wide;
- * the control page keeps its own trio (completeness, evidence validated —
- * TOE-based, TOD coverage confidence). Each card = ring beside the heading,
- * fraction below it, status word top-right, one-line explainer.
+ * Confidence scores as tinted cards: the Overview tab rolls up RACM, control
+ * effectiveness and sample testing engagement-wide in a 3-column grid; the
+ * control page keeps its own trio (completeness, evidence validated —
+ * TOE-based, TOD coverage confidence), stacked in the right rail above
+ * History and Discussion rather than striped across the top. Each card = ring
+ * beside the heading, fraction below it, status word, one-line explainer.
  */
 test('RAG meters — trio on control page, trio on Overview', async ({ page }) => {
   test.setTimeout(150_000);

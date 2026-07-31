@@ -1,7 +1,7 @@
 import { isInquiryOnly } from './types';
 import type {
   Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
+  FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -210,38 +210,132 @@ const dayGap = (a?: string, b?: string) => {
  *  expected figure is a judgement made before the data was seen, and holding it
  *  to the row is false precision. */
 const OVER_BAND = 0.05;
-/** A shortfall is held tighter, and deliberately so. See `countVerdict`.
- *  Exported because the demo extract sizes its own wobble against it — the
- *  filter is allowed to miss the expectation, but never by enough to trip the
- *  check it is being measured by. */
-export const UNDER_BAND = 0.02;
+/** How far the demo extract is allowed to drift off the expectation. Kept on the
+ *  OVER side and inside the band above: a shortfall is a completeness gate now,
+ *  so an extract that undershot by chance would open every demo on a block. */
+export const EXTRACT_WOBBLE = 0.04;
 
-/** Where the surplus rows sit, as a hypothesis worth checking.
+/** Where the surplus rows sit — broken down along the dimension that was
+ *  filtered on.
  *
- *  Grouped rather than listed because the question an over-inclusive filter
- *  raises is "what did I sweep in", and three named buckets answer that faster
- *  than a thousand rows. Deterministic from the control id — a diagnosis that
- *  reshuffles on every render is not a diagnosis. */
-function overBreakdown(c: Control, excess: number): { label: string; n: number }[] {
-  if (excess < 3) return [];
-  let s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+ *  The question an over-inclusive filter raises is "what did I sweep in", and
+ *  the fastest answer is the filtered dimension itself: `type Banking 1,180 ·
+ *  type Other 238` says the filter let something through in one line. Falls back
+ *  to the account when the filter named one instead, and to nothing at all when
+ *  the filter named neither — a breakdown of an unnamed dimension explains
+ *  nothing. */
+function overBreakdown(pop: Population, excess: number): { label: string; n: number }[] {
+  const dim = pop.filterType ? { key: 'type', value: pop.filterType } : pop.filterAccount ? { key: 'account', value: pop.filterAccount } : null;
+  if (!dim || excess < 1) return [];
+  return [
+    { label: `${dim.key} ${dim.value}`, n: Math.max(0, pop.count - excess) },
+    { label: `${dim.key} Other`, n: excess },
+  ];
+}
+
+// ─── The shape of the extract, month by month ────────────────────────────────────
+/** One month of the population. */
+export interface PopMonth { key: string; label: string; n: number; }
+
+/** How the instances fall across the filter window.
+ *
+ *  A total says nothing about whether the extract is whole: 1,418 instances over
+ *  a year reads fine until you see that November and December hold none of them.
+ *  So the count is never shown as a single number — the months are shown with
+ *  it, and the reader can see the hole rather than be told there isn't one.
+ *
+ *  Deterministic from the control id (prototype data): the same population must
+ *  not reshape itself between renders, or the working paper disagrees with the
+ *  screen that produced it. */
+export function monthlyBreakdown(c: Control): PopMonth[] {
+  const pop = c.operating.population;
+  if (!pop) return [];
+  const start = parseDay(pop.filterFrom), end = parseDay(pop.filterTo);
+  if (!start || !end) return [];
+  const months = windowMonths(pop.filterFrom, pop.filterTo);
+  if (months < 2 || months > 24) return [];
+
+  let s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
-  const labels = ['Reversals and cancellations', 'Duplicate references', 'Transaction type not in scope', 'Outside the date window', 'A second entity in the file'];
-  const picked = [labels[Math.floor(next() * 2)], labels[2], labels[3 + Math.floor(next() * 2)]];
-  const w = picked.map(() => next() + 0.25);
-  const total = w.reduce((a, b) => a + b, 0);
-  // Every bucket but the last is rounded off the weights; the last takes the
-  // remainder so the buckets always add to the surplus exactly. A breakdown
-  // that doesn't reconcile is worse than no breakdown at all — so where the
-  // remainder won't cover a bucket, that bucket is dropped rather than fudged.
-  const out: { label: string; n: number }[] = [];
-  let left = excess;
-  picked.forEach((label, i) => {
-    if (i === picked.length - 1) { if (left > 0) out.push({ label, n: left }); return; }
-    const n = Math.max(1, Math.round((excess * w[i]) / total));
-    if (n < left) { out.push({ label, n }); left -= n; }
+  // A tail that stops early — the case a correct-looking filter window hides.
+  // One control in four, chosen by its own id so it is always the same ones.
+  //
+  // Never on a seeded population (`checks` is the marker of one — the retired
+  // tick boxes only ever existed on the fixtures). Those were locked before this
+  // check existed, and growing a hole under a lock nobody can now answer would
+  // read as a defect in the paper rather than a demonstration of the check. Both
+  // draws happen either way, so the shape a population is generated with never
+  // changes underneath it.
+  const tailRoll = next(), tailLen = 1 + Math.floor(next() * 2);
+  const deadTail = pop.checks ? 0 : tailRoll < 0.25 ? tailLen : 0;
+  const live = Math.max(1, months - deadTail);
+  // A spike month, so "highlight the spikes" has something to highlight.
+  const spike = next() < 0.5 ? Math.floor(next() * live) : -1;
+
+  const weights = Array.from({ length: months }, (_, i) => {
+    if (i >= live) return 0;
+    return (i === spike ? 2.4 : 1) * (0.75 + next() * 0.5);
   });
+  const total = weights.reduce((a, b) => a + b, 0);
+  const out: PopMonth[] = [];
+  let left = pop.count;
+  for (let i = 0; i < months; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const label = d.toLocaleDateString('en-GB', { month: 'short' });
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    // The last live month takes the remainder, so the months always add to the
+    // population. A breakdown that doesn't reconcile is worse than none.
+    const last = i === live - 1;
+    const n = weights[i] === 0 ? 0 : last ? Math.max(0, left) : Math.min(left, Math.round((pop.count * weights[i]) / total));
+    out.push({ key, label, n });
+    left -= n;
+  }
   return out;
+}
+
+/** A month holding more than double the typical month. Worth a second look
+ *  before the count is agreed with — usually a duplicate load or a second
+ *  entity, occasionally the business itself. */
+export function spikeMonths(months: PopMonth[]): Set<string> {
+  const live = months.filter(m => m.n > 0).map(m => m.n).sort((a, b) => a - b);
+  if (live.length < 3) return new Set();
+  const median = live[Math.floor(live.length / 2)];
+  return new Set(months.filter(m => m.n >= median * 2).map(m => m.key));
+}
+
+/** The first and last day the extract actually holds data for, read off the
+ *  months. Distinct from the filter window: the filter is what was asked for,
+ *  this is what came back. */
+export function dataWindow(c: Control): { from: string; to: string } | null {
+  const months = monthlyBreakdown(c);
+  const live = months.filter(m => m.n > 0);
+  if (live.length === 0) return null;
+  const [fy, fm] = live[0].key.split('-').map(Number);
+  const [ly, lm] = live[live.length - 1].key.split('-').map(Number);
+  const end = new Date(ly, lm, 0);   // day 0 of the next month = last day of this one
+  return {
+    from: `${fy}-${String(fm).padStart(2, '0')}-01`,
+    to: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`,
+  };
+}
+
+/** The same control's population last round, when there was a last round.
+ *
+ *  Prior counts are the only outside reference a reader has for whether this
+ *  round's number is plausible, so where an earlier audit exists its figure is
+ *  offered beside this one. Prototype data: derived from the control id rather
+ *  than stored, since nothing archives a prior population yet. */
+export function priorRoundCount(eng: IcfrEngagement, c: Control, openAuditId?: string | null): { label: string; n: number } | null {
+  const pop = c.operating.population;
+  if (!pop) return null;
+  const open = eng.audits.find(a => a.id === openAuditId);
+  const prior = eng.audits
+    .filter(a => a.id !== openAuditId && (!open || a.windowFrom < open.windowFrom))
+    .sort((a, b) => (a.windowFrom < b.windowFrom ? 1 : -1))[0];
+  if (!prior) return null;
+  const s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 3);
+  const drift = ((s % 25) - 8) / 100;              // −8% … +16% on the round before
+  return { label: `${prior.period} · ${prior.round === 'yearend' ? 'year-end' : prior.round === 'interim' ? 'interim' : 'roll-forward'}`, n: Math.max(1, Math.round(pop.count * (1 - drift))) };
 }
 
 /** Does the count hold up?
@@ -265,7 +359,11 @@ function overBreakdown(c: Control, excess: number): { label: string; n: number }
  *
  *  Where no expectation was recorded it falls back to the derived run count, and
  *  there only a shortfall counts — most populations are transaction-grained
- *  while a run count never is. */
+ *  while a run count never is.
+ *
+ *  Neither direction is a failure of the auditor's work, and neither is written
+ *  as one. A variance is shown; only the ones that could hide missing instances
+ *  hold the lock. */
 export function countVerdict(c: Control): PopVerdict | null {
   const pop = c.operating.population;
   if (!pop) return null;
@@ -289,19 +387,19 @@ export function countVerdict(c: Control): PopVerdict | null {
       }
       return {
         level: 'warn', blocks: true, headline,
-        detail: `${diff.toLocaleString()} more than expected, ${pct}% over. Extra rows are not a hole in the test — the risk is sampling an item this control never touched, which turns up later as an exception that was never real.`,
-        breakdown: overBreakdown(c, diff),
+        detail: `${diff.toLocaleString()} more than expected, ${pct}% over. Extra rows are not a hole in the test — the risk is sampling an item this control never touched, which turns up later as an exception that was never real. Refilter, or accept it with a reason.`,
+        breakdown: overBreakdown(pop, diff),
         causes: 'Commonly duplicates, reversals, a transaction type outside the scope, one month too many in the window, or a second entity sitting in the same file.',
       };
     }
 
-    // Short. Tighter band, and a different kind of problem.
-    if (off <= UNDER_BAND) {
-      return { level: 'pass', blocks: false, headline, detail: `${Math.abs(diff).toLocaleString()} under, ${pct}% — inside the 2% band held for shortfalls.${runNote}` };
-    }
+    // Short. A shortfall is the harder case whatever its size: the rows that
+    // aren't there cannot be diagnosed, cannot be sampled, and cannot be seen
+    // by anyone reading the population afterwards. So every shortfall carries a
+    // recorded reason, and a small one is not waved through on percentage.
     return {
       level: 'fail', blocks: true, headline,
-      detail: `${Math.abs(diff).toLocaleString()} fewer than expected, ${pct}% short. An instance that is not in the population can never be sampled, so this is a completeness gap rather than a filter that swept too wide — which is why a shortfall is held to a tighter band than an overshoot.`,
+      detail: `${Math.abs(diff).toLocaleString()} fewer than expected, ${pct}% short. An instance that is not in the population can never be sampled, so this is a completeness gap rather than a filter that swept too wide — which is why every shortfall needs an answer, however small.`,
       causes: 'Commonly a month missing from the window, a transaction type the filter excluded, or an extract taken before the period closed.',
     };
   }
@@ -321,11 +419,14 @@ export function countVerdict(c: Control): PopVerdict | null {
   };
 }
 
-/** Does the filter window cover the window the audit is testing?
+/** Three windows have to line up, not two: the period the audit tests, the range
+ *  the filter asked for, and the dates the extract actually came back with.
  *
- *  Both dates are held, so this is subtraction. A window that opens late or
- *  closes early leaves a stretch of the period untested, and the gap is stated
- *  in days rather than left for someone to notice. */
+ *  Checking the filter alone passes the case that matters most — a filter set to
+ *  the whole year against a file whose data stops in October reads as full
+ *  coverage while two months of the period were never in the population at all.
+ *  So the filter is measured against the period, and then the data is measured
+ *  against the filter. */
 export function coverageVerdict(c: Control, windowFrom?: string, windowTo?: string): PopVerdict | null {
   const pop = c.operating.population;
   if (!pop) return null;
@@ -344,16 +445,40 @@ export function coverageVerdict(c: Control, windowFrom?: string, windowTo?: stri
     // untested stretch can never be sampled out of.
     return { level: 'fail', blocks: true, headline: `${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}`, detail: `The audit period runs ${fmtDate(windowFrom)} – ${fmtDate(windowTo)}. This filter ${gaps.join(' and ')} — that stretch goes untested.`, causes: 'Commonly a window copied from the prior round, or an extract taken before the period closed.' };
   }
-  return { level: 'pass', blocks: false, headline: `${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}`, detail: `Covers the whole audit period, ${fmtDate(windowFrom)} – ${fmtDate(windowTo)}.` };
+
+  // The filter is right. Is the data? A whole month with no instances at either
+  // end of a correct window is a hole the filter cannot show you.
+  const data = dataWindow(c);
+  if (data) {
+    const openLate = dayGap(pop.filterFrom, data.from);
+    const stopEarly = dayGap(data.to, pop.filterTo);
+    const holes = [
+      openLate >= 28 && `starts ${fmtDate(data.from)}, ${openLate} days into it`,
+      stopEarly >= 28 && `stops ${fmtDate(data.to)}, ${stopEarly} days before it closes`,
+    ].filter(Boolean) as string[];
+    if (holes.length > 0) {
+      return {
+        level: 'fail', blocks: true,
+        headline: `Filter ${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}, data ${fmtDate(data.from)} – ${fmtDate(data.to)}`,
+        detail: `The filter window is right, but the extract ${holes.join(' and ')} — that stretch has no instances in it, so nothing in it can ever be sampled.`,
+        causes: 'Commonly an extract taken before the period closed, a feed that stopped, or a system cut over mid-period with the rest of the data in the old one.',
+      };
+    }
+  }
+  return { level: 'pass', blocks: false, headline: `${fmtDate(pop.filterFrom)} – ${fmtDate(pop.filterTo)}`, detail: `Covers the whole audit period, ${fmtDate(windowFrom)} – ${fmtDate(windowTo)}${data ? `, and the extract holds instances from ${fmtDate(data.from)} to ${fmtDate(data.to)}` : ''}.` };
 }
 
-/** Everything that has to be settled before the population can be locked: every
- *  blocking check answered, and the three source facts in.
+/** Everything that has to be settled before the population can be locked: the
+ *  computed checks holding, the count agreed with, and the origin answered.
  *
- *  Not every disagreement blocks. A variance inside its band is shown and passed
- *  over; only the ones that hold the lock need an answer, and either answer will
- *  do — a refilter that removes the disagreement, or a reason recorded against
- *  it, because sometimes the filter is wrong and sometimes the expectation is. */
+ *  Not every disagreement blocks. A small overshoot is shown and passed over;
+ *  only the ones that could hide missing instances hold the lock, and either
+ *  answer will do — a refilter that removes the disagreement, or a reason
+ *  recorded against it, because sometimes the filter is wrong and sometimes the
+ *  expectation is.
+ *
+ *  The count is different: it never blocks on arithmetic, but it is never locked
+ *  without a human agreeing the shape looks right either. */
 export function populationReady(c: Control, windowFrom?: string, windowTo?: string): boolean {
   const pop = c.operating.population;
   if (!pop) return false;
@@ -361,8 +486,71 @@ export function populationReady(c: Control, windowFrom?: string, windowTo?: stri
   const gv = coverageVerdict(c, windowFrom, windowTo);
   if (cv?.blocks && !pop.countNote?.trim()) return false;
   if (gv?.blocks && !pop.coverageNote?.trim()) return false;
-  const p = pop.provenance;
-  return !!p?.system.trim() && !!p.extractedBy.trim() && !!p.extractedOn.trim();
+  // Provenance is deliberately NOT a condition here. It belongs to the source
+  // file, was answered when that file entered the audit, and a file with no
+  // answer cannot be picked as a source in the first place — so by the time
+  // there is a population to lock, the question is already settled.
+  return !!pop.countConfirmed;
+}
+
+// ─── The file registry — provenance, once per file ───────────────────────────────
+/** What a file's provenance defaults to before anybody has said anything.
+ *
+ *  Only for files the engagement DERIVES: a trial balance or general ledger
+ *  reaches an audit as an ERP extract, and a RACM or SOP reaches it as a client
+ *  document. Both are stated on the file record and both are correctable there.
+ *  A file uploaded through the app never lands here — it is answered at upload,
+ *  which is the whole point of the rule. */
+export function defaultFileOrigin(kind: string): FileOrigin | undefined {
+  if (kind === 'Trial balance' || kind === 'General ledger') return 'System export';
+  if (kind === 'RACM / SOP') return 'Client-prepared';
+  return undefined;
+}
+
+/** Which controls drew a population off this file. Derived rather than stored:
+ *  a list kept in two places is a list that disagrees with itself, and the
+ *  populations already name their source. */
+export function controlsUsingFile(eng: IcfrEngagement, name: string): Control[] {
+  return eng.controls.filter(c => c.operating.population?.sourceFile === name);
+}
+
+/** A file's kind read back off its name, for files nobody registered. */
+export function guessFileKind(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('tb') || n.includes('trial')) return 'Trial balance';
+  if (n.includes('gl') || n.includes('ledger')) return 'General ledger';
+  if (n.includes('racm') || n.includes('sop')) return 'RACM / SOP';
+  return 'Source file';
+}
+
+/** Where a file came from, resolved the ONE way, wherever the question is asked
+ *  — the source line on a control, the registry on Configuration, the working
+ *  paper.
+ *
+ *  Order: the registry record if somebody has said something; otherwise the
+ *  default the file's kind implies; and last, for a population seeded before any
+ *  of this existed, the system its extract recorded — a file that names the
+ *  system it was pulled out of has already answered the question. */
+export function fileOriginOf(eng: IcfrEngagement, name?: string, seededSystem?: string): {
+  origin?: FileOrigin; systemFetched?: boolean; by?: string; at?: string;
+} {
+  if (!name) return {};
+  const rec = eng.fileRegistry?.find(f => f.name === name);
+  if (rec) return { origin: rec.origin, systemFetched: rec.systemFetched, by: rec.originBy, at: rec.originAt };
+  const byKind = defaultFileOrigin(guessFileKind(name));
+  if (byKind) return { origin: byKind };
+  return seededSystem?.trim() ? { origin: 'System export' } : {};
+}
+
+/** A file with no answer cannot be a population source — that is what removing
+ *  "unknown" means in practice. */
+export function fileUsable(f: { origin?: FileOrigin; systemFetched?: boolean }): boolean {
+  return !!f.systemFetched || !!f.origin;
+}
+
+/** How a file's provenance reads in one line, wherever it is shown. */
+export function originLabel(f: { origin?: FileOrigin; systemFetched?: boolean }): string {
+  return f.systemFetched ? 'fetched by the system' : f.origin ? f.origin.toLowerCase() : 'not answered';
 }
 
 // ─── Exceptions — every failure, at the grain the auditor has to judge it ─────────
