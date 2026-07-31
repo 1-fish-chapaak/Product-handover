@@ -2008,15 +2008,20 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   button takes over. */}
               {showImportOffer && (
                 <div className="mx-auto mt-5 w-full max-w-3xl rounded-lg border border-canvas-border bg-white px-6 py-5">
-                  <p className="text-[0.875rem] font-semibold text-ink-900">Already have a report you send?</p>
-                  <p className="mt-1 text-[0.875rem] text-ink-500">This template can take its sections, tables and letterhead. Nothing written inside it is kept.</p>
+                  {/* The memo's promise, said once, in the memo's own words: we
+                      copy how it looks, not what it says. Same phrase the
+                      footer's own import door uses ("a report you already
+                      send" / "Use a report you send"), so the two doors into
+                      this journey read as one offer, not two. */}
+                  <p className="text-[0.875rem] font-semibold text-ink-900">Have a report you already send?</p>
+                  <p className="mt-1 text-[0.875rem] text-ink-500">We copy how it looks, not what it says — its sections, tables and letterhead. Nothing you write in this one is kept.</p>
                   <button
                     type="button"
                     onClick={() => importInputRef.current?.click()}
                     disabled={isSaving}
                     className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-4 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-500 cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
-                    <UploadCloud size={15} /> Use that report
+                    <UploadCloud size={15} /> Use a report you send
                   </button>
                 </div>
               )}
