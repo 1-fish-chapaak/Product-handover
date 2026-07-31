@@ -936,8 +936,13 @@ export interface AuditRecord {
   /** The rule as set on the materiality step. Shape is inlined rather than
    *  imported from soxTestingData — this module deliberately has no imports,
    *  and the audit freezes its own copy anyway, so later edits to the
-   *  programme's rules don't rewrite history. */
-  materiality: { basisLabel: string; benchmark: number; pct: number };
+   *  programme's rules don't rewrite history.
+   *
+   *  pmPct / ctPct are performance materiality and the clearly-trivial floor as
+   *  percentages OF overall — the two thresholds testing actually runs against.
+   *  Optional because audits created before the wizard asked for them have
+   *  neither; readers fall back to the SOX-standard 75 / 5. */
+  materiality: { basisLabel: string; benchmark: number; pct: number; pmPct?: number; ctPct?: number };
   /** ₹ Cr threshold the rule computes, frozen at creation. */
   overall: number;
   /** This audit's own conclusion. Sign-off is per AUDIT, not per engagement —

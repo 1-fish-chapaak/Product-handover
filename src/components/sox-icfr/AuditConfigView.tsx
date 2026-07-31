@@ -8,6 +8,7 @@ import { BASIS_OPTIONS, cycleYears, ruleOverall, type MaterialityBasis } from '.
 import { entitiesFor, processesFor } from './auditScope';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
+import { MaterialityGroundRules } from './extraViews';
 
 import type { AuditRecord, AuditScopeKind, FileOrigin } from './types';
 import { cn } from '../../lib/cn';
@@ -191,6 +192,13 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
   const entities = useMemo(() => entitiesFor(eng.id), [eng.id]);
   const racms = useMemo(() => processesFor(eng.id), [eng.id]);
 
+  /** The other audits an engagement-level edit made here would also re-grade.
+   *  Empty means this is the only audit, and the ground rules edit directly. */
+  const otherAudits = useMemo(
+    () => eng.audits.filter(a => a.id !== audit.id).map(a => a.period),
+    [eng.audits, audit.id],
+  );
+
   const year = yearOf(audit);
   // This view's Year type toggle only offers fy/cy (see below) — a quarter or
   // custom audit falls back to 'fy' here rather than asserting a type the
@@ -230,7 +238,10 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
     const benchmark = patch.basis ? opt.defaultBenchmark : patch.benchmark ?? audit.materiality.benchmark;
     const pct = patch.basis ? opt.defaultPct : patch.pct ?? audit.materiality.pct;
     updateAudit(audit.id, {
-      materiality: { basisLabel: opt.label, benchmark, pct },
+      // Spread first: pmPct / ctPct are set on the creation wizard and not
+      // edited here, so rebuilding the object from scratch would silently drop
+      // them the first time the basis or benchmark is changed.
+      materiality: { ...audit.materiality, basisLabel: opt.label, benchmark, pct },
       overall: ruleOverall({ id: 'a', name: 'a', basis, benchmark, pct }),
     });
   };
@@ -383,6 +394,13 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
           </p>
         </div>
       </Section>
+
+      {/* The engagement's ground rules, inline (user ask) — the Dashboard's
+          Materiality card lands here now instead of opening a page of its own.
+          Two materiality blocks sit together on purpose: the one above is THIS
+          audit's own threshold, this one is the engagement's, and the banner
+          inside says so. */}
+      <MaterialityGroundRules sharedWith={otherAudits} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ export interface GroupEntity {
 
 /** 'netAssets' is produced only by the V2 wizard (call decision #3) — the
  *  classic wizard's option list is unchanged. */
-export type MaterialityBasis = 'pbt' | 'revenue' | 'netAssets' | 'expenses' | 'custom';
+export type MaterialityBasis = 'pbt' | 'revenue' | 'netAssets' | 'assets' | 'expenses' | 'custom';
 
 export interface BasisOption {
   id: MaterialityBasis;
@@ -55,6 +55,16 @@ export const BASIS_OPTIONS: BasisOption[] = [
     defaultPct: 1.5,
     benchmarkLabel: 'Total revenue (consolidated)',
     defaultBenchmark: 5240,
+  },
+  {
+    // Asset-intensive groups — the band the app's own BENCHMARK_META already
+    // quotes for total assets (0.5–2%), taken at its midpoint.
+    id: 'assets',
+    label: '% of total asset balance',
+    hint: 'Asset-intensive group (infrastructure, fleet) — 0.5–2% of total assets',
+    defaultPct: 1,
+    benchmarkLabel: 'Total assets (consolidated)',
+    defaultBenchmark: 8400,
   },
   {
     id: 'expenses',

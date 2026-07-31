@@ -84,9 +84,19 @@ export async function concludeIpeReliable(page: Page) {
 }
 
 /** Library card click → the SOX workspace. The Engagements page opens on its
- * Overview tab; the cards live on the All Engagements tab. */
+ * Overview tab; the cards live on the All Engagements tab.
+ *
+ * `goto('/')` lands on Home, not Engagements, so the tab this used to click
+ * straight away doesn't exist yet — every caller was timing out on it. Navigate
+ * first, but only when the tab isn't already there, so callers that are already
+ * deep in the library still work. */
 export async function openFromLibrary(page: Page, name: string) {
-  await page.getByRole('tab', { name: /All Engagements/ }).click();
+  const libraryTab = page.getByRole('tab', { name: /All Engagements/ });
+  if (await libraryTab.count() === 0) {
+    await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+    await page.waitForTimeout(900);
+  }
+  await libraryTab.click();
   await page.waitForTimeout(700);
   await page.getByText(name).first().click();
   await page.waitForTimeout(1100);
