@@ -173,7 +173,17 @@ const HEADING_SIZE = 1.14;
 const NUMBERED = /^(\d+(?:\.\d+)*)[.)]?\s+(\S.*)$/;
 const LETTERED = /^([A-Z])[.)]\s+(\S.*)$/;
 const APPENDIX = /^(appendix|annexure|annex|schedule|exhibit)\s+([A-Z0-9]+)\b[:.\-\s]*(.*)$/i;
-const CONTINUED = /\(?\bcont(?:inued|d)?\.?\)?\s*$/i;
+// The optional tail: a consultant deck glues the finding's rating LETTER onto
+// the end of its own running-header title ("… (contd.)  H"), same as it does
+// on the title's first appearance. "(contd.)" no longer sits at the string's
+// own end once that letter trails it, so the plain end-anchored version below
+// stopped matching a continuation page at all — the merge that is supposed to
+// fold "(contd.)" back into the page before it silently never fired, and the
+// stray page went on to be read as a whole extra finding. A bare 1-2 letter
+// token is never real title content, whatever it says, so it is tolerated
+// generically here rather than checked against the client's own scale words —
+// deckShapedTree runs before the scale is known.
+const CONTINUED = /\(?\bcont(?:inued|d)?\.?\)?\s*(?:[A-Za-z]{1,2}\s*)?$/i;
 export const CONTENTS = /^(table of contents|contents|index)$/i;
 const PAGE_NUMBER = /^(page\s*)?\d+(\s*(of|\/)\s*\d+)?$/i;
 export const CONFIDENTIAL = /\b(strictly\s+)?(confidential|private and confidential|internal use only|restricted)\b/i;
@@ -3160,7 +3170,19 @@ export function assemble(input: AssembleInput): ReadResult {
         if (FIXED_NAME.test(text)) continue;                   // a definitions page rates nothing
         for (const line of page) {
           const clean = line.text.trim();
-          if (clean.length > 12 && clean.split(/\s+/).length >= 3) ratedLines.push(clean);
+          if (clean.length <= 12 || clean.split(/\s+/).length < 3) continue;
+          // THE PAGE'S OWN HEADING NAMES THE PAGE. It is never one of the rows
+          // it lists, however many rating words its neighbours carry. Missed,
+          // it becomes a false ratedLine match, `foldRatedRun` then reads the
+          // section's own title as "a finding" and folds the ROLLUP PAGE ITSELF
+          // in as the stamp's first repetition — so the card shape stored for
+          // "the finding" is a summary table's columns, not a real finding's
+          // fields, and the count comes out one page over what is really there.
+          // The PwC "C. Overview of observations" page is the caught case: nine
+          // named findings, a stamp of twelve, because the rollup heading and
+          // a continued page both counted as findings of their own.
+          if (headingOf(line, bodySize)) continue;
+          ratedLines.push(clean);
         }
       }
     }
@@ -3663,7 +3685,7 @@ export function classifyStamped(section: SpineSection, bodySize: number): RawBlo
 // the way the parts are found differs: pass 2 has already lifted the running
 // furniture out, and passes 4 to 6 never cared where a section came from.
 
-function deckShapedTree(furnished: Furnished): Tree {
+function deckShapedTree(furnished: Furnished, findingScale?: string[]): Tree {
   const cover: Line[] = [];
   let docEntries = 0;
   const units: DeckUnit[] = [];
@@ -3741,10 +3763,27 @@ function deckShapedTree(furnished: Furnished): Tree {
   // not one part per page. They fold into the first of the run before the deck
   // rules count anything.
   const folded: DeckUnit[] = [];
+  // A RATING LETTER GLUED TO THE TITLE BREAKS THE MATCH, the same way it broke
+  // a section's own heading (§05): a consultant deck's running-header repeats
+  // "2. Improve controls over contract management  H" on every page of that
+  // finding, but the FIRST page carries only the bare letter while a later,
+  // continued page adds "(contd.)" in front of it — "…management H" and
+  // "…management (contd.) H" then normalize to two different strings and the
+  // pages never fold into one, so the finding comes back as two. Guarded the
+  // same way stripTitleRatings is: needs two or more distinct scale initials
+  // and a three-or-more-word head, so "Annexure A" keeps its letter and is
+  // never mistaken for a rating.
+  const initials = new Set((findingScale ?? []).map(w => w.trim().charAt(0).toUpperCase()).filter(Boolean));
+  const unlettered = (text: string): string => {
+    if (initials.size < 2) return text;
+    const m = /^(.*\S)\s+[([]?([A-Za-z])[)\]]?[.\s]*$/.exec(text);
+    if (!m || !initials.has(m[2].toUpperCase())) return text;
+    return m[1].trim().split(/\s+/).length >= 3 ? m[1].trim() : text;
+  };
   // "…(continued)" is the same part carrying on, so the suffix comes off before
   // the two headings are compared. Without that, one observation running over
   // two pages reads as two observations.
-  const headKey = (h?: { text: string }) => (h ? norm(h.text.replace(CONTINUED, '').trim()) : '');
+  const headKey = (h?: { text: string }) => (h ? norm(unlettered(h.text).replace(CONTINUED, '').trim()) : '');
   for (const unit of units) {
     const previous = folded[folded.length - 1];
     if (previous?.heading && unit.heading && headKey(previous.heading) === headKey(unit.heading)) {
@@ -3797,8 +3836,16 @@ export async function readTemplateFromPdf(file: File): Promise<ReadOutcome> {
       (furnished.furniture?.header.length ?? 0) + (furnished.furniture?.footer.length ?? 0) > 0
         || !!furnished.furniture?.pageNumberPattern,
     );
+    // The scale, read early rather than only inside assemble(), because
+    // deckShapedTree needs it too: a consultant deck glues the finding's own
+    // rating letter onto its running-header title, on every page including its
+    // continuations, and only the client's own scale says which trailing
+    // letter is a rating rather than real title content ("Annexure A" keeps
+    // its A). assemble() re-detects the same way afterwards — a second call on
+    // the same pure function, not a second source of truth.
+    const { findingScale: deckScale } = detectScales(furnished.body.flat().map(l => l.text).join('\n'));
     const tree = shape.isDeck
-      ? deckShapedTree(furnished)
+      ? deckShapedTree(furnished, deckScale)
       : passBuildTree(furnished, unpacked);
 
     return {
