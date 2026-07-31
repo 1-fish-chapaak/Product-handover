@@ -1110,7 +1110,15 @@ function headingOf(line: Line, bodySize: number): HeadingHit | null {
 
   const appendix = APPENDIX.exec(text);
   if (appendix) {
-    const tail = appendix[3]?.replace(/^[\s—–\-:·]+/, '').trim();
+    // The subtitle after the colon is a short label ("Appendix D: Audit
+    // Recommendations"), not a whole sentence. "Appendix D: Audit
+    // recommendations arising from this audit review are summarised below:"
+    // is the caught case — a run-on line ending in its own colon, kept whole
+    // because nothing tested it. Same gate a heading candidate is held to
+    // everywhere else in this file: a subtitle that reads like a sentence
+    // is dropped, and the appendix keeps just its letter.
+    const rawTail = appendix[3]?.replace(/^[\s—–\-:·]+/, '').trim();
+    const tail = rawTail && !sentenceish(rawTail) ? rawTail : undefined;
     return {
       name: tail ? `${titleCase(appendix[1])} ${appendix[2]}: ${tail}` : `${titleCase(appendix[1])} ${appendix[2]}`,
       level: 1, evidence: 'explicit', confidence: 0.92, appendix: true,
@@ -2968,6 +2976,19 @@ function foldRatedRun(
   // Where each line of the report lives, so a heading can be tested against
   // every OTHER part's body. A heading listed as an item inside another part is
   // one of that part's items, not a part of the format in its own right.
+  //
+  // KNOWN GAP: this is unguarded, so an Introduction's own opening bullets
+  // ("Area subject to review", "Rationale for review" — a plain outline of
+  // what follows, no rating attached) can satisfy this the same way a rated
+  // snapshot table's listed findings do, and fold the real sections of the
+  // same name away as if the Introduction had rated them. Gating this on
+  // `ratedKeys` (only trust a listing line that itself sits on a page pass 05
+  // already judged as rating what it lists) was tried and reverted: it broke
+  // five fixtures' worth of the legitimate case this exists for and produced
+  // two invariant violations (a drop over kept blocks) — the exact class of
+  // bug the drop invariant exists to catch. The gate is too coarse; the real
+  // fix needs to tell "an Introduction's outline" apart from "a snapshot's
+  // rated list" some other way, not just by page-level rating presence.
   const listed: { words: Set<string>; section: number }[] = [];
   spine.forEach((s, si) => {
     for (const line of s.lines) {
