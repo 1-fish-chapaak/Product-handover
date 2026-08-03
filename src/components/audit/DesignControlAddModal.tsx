@@ -31,8 +31,14 @@ export interface DesignControlAddInput {
   inRacm: boolean;
 }
 
-export default function DesignControlAddModal({ subProcesses, onClose, onCreate }: {
+export default function DesignControlAddModal({ subProcesses, presentation = 'modal', onClose, onCreate }: {
   subProcesses: string[];
+  /** How the form arrives. 'modal' is the Process Hub default — centred, the
+   *  way both its surfaces have always shown it. 'sheet' slides in from the
+   *  right instead, for callers that are already inside a sheet: a centred
+   *  dialog on top of one reads as a different app, a second sheet reads as
+   *  going one level deeper. Same form either way. */
+  presentation?: 'modal' | 'sheet';
   onClose: () => void;
   onCreate: (input: DesignControlAddInput) => void;
 }) {
@@ -46,6 +52,24 @@ export default function DesignControlAddModal({ subProcesses, onClose, onCreate 
   const addAttrRow = () => setAttrs(prev => [...prev, '']);
   const removeAttrRow = (i: number) => setAttrs(prev => prev.filter((_, idx) => idx !== i));
   const valid = description.trim().length > 0;
+  const sheet = presentation === 'sheet';
+  // The sheet borrows FlowModal's geometry and spring so it lands like every
+  // other sheet in the product rather than like a dialog pinned to the edge.
+  const frame = sheet
+    ? {
+      initial: { x: '100%' as const },
+      animate: { x: 0 },
+      exit: { x: '100%' as const },
+      transition: { type: 'spring' as const, damping: 30, stiffness: 300 },
+      className: 'fixed right-0 top-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated border-l border-canvas-border shadow-2xl z-50 flex flex-col',
+    }
+    : {
+      initial: { opacity: 0, scale: 0.97, y: 8 },
+      animate: { opacity: 1, scale: 1, y: 0 },
+      exit: { opacity: 0, scale: 0.97, y: 8 },
+      transition: { duration: 0.18, ease: [0.2, 0, 0, 1] as [number, number, number, number] },
+      className: 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]',
+    };
 
   return (
     <>
@@ -53,12 +77,7 @@ export default function DesignControlAddModal({ subProcesses, onClose, onCreate 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose}
       />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
-        role="dialog" aria-label="Add control"
-      >
+      <motion.div {...frame} role="dialog" aria-label="Add control">
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-brand-600" />

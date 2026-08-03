@@ -14,7 +14,7 @@ import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
   // the deficiency banner below. Both go back together.
   // formatINR,
-  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor,
+  controlCode, controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, EXTRACT_WOBBLE,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
@@ -2439,7 +2439,7 @@ export default function ControlDossier() {
                 {control.clazz && <Pill tone="draft">{control.clazz}</Pill>}
                 <NatureChip nature={control.nature} /><Pill tone="draft">{control.type}</Pill><Pill tone="draft">{control.frequency}</Pill>
                 {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
-                <span className="text-[0.6875rem] text-ink-400 font-mono">{control.id}</span>
+                <span className="text-[0.6875rem] text-ink-400 font-mono">{controlCode(control)}</span>
               </div>
               {/* Heading = the control OBJECTIVE where the RACM carries one: what
                   the control is for, which is what the reviewer reads first. The
@@ -2461,6 +2461,14 @@ export default function ControlDossier() {
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[0.71875rem] text-ink-500">
+                {/* Which company's copy this is. The same control number is tested
+                    separately at each entity in scope, and this page is one of
+                    them — so the entity belongs beside the process, not buried. */}
+                {control.entity && (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="text-ink-400">Entity</span> · <b className="font-semibold text-ink-700">{control.entity}</b>
+                  </span>
+                )}
                 <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
                 <span><span className="text-ink-400">Risk {control.riskId}</span> · {control.riskDescription}</span>
@@ -2532,7 +2540,13 @@ export default function ControlDossier() {
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
-          <VStep n={1} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
+          {/* Design leads (user ask). It is also the order the work happens in:
+              design gates operating, so a control whose design fails never needs
+              a population at all — building one first was work done on spec. */}
+          <VStep n={1} title="Test of design" subtitle="The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective." status={designResult}>
+            <DesignSection control={control} canEdit={canEdit} />
+          </VStep>
+          <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked ? 'Effective' : 'Not tested'}
             right={popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
@@ -2540,9 +2554,6 @@ export default function ControlDossier() {
                 ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
             <PopulationSection control={control} canEdit={canEdit} />
-          </VStep>
-          <VStep n={2} title="Test of design" subtitle="The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective." status={designResult}>
-            <DesignSection control={control} canEdit={canEdit} />
           </VStep>
           <VStep n={3} title="Sample" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}

@@ -570,6 +570,23 @@ export const CONTROL_CLASSES: ControlClass[] = ['Financial', 'Operational', 'Com
 
 export interface Control {
   id: string;
+  /** THE CONTROL NUMBER THE CLIENT KNOWS — set only when `id` had to be made
+   *  unique because the same control runs at more than one company. The register,
+   *  the control page and the working paper all print `code ?? id`, so two rows
+   *  of the same control read with the same number and are told apart by their
+   *  entity. See `entity`. */
+  code?: string;
+  /** THE COMPANY THIS ROW IS TESTED AT.
+   *
+   *  A group audit tests the same control separately at every entity in its
+   *  scope: same number, same wording, entirely separate lives. Altura's
+   *  Treasury controls run at four companies — one may be concluded effective
+   *  while another has not started, and a failure at one says nothing about the
+   *  others. So an entity's copy is its OWN row with its own design and
+   *  operating tracks, its own sample, its own conclusion and its own findings.
+   *
+   *  Absent on engagements that were never scoped by entity. */
+  entity?: string;
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
@@ -1071,6 +1088,11 @@ export interface AuditRecord {
    *  empty means the whole of every picked RACM — an audit scoped by entity
    *  never sets it, because there the processes decide. */
   controlIds?: string[];
+  /** Where the auditor overruled the derived entity scope, and why. Absent when
+   *  the audit took the trial balance's answer as it stood, or was scoped by
+   *  RACM. Every entry carries a reason — the wizard won't leave the scope step
+   *  with an unexplained change in it. */
+  scopeNotes?: { entityId: string; name: string; inScope: boolean; note: string }[];
   /** Simulated TB / GL uploads; empty when the step was skipped. */
   files: { name: string; kind: 'tb' | 'gl' }[];
   /** The rule as set on the materiality step. Shape is inlined rather than

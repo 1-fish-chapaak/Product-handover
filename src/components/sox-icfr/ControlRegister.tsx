@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, Table2, StickyNote,
+  // PARKED (Aug 2026) — FileSpreadsheet went with the icon-only export button.
+  //   FileSpreadsheet,
+  Search, Plus, Building2, Rows3, MessageSquare,
+  Star, FileText, X, Send, LayoutGrid, List, StickyNote,
 } from 'lucide-react';
-import { HeaderFilter } from '../shared/FilterSelect';
+import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import {
-  controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
+  controlCode, controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
@@ -41,6 +43,54 @@ const VIEWS: { id: SavedView; label: string }[] = [
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
 
+type GroupBy = 'none' | 'process' | 'entity';
+const GROUP_OPTIONS = [
+  { value: 'process', label: 'Process' },
+  { value: 'entity', label: 'Entity' },
+  { value: 'none', label: 'No grouping' },
+];
+
+// ── Columns ─────────────────────────────────────────────────────────────────────
+//
+// Order and starting width, in one place, because three things read it: the
+// <colgroup> that lays the table out, the drag handles that resize it, and the
+// group row's colSpan. `table-layout: fixed` makes the colgroup authoritative —
+// content no longer votes on width, which is what lets a drag actually hold.
+const REG_COLS = [
+  { key: 'process', w: 130 },
+  { key: 'control', w: 330 },
+  { key: 'entity', w: 160 },
+  { key: 'type', w: 124 },
+  { key: 'frequency', w: 116 },
+  { key: 'owner', w: 144 },
+  { key: 'objective', w: 250 },
+  { key: 'nature', w: 108 },
+  { key: 'design', w: 150 },
+  { key: 'operating', w: 168 },
+  { key: 'conclusion', w: 126 },
+  { key: 'court', w: 122 },
+] as const;
+type ColKey = typeof REG_COLS[number]['key'];
+const COL_DEFAULT = Object.fromEntries(REG_COLS.map(c => [c.key, c.w])) as Record<ColKey, number>;
+/** Widths are the reader's, not ours — they survive the session. */
+const COLW_KEY = 'sox-register-colw';
+/** Narrow enough to be a deliberate choice, wide enough to still show something. */
+const COL_MIN = 64;
+
+/** A header cell with a resize grip on its right edge. Module-level on purpose:
+ *  declared inside the register it would remount on every keystroke and slam the
+ *  open column-filter menu shut. */
+function Th({ width, onResize, title, children }: {
+  width: number; onResize: (e: React.MouseEvent) => void; title?: string; children: React.ReactNode;
+}) {
+  return (
+    <th style={{ width }} title={title} className="relative">
+      {children}
+      <span onMouseDown={onResize} onClick={e => e.stopPropagation()} className="reg-grip" aria-hidden />
+    </th>
+  );
+}
+
 function CardTrack({ label, res, started }: { label: string; res: ReturnType<typeof trackResult>; started: boolean }) {
   const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
   const word = res === 'Not tested' ? (started ? 'In progress' : 'Not tested') : res;
@@ -72,9 +122,20 @@ function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
       <div className="ac-meta">
-        {c.id} · {c.nature} ·{' '}
+        {controlCode(c)} · {c.nature} ·{' '}
         {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
       </div>
+      {/* The company this row is tested at, on its own line — a company name and
+          a process name side by side in the eyebrow left neither of them
+          readable, and in a group audit the entity is the stronger identity: the
+          same control number at another company is a different card, with its own
+          design, its own sample and its own conclusion. */}
+      {c.entity && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+          <Building2 size={11} className="text-ink-300 shrink-0" />
+          <span className="truncate font-medium">{c.entity}</span>
+        </div>
+      )}
       <div className="ac-div" />
       <div className="space-y-1.5">
         <CardTrack label="Design" res={trackResult(c.design)} started={designStarted(c)} />
@@ -115,7 +176,8 @@ export default function ControlRegister() {
   );
   // preview-before-download for the consolidated working paper, and for the audit
   // report — the deliverable the paper isn't. Same modal, same block format.
-  const [wpPreview, setWpPreview] = useState(false);
+  // PARKED (Aug 2026) — with the icon-only export button that set it.
+  //   const [wpPreview, setWpPreview] = useState(false);
   const [reportPreview, setReportPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
   const [savedView, setSavedView] = useState<SavedView>('all');
@@ -130,9 +192,54 @@ export default function ControlRegister() {
     clearRegisterPreset();
   }, [registerPreset, clearRegisterPreset]);
   const [nature, setNature] = useState('All');
-  const [grouped, setGrouped] = useState(true);
+  const [entity, setEntity] = useState('All');
+  const [ctype, setCtype] = useState('All');
+  const [frequency, setFrequency] = useState('All');
+  const [owner, setOwner] = useState('All');
+
+  // ── Column widths — dragged by the reader, remembered for them ───────────────
+  const [colw, setColw] = useState<Partial<Record<ColKey, number>>>(() => {
+    try { return JSON.parse(localStorage.getItem(COLW_KEY) || '{}'); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(COLW_KEY, JSON.stringify(colw)); } catch { /* private mode — the widths just don't persist */ }
+  }, [colw]);
+  const widthOf = (k: ColKey) => colw[k] ?? COL_DEFAULT[k];
+  const tableWidth = REG_COLS.reduce((sum, c) => sum + widthOf(c.key), 0);
+  // Cleanup for a drag still in flight, so an unmount mid-drag can't leave
+  // listeners on the window and the body stuck in a col-resize cursor.
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  const startResize = (e: React.MouseEvent, key: ColKey) => {
+    e.preventDefault();
+    e.stopPropagation();                       // never let the grip trip the header's filter
+    const startX = e.clientX;
+    const startW = widthOf(key);
+    const onMove = (ev: MouseEvent) =>
+      setColw(prev => ({ ...prev, [key]: Math.max(COL_MIN, Math.round(startW + (ev.clientX - startX))) }));
+    const done = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', done);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      dragCleanup.current = null;
+    };
+    dragCleanup.current = done;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', done);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+  /** Width + grip wiring for one column, so the header reads as a list of columns. */
+  const th = (key: ColKey) => ({ width: widthOf(key), onResize: (e: React.MouseEvent) => startResize(e, key) });
+  // What the register is stacked by. Process is how an audit is planned; entity is
+  // how a group audit is reported ("is Solar done?"), and the register carries one
+  // row per control per company, so both are real ways to read the same list.
+  const [groupBy, setGroupBy] = useState<GroupBy>('process');
   const [dense, setDense] = useState(false);
-  const [layout, setLayout] = useState<'cards' | 'table'>('cards');
+  // Inside an audit the register is a working list, not a browse surface — open on the
+  // table so every control's state is legible in one scan. The card view stays a click away.
+  const [layout, setLayout] = useState<'cards' | 'table'>('table');
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   // Person-lane: the owner's register is their own controls, never the engagement's.
@@ -145,7 +252,13 @@ export default function ControlRegister() {
     awaitingReview: scoped.filter(isAwaitingReview).length,
     waitingOnOwner: scoped.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
   }), [scoped, eng.tasks, eng.reviewNotes]);
+  // Column-filter option lists — built from what is actually in front of you, so a
+  // filter can never offer a value that returns nothing.
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
+  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
+  const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
+  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.owner))).sort()], [scoped]);
+  const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
 
   const matchesView = (c: Control, v: SavedView): boolean => {
     if (v === 'due') return isTestDueNow(c);
@@ -169,10 +282,14 @@ export default function ControlRegister() {
     return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
-      if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (entity !== 'All' && c.entity !== entity) return false;
+      if (ctype !== 'All' && c.type !== ctype) return false;
+      if (frequency !== 'All' && c.frequency !== frequency) return false;
+      if (owner !== 'All' && c.owner !== owner) return false;
+      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [scoped, q, process, nature]);
+  }, [scoped, q, process, nature, entity, ctype, frequency, owner]);
   const filtered = useMemo(() => base.filter(c => matchesView(c, savedView)), [base, savedView, eng.tasks, eng.reviewNotes, role]);
   const viewCounts = useMemo(
     () => Object.fromEntries(VIEWS.map(v => [v.id, base.filter(c => matchesView(c, v.id)).length])) as Record<SavedView, number>,
@@ -180,18 +297,22 @@ export default function ControlRegister() {
   );
 
   const groups = useMemo(() => {
-    if (!grouped) return [{ key: '', rows: filtered }];
+    if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
-    for (const c of filtered) { const k = c.process; if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
+    for (const c of filtered) {
+      const k = groupBy === 'entity' ? (c.entity ?? 'No entity recorded') : c.process;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(c);
+    }
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
-  }, [filtered, grouped]);
+  }, [filtered, groupBy]);
 
   const allVisible = filtered.map(c => c.id);
   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const colSpan = 8;
+  const colSpan = REG_COLS.length;
 
   return (
     <div>
@@ -213,20 +334,37 @@ export default function ControlRegister() {
         <FilterSelect value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" />
         */}
         <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
-        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
-        {/* view toggle — icon-only, matching Reports' ToolbarViewToggle. Sized to
-            this toolbar's h-9 rhythm rather than the h-10 the Reports toolbar runs. */}
-        <div className="flex items-center gap-0.5 p-1 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <button onClick={() => setLayout('cards')} title="Card view" aria-label="Card view" aria-pressed={layout === 'cards'}
-            className={cn('p-1.5 rounded-[7px] cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={15} /></button>
-          <button onClick={() => setLayout('table')} title="Table view" aria-label="Table view" aria-pressed={layout === 'table'}
-            className={cn('p-1.5 rounded-[7px] cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><Table2 size={15} /></button>
+        {/* No "GROUP" prefix — the value says it ("Process", "Entity", "No
+            grouping") and the label was doing nothing the words don't. */}
+        <FilterSelect value={groupBy} options={GROUP_OPTIONS} engaged={groupBy !== 'none'}
+          onChange={v => setGroupBy(v as GroupBy)} ariaLabel="Group the register by" align="right" />
+        {/* Dense wears the dropdown's trigger shape, not `.filter-pill` — that
+            class is 28px tall and everything else on this row is 36px. */}
+        {layout === 'table' && (
+          <button onClick={() => setDense(d => !d)} className={triggerCls(dense, false)} aria-pressed={dense}>
+            <Rows3 size={13} className={dense ? 'text-brand-600' : 'text-ink-400'} /> Dense
+          </button>
+        )}
+        {/* view toggle — the platform's ToolbarViewToggle (shared/ListToolbar.tsx) to the
+            letter: list on the left, grid on the right, same icons and active chip. Only the
+            shell height follows this toolbar's h-9 rhythm instead of the Reports h-10. */}
+        {/* p-0.5, not p-1: the 16px icons in p-1.5 buttons are 28px tall, which
+            overflowed a p-1 wrapper's 26px content box and left the active chip
+            kissing the border. */}
+        <div className="flex items-center gap-0.5 p-0.5 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('table')} title="List view" aria-label="List view" aria-pressed={layout === 'table'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><List size={16} /></button>
+          <button onClick={() => setLayout('cards')} title="Grid view" aria-label="Grid view" aria-pressed={layout === 'cards'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={16} /></button>
         </div>
         {/* the register's actions — view controls to their left, primary CTA last */}
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
-          {/* the consolidated paper carries materiality & the opinion — audit-side only */}
+          {/* PARKED (Aug 2026) — the icon-only working-paper export. The user asked
+              for it off the toolbar; the modal it opened is unchanged and still
+              reachable from Audit report, so this is one line away from coming
+              back. Its state (`wpPreview`) and modal are parked with it below.
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
+          */}
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
@@ -249,7 +387,7 @@ export default function ControlRegister() {
         ))}
       </div>
 
-      {/* register body — cards (default) or table */}
+      {/* register body — table (default) or cards */}
       {layout === 'cards' ? (
         <div>
           {groups.map(g => (
@@ -272,27 +410,40 @@ export default function ControlRegister() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
+            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
           )}
         </div>
       ) : (
       <div className={cn('reg-wrap', dense && 'reg-dense')}>
-        <table className="w-full border-collapse">
+        {/* The register carries the RACM's own columns now, so it is wider than a
+            screen — the wrapper scrolls sideways rather than crushing the text.
+            Fixed layout + a colgroup means the widths are the ones on record, not
+            whatever the longest cell argued for, which is what makes a drag hold. */}
+        <table className="border-collapse" style={{ tableLayout: 'fixed', width: tableWidth }}>
+          <colgroup>{REG_COLS.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
           <thead className="reg-head">
             <tr>
-              <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all" /></th>
-              <th style={{ width: 64 }}>W/P</th>
-              {/* column filters — the toolbar dropdowns moved up here */}
-              <th><HeaderFilter label="Control" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></th>
-              <th style={{ width: 96 }}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></th>
-              <th style={{ width: 150 }}>① Design</th>
-              <th style={{ width: 168 }}>② Operating</th>
-              <th style={{ width: 116 }}>
+              {/* Column filters live in the headers — the toolbar dropdowns moved
+                  up here (Jul 24), and Entity / Control type / Frequency / Owner
+                  joined them once the register went one-row-per-company. */}
+              <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>
+              <Th {...th('control')}>Control</Th>
+              <Th {...th('entity')}><HeaderFilter label="Entity" value={entity} options={entities} allLabel="All entities" onChange={setEntity} ariaLabel="Filter by entity" /></Th>
+              <Th {...th('type')} title="Preventive controls stop it happening; detective controls find it after it has">
+                <HeaderFilter label="Control type" value={ctype} options={ctypes} allLabel="All types" onChange={setCtype} ariaLabel="Filter by control type" />
+              </Th>
+              <Th {...th('frequency')}><HeaderFilter label="Frequency" value={frequency} options={frequencies} allLabel="All frequencies" onChange={setFrequency} ariaLabel="Filter by frequency" /></Th>
+              <Th {...th('owner')}><HeaderFilter label="Owner" value={owner} options={owners} allLabel="All owners" onChange={setOwner} ariaLabel="Filter by owner" /></Th>
+              <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
+              <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
+              <Th {...th('design')}>① Design</Th>
+              <Th {...th('operating')}>② Operating</Th>
+              <Th {...th('conclusion')}>
                 <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
                   options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
                   onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
-              </th>
-              <th style={{ width: 116 }} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</th>
+              </Th>
+              <Th {...th('court')} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</Th>
             </tr>
           </thead>
           <tbody>
@@ -313,19 +464,36 @@ export default function ControlRegister() {
                   const noteN = pendingReviewNoteCount(eng, c.id);
                   return (
                     <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
+                      {/* PARKED (Aug 2026) — the select-all / per-row checkbox column.
+                          Selection still runs on the CARD view, which is what feeds the
+                          bulk bar, so nothing downstream is dead.
                       <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
-                      <td><span className="wp-ref">{c.wpRef}</span></td>
+                      */}
+                      <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                          <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[420px]">{c.description}</span>
+                          <span className="font-semibold text-ink-900 text-[12.5px] truncate min-w-0">{c.description}</span>
                           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
                           {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-high-700 bg-high-50 px-1.5 h-[17px] rounded-full"><StickyNote size={9} />{noteN}</span>}
                         </div>
+                        {/* process and owner have their own columns now — saying
+                            them twice on the same row is noise. */}
                         <div className="text-[11px] text-ink-400 mt-0.5">
-                          {c.id} · {c.subProcess} · {c.owner} ·{' '}
+                          {controlCode(c)} · {c.subProcess} ·{' '}
                           {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
+                      </td>
+                      <td className="text-[0.71875rem] text-ink-700">
+                        {c.entity
+                          ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                          : <span className="text-ink-300">—</span>}
+                      </td>
+                      <td className="text-[0.71875rem] text-ink-600">{c.type}</td>
+                      <td className="text-[0.71875rem] text-ink-600">{c.frequency}</td>
+                      <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
+                      <td className="text-[0.71875rem] text-ink-500">
+                        <span className="reg-clamp" title={c.objective ?? undefined}>{c.objective ?? '—'}</span>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><TrackCell result={trackResult(c.design)} a={dp.docsReceived} b={dp.docsTotal} label={`${dp.docsReceived}/${dp.docsTotal} docs`} /></td>
@@ -338,7 +506,7 @@ export default function ControlRegister() {
               </FragmentGroup>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
+              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
             )}
           </tbody>
         </table>
@@ -361,7 +529,9 @@ export default function ControlRegister() {
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {/* the paper follows the filters — only the visible controls' data goes in */}
+      {/* PARKED (Aug 2026) — the working-paper preview, with its trigger.
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
+      */}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
 
     </div>

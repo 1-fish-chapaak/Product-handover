@@ -57,12 +57,26 @@
 .reg-head th {
   text-align: left; font-weight: 600; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--color-ink-500); padding: 9px 12px; white-space: nowrap;
+  /* the column is fixed-width now, so a long header ellipses rather than
+     arguing with the width the reader dragged it to */
+  overflow: hidden; text-overflow: ellipsis;
 }
+/* Drag-to-resize grip — invisible until you go for it, then it says so. Sits on
+   the column's own right edge, above the sticky header. */
+.reg-grip {
+  position: absolute; top: 0; right: 0; height: 100%; width: 7px; z-index: 20;
+  cursor: col-resize; transition: background .12s;
+}
+.reg-grip:hover { background: color-mix(in srgb, var(--color-brand-400) 40%, transparent); }
+.reg-grip:active { background: var(--color-brand-500); }
 .reg-row { border-bottom: 1px solid var(--paper-rule); cursor: pointer; transition: background .12s; }
 .reg-row:hover { background: color-mix(in srgb, var(--color-brand-50) 45%, transparent); }
 .reg-row:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: -2px; background: color-mix(in srgb, var(--color-brand-50) 55%, transparent); }
 .reg-row.sel { background: color-mix(in srgb, var(--color-brand-50) 70%, transparent); }
-.reg-row td { padding: 9px 12px; vertical-align: middle; font-size: 12.5px; color: var(--color-ink-700); }
+.reg-row td { padding: 9px 12px; vertical-align: middle; font-size: 12.5px; color: var(--color-ink-700);
+  /* fixed layout means content can't widen a column, so it has to be clipped
+     instead of spilling into the neighbour */
+  overflow: hidden; }
 .reg-row td.tight { padding-top: 7px; padding-bottom: 7px; }
 .reg-group-row td {
   background: color-mix(in srgb, var(--color-ink-900) 3.5%, transparent);
@@ -72,6 +86,10 @@
   padding: 7px 12px; position: sticky; top: 33px; z-index: 4;
 }
 .reg-dense .reg-row td { padding-top: 5px; padding-bottom: 5px; font-size: 12px; }
+/* Sentence-length cells (the control objective) — two lines, then ellipsis, with
+   the full text on the title attribute. Dense mode drops it to one. */
+.reg-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+.reg-dense .reg-clamp { -webkit-line-clamp: 1; }
 
 /* tiny track meter in a register cell */
 .cell-track { display: inline-flex; align-items: center; gap: 7px; }

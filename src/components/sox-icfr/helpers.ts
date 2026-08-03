@@ -947,6 +947,13 @@ export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: numb
   return { suggested, range: band.range, note: rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note };
 }
 
+// ─── Identity ────────────────────────────────────────────────────────────────────
+
+/** THE NUMBER TO PRINT. When the same control is tested at several companies its
+ *  rows need unique ids, but the number people quote in a meeting is the same
+ *  one for all of them — so `id` stays the key and this is what gets shown. */
+export const controlCode = (c: Pick<Control, 'id' | 'code'>): string => c.code ?? c.id;
+
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
 
 export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {

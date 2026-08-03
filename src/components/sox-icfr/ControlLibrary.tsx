@@ -10,7 +10,7 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, normaliseProcess, processesForAudit } from './auditScope';
 import {
-  controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
+  controlCode, controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
 } from './helpers';
 import { NatureChip, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -157,7 +157,7 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
-      <div className="ac-meta">{c.id} · {c.nature} · {c.frequency}</div>
+      <div className="ac-meta">{controlCode(c)} · {c.nature} · {c.frequency}</div>
       <div className="ac-div" />
 
       {/* three stats, equal weight, side by side — was three ragged label/value
@@ -244,7 +244,7 @@ export function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
   return (
     <Drawer
       title={`Run history — ${c.wpRef}`}
-      subtitle={<span className="text-[0.75rem] text-ink-500">{c.id} · {c.description}</span>}
+      subtitle={<span className="text-[0.75rem] text-ink-500">{controlCode(c)} · {c.description}</span>}
       onClose={onClose}
       ariaLabel={`Run history for ${c.id}`}
       footer={(
@@ -352,7 +352,7 @@ export default function ControlLibrary() {
       if (nature !== 'All' && c.nature !== nature) return false;
       if (!matchesCoverage(c)) return false;
       if (preset && !matchesPreset(c)) return false;
-      if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
   }, [scoped, q, process, nature, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
@@ -501,7 +501,7 @@ export default function ControlLibrary() {
                             {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                             <span className="font-semibold text-ink-900 text-[0.78125rem] truncate max-w-[26.25rem]">{c.description}</span>
                           </div>
-                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{c.id} · {c.subProcess} · {c.owner}</div>
+                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess} · {c.owner}</div>
                         </td>
                         <td><NatureChip nature={c.nature} small /></td>
                         <td className="tabular-nums font-semibold text-ink-800">{attrs}</td>

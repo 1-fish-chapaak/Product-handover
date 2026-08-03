@@ -1,3 +1,5 @@
+import { entityShort } from '../audit/sox-testing/soxTestingData';
+import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
 import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
@@ -6,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -632,6 +634,63 @@ const SPREADS: Spread[] = [
 ];
 const riskFor = (sp: Spread, titleIdx: number): SpreadRisk =>
   sp.risks.find(r => r.covers.includes(titleIdx)) ?? sp.risks[0]!;
+
+/**
+ * WHAT THE CONTROL IS FOR, one per risk.
+ *
+ * The objective is the outcome management is securing; the risk is what happens
+ * if it isn't secured. They are the same sentence from opposite ends, which is
+ * why this is keyed by risk id rather than written per control — every control
+ * answering one risk is aimed at one outcome. Written in the flagship's voice:
+ * plain, positive, and about the business rather than the paperwork.
+ */
+const OBJECTIVE_BY_RISK: Record<string, string> = {
+  'R-40': 'Customers can only take on what the business has agreed to let them owe.',
+  'R-41': 'What a customer is billed is what the approved price list says.',
+  'R-42': 'Revenue lands in the period the goods actually left.',
+  'R-43': 'Revenue is only given back where someone with the authority agreed to give it back.',
+  'R-44': 'The receivables balance reflects what will realistically be collected.',
+  'R-45': 'Money received is credited to the customer who sent it.',
+  'R-50': 'Nothing reaches the ledger that a second person has not agreed to.',
+  'R-51': 'Every balance is explained by something outside the ledger.',
+  'R-52': 'Group results carry no balance that is really the group owing itself.',
+  'R-53': 'The books are closed completely, in order, and by the date agreed.',
+  'R-54': 'Foreign-currency balances are stated at the rate that actually applies.',
+  'R-55': 'Each ledger balance lands on the financial-statement line it belongs to.',
+  'R-60': 'Stock is carried at what it is genuinely worth.',
+  'R-61': 'The stock on the books is the stock in the warehouse.',
+  'R-62': 'Stock only moves on an instruction someone was entitled to give.',
+  'R-70': 'Money leaves the group only to a payee two people agreed to pay.',
+  'R-71': 'The bank balance on the books is the balance at the bank.',
+  'R-72': 'Treasury exposure stays inside the limits the board set.',
+  'R-75': 'Only people who actually work here get paid.',
+  'R-76': 'Payroll cost in the ledger is the payroll that was approved and run.',
+  'R-77': 'What is deducted from pay reaches the authority it is owed to.',
+  'R-80': 'Indirect-tax filings are right, reconciled and on time.',
+  'R-81': 'The tax charge is what the position at the year end genuinely supports.',
+  'R-85': 'Only the people who need access to the financial systems have it.',
+  'R-86': 'Nothing reaches production that was not tested and approved first.',
+  'R-87': 'Financial data survives processing intact, and failures are noticed.',
+};
+
+/** Processes outside the catalogue get one generic risk, so they get one
+ *  generic objective — still a purpose rather than a restatement of the title. */
+const objectiveFor = (riskId: string, process: string): string =>
+  OBJECTIVE_BY_RISK[riskId]
+  ?? `${process} balances are complete, accurate, and recorded in the period they belong to.`;
+
+/**
+ * Preventive or detective, read off what the control actually does.
+ *
+ * A control that stops the thing happening is preventive; one that finds it
+ * afterwards is detective. Reconciliations, reviews, cut-off checks and
+ * escalations are all after the fact — which is the same line the flagship's
+ * hand-written controls draw (its three-way match and GR/IR review are both
+ * detective). Derived rather than stored because the title already says it, and
+ * a register where all 45 rows read "Preventive" tells a reader nothing.
+ */
+const DETECTIVE = /reconcil|review|monitor|escalat|ageing|cut-off|verification results|investigat|cleared|failures/i;
+const typeOf = (title: string): ControlType => (DETECTIVE.test(title) ? 'Detective' : 'Preventive');
 
 const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
 const STATIONS = ['BOM', 'DEL', 'COK', 'BLR'];
@@ -1403,9 +1462,13 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // history and the audits those cycles ran under. Every other engagement is
   // seeded exactly as before. See `rich` on racmTemplateForProcesses.
   const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
-  const controls = meta.processes
+  const built = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
+  // One row per control PER COMPANY it is tested at — see withEntityInstances.
+  // Altura only, like the findings below: every other engagement keeps the exact
+  // one-row-per-control register it had.
+  const controls = rich ? withEntityInstances(built, meta.id) : built;
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -1498,6 +1561,92 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
   }
 }
 
+// ── The same control, at every company in its scope ─────────────────────────────
+//
+// A group audit does not test a control once. It tests it separately at each
+// entity the scoping brought in: same control number, same wording, four
+// separate lives. Altura's Treasury RACM covers Holdings, Solar, Wind and Smart
+// Metering, so TRY-01 is four rows — and one being concluded effective says
+// nothing at all about the other three.
+//
+// Which companies each control runs at is NOT invented here. It is read straight
+// off the programme's own RACM derivation — the same mapping the scoping wizard
+// wrote when it decided which trial-balance captions were in scope — so the
+// register can never disagree with the Configuration tab.
+
+/** Where the row's testing has got to. The whole point of separate rows is that
+ *  entities are at different points, so the clones spread across these. */
+type EntityStage = 'fresh' | 'design' | 'part' | 'done';
+
+/** One entity's copy of a control: same number, its own working paper, its own
+ *  design and operating tracks reset to `stage`. */
+function instanceAt(base: Control, entity: string, short: string, stage: EntityStage): Control {
+  const designDone = stage !== 'fresh';
+  const opDone = stage === 'done';
+  return {
+    ...base,
+    // `id` is the key everything else in the workspace hangs off (findings,
+    // tasks, run records), so it has to be unique. `code` is what people read.
+    id: `${base.id}@${short.toLowerCase()}`,
+    code: base.code ?? base.id,
+    // A working paper index has to be unique too — the entity suffix is exactly
+    // how a group file references the same control at a different company.
+    wpRef: `${base.wpRef}/${short.slice(0, 3).toUpperCase()}`,
+    entity,
+    design: {
+      ...base.design,
+      documents: base.design.documents.map(d => ({ ...d, status: (designDone ? 'Received' : 'Requested') as DocStatus })),
+      points: base.design.points.map(p => ({ ...p, result: (designDone ? 'Pass' : 'Not tested') as TestResult })),
+      conclusion: (designDone ? 'Effective' : 'Not tested') as TrackConclusion,
+      testedBy: designDone ? base.design.testedBy : null,
+      testedAt: designDone ? base.design.testedAt : null,
+    },
+    operating: {
+      ...base.operating,
+      // Nothing is sampled until design is signed off, so a row that hasn't got
+      // there carries no population and no sample — the control page opens at ①.
+      population: designDone ? base.operating.population : undefined,
+      sampling: opDone ? base.operating.sampling : undefined,
+      steps: base.operating.steps.map((s, i) => ({
+        ...s,
+        result: (opDone ? 'Pass' : stage === 'part' && i === 0 ? 'Pass' : 'Not tested') as TestResult,
+      })),
+      conclusion: (opDone ? 'Effective' : 'Not tested') as TrackConclusion,
+      testedBy: opDone ? base.operating.testedBy : null,
+      testedAt: opDone ? base.operating.testedAt : null,
+    },
+  };
+}
+
+/**
+ * Give every control its entity, and add a row for each further company its
+ * process covers.
+ *
+ * The originals keep their ids and their place at the front of the array —
+ * everything that picks a control by position (the seeded findings, the run
+ * history) goes on meaning what it meant before. The copies are appended.
+ */
+function withEntityInstances(controls: Control[], engagementId: string): Control[] {
+  const prog = programmeFor(engagementId);
+  if (!prog) return controls;
+  const fullName = new Map(prog.entities.map(e => [entityShort(e.id, prog.entities), e.name]));
+  const scopeOf = new Map<string, string[]>();
+  prog.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
+  if (!scopeOf.size) return controls;
+
+  const STAGES: EntityStage[] = ['done', 'part', 'design', 'fresh'];
+  const copies: Control[] = [];
+  controls.forEach((c, i) => {
+    const shorts = scopeOf.get(normaliseProcess(c.process)) ?? [];
+    if (!shorts.length) return;
+    c.entity = fullName.get(shorts[0]!) ?? shorts[0]!;
+    shorts.slice(1).forEach((short, k) => {
+      copies.push(instanceAt(c, fullName.get(short) ?? short, short, STAGES[(i + k) % STAGES.length]!));
+    });
+  });
+  return [...controls, ...copies];
+}
+
 /** The attributes a seeded control is tested against, in the order an auditor
  *  would write them: does the check itself hold, are the exceptions dealt with,
  *  was it done in time, is the evidence there, and was the person allowed to do
@@ -1554,9 +1703,10 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           `${name} exceptions are escalated and resolved per policy`,
         ]).map((title, i) => ({
           id: `${prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
-          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
+          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
           isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
           riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
+          objective: objectiveFor(`R-${prefix}-1`, name),
           owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
           riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
           assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
@@ -1623,9 +1773,10 @@ export function racmTemplate(process: string): Control[] {
   const sp = SPREADS.find(s => s.process === process) ?? SPREADS[0];
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
-    process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
+    process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
     isKey: i % 4 !== 3, clazz: classOf(sp.process), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
     riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
+    objective: objectiveFor(riskFor(sp, i).id, sp.process),
     owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),
