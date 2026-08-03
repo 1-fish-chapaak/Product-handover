@@ -2169,7 +2169,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         const focus = FOCUS[Math.min(shown, FOCUS.length - 1)];
                         const part = (key: string) =>
                           `transition-all duration-500 ${focus && focus !== key ? 'opacity-20' : 'opacity-100'} ${
-                            focus === key ? 'rounded-[3px] outline outline-1 outline-brand-400/70 outline-offset-[3px]' : ''
+                            focus === key ? 'rounded-xs outline outline-1 outline-brand-400/70 outline-offset-[3px]' : ''
                           }`;
                         return (
                           <>
