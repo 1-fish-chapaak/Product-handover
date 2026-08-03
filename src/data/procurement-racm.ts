@@ -73,6 +73,10 @@ export interface RacmColumnDef {
 export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'riskId', label: "Risk ID", group: 'identity', width: 88 },
   { key: 'controlId', label: "Control ID", group: 'identity', width: 104 },
+  // Key-control designation is a judgment the auditor records, not something
+  // derived from the risk rating — so it gets its own column beside the control
+  // it qualifies, and the star is a control you can click rather than a read-out.
+  { key: 'isKey', label: "Key Control", group: 'identity', width: 132 },
   { key: 'processArea', label: "Process Area", group: 'context', width: 200 },
   { key: 'subProcess', label: "Sub-Process", group: 'context', width: 260 },
   { key: 'riskCategory', label: "Risk Category", group: 'risk', width: 130 },

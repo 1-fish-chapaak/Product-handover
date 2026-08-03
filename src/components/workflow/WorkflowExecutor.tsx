@@ -12,6 +12,7 @@ import {
   Table2, Type as TypeIcon, Hash,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
+import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
 import { PlanSection, type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
@@ -34,7 +35,9 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
-import type { LayeredInsight } from '../../data/layeredInsights';
+import InsightGenerator from '../shared/InsightGenerator';
+import { getGeneratedInsight, useInsightCacheVersion } from '../shared/insightCache';
+import { readTrajectory, type LayeredInsight, type RunTrajectory } from '../../data/layeredInsights';
 import WorkflowFollowUpInsights from './WorkflowFollowUpInsights';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
@@ -610,6 +613,21 @@ const RESULTS_DATA: ResultRow[] = [
   { invoiceNo: 'INV-2026-5515', vendor: 'Meridian Office Supply Co', amount: '$3,475.25', duplicateGroup: 'DG-004', confidence: 79 },
 ];
 
+// Prior runs of this duplicate-invoice check, oldest → newest — the stored run
+// history behind the output insight's "Across runs" trajectory band. The
+// current run's point is derived from RESULTS_DATA at render, so the band
+// always ties to the results table above it (PRD honesty rule: a trend is
+// claimed only because these runs back it). `flaggedVendor` records whether
+// that run's flags included the vendor behind this run's biggest exposure —
+// the entity-recurrence strip reads it.
+const PRIOR_RUN_HISTORY = [
+  { runId: 'dup-feb', label: 'Feb 2026', month: 'Feb', date: '13 Feb 2026', pairs: 1, flaggedVendor: false },
+  { runId: 'dup-mar', label: 'Mar 2026', month: 'Mar', date: '12 Mar 2026', pairs: 1, flaggedVendor: false },
+  { runId: 'dup-apr', label: 'Apr 2026', month: 'Apr', date: '10 Apr 2026', pairs: 1, flaggedVendor: false },
+  { runId: 'dup-may', label: 'May 2026', month: 'May', date: '12 May 2026', pairs: 2, flaggedVendor: true },
+  { runId: 'dup-jun', label: 'Jun 2026', month: 'Jun', date: '11 Jun 2026', pairs: 3, flaggedVendor: true },
+];
+
 // Suggested follow-up questions shown beneath the output CTAs. These read as
 // an auditor's natural next questions about duplicate-invoice findings — a mix
 // of analysis, drill-down, action, and prevention so the user sees the full
@@ -989,20 +1007,21 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  // Most workflow IDs resolve to the AP duplicate-detection mock. The
-  // consolidated-file tester is a dedicated single-run journey driven by one
-  // bundled workbook — its own flow is built out separately from the
-  // multi-input default executor.
-  const workflow =
-    workflowId === 'lw-consolidated-file'
-      ? CONSOLIDATED_FILE_WORKFLOW
-      : workflowId === 'lw-consolidated-file-multi'
-        ? CONSOLIDATED_FILE_MULTI_WORKFLOW
-        : workflowId === 'lw-consolidated-file-reference'
-          ? CONSOLIDATED_FILE_REFERENCE_WORKFLOW
-          : workflowId === 'lw-consolidated-file-compare'
-            ? CONSOLIDATED_FILE_COMPARE_WORKFLOW
-            : EXECUTOR_WORKFLOW;
+  // Most workflow IDs resolve to the AP duplicate-detection mock (inputs,
+  // steps, results) — but the HEADER identity comes from the library catalog,
+  // so launching "PO Approval Threshold Scan" never reads as a different
+  // workflow. The consolidated-file tester is a dedicated single-run journey
+  // driven by one bundled workbook — its own flow is built out separately.
+  const workflow = useMemo(() => {
+    if (workflowId === 'lw-consolidated-file') return CONSOLIDATED_FILE_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-multi') return CONSOLIDATED_FILE_MULTI_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-reference') return CONSOLIDATED_FILE_REFERENCE_WORKFLOW;
+    if (workflowId === 'lw-consolidated-file-compare') return CONSOLIDATED_FILE_COMPARE_WORKFLOW;
+    const lib = LIBRARY_WORKFLOWS.find(w => w.id === workflowId);
+    return lib
+      ? { ...EXECUTOR_WORKFLOW, name: lib.name, description: lib.description, category: lib.businessProcess }
+      : EXECUTOR_WORKFLOW;
+  }, [workflowId]);
 
   // Single "what this run means" insight, derived from the run's own output so
   // the numbers always match the results table. Aggregates the flagged rows by
@@ -1033,12 +1052,46 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     const clearest = [...groups].sort((a, b) => b.match - a.match)[0];
     const avgMatch = groups.reduce((sum, g) => sum + g.match, 0) / groups.length;
 
+    // Across runs — the stored history plus this run's own pair count, one
+    // series feeding the trajectory band, the takeaway and the trend
+    // recommendation so every claim quotes the same numbers.
+    const trajectory: RunTrajectory = {
+      metricLabel: 'Duplicate pairs',
+      unitLabel: 'duplicate pairs this run',
+      format: 'int',
+      polarity: 'lowerBetter',
+      points: [
+        ...PRIOR_RUN_HISTORY.map((r) => ({ runId: r.runId, label: r.label, month: r.month, date: r.date, value: r.pairs })),
+        { runId: 'dup-jul', label: 'Jul 2026', month: 'Jul', date: '15 Jul 2026', value: groups.length, current: true },
+      ],
+      entityLabel: biggest.vendor,
+      flaggedRuns: [...PRIOR_RUN_HISTORY.map((r) => r.flaggedVendor), true],
+    };
+    const trend = readTrajectory(trajectory);
+    const runCount = trajectory.points.length;
+    const worsening = trend.tone === 'bad' && trend.streak >= 2;
+    const firstMonth = trajectory.points[0].month;
+    const lastMonth = trajectory.points[runCount - 1].month;
+
+    // The honesty ladder decides how far the takeaway may reach: a streak
+    // claim needs 3+ runs, a delta claim needs 2, one run stays within-run.
+    const takeawayBase = `${groups.length} duplicate invoice pairs put ${usd(exposure)} at risk of double payment`;
+    const takeaway =
+      runCount >= 3 && trend.streak >= 2
+        ? `${takeawayBase} — and the pair count has climbed ${trend.streak} runs straight.`
+        : runCount === 2 && trend.direction !== 'flat'
+          ? `${takeawayBase} — ${trend.direction} ${Math.abs(trend.lastPct)}% on last run.`
+          : `${takeawayBase}.`;
+
     return {
       id: 'run-output-duplicates',
       layer: 'control',
       subjectId: 'this-run',
       subjectLabel: 'Duplicate invoice check — this run',
-      takeaway: `${groups.length} duplicate invoice pairs put ${usd(exposure)} at risk of double payment.`,
+      takeaway,
+      trajectory,
+      freshness: worsening ? 'escalated' : undefined,
+      freshnessNote: worsening ? `Pair count rising ${trend.streak} runs` : undefined,
       verdict: { label: 'Exceptions found', tone: 'negative' },
       severity: 'high',
       likelyCause: {
@@ -1057,8 +1110,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           detail: `${g.amountLabel} billed ${g.count}× · ${g.match}% match`,
           tone: g.match >= 95 ? 'negative' : 'caution',
         })),
-      evidenceNote: `${RESULTS_DATA.length} flagged rows · 1 run — this-run evidence, not yet a recurring pattern.`,
-      runsAnalysed: 1,
+      evidenceNote:
+        runCount >= 3
+          ? `${RESULTS_DATA.length} flagged rows this run · ${runCount} runs analysed — trend backed by stored run history.`
+          : runCount === 2
+            ? `${RESULTS_DATA.length} flagged rows · 2 runs analysed — a delta, not yet a trend.`
+            : `${RESULTS_DATA.length} flagged rows · 1 run — this-run evidence, not yet a recurring pattern.`,
+      runsAnalysed: runCount,
       detectedOn: '15 Jul 2026',
       detectedBy: 'traceable',
       rollupOf: { label: 'flagged rows', count: RESULTS_DATA.length },
@@ -1074,6 +1132,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           title: `Hold the ${groups.length} flagged pairs before the next payment run.`,
           rationale: `${usd(exposure)} clears settlement otherwise — a hold is reversible, a double payment is a recovery exercise.`,
         },
+        ...(worsening
+          ? [{
+              id: 'run-rec-trend', category: 'monitoring' as const, priority: 'do-now' as const,
+              title: `Investigate the ${trend.streak}-run rise in duplicate pairs — ${trend.first} → ${trend.current} across ${firstMonth}–${lastMonth}.`,
+              rationale: 'A steadily climbing pair count means the intake control is degrading, not noise — the vendor-master duplicates behind these pairs are accumulating faster than they are cleaned.',
+            }]
+          : []),
         {
           id: 'run-rec-cause', category: 'root-cause', priority: 'do-now',
           title: `Confirm the vendor-master duplicates behind the ${biggest.vendor} pair.`,
@@ -1093,6 +1158,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       ],
     };
   }, []);
+
+  // The follow-up band ("Ira looked beyond this run") reveals with the SAME
+  // Generate CTA as the run-output insight — one trigger produces everything
+  // the engine looked at, nothing insight-shaped renders before it. The cache
+  // subscription makes the band appear the moment generation completes.
+  useInsightCacheVersion();
+  const runInsightGenerated = getGeneratedInsight('control', 'run-output-duplicates') != null;
 
   // When the executor is opened from the Audit Logs new-tab flow, the URL
   // carries ?state=completed — boot directly into the "complete" output view
@@ -2851,13 +2923,40 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   </div>
 
                   {/* What this run means — one focused output insight, sitting
-                      between the results and the run's actions. Rendered through
-                      the shared LayeredInsightCard so every AI-insight surface
-                      reads identically. */}
-                  <LayeredInsightCard
-                    insight={outputInsight}
-                    headerLabel="this run"
-                    evidenceLabel="Evidence · duplicate groups"
+                      between the results and the run's actions. Trigger-gated
+                      like every other insight surface (the engine bills per
+                      generation, so it never fires on its own); the built card
+                      derives from this run's own output. */}
+                  <InsightGenerator
+                    layer="control"
+                    subjectId="run-output-duplicates"
+                    subjectLabel="Duplicate invoice check — this run"
+                    labelOverride="this run"
+                    scanOverride="Scans this run's flagged rows against the workflow's stored run history"
+                    stepsOverride={[
+                      'Reading this run’s flagged rows',
+                      'Correlating pairs across the stored run history',
+                      'Pricing the double-payment exposure',
+                      'Writing the explanation',
+                    ]}
+                    buildInsight={() => outputInsight}
+                    generatedView={(insight, regenerate) => (
+                      <div className="space-y-2">
+                        <LayeredInsightCard
+                          insight={insight}
+                          headerLabel="this run"
+                          evidenceLabel="Evidence · duplicate groups"
+                        />
+                        <div className="flex items-center gap-2 px-1">
+                          <span className="text-[0.65625rem] text-ink-400 flex items-center gap-1">
+                            <Check size={11} className="text-compliant" /> Generated just now · cached for this session
+                          </span>
+                          <button type="button" onClick={regenerate} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
+                            <RefreshCw size={11} /> Regenerate
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   />
 
                   <div className="flex items-center gap-2.5 mt-5 mb-5">
@@ -2945,13 +3044,16 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </motion.div>
                   )}
 
-                  {/* Ira looked beyond this run — the two AI-insight cards
-                      (a. compare with previous output, b. cross-workflow
-                      correlation), after the follow-up composer. Each card's
-                      "what to do next" seeds that composer. */}
-                  <div className="mt-5">
-                    <WorkflowFollowUpInsights onAction={submitFollowUp} />
-                  </div>
+                  {/* Ira looked beyond this run — the cross-run AI-insight
+                      cards, revealed by the same Generate CTA as the run
+                      insight above (one trigger, one bill, everything the
+                      engine looked at). Each card's "what to do next" seeds
+                      the follow-up composer. */}
+                  {runInsightGenerated && (
+                    <div className="mt-5">
+                      <WorkflowFollowUpInsights onAction={submitFollowUp} workflowId={workflowId} />
+                    </div>
+                  )}
 
                 </motion.section>
               )}

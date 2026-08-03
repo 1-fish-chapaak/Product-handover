@@ -4,7 +4,7 @@
  * Workflows / Evidence / Sample cards. All side-effects are local + toasts.
  */
 
-import { useMemo, useState, useRef, type JSX } from 'react';
+import { useEffect, useMemo, useState, useRef, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
@@ -23,9 +23,13 @@ import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
 import ControlTestJourney from './ControlTestJourney';
-import InsightGenerator from '../shared/InsightGenerator';
-import AIRecommendsPopover from '../shared/AIRecommendsPopover';
-import { actionableRecs } from '../../data/layeredInsights';
+import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
+import {
+  getGeneratedInsight, getReflectionsFor, getActionsForTarget, useInsightCacheVersion,
+  type TargetedAction,
+} from '../shared/insightCache';
+import { InsightReflection, TargetedActionList, InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/TargetedActions';
+import type { LayeredInsight } from '../../data/layeredInsights';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,9 +41,14 @@ interface Props {
   onTestEvidence?: (controlId: string) => void;
   /** Open the Workflow Executor for an attribute's linked workflow (automated test). */
   onRunWorkflow?: (workflowId: string) => void;
+  /** Land on this control's row — expand it, scroll to it, pulse-highlight it.
+   *  Set by the engagement insights drawer's "go to control" redirect. */
+  focusControlId?: string | null;
+  /** The focus landed (or the id no longer exists) — clear it host-side. */
+  onFocusHandled?: () => void;
 }
 
-type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
+export type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
 type StatusFilter = 'All' | ControlStatus;
 /** Per-attribute test method — a control may be hybrid (mix of both). */
 type AttrType = 'Self-assessed' | 'Automated';
@@ -127,6 +136,13 @@ function rollupStatus(results: AttrResult[]): ControlStatus {
   return tested.some(r => r === 'Fail') ? 'Fail' : 'Pass';
 }
 
+/** The status a control row shows before any in-session edits — the same
+ *  seeded attribute results this tab renders, rolled up. Exported so the
+ *  engagement-level insight subjects quote the row the redirect lands on. */
+export function seededControlStatus(attributeIds: string[], engagementHealth: number): ControlStatus {
+  return rollupStatus(attributeIds.map(id => seedAttrResult(id, engagementHealth)));
+}
+
 function workingPaperFor(attributeId: string): WorkingPaperStatus {
   const r = hash(attributeId) % 100;
   if (r < 40) return 'Draft';
@@ -161,12 +177,15 @@ function kindForFile(name: string): EvidenceKind {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow }: Props): JSX.Element {
+export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow, focusControlId, onFocusHandled }: Props): JSX.Element {
   const { addToast, updateToast } = useToast();
   const { can } = useCan();
   const logEvent = useAuditLog();
   const ws = useEngagementWorkspace();
   const controls = ws.controls;
+  // Re-render when any insight generation completes, so the per-row
+  // "AI recommends" CTAs appear the moment their subject's insight exists.
+  useInsightCacheVersion();
 
   // Workflow link options derived from the engagement's workflow set (shared with the Workflows tab).
   const aiSuggestions = useMemo<AiSuggestion[]>(
@@ -197,6 +216,11 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const [addControlOpen, setAddControlOpen] = useState(false);
   // Control test journey (population → sampling → AI validation → working paper).
   const [journeyControlId, setJourneyControlId] = useState<string | null>(null);
+  // The targeted action open in the act-in-place drawer.
+  const [drawerAction, setDrawerAction] = useState<TargetedAction | null>(null);
+  // "View full insight" opens the complete card in a right-side drawer — the
+  // rows stay compact and the reader never leaves the list.
+  const [insightDetail, setInsightDetail] = useState<LayeredInsight | null>(null);
 
   // ── Per-attribute data stores
   const [evidence, setEvidence] = useState<Record<string, EvidenceFile[]>>({});
@@ -311,6 +335,15 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     return next;
   });
 
+  // The "AI recommends" CTA opens (never collapses) the row — its promise is
+  // "click to view", so a second click must not fold the insight away.
+  const expandControl = (controlId: string) => setExpandedControlIds(prev => {
+    if (prev.has(controlId)) return prev;
+    const next = new Set(prev);
+    next.add(controlId);
+    return next;
+  });
+
   const acceptSuggestion = (attributeId: string, suggestion: AiSuggestion) => {
     ws.linkWorkflow(attributeId, suggestion.id);
     addToast({ type: 'success', message: `Linked "${suggestion.name}"` });
@@ -422,6 +455,25 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     setFrequencyFilter('All');
     setSearch('');
   };
+
+  // ── Row focus — the landing half of the insight drawer's "go to control".
+  // Expand the row, scroll it to center, pulse a ring long enough to register,
+  // then hand the focus back. Filters that would hide the row are cleared: the
+  // redirect's intent ("show me this control") outranks stored filter state.
+  const [flashControlId, setFlashControlId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusControlId) return;
+    if (!controls.some(c => c.controlId === focusControlId)) { onFocusHandled?.(); return; }
+    if (!filteredControls.some(c => c.controlId === focusControlId)) clearAllFilters();
+    expandControl(focusControlId);
+    setFlashControlId(focusControlId);
+    const scrollT = window.setTimeout(() => {
+      document.getElementById(`eng-control-${focusControlId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 160);
+    const doneT = window.setTimeout(() => { setFlashControlId(null); onFocusHandled?.(); }, 2600);
+    return () => { window.clearTimeout(scrollT); window.clearTimeout(doneT); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusControlId]);
 
 
   // ─── Empty state ───────────────────────────────────────────────────────────
@@ -562,11 +614,28 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         {filteredControls.map(c => {
           const status = controlStatuses.get(c.controlId) ?? 'Not tested';
           const expanded = expandedControlIds.has(c.controlId);
-          const aiRecs = actionableRecs({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status, isKey: c.isKey });
+          // The row CTA appears only once this control's insight exists — from
+          // the engagement-level Generate (AI Insights tab seeds every subject)
+          // or this row's own Generate. Click reveals the card in the row body.
+          const genInsight = getGeneratedInsight('control', c.controlId);
+          const genRecs = genInsight?.recommendations ?? [];
+          // B+C: what landed on this row from OTHER generated insights — a
+          // reflection when a higher anchor spans it, chips when an action
+          // explicitly targets it. Pure cache reads; no generation.
+          const reflections = getReflectionsFor('control', c.controlId);
+          const targeted = getActionsForTarget('control', c.controlId);
+          const hasAiRow = !!genInsight || reflections.length > 0 || targeted.length > 0;
+          const rowRecs = [...genRecs, ...targeted.map(t => t.rec)];
+          const genPriority = rowRecs.some(r => r.priority === 'do-now')
+            ? 'do-now' as const
+            : rowRecs.some(r => r.priority === 'this-period') ? 'this-period' as const : undefined;
           return (
             <div
               key={c.controlId}
-              className="glass-card overflow-hidden"
+              id={`eng-control-${c.controlId}`}
+              className={`glass-card overflow-hidden transition-shadow duration-500 ${
+                flashControlId === c.controlId ? 'ring-2 ring-brand-500/60 shadow-lg shadow-brand-500/10' : ''
+              }`}
             >
               <button
                 onClick={() => toggleExpand(c.controlId)} aria-expanded={expanded}
@@ -581,9 +650,33 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                   </span>
                 )}
                 {c.isKey && <span className="px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 inline-flex items-center shrink-0">Key</span>}
-                {aiRecs.length > 0 && (
+                {hasAiRow && (
                   <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
-                    <AIRecommendsPopover recs={aiRecs} subjectLabel={c.controlId} subjectSub={c.description} />
+                    {targeted.length > 0 ? (
+                      // The mock's chip for a row that received travelled work:
+                      // an honest count of actions landing HERE, not a generic badge.
+                      <button
+                        type="button"
+                        onClick={() => expandControl(c.controlId)}
+                        title="AI actions from a generated insight target this control — click to view"
+                        className={`inline-flex items-center gap-1 rounded-full px-2 h-5 text-[0.625rem] font-bold border cursor-pointer ${
+                          targeted.some(t => t.rec.priority === 'do-now')
+                            ? 'bg-risk-50 text-risk border-risk/20'
+                            : 'bg-brand-50 text-brand-700 border-brand-100 hover:bg-brand-100'
+                        }`}
+                      >
+                        <Sparkles size={9} aria-hidden="true" />
+                        {targeted.length} action{targeted.length === 1 ? '' : 's'}
+                        {targeted.some(t => t.rec.priority === 'do-now') && ` · ${targeted.filter(t => t.rec.priority === 'do-now').length} do now`}
+                      </button>
+                    ) : (
+                      <AIRecommendsBadge
+                        label="AI insight"
+                        priority={genPriority}
+                        count={rowRecs.length || genInsight?.recommendedActions.length}
+                        onClick={() => expandControl(c.controlId)}
+                      />
+                    )}
                   </span>
                 )}
                 <span className={`px-2 h-6 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
@@ -602,13 +695,48 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
-                      <InsightGenerator
-                        layer="control"
-                        subjectId={c.controlId}
-                        subjectLabel={c.description}
-                        status={status}
-                        isKey={c.isKey}
-                      />
+                      {reflections.length > 0 ? (
+                        // A SPANNED row: its slice of the finding lives in the
+                        // reflection, its work in the chips below — never a
+                        // second copy of the card. The anchor stays the record,
+                        // so the row's own generator is suppressed here.
+                        <div className="space-y-2.5">
+                          {reflections.map(r => (
+                            <InsightReflection key={`${r.source.id}:${c.controlId}`} reflection={r} onViewAnchor={() => setInsightDetail(r.source)} />
+                          ))}
+                          <TargetedActionList actions={targeted} onOpen={setDrawerAction} bare />
+                        </div>
+                      ) : (
+                        <>
+                          {/* Actions that explicitly target this control, from
+                              any generated insight — click to act in place. */}
+                          {targeted.length > 0 && (
+                            <TargetedActionList
+                              actions={targeted}
+                              heading="AI actions targeting this control"
+                              onOpen={setDrawerAction}
+                            />
+                          )}
+                          <InsightGenerator
+                            layer="control"
+                            subjectId={c.controlId}
+                            subjectLabel={c.description}
+                            status={status}
+                            isKey={c.isKey}
+                            // Rows never render the full card — the hub is the
+                            // reading surface. Generated → compact summary strip
+                            // with the actions as drawer-opening chips.
+                            generatedView={(ins, regenerate) => (
+                              <InsightSummaryStrip
+                                insight={ins}
+                                onViewFull={() => setInsightDetail(ins)}
+                                onOpenAction={setDrawerAction}
+                                onRegenerate={regenerate}
+                              />
+                            )}
+                          />
+                        </>
+                      )}
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
                         <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
@@ -793,6 +921,28 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
           <ControlTestJourney engagement={engagement} controlId={journeyControlId} onClose={() => setJourneyControlId(null)} />
         )}
       </AnimatePresence>
+
+      {/* Act-in-place drawer for a targeted AI action. */}
+      <ActionDrawer
+        action={drawerAction}
+        onClose={() => setDrawerAction(null)}
+        onViewAnchor={() => { if (drawerAction) setInsightDetail(drawerAction.source); }}
+      />
+
+      {/* Full-card slide-over behind every "View full insight". */}
+      {/* A control-anchored insight edits ITS control (expand the row in
+          place); only higher-level anchors still offer creating a new one. */}
+      <InsightDrawer
+        insight={insightDetail}
+        onClose={() => setInsightDetail(null)}
+        controlCtaVariant={insightDetail?.layer === 'control' ? 'edit' : 'create'}
+        onCreateControl={
+          insightDetail?.layer === 'control'
+            ? () => expandControl(insightDetail.subjectId)
+            : can('ctrl_create') ? () => setAddControlOpen(true) : undefined
+        }
+        onCreateWorkflow={createWorkflow}
+      />
     </div>
   );
 }

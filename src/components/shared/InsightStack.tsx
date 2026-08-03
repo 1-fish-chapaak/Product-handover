@@ -11,10 +11,8 @@
 //             states how many High-severity items it hides (usually "0 High" —
 //             which is assurance, not noise). Expands to the same calm rows.
 //
-// A delta strip above the rows answers "what changed since the last run?" —
-// new · escalated · recurring · resolved — and each segment doubles as a filter,
-// as do the severity chips. Recency never outranks materiality: freshness sorts
-// WITHIN a severity band, not above it.
+// Recency never outranks materiality: freshness sorts WITHIN a severity band,
+// not above it.
 //
 // PREVIEW mode (`previewCount` + `onSeeAll`): a surface like the engagement
 // Overview shows only the hero and a single honest "See all N insights" CTA —
@@ -26,10 +24,18 @@
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpRight, Brain, Sparkles, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
-import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness } from '../../data/layeredInsights';
-import LayeredInsightCard from './LayeredInsightCard';
-import { FRESHNESS_META } from './insightFreshness';
+import { ArrowUpRight, Brain, Sparkles, ChevronDown } from 'lucide-react';
+import type { LayeredInsight, CheckMoreOption, InsightLayer, VerdictTone, InsightFreshness, EntityRef } from '../../data/layeredInsights';
+import LayeredInsightCard, { type InsightEntityNav } from './LayeredInsightCard';
+
+/** Row-level navigation a host surface offers the stack: which entities have a
+ *  real row it can take the reader to, and how. The stack layers its own
+ *  fallback on top — an entity without a row but WITH a card in this stack
+ *  jumps to that card instead, so no reference is ever a dead end. */
+export interface StackRowNav {
+  canOpen: (ref: EntityRef) => boolean;
+  open: (ref: EntityRef) => void;
+}
 
 // The attention budget: 1 expanded hero + this many scannable rows before the
 // ledger fold. Everything past it still renders — one click away, never hidden.
@@ -42,15 +48,16 @@ const SEV: Record<LayeredInsight['severity'], { rank: number; label: string; pil
   low:  { rank: 2, label: 'Low', pill: 'bg-compliant-50 text-compliant-700 border-compliant-200', dot: 'bg-compliant' },
 };
 const TONE_RANK: Record<VerdictTone, number> = { negative: 0, caution: 1, positive: 2 };
-// A rollup reads top-down: the engagement escalation, then the risks under it,
-// then the controls under those.
-const LAYER_RANK: Record<InsightLayer, number> = { engagement: 0, risk: 1, control: 2 };
+// A rollup reads top-down: the engagement escalation, then the SOPs and risks
+// under it, then the controls under those.
+const LAYER_RANK: Record<InsightLayer, number> = { engagement: 0, sop: 1, risk: 2, control: 3 };
+const LAYER_GROUP_LABEL: Record<InsightLayer, string> = {
+  engagement: 'Anchored at engagement', sop: 'Anchored at SOP', risk: 'Anchored at risk', control: 'Anchored at control',
+};
 // Freshness is a tiebreaker INSIDE a severity+layer band — a new Low must never
 // displace a known High. Escalated outranks new: worse beats first-seen.
 const FRESH_RANK: Record<InsightFreshness, number> = { escalated: 0, new: 1, recurring: 2, resolved: 3 };
 const freshRank = (i: LayeredInsight) => (i.freshness ? FRESH_RANK[i.freshness] : 2.5);
-
-const FRESH_ORDER: InsightFreshness[] = ['new', 'escalated', 'recurring', 'resolved'];
 
 function confOf(i: LayeredInsight): number {
   if (i.confidenceOverride != null) return i.confidenceOverride;
@@ -58,11 +65,9 @@ function confOf(i: LayeredInsight): number {
   return f.frequency * f.sourceDiversity * f.recency * f.businessImpact;
 }
 
-type StackFilter = { kind: 'sev'; value: LayeredInsight['severity'] } | { kind: 'fresh'; value: InsightFreshness } | null;
-
 export default function InsightStack({
   insights, scopeLabel = '', onCheckMore, initialOpen = 1,
-  previewCount, onSeeAll, foldLedger = true,
+  previewCount, onSeeAll, foldLedger = true, groupByAnchor = false, rowNav,
 }: {
   insights: LayeredInsight[];
   /** Trailing phrase for the header, e.g. "across this engagement". */
@@ -77,26 +82,34 @@ export default function InsightStack({
   /** Fold everything past hero+tail into the ledger (default). The dedicated
    *  AI Insights tab turns this off — you asked for all of them, you get all. */
   foldLedger?: boolean;
+  /** Read the stack as a directory of anchors: grouped engagement → SOP →
+   *  risk → control with group labels (the AI Insights tab's B+C reading),
+   *  severity-ranked within each group. Disables the ledger fold. */
+  groupByAnchor?: boolean;
+  /** Host-surface row navigation — makes every card name its exact
+   *  risk/control and redirect there (entity chips + go-to-row affordances). */
+  rowNav?: StackRowNav;
 }) {
   // Most-severe first; within a severity, escalation altitude, then what
   // changed, then finding tone, then confidence. Stable across renders.
+  // Anchor-grouped surfaces flip the first two keys: level, then severity.
   const sorted = useMemo(
     () => [...insights].sort(
       (a, b) =>
-        SEV[a.severity].rank - SEV[b.severity].rank ||
-        LAYER_RANK[a.layer] - LAYER_RANK[b.layer] ||
+        (groupByAnchor
+          ? LAYER_RANK[a.layer] - LAYER_RANK[b.layer] || SEV[a.severity].rank - SEV[b.severity].rank
+          : SEV[a.severity].rank - SEV[b.severity].rank || LAYER_RANK[a.layer] - LAYER_RANK[b.layer]) ||
         freshRank(a) - freshRank(b) ||
         TONE_RANK[a.verdict.tone] - TONE_RANK[b.verdict.tone] ||
         confOf(b) - confOf(a),
     ),
-    [insights],
+    [insights, groupByAnchor],
   );
 
   const [openIds, setOpenIds] = useState<Set<string>>(
     () => new Set(sorted.slice(0, Math.max(0, initialOpen)).map(i => i.id)),
   );
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [filter, setFilter] = useState<StackFilter>(null);
 
   const toggle = (id: string) =>
     setOpenIds(prev => {
@@ -104,56 +117,57 @@ export default function InsightStack({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  const setAll = (open: boolean) => {
-    setOpenIds(open ? new Set(sorted.map(i => i.id)) : new Set());
-    setLedgerOpen(open);
-  };
-  const allOpen = openIds.size === sorted.length && sorted.length > 0;
-
   // Preview only when there is actually more than the preview shows.
   const preview = !!onSeeAll && previewCount != null && previewCount < sorted.length;
 
-  const toggleFilter = (next: NonNullable<StackFilter>) =>
-    setFilter(prev => (prev && prev.kind === next.kind && prev.value === next.value ? null : next));
-  // In preview a chip can't honestly filter a list that isn't shown — it takes
-  // you to the full tab instead.
-  const chipClick = (next: NonNullable<StackFilter>) => (preview ? onSeeAll!() : toggleFilter(next));
+  // ── Entity navigation — rows first, sibling cards second, never a dead end.
+  // An entity with a real row redirects out to it; one without (a workflow-
+  // tested control, a cross-cutting risk) jumps to its own full card here.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const entityNav = useMemo<InsightEntityNav | undefined>(() => {
+    if (!rowNav) return undefined;
+    const cardFor = (ref: EntityRef) => sorted.find(i => i.layer === ref.kind && i.subjectId === ref.id);
+    return {
+      resolve: ref => (rowNav.canOpen(ref) ? 'row' : cardFor(ref) ? 'insight' : null),
+      open: ref => {
+        if (rowNav.canOpen(ref)) { rowNav.open(ref); return; }
+        const card = cardFor(ref);
+        if (!card) return;
+        setOpenIds(prev => new Set(prev).add(card.id));
+        setLedgerOpen(o => o || sorted.indexOf(card) >= 1 + TAIL_COUNT);
+        setFlashId(card.id);
+        window.setTimeout(() => {
+          document.getElementById(`insight-card-${card.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+        window.setTimeout(() => setFlashId(f => (f === card.id ? null : f)), 2400);
+      },
+    };
+  }, [rowNav, sorted]);
+  const flashCls = (id: string) =>
+    flashId === id ? 'rounded-2xl ring-2 ring-brand-400/60 transition-shadow duration-500' : '';
 
   const counts = {
     high: sorted.filter(i => i.severity === 'high').length,
     med: sorted.filter(i => i.severity === 'med').length,
     low: sorted.filter(i => i.severity === 'low').length,
   };
-  const doNow = sorted.reduce((s, i) => s + (i.recommendations?.filter(r => r.priority === 'do-now').length ?? 0), 0);
-  // The delta strip: what changed since the previous run, by lifecycle state.
-  const freshCounts = useMemo(() => {
-    const m = new Map<InsightFreshness, number>();
-    sorted.forEach(i => { if (i.freshness) m.set(i.freshness, (m.get(i.freshness) ?? 0) + 1); });
-    return m;
-  }, [sorted]);
 
-  // Apply the active filter, then split into the visible tier and the ledger.
-  const filtered = useMemo(() => {
-    if (!filter) return sorted;
-    return sorted.filter(i => (filter.kind === 'sev' ? i.severity === filter.value : i.freshness === filter.value));
-  }, [sorted, filter]);
+  // Split into the visible tier and the ledger.
   const foldAt = 1 + TAIL_COUNT;
   // A ledger of one is sillier than one extra row — fold only when it earns it.
-  const folds = !preview && foldLedger && filtered.length > foldAt + 1;
-  const visible = preview ? sorted.slice(0, previewCount) : folds ? filtered.slice(0, foldAt) : filtered;
-  const ledger = folds ? filtered.slice(foldAt) : [];
+  // Anchor-grouped surfaces never fold: a directory hides nothing.
+  const folds = !preview && !groupByAnchor && foldLedger && sorted.length > foldAt + 1;
+  const visible = preview ? sorted.slice(0, previewCount) : folds ? sorted.slice(0, foldAt) : sorted;
+  const ledger = folds ? sorted.slice(foldAt) : [];
   const ledgerHigh = ledger.filter(i => i.severity === 'high').length;
   const ledgerMed = ledger.filter(i => i.severity === 'med').length;
   const ledgerLow = ledger.filter(i => i.severity === 'low').length;
 
   if (sorted.length === 0) return null;
 
-  const chipBase = 'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold cursor-pointer transition-shadow';
-  const activeRing = 'ring-2 ring-brand-600/30';
-
   return (
     <section aria-label="AI insights">
-      {/* Rollup header — count · severity mix (clickable) · one expand/collapse control */}
+      {/* Rollup header — title · engine badge */}
       <div className="flex items-start gap-3 flex-wrap">
         <span className="size-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
           <Brain size={16} aria-hidden="true" />
@@ -165,81 +179,42 @@ export default function InsightStack({
               <Sparkles size={9} aria-hidden="true" /> Insight Memory Engine
             </span>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-            <span className="text-[11px] text-ink-500 tabular-nums font-medium">{sorted.length} insight{sorted.length === 1 ? '' : 's'}</span>
-            <span className="text-ink-300" aria-hidden="true">·</span>
-            {(['high', 'med', 'low'] as const).map(sev => counts[sev] > 0 && (
-              <button
-                key={sev} type="button"
-                onClick={() => chipClick({ kind: 'sev', value: sev })}
-                aria-pressed={filter?.kind === 'sev' && filter.value === sev}
-                title={preview ? 'See all insights' : `Show only ${SEV[sev].label}-severity insights`}
-                className={`${chipBase} ${SEV[sev].pill} ${filter?.kind === 'sev' && filter.value === sev ? activeRing : ''}`}
-              >
-                <span className={`size-1 rounded-full ${SEV[sev].dot}`} /> {counts[sev]} {SEV[sev].label}
-              </button>
-            ))}
-            {doNow > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[9px] font-bold border border-risk/20">{doNow} do now</span>}
-            {/* Delta strip — what changed since the previous run. Each segment filters. */}
-            {freshCounts.size > 0 && (
-              <>
-                <span className="h-3 w-px bg-canvas-border mx-0.5 hidden sm:block" aria-hidden="true" />
-                <span className="text-[9px] font-bold uppercase tracking-wider text-ink-400">Since last run</span>
-                {FRESH_ORDER.map(f => {
-                  const n = freshCounts.get(f);
-                  if (!n) return null;
-                  const m = FRESHNESS_META[f];
-                  return (
-                    <button
-                      key={f} type="button"
-                      onClick={() => chipClick({ kind: 'fresh', value: f })}
-                      aria-pressed={filter?.kind === 'fresh' && filter.value === f}
-                      title={preview ? 'See all insights' : `Show only ${m.label.toLowerCase()} insights`}
-                      className={`${chipBase} ${m.pill} ${filter?.kind === 'fresh' && filter.value === f ? activeRing : ''}`}
-                    >
-                      <span className={`size-1 rounded-full ${m.dot}`} /> {n} {m.label.toLowerCase()}
-                    </button>
-                  );
-                })}
-              </>
-            )}
-          </div>
         </div>
-        {!preview && sorted.length > 1 && (
-          <button
-            type="button" onClick={() => setAll(!allOpen)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 h-8 text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
-          >
-            {allOpen ? <ChevronsDownUp size={13} aria-hidden="true" /> : <ChevronsUpDown size={13} aria-hidden="true" />}
-            {allOpen ? 'Collapse all' : 'Expand all'}
-          </button>
-        )}
       </div>
 
-      {/* Filtered-out note, so an active filter never reads as "insights vanished". */}
-      {filter && filtered.length < sorted.length && (
-        <p className="mt-2 text-[10.5px] text-ink-400">
-          Showing {filtered.length} of {sorted.length} insights ·{' '}
-          <button type="button" onClick={() => setFilter(null)} className="font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">Clear filter</button>
-        </p>
-      )}
-
-      {/* Hero + tail — the attention budget, spent. */}
+      {/* Hero + tail — the attention budget, spent. Anchor-grouped surfaces
+          read as a directory: a group label opens each anchor level. */}
       <motion.ul
         initial={false}
         className="mt-3 flex flex-col gap-1.5"
       >
-        {visible.map((insight) => (
-          <li key={insight.id}>
-            <LayeredInsightCard
-              insight={insight}
-              onCheckMore={onCheckMore}
-              collapsible
-              open={openIds.has(insight.id)}
-              onToggleOpen={() => toggle(insight.id)}
-            />
-          </li>
-        ))}
+        {visible.map((insight, i) => {
+          const newGroup = groupByAnchor && (i === 0 || visible[i - 1]!.layer !== insight.layer);
+          const groupCount = groupByAnchor ? sorted.filter(s => s.layer === insight.layer).length : 0;
+          return (
+            <li key={insight.id}>
+              {newGroup && (
+                <div className={`flex items-center gap-2 px-0.5 ${i === 0 ? 'mb-1.5' : 'mt-3 mb-1.5'}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                    {LAYER_GROUP_LABEL[insight.layer]}
+                  </span>
+                  <span className="text-[10px] font-bold text-brand-700 tabular-nums">· {groupCount}</span>
+                  <span className="flex-1 h-px bg-canvas-border" aria-hidden="true" />
+                </div>
+              )}
+              <div id={`insight-card-${insight.id}`} className={flashCls(insight.id)}>
+                <LayeredInsightCard
+                  insight={insight}
+                  onCheckMore={onCheckMore}
+                  collapsible
+                  open={openIds.has(insight.id)}
+                  onToggleOpen={() => toggle(insight.id)}
+                  entityNav={entityNav}
+                />
+              </div>
+            </li>
+          );
+        })}
       </motion.ul>
 
       {/* Preview CTA — the one row that replaces tail + ledger on the Overview.
@@ -287,13 +262,16 @@ export default function InsightStack({
               >
                 {ledger.map((insight) => (
                   <li key={insight.id}>
-                    <LayeredInsightCard
-                      insight={insight}
-                      onCheckMore={onCheckMore}
-                      collapsible
-                      open={openIds.has(insight.id)}
-                      onToggleOpen={() => toggle(insight.id)}
-                    />
+                    <div id={`insight-card-${insight.id}`} className={flashCls(insight.id)}>
+                      <LayeredInsightCard
+                        insight={insight}
+                        onCheckMore={onCheckMore}
+                        collapsible
+                        open={openIds.has(insight.id)}
+                        onToggleOpen={() => toggle(insight.id)}
+                        entityNav={entityNav}
+                      />
+                    </div>
                   </li>
                 ))}
               </motion.ul>

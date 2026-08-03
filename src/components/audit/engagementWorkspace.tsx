@@ -58,8 +58,10 @@ export function useEngagementWorkspace(): WorkspaceCtx {
   return c;
 }
 
-/** Derive the base (library) controls for an engagement — one row per controlId. */
-function baseControlsFor(engagement: Engagement): WorkspaceControl[] {
+/** Derive the base (library) controls for an engagement — one row per controlId.
+ *  Exported so the engagement insight subjects are built from the SAME rows the
+ *  Controls tab renders — the drawer's redirects land on rows that exist. */
+export function baseControlsFor(engagement: Engagement): WorkspaceControl[] {
   const rows = racmRowsForProcess(engagement.process);
   const usable = rows.length > 0 ? rows : RACM_LIBRARY;
   const byId = new Map<string, WorkspaceControl>();

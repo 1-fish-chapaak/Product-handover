@@ -35,8 +35,10 @@ import {
   type Automation,
 } from '../../data/racm';
 import { useEngagementWorkspace, type WorkspaceControl } from './engagementWorkspace';
-import AIRecommendsPopover from '../shared/AIRecommendsPopover';
-import { actionableRacmRecs } from '../../data/layeredInsights';
+import { AIRecommendsBadge } from '../shared/InsightGenerator';
+import { InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/TargetedActions';
+import { getGeneratedInsight, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
+import { buildLayeredInsight, type LayeredInsight } from '../../data/layeredInsights';
 
 /** Adapt a user-added control into a RACM row so it renders in the matrix. */
 function customControlToRacmRow(c: WorkspaceControl, process: Engagement['process']): RACMRow {
@@ -145,12 +147,30 @@ function entryStats(rows: RACMRow[]) {
   };
 }
 
+// ─── Derived risk insights (trigger-gated, zero extra generation) ─────────────
+// Same pattern as workflow rows: a RACM row's risk-layer insight is BUILT ON
+// RENDER, gated on the engagement-level generation existing, and stamped with
+// that run's time — one header Generate lights every RACM surface, and no
+// engine call ever fires from this tab.
+
+function rowRiskInsight(row: RACMRow, stamp: number): LayeredInsight {
+  return {
+    ...buildLayeredInsight({ layer: 'risk', subjectId: row.riskId, subjectLabel: row.riskDescription, priority: row.isKey ? 'High' : 'Low' }),
+    generatedAt: stamp,
+  };
+}
+
+const SEV_RANK: Record<LayeredInsight['severity'], number> = { high: 0, med: 1, low: 2 };
+
 // ─── Container ────────────────────────────────────────────────────────────────
 
 export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.Element {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const ws = useEngagementWorkspace();
+  // Light up when the engagement-level generation lands (header launcher run).
+  useInsightCacheVersion();
+  const insightStamp = getGeneratedInsight('engagement', engagement.id)?.generatedAt ?? null;
   const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
 
   // When a full RACM is uploaded it replaces the library rows for every area.
@@ -201,8 +221,10 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   const entries = useMemo(() => [...extraEntries, ...libraryEntries], [extraEntries, libraryEntries]);
   const selected = entries.find(e => e.id === selectedId) ?? null;
 
-  // Opening a RACM goes straight to the full-page editor (not an in-tab sub-page).
-  // The in-tab matrix is only a fallback for contexts that don't wire an editor.
+  // Two ways into a RACM: the card NAME opens the in-tab matrix (read it in
+  // place — where the row-level AI insights live); the "Open in editor" button
+  // goes to the full-page editor for actual editing.
+  const openMatrix = (entry: RacmEntry) => setSelectedId(entry.id);
   const openEditor = (entry: RacmEntry) => {
     if (onOpenFullEditor) onOpenFullEditor({ racmName: entry.name, processLabel: entry.subProcess });
     else setSelectedId(entry.id);
@@ -274,10 +296,11 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
         <RacmMatrixView
           entry={selected}
           framework={engagement.framework}
+          insightStamp={insightStamp}
           onBack={() => setSelectedId(null)}
           onViewSop={() => setSopPreview(selected)}
           onUploadSop={() => triggerSopUpload(selected.id)}
-          onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor() : undefined}
+          onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor({ racmName: selected.name, processLabel: selected.subProcess }) : undefined}
         />
         {hiddenInputs}
         <AnimatePresence>{sopPreview && <SopPreviewDrawer entry={sopPreview} onClose={() => setSopPreview(null)} />}</AnimatePresence>
@@ -293,7 +316,9 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
         process={engagement.process}
         framework={engagement.framework}
         entries={entries}
-        onOpen={openEditor}
+        insightStamp={insightStamp}
+        onOpen={openMatrix}
+        onOpenEditor={openEditor}
         onViewSop={setSopPreview}
         onNew={() => setNewOpen(true)}
         onUploadRacm={triggerRacmUpload}
@@ -310,12 +335,17 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
 // ─── Library list ─────────────────────────────────────────────────────────────
 
 function RacmLibraryList({
-  process, framework, entries, onOpen, onViewSop, onNew, onUploadRacm, onUploadSop,
+  process, framework, entries, insightStamp, onOpen, onOpenEditor, onViewSop, onNew, onUploadRacm, onUploadSop,
 }: {
   process: string;
   framework: string;
   entries: RacmEntry[];
+  /** Engagement generation timestamp — null until the header Generate runs. */
+  insightStamp: number | null;
+  /** Open the in-tab matrix (read in place — row insights live there). */
   onOpen: (entry: RacmEntry) => void;
+  /** Open the full-page editor. */
+  onOpenEditor: (entry: RacmEntry) => void;
   onViewSop: (entry: RacmEntry) => void;
   onNew: () => void;
   onUploadRacm: () => void;
@@ -363,7 +393,9 @@ function RacmLibraryList({
             <RacmEntryCard
               key={entry.id}
               entry={entry}
+              insightStamp={insightStamp}
               onOpen={() => onOpen(entry)}
+              onOpenEditor={() => onOpenEditor(entry)}
               onViewSop={() => onViewSop(entry)}
               onUploadSop={() => onUploadSop(entry.id)}
             />
@@ -411,15 +443,25 @@ function RacmOnboarding({ onUploadRacm, onUploadSop }: { onUploadRacm: () => voi
   );
 }
 
-function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
+function RacmEntryCard({ entry, insightStamp, onOpen, onOpenEditor, onViewSop, onUploadSop }: {
   entry: RacmEntry;
+  insightStamp: number | null;
   onOpen: () => void;
+  onOpenEditor: () => void;
   onViewSop: () => void;
   onUploadSop: () => void;
 }): JSX.Element {
   const s = entryStats(entry.rows);
   const badge = SOURCE_BADGE[entry.source];
-  const racmRecs = actionableRacmRecs({ subjectLabel: entry.name, risks: s.risks, controls: s.controls, keyControls: s.keyControls, attributes: s.attributes, hasSop: Boolean(entry.sop) });
+  // Once the engagement generation lands, each card carries its risks' derived
+  // insights: a chip + the top-severity takeaway. The full strip + actions
+  // live one click in, on the matrix rows (the same split as Controls rows).
+  const riskInsights = useMemo(() => {
+    if (insightStamp == null) return [];
+    const uniqueRiskRows = entry.rows.filter((r, i, arr) => arr.findIndex(x => x.riskId === r.riskId) === i);
+    return uniqueRiskRows.map(r => rowRiskInsight(r, insightStamp)).sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
+  }, [entry.rows, insightStamp]);
+  const topInsight = riskInsights[0] ?? null;
   return (
     <div className="glass-card p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className="p-2.5 rounded-xl bg-brand-50 shrink-0"><BookOpen size={18} className="text-brand-600" /></div>
@@ -427,11 +469,13 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
       {/* Identity + counts */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={onOpen} className="text-[0.875rem] font-semibold text-text hover:text-primary transition-colors cursor-pointer text-left">
+          <button onClick={onOpen} className="text-[0.875rem] font-semibold text-text hover:text-primary transition-colors cursor-pointer text-left" title="Open this RACM's matrix in place">
             {entry.name}
           </button>
           <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wider border ${badge.cls}`}>{badge.label}</span>
-          {racmRecs.length > 0 && <AIRecommendsPopover recs={racmRecs} subjectLabel={entry.name} subjectSub={entry.subProcess} className="shrink-0" />}
+          {topInsight && (
+            <AIRecommendsBadge label="AI insight" count={riskInsights.length} onClick={onOpen} className="shrink-0" />
+          )}
         </div>
         <div className="text-[0.6875rem] text-text-muted mt-1 tabular-nums">
           {s.risks} risk{s.risks === 1 ? '' : 's'}
@@ -443,6 +487,12 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
           <span className="text-border mx-1.5">·</span>
           updated {entry.updatedAgo}
         </div>
+        {topInsight && (
+          <p className="mt-1 flex items-center gap-1.5 min-w-0 text-[0.71875rem] text-text-secondary">
+            <Sparkles size={10} className="text-brand-600 shrink-0" aria-hidden="true" />
+            <span className="truncate">{topInsight.takeaway}</span>
+          </p>
+        )}
       </div>
 
       {/* SOP — clearly visible on the right, just left of Open */}
@@ -478,7 +528,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
       )}
 
       <button
-        onClick={onOpen}
+        onClick={onOpenEditor}
         title="Open in the full-page RACM editor"
         className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.78125rem] font-semibold transition-colors cursor-pointer"
       >
@@ -490,9 +540,11 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
 
 // ─── Matrix detail (one RACM / sub-process) ───────────────────────────────────
 
-function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOpenFullEditor }: {
+function RacmMatrixView({ entry, framework, insightStamp, onBack, onViewSop, onUploadSop, onOpenFullEditor }: {
   entry: RacmEntry;
   framework: string;
+  /** Engagement generation timestamp — null until the header Generate runs. */
+  insightStamp: number | null;
   onBack: () => void;
   onViewSop: () => void;
   onUploadSop: () => void;
@@ -504,6 +556,11 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<RACMRow | null>(null);
+  // Risk-anchored insight surfaces (parity with Controls-tab rows): the full
+  // card in a slide-over, and the act-in-place drawer for a targeted action.
+  const [insightDetail, setInsightDetail] = useState<LayeredInsight | null>(null);
+  const [drawerAction, setDrawerAction] = useState<TargetedAction | null>(null);
+  const insightFor = insightStamp == null ? undefined : (row: RACMRow) => rowRiskInsight(row, insightStamp);
 
   const filteredRows = useMemo(() => (keyOnly ? entry.rows.filter(r => r.isKey) : entry.rows), [entry.rows, keyOnly]);
   const groups = useMemo(() => groupRacmBySubProcess(filteredRows), [filteredRows]);
@@ -619,7 +676,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }} className="overflow-hidden border-t border-border-light">
-                      <RACMTable rows={group.rows} expandedRow={expandedRow} onToggleRow={toggleRow} onIdClick={() => addToast({ message: 'Risk/Control detail opening soon', type: 'info' })} onOpenDetail={setDetailRow} />
+                      <RACMTable rows={group.rows} expandedRow={expandedRow} onToggleRow={toggleRow} onIdClick={() => addToast({ message: 'Risk/Control detail opening soon', type: 'info' })} onOpenDetail={setDetailRow} insightFor={insightFor} onViewInsight={setInsightDetail} onOpenAction={setDrawerAction} />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -630,6 +687,15 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
       )}
 
       <AnimatePresence>{detailRow && <RACMDetailDrawer row={detailRow} onClose={() => setDetailRow(null)} />}</AnimatePresence>
+
+      {/* Act-in-place drawer for a targeted AI action. */}
+      <ActionDrawer
+        action={drawerAction}
+        onClose={() => setDrawerAction(null)}
+        onViewAnchor={() => { if (drawerAction) setInsightDetail(drawerAction.source); }}
+      />
+      {/* Full-card slide-over behind every "View full insight". */}
+      <InsightDrawer insight={insightDetail} onClose={() => setInsightDetail(null)} />
     </div>
   );
 }
@@ -833,12 +899,19 @@ function RACMTable({
   onToggleRow,
   onIdClick,
   onOpenDetail,
+  insightFor,
+  onViewInsight,
+  onOpenAction,
 }: {
   rows: RACMRow[];
   expandedRow: string | null;
   onToggleRow: (id: string) => void;
   onIdClick: () => void;
   onOpenDetail: (row: RACMRow) => void;
+  /** Derived risk insight per row — undefined until the engagement Generate runs. */
+  insightFor?: (row: RACMRow) => LayeredInsight;
+  onViewInsight?: (insight: LayeredInsight) => void;
+  onOpenAction?: (action: TargetedAction) => void;
 }) {
   return (
     <div className="text-[0.75rem]">
@@ -859,8 +932,12 @@ function RACMTable({
 
       {/* Rows */}
       <div className="divide-y divide-border-light/60">
-        {rows.map(row => {
+        {rows.map((row, idx) => {
           const isOpen = expandedRow === row.id;
+          // Visible without expanding — a generated insight must never hide
+          // behind a chevron. One strip per RISK (rows are risk×control pairs,
+          // so a shared risk would otherwise repeat its insight verbatim).
+          const insight = rows.findIndex(r => r.riskId === row.riskId) === idx ? insightFor?.(row) : undefined;
           return (
             <div key={row.id} className="bg-white">
               <div
@@ -956,6 +1033,20 @@ function RACMTable({
                   </button>
                 </div>
               </div>
+
+              {/* Risk-anchored insight — inline the moment generation lands:
+                  the one-line takeaway + targeted-action grid + "View full
+                  insight" (right-side drawer). Attributes stay behind the
+                  expander; analysis doesn't. */}
+              {insight && (
+                <div className="px-4 pb-3.5">
+                  <InsightSummaryStrip
+                    insight={insight}
+                    onViewFull={() => onViewInsight?.(insight)}
+                    onOpenAction={a => onOpenAction?.(a)}
+                  />
+                </div>
+              )}
 
               {/* Attributes */}
               <AnimatePresence initial={false}>

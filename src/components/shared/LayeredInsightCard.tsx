@@ -21,22 +21,21 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, DollarSign, Layers, ChevronDown, ArrowRight, ShieldCheck,
-  Info, Crosshair, Split, GitCompareArrows, MessageCircleQuestion,
-  ScrollText, X, MessageSquare, ArrowUpRight,
+  Crosshair, MessageSquare, ArrowUpRight, Mail, ArrowDown, Locate,
 } from 'lucide-react';
-import {
-  displayConfidencePct, CONFIDENCE_FACTOR_META, MEMORY_CANDIDATE_THRESHOLD,
-} from '../../data/insightMemory';
 import {
   LAYER_META,
   type LayeredInsight, type VerdictTone, type CheckMoreOption,
-  type RecPriority,
+  type RecPriority, type EntityRef,
 } from '../../data/layeredInsights';
 import { FRESHNESS_META } from './insightFreshness';
 import { openInChat as openChatTab } from './insightChat';
+import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
+import RunTrajectoryBand from './RunTrajectoryBand';
+import InsightEmailModal from './InsightEmailModal';
+import InsightFeedback from './InsightFeedback';
 
 const PRIORITY_RANK: Record<RecPriority, number> = { 'do-now': 0, 'this-period': 1, advisory: 2 };
-const REC_CAP = 6;
 
 // ─── Tone → Editorial-GRC palette ─────────────────────────────────────────
 
@@ -65,77 +64,15 @@ function FreshnessTag({ insight }: { insight: LayeredInsight }) {
   );
 }
 
-const CHECK_ICON: Record<CheckMoreOption['kind'], typeof Crosshair> = {
-  compare: GitCompareArrows, split: Split, trace: Crosshair, ask: MessageCircleQuestion,
-};
-
-function confDot(pct: number): string {
-  if (pct >= 70) return 'rgb(21 128 61)';       // compliant
-  if (pct >= MEMORY_CANDIDATE_THRESHOLD * 100) return 'rgb(180 83 9)'; // mitigated
-  return 'rgb(154 143 174)';                     // ink-400
-}
-
-// ─── Confidence pill (three axes, popover breakdown) ───────────────────────
-
-function ConfidencePill({ insight }: { insight: LayeredInsight }) {
-  const [open, setOpen] = useState(false);
-  const pct = displayConfidencePct(insight);
-  const engineScored = insight.confidenceOverride != null;
-  const candidate = pct >= MEMORY_CANDIDATE_THRESHOLD * 100;
-  return (
-    <div className="relative">
-      <button
-        type="button" onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[11px] font-semibold text-ink-800 hover:border-brand-300 transition-colors cursor-pointer"
-        title="How this confidence was scored"
-      >
-        <span className="size-1.5 rounded-full" style={{ background: confDot(pct) }} />
-        {pct}% confidence
-        <Info size={11} className="text-ink-400" aria-hidden="true" />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 z-30 mt-2 w-[300px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-3.5"
-          >
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[12px] font-bold text-ink-800">Confidence — three axes</span>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="text-ink-400 hover:text-ink-700 cursor-pointer"><X size={13} /></button>
-            </div>
-            {engineScored ? (
-              <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                Engine-scored composite of evidence strength, materiality and novelty. The three axes gate independently — a thin-evidence finding is capped on “real”, never floated by dollars. See the evidence note on the card.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {CONFIDENCE_FACTOR_META.map(m => {
-                  const v = Math.round(insight.factors[m.key] * 100);
-                  return (
-                    <div key={m.key}>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-semibold text-ink-800">{m.label}</span>
-                        <span className="font-bold tabular-nums text-ink-800">{v}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
-                        <div className={`h-full rounded-full ${v >= 70 ? 'bg-compliant' : v >= 45 ? 'bg-mitigated-500' : 'bg-ink-300'}`} style={{ width: `${v}%` }} />
-                      </div>
-                      <p className="text-[10px] text-ink-400 mt-0.5">{m.hint}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="mt-3 pt-2.5 border-t border-canvas-border flex items-center justify-between">
-              <span className="text-[10px] text-ink-400 font-mono">real · materiality · novelty</span>
-              <span className={`text-[11px] font-bold ${candidate ? 'text-compliant-700' : 'text-ink-400'}`}>{pct}% {candidate ? '· candidate' : '· below gate'}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+// Relative time for the header — ambient meta only (the audit trail keeps
+// absolute timestamps). Insights without a stamp were generated this render.
+function timeAgo(ts?: number): string {
+  if (!ts) return 'just now';
+  const m = Math.floor((Date.now() - ts) / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} hr ago` : `${Math.floor(h / 24)} d ago`;
 }
 
 // ─── Evidence label per altitude ───────────────────────────────────────────
@@ -143,24 +80,67 @@ function ConfidencePill({ insight }: { insight: LayeredInsight }) {
 const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
   control: 'Evidence · runs and rows',
   risk: 'Evidence · controls under this risk',
+  sop: 'Evidence · risks and controls under this SOP',
   engagement: 'Evidence · risks and controls',
 };
 
-// ─── Recommended-action tile (grid cell) ───────────────────────────────────
-// Pared to the essential: the imperative, and nothing else. Priority survives
-// only in the sort order, so five real recommendations read as a clean
-// two-column list. The whole tile opens the step in Ask IRA — where the full
-// rationale and methodology live.
+const LAYER_WORD: Record<LayeredInsight['layer'], string> = {
+  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement',
+};
 
-function RecTile({ r, onOpen }: { r: NonNullable<LayeredInsight['recommendations']>[number]; onOpen: () => void }) {
+// ─── Entity navigation — "which risk/control, and take me there" ────────────
+// Rollup surfaces (the engagement insights drawer) pass `entityNav` so every
+// card names the exact row it resolves to and can redirect the reader there.
+// Row-level surfaces never pass it — a card sitting ON its own row would be
+// giving directions to where the reader already stands.
+
+/** How an entity opens: its own row elsewhere in the app ('row'), its full
+ *  card inside the surrounding stack ('insight'), or not at all (null). */
+export type EntityNavMode = 'row' | 'insight';
+
+export interface InsightEntityNav {
+  resolve: (ref: EntityRef) => EntityNavMode | null;
+  open: (ref: EntityRef) => void;
+}
+
+/** One entity reference chip: KIND · mono id · label. Navigable chips carry a
+ *  direction glyph — outward (↗) to the entity's row, downward (↓) to its full
+ *  card later in this report — so the reader knows where a click lands. */
+function EntityChip({ entity, mode, onOpen, title }: {
+  entity: EntityRef;
+  mode: EntityNavMode | null;
+  onOpen?: () => void;
+  title?: string;
+}) {
+  const body = (
+    <>
+      <span className="shrink-0 text-[8.5px] font-bold uppercase tracking-wider text-ink-400">{entity.kind}</span>
+      <span className="shrink-0 font-mono text-[10px] font-semibold text-brand-700">{entity.id}</span>
+      <span className="min-w-0 max-w-[220px] truncate text-[11px] font-semibold text-ink-700">{entity.label}</span>
+    </>
+  );
+  if (!mode) {
+    return (
+      <span
+        className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas px-2 py-1"
+        title={title ?? entity.note ?? entity.label}
+      >
+        {body}
+      </span>
+    );
+  }
   return (
     <button
       type="button" onClick={onOpen}
-      title="Open this recommendation in Ask IRA (new tab)"
-      className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
+      title={title ?? (mode === 'row'
+        ? `Open ${entity.kind} ${entity.id} — review and act on its row (new tab)`
+        : `Read this ${entity.kind}’s full insight further down this report`)}
+      className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-2 py-1 hover:border-brand-300 hover:bg-brand-50/60 transition-colors cursor-pointer"
     >
-      <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">{r.title}</span>
-      <MessageSquare size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-300 group-hover:text-brand-600 transition-colors" />
+      {body}
+      {mode === 'row'
+        ? <ArrowUpRight size={11} className="shrink-0 text-brand-600" aria-hidden="true" />
+        : <ArrowDown size={11} className="shrink-0 text-brand-600" aria-hidden="true" />}
     </button>
   );
 }
@@ -199,7 +179,7 @@ function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
 
 export default function LayeredInsightCard({
   insight, onCheckMore, collapsible = false, open = true, onToggleOpen,
-  headerLabel, evidenceLabel, evidenceExtra, onRec,
+  headerLabel, evidenceLabel, evidenceExtra, onRec, entityNav,
 }: {
   insight: LayeredInsight;
   /** Optional override for a "check more" chip; defaults to opening it in chat. */
@@ -218,13 +198,18 @@ export default function LayeredInsightCard({
   evidenceExtra?: React.ReactNode;
   /** Optional override for opening a recommended action; defaults to Ask IRA in a new tab. */
   onRec?: (title: string) => void;
+  /** Rollup-surface navigation: name the exact risk/control this card resolves
+   *  to and redirect there. Only the engagement drawer passes this — row-level
+   *  surfaces render exactly as before. */
+  entityNav?: InsightEntityNav;
 }) {
   const meta = LAYER_META[insight.layer];
-  // Evidence starts collapsed on every card — the rows are one click away and
-  // the observation bullets already carry the sample refs.
-  const [showEvidence, setShowEvidence] = useState(false);
-  const vTone = TONE[insight.verdict.tone];
   const sevTone = TONE[SEV_TONE[insight.severity]];
+  // Header scope, sentence-cased: "This control" / "Across workflows" / …
+  const scope = headerLabel ?? meta.label;
+  const scopeText = scope.charAt(0).toUpperCase() + scope.slice(1);
+  // Share-by-email — every full card carries it; collapsed rows stay calm.
+  const [emailOpen, setEmailOpen] = useState(false);
   // Typed recommendations, most-urgent first.
   const recs = [...(insight.recommendations ?? [])].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
 
@@ -238,50 +223,71 @@ export default function LayeredInsightCard({
   // Recommended actions honour the caller's handler (e.g. seed a follow-up composer).
   const openRec = (title: string) => (onRec ? onRec(title) : openInChat(title));
 
-  const doNowCount = recs.filter(r => r.priority === 'do-now').length;
+  // ── Entity navigation (rollup surfaces only) ──
+  // The anchor is this card's own subject; its only meaningful destination is a
+  // real row elsewhere ('insight' would just point the card at itself). The
+  // engagement anchor is the surface the reader is already on — no chip.
+  const anchorRef: EntityRef = { kind: insight.layer, id: insight.subjectId, label: insight.subjectLabel };
+  const showAnchorRef = !!entityNav && insight.layer !== 'engagement';
+  const anchorNavigable = showAnchorRef && entityNav!.resolve(anchorRef) === 'row';
+  const openAnchor = () => entityNav?.open(anchorRef);
+  // Where to check — navigation refs when the caller set them, else the spans
+  // (for a risk card the spanned controls ARE the rows to check).
+  const checkEntities: EntityRef[] = entityNav ? (insight.checkAt ?? insight.spans ?? []) : [];
 
   // ── Collapsed — a sleek single-row summary, so a stack of ten reads like a
   //    scannable list and doesn't push the engagement detail off-screen. Brand
   //    chrome and the full anatomy are reserved for the expanded card. ──
   if (collapsible && !open) {
-    const pct = displayConfidencePct(insight);
-    const layerWord = insight.layer === 'control' ? 'Control' : insight.layer === 'risk' ? 'Risk' : 'Engagement';
+    const layerWord = LAYER_WORD[insight.layer];
     return (
       <motion.section
         initial={false}
-        className="rounded-xl border border-canvas-border bg-canvas-elevated hover:border-brand-200 transition-colors"
+        className="flex items-stretch rounded-xl border border-canvas-border bg-canvas-elevated hover:border-brand-200 transition-colors"
       >
         <button
           type="button" onClick={onToggleOpen} aria-expanded={false}
           aria-label={`Expand insight: ${insight.takeaway}`}
-          className="group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer"
+          className="group flex flex-1 min-w-0 items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer"
         >
           <ChevronDown size={15} className="shrink-0 -rotate-90 text-ink-300 group-hover:text-ink-500 transition-colors" aria-hidden="true" />
           <span className={`size-2 rounded-full shrink-0 ${sevTone.dot}`} title={`Severity: ${SEV_LABEL[insight.severity]}`} />
           <span className="hidden sm:inline shrink-0 text-[9px] font-bold uppercase tracking-wider text-ink-400">{layerWord}</span>
+          {/* The mapping the rollup reader scans for: WHICH risk/control. */}
+          {showAnchorRef && (
+            <span className="hidden sm:inline shrink-0 font-mono text-[10px] font-semibold text-brand-700" title={insight.subjectLabel}>
+              {insight.subjectId}
+            </span>
+          )}
           <FreshnessTag insight={insight} />
+          {(insight.spans?.length ?? 0) > 0 && (
+            <span
+              className="hidden lg:inline-flex shrink-0 items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[9.5px] font-bold"
+              title={insight.spans!.map(s => s.label).join(' · ')}
+            >
+              Spans {insight.spans!.length} {insight.spans![0].kind}{insight.spans!.length === 1 ? '' : 's'}
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-800 group-hover:text-brand-700 transition-colors">
             {insight.takeaway}
           </span>
-          {doNowCount > 0 && (
-            <span className="hidden md:inline-flex items-center rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[9.5px] font-bold border border-risk/20 shrink-0">
-              {doNowCount} do now
-            </span>
-          )}
-          {recs.length > 0 && (
-            <span className="hidden xl:inline shrink-0 text-[10px] font-semibold text-brand-600/70 tabular-nums">{recs.length} rec{recs.length === 1 ? '' : 's'}</span>
-          )}
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-bold shrink-0 ${vTone.pill}`}>
-            <span className={`size-1.5 rounded-full ${vTone.dot}`} /> {insight.verdict.label}
+          {/* Right side carries ONE tag: severity. Verdict, rec counts and
+              confidence live inside the expanded card, not on the row. */}
+          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold shrink-0 ${sevTone.wrap}`} title={insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}>
+            {SEV_LABEL[insight.severity]}
           </span>
-          {insight.verdict.tone === 'positive' ? (
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[9.5px] font-semibold text-compliant-700 shrink-0"><ShieldCheck size={9} aria-hidden="true" /> Signed pass</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[10px] font-semibold text-ink-700 shrink-0 tabular-nums">
-              <span className="size-1.5 rounded-full" style={{ background: confDot(pct) }} /> {pct}%
-            </span>
-          )}
         </button>
+        {/* Straight to the row — the redirect without opening the card first. */}
+        {anchorNavigable && (
+          <button
+            type="button" onClick={openAnchor}
+            aria-label={`Open ${layerWord.toLowerCase()} ${insight.subjectId} in a new tab`}
+            title={`Open ${layerWord.toLowerCase()} ${insight.subjectId} — review and act on its row (new tab)`}
+            className="shrink-0 self-stretch px-2.5 rounded-r-xl border-l border-canvas-border text-ink-300 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+          >
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </button>
+        )}
       </motion.section>
     );
   }
@@ -298,25 +304,44 @@ export default function LayeredInsightCard({
       className={`rounded-2xl border overflow-hidden transition-colors ${container}`}
     >
       <div className="p-4">
-        {/* Header */}
+        {/* Header — [IRA INSIGHT] pill · scope · time ago ··· severity · confidence · caret */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`size-6 rounded-lg flex items-center justify-center shrink-0 ${bodyShown ? 'bg-brand-100 text-brand-700' : 'bg-canvas text-ink-400'}`}>
-            <Sparkles size={13} aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand-100/70 text-brand-700 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+            <Sparkles size={9} aria-hidden="true" /> IRA Insight
           </span>
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${bodyShown ? 'text-brand-700' : 'text-ink-500'}`}>AI insight · {headerLabel ?? meta.label}</span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${sevTone.pill}`}>
-            {insight.severityLabel ?? `Severity: ${SEV_LABEL[insight.severity]}`}
-          </span>
-          <span className="font-mono text-[10px] text-ink-400 hidden sm:inline">Insight Memory Engine</span>
-          <div className="ml-auto flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${vTone.pill}`}>
-              <span className={`size-1.5 rounded-full ${vTone.dot}`} /> {insight.verdict.label}
+          {/* On rollup surfaces the scope word becomes the exact entity — the
+              reader should never have to ask "which control is 'this control'?" */}
+          {showAnchorRef ? (
+            <EntityChip
+              entity={anchorRef}
+              mode={anchorNavigable ? 'row' : null}
+              onOpen={openAnchor}
+              title={anchorNavigable
+                ? `Open ${insight.layer} ${insight.subjectId} — review and act on its row (new tab)`
+                : `${insight.subjectLabel} — no row of its own in this engagement`}
+            />
+          ) : (
+            <span className="text-[12.5px] font-bold text-ink-600">{scopeText}</span>
+          )}
+          <span className="text-[11.5px] text-ink-400">· {timeAgo(insight.generatedAt)}</span>
+          <div className="ml-auto flex items-center gap-2.5">
+            {/* Severity, spelled out plain — label overrides like "Readiness: At
+                risk" stay on the hover title so the header reads one word. */}
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${sevTone.wrap}`} title={insight.severityLabel}>
+              {SEV_LABEL[insight.severity]}
             </span>
-            {/* A signed pass has no "finding confidence" to report — the confidence
-                axes describe the strength of a finding, so hide them on positive verdicts. */}
-            {insight.verdict.tone === 'positive'
-              ? <span className="inline-flex items-center gap-1 rounded-full border border-compliant-200 bg-compliant-50 px-2 py-0.5 text-[10px] font-semibold text-compliant-700"><ShieldCheck size={10} /> Signed pass</span>
-              : <ConfidencePill insight={insight} />}
+            {/* Confidence is deliberately not shown — severity leads; a signed
+                pass keeps its assurance chip. */}
+            {insight.verdict.tone === 'positive' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-compliant-50 px-2 py-0.5 text-[10px] font-semibold text-compliant-700"><ShieldCheck size={10} /> Signed pass</span>
+            )}
+            <button
+              type="button" onClick={() => setEmailOpen(true)}
+              aria-label="Email this insight" title="Email this insight"
+              className="shrink-0 p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+            >
+              <Mail size={14} aria-hidden="true" />
+            </button>
             {collapsible && (
               <button
                 type="button" onClick={onToggleOpen} aria-expanded={open}
@@ -352,10 +377,15 @@ export default function LayeredInsightCard({
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              {/* What we found · Root cause · What's at stake — three canvas
-                  panels at equal height, echoing the recommended-actions band. */}
-              <div className="grid gap-2.5 mt-3.5 lg:grid-cols-3 items-stretch">
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+              {/* Across runs — the anchor metric's trajectory over stored run
+                  history. Only single-output insights carry one; its absence
+                  is itself the honest "no cross-run claim" state. */}
+              {insight.trajectory && <RunTrajectoryBand trajectory={insight.trajectory} className="mt-3.5" />}
+
+              {/* What we found · Root cause · What's at stake — three open
+                  columns, no boxes; the gutters do the separating. */}
+              <div className="grid gap-x-8 gap-y-4 mt-3.5 lg:grid-cols-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <Layers size={12} className="text-brand-600" aria-hidden="true" /> What we found
                   </div>
@@ -368,7 +398,7 @@ export default function LayeredInsightCard({
                     ))}
                   </ul>
                 </div>
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
                   </div>
@@ -380,7 +410,7 @@ export default function LayeredInsightCard({
                     </p>
                   </div>
                 </div>
-                <div className="min-w-0 rounded-xl border border-canvas-border bg-canvas p-3">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
                     <DollarSign size={12} className="text-ink-500" aria-hidden="true" /> What&rsquo;s at stake
                   </div>
@@ -395,101 +425,66 @@ export default function LayeredInsightCard({
                 </div>
               </div>
 
-              {/* Toolbar — evidence toggle (collapsed by default) + check-more
-                  chips on one line, so neither claims a row of its own. */}
-              {(insight.evidence.length > 0 || insight.checkMore.length > 0) && (
-                <div className="mt-3">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                    {insight.evidence.length > 0 && (
-                      <button
-                        type="button" onClick={() => setShowEvidence(v => !v)} aria-expanded={showEvidence}
-                        className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-                      >
-                        <motion.span animate={{ rotate: showEvidence ? 0 : -90 }} transition={{ type: 'spring', stiffness: 360, damping: 26 }} className="inline-flex">
-                          <ChevronDown size={14} aria-hidden="true" />
-                        </motion.span>
-                        <ScrollText size={12} aria-hidden="true" /> {evidenceLabel ?? EVIDENCE_LABEL[insight.layer]} · {insight.evidence.length}
-                      </button>
-                    )}
-                    {insight.evidence.length > 0 && insight.checkMore.length > 0 && (
-                      <span className="h-3.5 w-px bg-canvas-border mx-1 hidden sm:block" aria-hidden="true" />
-                    )}
-                    {insight.checkMore.map((opt, i) => {
-                      const Icon = CHECK_ICON[opt.kind];
-                      return (
-                        <button
-                          key={i} type="button"
-                          onClick={() => (onCheckMore ? onCheckMore(opt) : openInChat(opt.detail ? `${opt.label} — ${opt.detail}` : opt.label))}
-                          title="Ask this in Ask IRA (new tab)"
-                          className="group inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors"
-                        >
-                          <Icon size={12} className="text-ink-400 group-hover:text-brand-600" aria-hidden="true" />
-                          {opt.label}
-                          {opt.detail && <span className="text-ink-400">· {opt.detail}</span>}
-                          <ArrowUpRight size={11} className="text-ink-300 group-hover:text-brand-600" aria-hidden="true" />
-                        </button>
-                      );
-                    })}
+              {/* Where to check — rollup surfaces turn the span/checkAt refs
+                  into the answer to "which risk/control do I open, exactly?".
+                  Each chip redirects to its row (↗) or, when the entity has no
+                  row of its own, to its full card further down the report (↓). */}
+              {entityNav && checkEntities.length > 0 ? (
+                <div className="mt-3.5 rounded-xl border border-brand-100 bg-brand-50/30 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700">
+                    <Locate size={12} aria-hidden="true" /> Where to check · {checkEntities.length}
                   </div>
-                  <AnimatePresence initial={false}>
-                    {insight.evidence.length > 0 && showEvidence && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden"
-                      >
-                        {/* A calm data table — headers, plain ink, no severity paint;
-                            the tone story is already told above the fold. */}
-                        <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden bg-canvas-elevated">
-                          <table className="w-full text-[11.5px]">
-                            <thead>
-                              <tr className="bg-canvas border-b border-canvas-border text-left">
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500 hidden sm:table-cell w-[172px]">Source</th>
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Item</th>
-                                <th scope="col" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-500">Detail</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-canvas-border">
-                              {insight.evidence.map((e, i) => (
-                                <tr key={i}>
-                                  <td className="px-3 py-2 font-mono text-[10.5px] text-ink-500 truncate hidden sm:table-cell">{e.ref}</td>
-                                  <td className="px-3 py-2 font-medium text-ink-800">{e.label}</td>
-                                  <td className="px-3 py-2 text-ink-700 tabular-nums">{e.detail}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {evidenceExtra}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {checkEntities.map(e => (
+                      <EntityChip
+                        key={`${e.kind}:${e.id}`}
+                        entity={e}
+                        mode={entityNav.resolve(e)}
+                        onOpen={() => entityNav.open(e)}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-ink-400">
+                    One finding, counted once — open a row to make the change there.
+                  </p>
+                </div>
+              ) : (insight.spans?.length ?? 0) > 0 && (
+                // Spans — the entities below this anchor the finding draws from.
+                // This card is their single record; each spanned row shows a
+                // one-line reflection pointing back here, never a copy.
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mr-0.5">Spans</span>
+                  {insight.spans!.map(s => (
+                    <span
+                      key={`${s.kind}:${s.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-evidence-100 bg-evidence-50 px-2 py-0.5 text-[10.5px] font-semibold text-evidence-700"
+                      title={s.note ?? s.label}
+                    >
+                      <span className="font-mono text-[9.5px]">{s.id}</span>
+                      <span className="max-w-[180px] truncate">{s.label}</span>
+                    </span>
+                  ))}
+                  <span className="text-[10px] text-ink-400">· counted once — anchored on this card</span>
                 </div>
               )}
 
-              {/* Recommended actions — the fix, foregrounded. Tiles two-per-row so a
-                  4–5 item set reads in a couple of rows, not a tall wall. Each tile
-                  opens in Ask IRA (new tab) with the step pre-filled. */}
+              {/* Evidence disclosure — collapsed-by-default toggle + check-more
+                  chips + calm Source/Item/Detail table (shared surface). */}
+              <EvidenceDisclosure
+                evidence={insight.evidence}
+                label={evidenceLabel ?? EVIDENCE_LABEL[insight.layer]}
+                note={insight.evidenceNote}
+                checkMore={insight.checkMore}
+                onCheckMore={onCheckMore}
+                evidenceExtra={evidenceExtra}
+                subjectLabel={insight.subjectLabel}
+              />
+
+              {/* Recommended actions — the fix, foregrounded (shared surface).
+                  Falls back to the plain "what to do next" list when the subject
+                  has no typed recommendations. */}
               {recs.length > 0 ? (
-                <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
-                    <Sparkles size={12} className="text-brand-600" aria-hidden="true" />
-                    Recommended actions
-                    <span className="text-ink-400">· {recs.length}</span>
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-brand-100/70 px-2 py-0.5 text-[9px] font-semibold text-brand-700 normal-case tracking-normal">
-                      <MessageSquare size={10} aria-hidden="true" /> Open one to work it in chat
-                    </span>
-                  </div>
-                  <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
-                    {recs.slice(0, REC_CAP).map((r) => (
-                      <li key={r.id} className="min-w-0">
-                        <RecTile r={r} onOpen={() => openRec(r.title)} />
-                      </li>
-                    ))}
-                  </ul>
-                  {recs.length > REC_CAP && (
-                    <p className="text-[10px] text-ink-400 mt-2 px-0.5">+{recs.length - REC_CAP} more — ask IRA to walk the full set.</p>
-                  )}
-                </div>
+                <RecommendedActions recs={recs} onOpen={openRec} />
               ) : (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
@@ -504,10 +499,31 @@ export default function LayeredInsightCard({
                   </ul>
                 </div>
               )}
+
+              {/* The redirect, restated where the reader lands after the fix:
+                  having read what to do, go do it on the row itself. */}
+              {anchorNavigable && (
+                <button
+                  type="button" onClick={openAnchor}
+                  title={`Opens in a new tab — this report stays where it is.`}
+                  className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50/50 h-9 text-[12.5px] font-semibold text-brand-700 hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer"
+                >
+                  Open {LAYER_WORD[insight.layer].toLowerCase()}
+                  <span className="font-mono text-[11.5px]">{insight.subjectId}</span>
+                  to act
+                  <ArrowUpRight size={13} aria-hidden="true" />
+                </button>
+              )}
+
+              {/* Signal back — the card's last line. Rating sits below the fix
+                  because that's the first point the reader can judge the
+                  finding; the header stays status + dispatch. */}
+              <InsightFeedback insightId={insight.id} />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      <InsightEmailModal insight={insight} scopeLabel={scope} open={emailOpen} onClose={() => setEmailOpen(false)} />
     </motion.section>
   );
 }

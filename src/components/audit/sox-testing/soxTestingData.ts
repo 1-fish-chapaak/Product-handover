@@ -27,7 +27,7 @@ export interface GroupEntity {
 
 /** 'netAssets' is produced only by the V2 wizard (call decision #3) — the
  *  classic wizard's option list is unchanged. */
-export type MaterialityBasis = 'pbt' | 'revenue' | 'netAssets' | 'expenses' | 'custom';
+export type MaterialityBasis = 'pbt' | 'revenue' | 'netAssets' | 'assets' | 'expenses' | 'custom';
 
 export interface BasisOption {
   id: MaterialityBasis;
@@ -55,6 +55,16 @@ export const BASIS_OPTIONS: BasisOption[] = [
     defaultPct: 1.5,
     benchmarkLabel: 'Total revenue (consolidated)',
     defaultBenchmark: 5240,
+  },
+  {
+    // Asset-intensive groups — the band the app's own BENCHMARK_META already
+    // quotes for total assets (0.5–2%), taken at its midpoint.
+    id: 'assets',
+    label: '% of total asset balance',
+    hint: 'Asset-intensive group (infrastructure, fleet) — 0.5–2% of total assets',
+    defaultPct: 1,
+    benchmarkLabel: 'Total assets (consolidated)',
+    defaultBenchmark: 8400,
   },
   {
     id: 'expenses',
@@ -282,6 +292,23 @@ export interface MaterialityRule {
 /** ₹ Cr threshold a rule computes. */
 export const ruleOverall = (r: MaterialityRule): number =>
   r.basis === 'custom' ? r.benchmark : Math.round(r.benchmark * r.pct * 100) / 10000;
+
+/** End-year of the financial year in progress — 2027 means FY 2026-27.
+ *
+ *  The Indian financial year runs Apr–Mar, so from April onward the group is
+ *  reporting on a year that ends in the NEXT calendar year. Creation flows call
+ *  this instead of hard-coding a year: the audit-period field is parked on the
+ *  scoping wizard, so a frozen default would have silently kept creating
+ *  FY 2026-27 programmes forever. */
+export const currentFyEnd = (now: Date = new Date()): number =>
+  (now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear());
+
+/** The three cycles a creation flow offers: the current one, with one either
+ *  side. Calendar years sit one behind, matching the fy ⇄ cy toggle. */
+export const cycleYears = (basis: 'fy' | 'cy', now: Date = new Date()): number[] => {
+  const mid = basis === 'fy' ? currentFyEnd(now) : currentFyEnd(now) - 1;
+  return [mid - 1, mid, mid + 1];
+};
 
 export interface SoxProgramme {
   id: string;

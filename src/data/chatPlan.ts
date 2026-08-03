@@ -14,6 +14,7 @@
 
 import type { PlanCardStep, PlanCardSource } from '../components/shared/PlanCards';
 import type { PlanOutputItem } from '../components/shared/PlanFlowDiagram';
+import type { LayeredInsight } from './layeredInsights';
 
 export const SRC_SAP_AP: PlanCardSource = {
   id: 'sap-ap', name: 'SAP ERP AP Module', type: 'sql',
@@ -185,3 +186,162 @@ export const CHAT_RISK_SUMMARY = {
   vendors: new Set(RISK_FACTS.map((r) => r.vendor)).size,
   controls: new Set(RISK_FACTS.map((r) => r.control)).size,
 };
+
+// ─── The output insight — "what these exceptions mean" ─────────────────────
+//
+// The chat answer's own AI insight, built from the SAME nine findings the
+// results table renders, so no figure on the card can drift from the row above
+// it. Deliberately NARROWER than the workflow-executor run insight, because a
+// chat answer honestly knows less:
+//
+//   • no `trajectory` — a one-off query has no stored run history, so there is
+//     nothing to trend. Its absence is stated in the evidence note rather than
+//     left silent, so "no trend shown" can't be read as "flat".
+//   • no cross-workflow correlation band — that card correlates an entity
+//     across OTHER workflows' runs; an ad-hoc answer is not a workflow yet.
+//
+// One insight, one output. The advisory recommendation is the honest route out
+// of both limits: save the query as a workflow, and the second run earns a trend.
+
+/** Controls that govern who may APPROVE a payment and who RECEIVES it — as
+ *  opposed to whether the invoice itself is arithmetically right. The insight's
+ *  central correlation rests on this grouping, so it is named once, here. */
+const PAYMENT_PATH_CONTROLS = ['Approval rules check', 'Vendor detail change check'];
+
+/** Reader-facing phrase for each control, for prose that shouldn't read like a
+ *  control library ("vendor-detail changes", not "Vendor detail change check"). */
+const CONTROL_PHRASE: Record<string, string> = {
+  'Duplicate payment check': 'duplicate payments',
+  'Approval rules check': 'approval rules',
+  'Invoice-vs-PO match check': 'invoice-vs-PO matching',
+  'Vendor detail change check': 'vendor-detail changes',
+};
+
+const STATUS_PHRASE: Record<ChatPlanRiskFact['status'], string> = {
+  Open: 'open', 'In review': 'in review', Resolved: 'resolved',
+};
+
+const sumAmounts = (rows: ChatPlanRiskFact[]) => rows.reduce((sum, r) => sum + r.amount, 0);
+
+/** Sentence-case a line that opens on a control phrase ("duplicate payments…"). */
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The single insight for this chat output, rated against the user's own
+ *  materiality rule so the card and the table's Risk column agree. */
+export function buildChatOutputInsight(threshold: number): LayeredInsight {
+  const total = sumAmounts(RISK_FACTS);
+
+  // The correlation: findings about the payment PATH (who approves, who is
+  // paid) versus findings about the invoice itself.
+  const pathRows = RISK_FACTS.filter((r) => PAYMENT_PATH_CONTROLS.includes(r.control));
+  const pathTotal = sumAmounts(pathRows);
+  const pathPct = Math.round((pathTotal / total) * 100);
+
+  const openRows = RISK_FACTS.filter((r) => r.status === 'Open');
+  const openTotal = sumAmounts(openRows);
+  const largest = [...RISK_FACTS].sort((a, b) => b.amount - a.amount)[0];
+  const highCount = RISK_FACTS.filter((r) => isHighByAmount(r.amount, threshold)).length;
+
+  // Per-control roll-up — biggest exposure first, so the prose quotes the same
+  // ordering the evidence table does.
+  const byControl = [...new Set(RISK_FACTS.map((r) => r.control))]
+    .map((control) => {
+      const rows = RISK_FACTS.filter((r) => r.control === control);
+      return { control, count: rows.length, total: sumAmounts(rows) };
+    })
+    .sort((a, b) => b.total - a.total);
+  const pathBreakdown = byControl
+    .filter((c) => PAYMENT_PATH_CONTROLS.includes(c.control))
+    .map((c) => `${CONTROL_PHRASE[c.control]} ${inrFull(c.total)} across ${c.count}`)
+    .join(', ');
+  const mostFrequent = [...byControl].sort((a, b) => b.count - a.count || a.total - b.total)[0];
+  const smallest = byControl[byControl.length - 1];
+
+  // Named rows the narrative leans on — looked up, never hardcoded, so a change
+  // to RISK_FACTS rewrites the copy instead of contradicting it.
+  const bankChange = RISK_FACTS.find((r) => r.issue.includes('Bank account changed'));
+  const selfApproved = RISK_FACTS.find((r) => r.issue.includes('Approved by the raiser'));
+  const split = RISK_FACTS.find((r) => r.issue.includes('Split under'));
+  const inactive = RISK_FACTS.find((r) => r.issue.includes('inactive'));
+  const poRows = RISK_FACTS.filter((r) => r.control === 'Invoice-vs-PO match check');
+
+  return {
+    id: 'chat-output-risky-payments',
+    layer: 'control',
+    subjectId: 'chat-output-risky-payments',
+    subjectLabel: 'Risky payments — this answer',
+    takeaway: `${inrFull(pathTotal)} — ${pathPct}% of the flagged exposure — sits in ${pathRows.length} findings about who approved a payment or who received it, not about the invoice.`,
+    verdict: { label: 'Exceptions found', tone: 'negative' },
+    severity: 'high',
+    likelyCause: {
+      label: 'Changes to the payment path aren’t re-checked before release.',
+      detail: `Each of the ${pathRows.length} clears a control that reads the invoice, not the change behind it — a bank account edited days before a ${inrFull(bankChange?.amount ?? 0)} payment, ${inrFull(inactive?.amount ?? 0)} paid to a vendor marked inactive, ${inrFull(selfApproved?.amount ?? 0)} approved by the person who raised it, and ${inrFull(split?.amount ?? 0)} split into halves under the limit. Confirm the mechanism on the ${bankChange?.vendor} row before anything here is written up as fraud.`,
+    },
+    reasoning: `Nine rows, nine separate payments — no two findings describe the same invoice, so ${inrFull(total)} is a sum of nine amounts, not a double count.`,
+    observations: [
+      `${RISK_FACTS.length} exceptions across ${CHAT_RISK_SUMMARY.vendors} vendors and ${byControl.length} controls, ${inrFull(total)} in total — ${highCount} clear your ${inrFull(threshold)} High rule.`,
+      `The money concentrates where the payment path is set: ${pathBreakdown} — ${pathPct}% of the total from ${pathRows.length} of ${RISK_FACTS.length} findings.`,
+      sentence(
+        mostFrequent.control === smallest.control
+          ? `${CONTROL_PHRASE[mostFrequent.control]} break most often — ${mostFrequent.count} findings — but carry the least money: ${inrFull(mostFrequent.total)}.`
+          : `${CONTROL_PHRASE[mostFrequent.control]} break most often — ${mostFrequent.count} findings, ${inrFull(mostFrequent.total)}.`,
+      ),
+      `${openRows.length} findings are still open, worth ${inrFull(openTotal)}; the largest single item (${inrFull(largest.amount)}, ${largest.vendor}) is ${largest.status === 'Open' ? 'among them' : `already ${STATUS_PHRASE[largest.status]}`}.`,
+    ],
+    atStake: `${inrFull(openTotal)} of the ${inrFull(total)} is still open and unactioned, and the ${inrFull(largest.amount)} ${largest.vendor} payment is the one that can’t be unwound cheaply.`,
+    stakes: [
+      `${inrFull(openTotal)} sits in the ${openRows.length} findings nobody has actioned yet.`,
+      `${inrFull(bankChange?.amount ?? 0)} went to a bank account changed days earlier — if that change wasn’t genuine, the money comes back by dispute, not by credit note.`,
+      `The approval limit was cleared two different ways — self-approval and splitting — so the next bypass won’t look like either of these.`,
+    ],
+    // One run, two datasets, today: frequency stays low on purpose — a single
+    // output can price exposure, it cannot establish recurrence.
+    factors: { frequency: 0.35, sourceDiversity: 0.6, recency: 1, businessImpact: 0.9 },
+    confidenceOverride: 0.76,
+    evidence: [...RISK_FACTS]
+      .sort((a, b) => b.amount - a.amount)
+      .map((r) => ({
+        ref: r.control,
+        label: r.vendor,
+        detail: `${inrFull(r.amount)} · ${r.issue} · ${r.status}`,
+        tone: isHighByAmount(r.amount, threshold) ? ('negative' as const) : ('caution' as const),
+      })),
+    evidenceNote: `${RISK_FACTS.length} flagged rows from 1.2M payments checked · one run — this output only. There is no prior run to compare against, so nothing here is a trend.`,
+    runsAnalysed: 1,
+    detectedOn: '15 Jul 2026',
+    detectedBy: 'traceable',
+    rollupOf: { label: 'flagged payments', count: RISK_FACTS.length },
+    // The inline check-more chips were retired from the card; follow-ups live in
+    // the chat's own "Ask a follow-up" track directly below the answer.
+    checkMore: [],
+    recommendedActions: [],
+    recommendations: [
+      {
+        id: 'chat-rec-hold', category: 'monitoring', priority: 'do-now',
+        title: `Hold the ${inrFull(openTotal)} across the ${openRows.length} open findings before the next payment run.`,
+        rationale: 'A hold is reversible; a released payment becomes a recovery exercise — and one of these followed a bank-account change, which recovers slowest of all.',
+      },
+      {
+        id: 'chat-rec-bank', category: 'root-cause', priority: 'do-now',
+        title: `Confirm the ${bankChange?.vendor} bank-account change against an independently held contact before releasing ${inrFull(bankChange?.amount ?? 0)}.`,
+        rationale: 'A vendor-detail change immediately before payment is the standard payment-diversion shape — confirm the mechanism before it is treated as fraud.',
+        guardrail: 'The fraud call stays the auditor’s.',
+      },
+      {
+        id: 'chat-rec-approval', category: 'segregation', priority: 'this-period',
+        title: 'Re-test the approval limit against both self-approval and split invoices.',
+        rationale: `Two findings (${inrFull((selfApproved?.amount ?? 0) + (split?.amount ?? 0))}) cleared the same limit in two different ways, which means the limit is being applied to the invoice rather than to the requester.`,
+      },
+      {
+        id: 'chat-rec-evidence', category: 'evidence', priority: 'this-period',
+        title: `Pull the PO and receipt for the ${poRows.length} invoice-vs-PO breaks (${inrFull(sumAmounts(poRows))}).`,
+        rationale: 'A missing PO and an over-billed line can both be legitimate — a split delivery, an agreed variation. The paper decides before either is written up.',
+      },
+      {
+        id: 'chat-rec-workflow', category: 'automation', priority: 'advisory',
+        title: 'Save this query as a workflow so the next run has something to compare against.',
+        rationale: 'This ran once over 90 days. One run can price exposure but cannot show direction — a second run is what turns these nine rows into a trend.',
+      },
+    ],
+  };
+}

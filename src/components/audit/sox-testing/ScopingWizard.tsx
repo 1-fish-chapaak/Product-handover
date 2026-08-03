@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
-  Building2, Landmark, Upload, FileText, Check, Plus, Trash2, X,
+  Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle,
 } from 'lucide-react';
@@ -13,14 +13,15 @@ import { useAuditLog } from '../../../context/AdminDataContext';
 import {
   BASIS_OPTIONS, BEYOND_TB, QUAL_REASONS, SEED_ENTITIES,
   SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES, captionsForEntities,
-  deriveRacms, entityShort, fmtCr, genCode,
+  currentFyEnd, cycleYears, deriveRacms, entityShort, fmtCr, genCode,
   type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
 
 /** Scoping step — PARKED (user ask). SOX creation is now identity + entities +
  *  a RACM attached to each entity; the trial balance and general ledger are
- *  uploaded later, from the engagement's Configuration tab. Everything the step
+ *  asked for on Basics instead — the group TB / GL beside the group name, the
+ *  RACM per entity in the table. Everything the step
  *  rendered is still below, behind this flag: set it back to true and 'Scoping'
  *  returns to STEPS at index 2, the `step === 2` block renders again, its gate
  *  re-enters `canContinue`, and the Skip-for-now footer button comes back with
@@ -109,6 +110,12 @@ const REQUIRED_DOCS: { id: ReqDocId; name: string; formats: string }[] = [
 ];
 const REQ_TAG: Record<ReqDocId, string> = { racm: 'RACM / SOP', tb: 'Trial balance', gl: 'General ledger' };
 
+/** Group-level documents (user ask): the trial balance and general ledger are
+ *  consolidated — one file each, for the group as a whole — so they're asked
+ *  for on Basics next to the group name. The RACM is NOT here: it differs per
+ *  entity and is attached row by row in the entity table below. */
+const GROUP_DOCS = REQUIRED_DOCS.filter(d => d.id !== 'racm');
+
 const PROCESS_NAMES: ProcessName[] = [
   'Order to Cash', 'Procure to Pay', 'Inventory', 'Fixed Assets',
   'Payroll (Hire to Retire)', 'Treasury', 'Tax',
@@ -143,13 +150,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // dates. The cycle is named by the year the group reports on: a financial
   // year (Apr–Mar) or a calendar year (Jan–Dec).
   const [yearBasis, setYearBasis] = useState<'fy' | 'cy'>('fy');
-  /** End-year of the audit period — 2027 ⇒ FY 2026-27 (financial) / CY 2027 (calendar). */
-  const [fyEnd, setFyEnd] = useState(2027);
+  /** End-year of the audit period — 2027 ⇒ FY 2026-27 (financial) / CY 2027
+   *  (calendar). Derived from today rather than fixed: the audit-period field
+   *  is parked (AUDIT_PERIOD_FIELD), so this default is the ONLY thing naming
+   *  the cycle, and a hard-coded year would keep creating stale programmes
+   *  once the financial year turned over. */
+  const [fyEnd, setFyEnd] = useState(currentFyEnd);
   const [owner, setOwner] = useState(OWNER_NAMES[0]);
 
-  const YEAR_OPTIONS = yearBasis === 'fy'
-    ? [2026, 2027, 2028].map(y => ({ value: y, label: `FY ${y - 1}-${String(y).slice(-2)}` }))
-    : [2025, 2026, 2027].map(y => ({ value: y, label: `CY ${y}` }));
+  const YEAR_OPTIONS = cycleYears(yearBasis).map(y => (yearBasis === 'fy'
+    ? { value: y, label: `FY ${y - 1}-${String(y).slice(-2)}` }
+    : { value: y, label: `CY ${y}` }));
   const fyLabel = YEAR_OPTIONS.find(o => o.value === fyEnd)?.label ?? `FY ${fyEnd}`;
   const fy = `FY${String(fyEnd).slice(-2)}`;
   const asOf = yearBasis === 'fy' ? `31 Mar ${fyEnd}` : `31 Dec ${fyEnd}`;
@@ -179,9 +190,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const reqSatisfied = REQUIRED_DOCS.filter(d => attached.some(a => a.req === d.id)).length;
   const allReqsSatisfied = reqSatisfied === REQUIRED_DOCS.length;
 
-  // Scoping can be skipped (user ask): the programme is created without
-  // RACMs / TBs and the workspace Overview flags what's missing until the
-  // RACM is added (RACM tab) and the GL / TBs are uploaded (Configuration).
+  // Scoping can be skipped (user ask): the programme is created without RACMs
+  // and the workspace Overview flags that until one is added on the RACM tab.
+  // The GL / TBs are no longer asked for here — they arrive on the audit that
+  // tests them, captured by the New audit wizard (the audit's Configuration tab
+  // is parked; see SOX_TABS in SoxIcfrApp).
   const [scopingSkipped, setScopingSkipped] = useState(false);
   const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 
@@ -300,6 +313,21 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setAttached(next);
     if (!next.some(a => a.req === 'racm')) setRacmUpload('idle');
     if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); }
+  };
+
+  /** One consolidated group file per requirement — re-uploading replaces the
+   *  previous one rather than stacking a second copy of the same document.
+   *  The TB runs its simulated parse, but deliberately does NOT merge the
+   *  seeded companies: the entity list is the user's, typed or via the
+   *  no-entities checkbox, and shouldn't grow rows they never asked for. */
+  const onGroupDocSelected = (req: ReqDocId, list: FileList | null) => {
+    const file = list?.[0];
+    if (!file) return;
+    setAttached(prev => [...prev.filter(a => a.req !== req), { id: `att-grp-${req}-${Date.now()}`, name: file.name, req }]);
+    if (req === 'tb') {
+      setTbUpload('parsing');
+      window.setTimeout(() => setTbUpload('done'), 800);
+    }
   };
 
   /** RACM attached to one entity. It also registers as a group `racm`
@@ -438,7 +466,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       groupName: groupName.trim(),
       entities: entities.map(e => {
         const up = uploads[e.id];
-        return typeof up === 'object' ? { ...e, tbFile: up.file, tbLines: up.lines } : { ...e };
+        if (typeof up === 'object') return { ...e, tbFile: up.file, tbLines: up.lines };
+        // One consolidated group TB covers every entity under it.
+        const groupTb = attached.find(a => a.req === 'tb');
+        return groupTb ? { ...e, tbFile: groupTb.name } : { ...e };
       }),
       materiality: {
         basis,
@@ -454,10 +485,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       qualCount: qualScope.length,
       racms: derived,
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
-      // With the Scoping step parked, NO engagement arrives with a trial
-      // balance or GL — so every one carries the gap flag and the workspace
-      // asks for them, exactly as the old Skip-for-now path did.
-      scopingSkipped: (scopingSkipped || !SCOPING_STEP) || undefined,
+      // The workspace banner nags for a missing RACM, so flag only when one
+      // was genuinely never attached — the group TB / GL are asked for on
+      // Basics now, so arriving without them is no longer the default.
+      scopingSkipped: (scopingSkipped || racmCount === 0) || undefined,
     };
     onCreated(programme);
   };
@@ -616,10 +647,71 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <input value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
                 {groupName.trim().length === 0 && <Hint text="Group name is required" />}
               </div>
+
+              {/* PARKED (user ask): the group trial balance / general ledger
+                  upload. Files now arrive on the audit, not the engagement —
+                  the New audit wizard's Scope & files step attaches the TB and
+                  GL for the period being tested, which is where they belong,
+                  since a new cycle brings new ones.
+
+                  To restore: uncomment. Every handler behind it is still wired
+                  (`GROUP_DOCS`, `attached`, `onGroupDocSelected`, `removeAttached`,
+                  `tbUpload`), so this is a one-block uncomment.
+
+                  Consequence while parked: `attached` stays empty, so the
+                  entity rows carry no `tbFile` into the created programme and
+                  the Review step's Documents card is parked with it (below).
+
+              <div>
+                <div className={basicsLabelCls}>
+                  Group documents <span className="normal-case font-medium text-ink-400">(optional)</span>
+                </div>
+                <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+                  {GROUP_DOCS.map(d => {
+                    const doc = attached.find(a => a.req === d.id);
+                    const parsing = d.id === 'tb' && tbUpload === 'parsing';
+                    return (
+                      <div key={d.id} className="flex items-center gap-2 px-4 py-2.5 border-b border-border-light last:border-b-0">
+                        <FileText size={13} className="text-text-muted shrink-0" />
+                        <span className="text-[12.5px] font-semibold text-text shrink-0">{d.name}</span>
+                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[10px] font-bold text-text-muted shrink-0">{d.formats}</span>
+                        {doc ? (
+                          <span className="ml-auto flex items-center gap-1.5 min-w-0">
+                            <span className="text-[11.5px] text-text truncate">{doc.name}</span>
+                            {parsing
+                              ? <Loader2 size={11} className="animate-spin text-text-muted shrink-0" />
+                              : <Check size={12} className="text-compliant-600 shrink-0" />}
+                            <button
+                              onClick={() => removeAttached(doc.id)}
+                              aria-label={`Remove ${d.name}`}
+                              className="p-1 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ) : (
+                          <label className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0">
+                            <Upload size={11} /> Upload
+                            <input
+                              type="file"
+                              className="hidden"
+                              aria-label={`Upload ${d.name}`}
+                              onChange={e => { onGroupDocSelected(d.id, e.target.files); e.target.value = ''; }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[0.6875rem] text-ink-500 mt-1">
+                  One consolidated file each, covering the whole group — every entity's own RACM is attached in the table below.
+                </p>
+              </div>
+              */}
               <div>
                 <div className={basicsLabelCls}>
                   {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
-                  {!soloEntity && (racmUpload === 'done' || tbUpload === 'done') && entities.length > 0 && ' — mapped from the uploads'}
                 </div>
                 {/* Ownership % column — parked for now (grid was
                     [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
@@ -640,14 +732,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   </div>
                   {entities.length === 0 && (
                     <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
-                      No entities yet — add the companies in scope, and attach each one's RACM. If there are none, tick the box below.
+                      No entities yet — add the companies in scope. If there are none, tick the box below.
                     </div>
                   )}
                   {entities.map((ent, i) => {
                     const racm = entityRacm[ent.id];
                     return (
                     <div key={ent.id} className="border-b border-border-light last:border-b-0">
-                      <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 pt-2.5 items-center">
+                      {/* py, not pt: the RACM line under each row used to supply
+                          the bottom padding and is parked. */}
+                      <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2.5 items-center">
                       <div className="flex items-center gap-2 min-w-0">
                         {ent.type === 'Holding'
                           ? <Landmark size={14} className="text-brand-700 shrink-0" />
@@ -714,8 +808,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         <Trash2 size={13} />
                       </button>
                       </div>
-                      {/* The entity's own RACM, on its own line — a filename needs
-                          the width, and a fifth column would crush the rest. */}
+                      {/* PARKED (user ask): the per-entity RACM upload that sat
+                          on its own line under each row. The engagement is now
+                          created without a matrix; one is added or generated
+                          from the RACM tab afterwards, and the workspace
+                          Overview flags its absence until then.
+
+                          To restore: uncomment. `entityRacm`,
+                          `onEntityRacmSelected` and `removeEntityRacm` are all
+                          still wired.
+
+                          Consequence while parked: `racmCount` is always 0, so
+                          every created programme carries `scopingSkipped` — which
+                          is now simply true, and the Overview nag is correct.
+
                       <div className="pl-[38px] pr-4 pb-2.5 pt-1.5">
                         {!racm ? (
                           <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors">
@@ -746,6 +852,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           </span>
                         )}
                       </div>
+                      */}
                     </div>
                     );
                   })}
@@ -1130,15 +1237,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             title="Review"
             sub={SCOPING_STEP
               ? 'Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances.'
-              : `Confirm who is in scope before the ${fy} programme is created. Trial balances and the general ledger are uploaded afterwards, from the engagement's Configuration tab.`}
+              : `Confirm who is in scope, and what came in with them, before the ${fy} programme is created.`}
           >
-            {scopingSkipped && (
+            {(scopingSkipped || racmCount === 0) && (
               <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-high-50 border border-high-100">
                 <AlertCircle size={13} className="text-high-700 shrink-0 mt-0.5" />
                 <p className="text-[0.75rem] text-text-secondary leading-relaxed">
-                  Scoping skipped — the engagement is created without a RACM or GL / trial balances.
-                  The workspace Overview will flag both: add or generate the RACM from the RACM tab,
-                  and upload the GL and trial balances from the Configuration tab.
+                  {/* One arm now, not two: the RACM and the TB / GL are no
+                      longer asked for here, so arriving without them is the
+                      normal path rather than something the user skipped. */}
+                  The engagement is created without a RACM — add or generate one from the RACM tab, and the workspace
+                  Overview will flag it until you do. The trial balance and general ledger are attached later, on the
+                  audit that tests them.
                 </p>
               </div>
             )}
@@ -1172,13 +1282,30 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </ReviewCard>
               </>)}
               {!SCOPING_STEP && (
-                <ReviewCard title="What happens next">
-                  <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                    The {fy} programme is created with {entities.length} {entities.length === 1 ? 'entity' : 'entities'} and
-                    {' '}{racmCount} RACM{racmCount === 1 ? '' : 's'} attached.
-                    Upload the trial balances and general ledger from the Configuration tab — materiality and the
-                    account-level scope are set there, once the numbers are in.
-                  </p>
+                <ReviewCard title="Documents">
+                  {GROUP_DOCS.map(d => {
+                    const doc = attached.find(a => a.req === d.id);
+                    return (
+                      <div key={d.id} className="flex items-center gap-1.5 text-[11.5px] py-0.5 min-w-0">
+                        {doc
+                          ? <Check size={11} className="text-compliant-600 shrink-0" />
+                          : <Circle size={9} className="text-text-muted shrink-0" />}
+                        <span className="text-text-secondary shrink-0">{d.name}</span>
+                        <span className="text-text-muted truncate">{doc ? doc.name : '— not attached'}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-1.5 text-[11.5px] py-0.5">
+                    {racmCount > 0
+                      ? <Check size={11} className="text-compliant-600 shrink-0" />
+                      : <Circle size={9} className="text-text-muted shrink-0" />}
+                    <span className="text-text-secondary shrink-0">RACM</span>
+                    <span className="text-text-muted">
+                      {racmCount > 0
+                        ? `${racmCount} of ${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}`
+                        : '— add one from the RACM tab later'}
+                    </span>
+                  </div>
                 </ReviewCard>
               )}
             </div>
@@ -1226,7 +1353,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {SCOPING_STEP && step === 2 && (
               <button
                 onClick={skipScoping}
-                title="Create without scoping — the workspace Overview flags the missing RACM and GL / trial balances"
+                title="Create without scoping — the workspace Overview flags the missing RACM; the trial balance and GL arrive on the audit that tests them"
                 className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Skip for now

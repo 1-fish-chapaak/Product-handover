@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, Table2, FlaskConical, StickyNote,
+  Star, FileText, X, Send, LayoutGrid, Table2, StickyNote,
 } from 'lucide-react';
 import { HeaderFilter } from '../shared/FilterSelect';
+import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
+import { defWord } from './flow';
 import {
   controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
-import BulkTestModal from './BulkTestModal';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -28,7 +29,7 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'operating', label: 'Operating' },
   { id: 'operating-done', label: 'Operating concluded' },
   { id: 'effective', label: 'Effective' },
-  { id: 'exceptions', label: 'Exceptions' },
+  { id: 'exceptions', label: 'Exceptions' },  // relabelled per engagement — see viewOptions below
   { id: 'review', label: 'Awaiting review' },
   { id: 'owner', label: 'Waiting on owner' },
   { id: 'open', label: 'Not concluded' },
@@ -104,10 +105,18 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 export default function ControlRegister() {
   const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
   const { addToast } = useToast();
-  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
-  // preview-before-download for the consolidated working paper
+  // The register shows what the OPEN audit covers — its entities' processes.
+  const auditScoped = useAuditControls(eng.controls);
+  // Classic engagements still say Exceptions; the rework renamed them.
+  const viewOptions = useMemo(
+    () => VIEWS.map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
+    [eng.id],
+  );
+  // preview-before-download for the consolidated working paper, and for the audit
+  // report — the deliverable the paper isn't. Same modal, same block format.
   const [wpPreview, setWpPreview] = useState(false);
+  const [reportPreview, setReportPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
@@ -128,8 +137,8 @@ export default function ControlRegister() {
 
   // Person-lane: the owner's register is their own controls, never the engagement's.
   const scoped = useMemo(
-    () => (role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls),
-    [eng.controls, role, meOwner],
+    () => (role === 'risk-owner' ? auditScoped.filter(c => c.owner === meOwner) : auditScoped),
+    [auditScoped, role, meOwner],
   );
   const stats = useMemo(() => ({
     effective: scoped.filter(c => controlConclusion(c) === 'Effective').length,
@@ -198,7 +207,7 @@ export default function ControlRegister() {
             (HeaderFilter on Control / Nature / Conclusion). Resurrect by
             restoring the FilterSelect import alongside HeaderFilter.
         <FilterSelect prefix="Status" engaged={savedView !== 'all'} value={savedView}
-          options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+          options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
           onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
         <FilterSelect value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
         <FilterSelect value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" />
@@ -218,6 +227,9 @@ export default function ControlRegister() {
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
           {/* the consolidated paper carries materiality & the opinion — audit-side only */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
+          {/* the audit report — what management and the board actually read: the
+              observations, what they are worth, and who has committed to the fix */}
+          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -277,7 +289,7 @@ export default function ControlRegister() {
               <th style={{ width: 168 }}>② Operating</th>
               <th style={{ width: 116 }}>
                 <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
-                  options={VIEWS.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
+                  options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
                   onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
               </th>
               <th style={{ width: 116 }} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</th>
@@ -334,25 +346,23 @@ export default function ControlRegister() {
       )}
       <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
-      {/* bulk bar */}
+      {/* bulk bar — no bulk TEST here (user ask, 30 Jul: SOX controls aren't
+          bulk-tested) */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
 
-      {/* bulk test — compile files → attach unique datasets → execute */}
-      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
-
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {/* the paper follows the filters — only the visible controls' data goes in */}
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
+      {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
 
     </div>
   );

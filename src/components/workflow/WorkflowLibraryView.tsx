@@ -171,6 +171,24 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
     controlId: 'CTRL-006',
     live: true,
   },
+  {
+    id: 'lw-011',
+    name: 'PO Approval Threshold Scan',
+    description: 'Scans purchase orders against the approval matrix to flag POs approved above the approver’s threshold or split into smaller orders to stay under it.',
+    tags: ['P2P', 'po approvals'],
+    businessProcess: 'P2P',
+    controlId: 'CTRL-011',
+    live: true,
+  },
+  {
+    id: 'lw-012',
+    name: 'Vendor Master Change Monitor',
+    description: 'Monitors vendor master adds and changes for missing dual approval, bank-account edits without call-back verification, and incomplete KYC packs.',
+    tags: ['P2P', 'vendor master'],
+    businessProcess: 'P2P',
+    controlId: 'CTRL-012',
+    live: true,
+  },
 ];
 
 export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {

@@ -395,12 +395,11 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               <FlaskConical size={14} /> Test {active.length} control{active.length === 1 ? '' : 's'}
             </button>
           )}
-          {/* Done is the only way out of a finished run — its companion "View run"
-              button went with the parked Test runs tab (see SOX_TABS in
-              SoxIcfrApp). Closing lands back on the Control Library or the RACM
-              matrix the run was launched from, both of which already show the
-              new results, so there's nowhere else to send the user. Done takes
-              the primary style now that it stands alone. */}
+          {/* No "View run": the run registry is parked (the SOX audit tab holds
+              the audit register now), so there is nowhere for it to land.
+              Closing returns to the Control Library or RACM matrix the run was
+              launched from, both of which already show the new results, and the
+              per-control history survives on each control page. */}
           {finished && (
             <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
               Done

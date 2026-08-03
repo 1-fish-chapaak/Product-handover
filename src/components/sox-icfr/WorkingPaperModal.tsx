@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
+import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, PenLine, X } from 'lucide-react';
+import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
+import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
@@ -125,10 +126,17 @@ function ControlSignoff({ eng, c, onAttest }: { eng: IcfrEngagement; c: Control;
   );
 }
 
-/** Engagement-level sign-off (the opinion) — same gate as the Overview card. */
+/**
+ * The AUDIT's sign-off (the opinion) — same gate as the audit Dashboard's card.
+ *
+ * Was engagement-level. Sign-off moved onto the audit: the paper covers the
+ * period the audit tested, so the opinion in the file has to be that audit's. A
+ * concluded audit's signatures live in its archive and can't be re-signed.
+ */
 function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (req: AttestReq) => void }) {
-  const { role, signOffEngagement } = useIcfr();
-  const so = eng.signoff;
+  const { role, openAuditId, signOffAudit } = useIcfr();
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const so = audit?.signoff ?? {};
   const conclusion = so.icfrConclusion ?? icfrConclusion(eng);
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
@@ -136,8 +144,8 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   // same gate as Overview: every paper concluded AND countersigned by the reviewer
   const reviewed = eng.controls.filter(isControlFinal).length;
   const ready = eng.controls.length > 0 && reviewed === eng.controls.length;
-  const canSign = role === 'auditor' && ready && !so.preparer;
-  const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer;
+  const canSign = role === 'auditor' && ready && !so.preparer && !!audit && !audit.archive;
+  const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer && !!audit && !audit.archive;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
       <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> Sign-off — included in the file</div>
@@ -146,7 +154,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
         <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so.preparer ? 'text-ink-800' : 'text-ink-400')}>{so.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
-          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffEngagement('preparer') })}
+          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffAudit('preparer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
@@ -158,7 +166,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
         <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
-          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffEngagement('reviewer') })}
+          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffAudit('reviewer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
       </div>
@@ -171,7 +179,22 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   );
 }
 
-export default function WorkingPaperModal({ eng, control, controls, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[]; onClose: () => void; onDownload?: () => void }) {
+export default function WorkingPaperModal({ eng, control, controls, report, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[];
+  /** Preview the AUDIT REPORT instead of the working paper. Same renderer, same
+   *  block union, same sheet tabs — it is a different document, not a different
+   *  viewer, so nothing here changes except which builder is read and what the
+   *  download writes. */
+  report?: boolean; onClose: () => void; onDownload?: () => void }) {
+  // A control's paper is view-only until BOTH tracks have concluded. Not a
+  // permission — a readiness gate: the document does not yet say anything, and a
+  // downloaded file gets treated as final by whoever opens it next.
+  const designDone = control ? trackResult(control.design) !== 'Not tested' : true;
+  const operatingDone = control ? trackResult(control.operating) !== 'Not tested' : true;
+  const downloadBlocked = !!control && (!designDone || !operatingDone);
+  const blockedWhy = !designDone && !operatingDone ? 'design and operating not concluded'
+    : !designDone ? 'test of design not concluded'
+    : 'test of operating effectiveness not concluded';
+
   // an irreversible sign-off waits behind this attest confirm before it commits
   const [attest, setAttest] = useState<AttestReq | null>(null);
   // the engagement paper reads sheet by sheet, like the workbook it exports to
@@ -193,17 +216,21 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
   // the engagement paper follows the register's visible controls — a filtered
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
-  const fileName = control ? `Working_Paper_${control.id}.xlsx` : `Working_Paper_ICFR_${eng.code}.xlsx`;
-  const sheets = control ? controlPaperSections(eng, control) : buildIcfrPaper(eng, included);
+  const fileName = report ? `Audit_Report_ICFR_${eng.code}.xlsx`
+    : control ? `Working_Paper_${control.id}.xlsx`
+    : `Working_Paper_ICFR_${eng.code}.xlsx`;
+  const sheets = report ? buildAuditReport(eng, included)
+    : control ? controlPaperSections(eng, control)
+    : buildIcfrPaper(eng, included);
 
   return createPortal(
     <>
     {/* centred on screen — the fixed-height paper reads like a document viewer,
         not a top-anchored dialog */}
-    <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
-          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> Working paper — preview</h3>
+          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> {report ? 'Audit report — preview' : 'Working paper — preview'}</h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
 
@@ -241,11 +268,22 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
-          <span className="text-[11px] text-ink-400 truncate">{fileName}{control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
+          <span className="text-[11px] text-ink-400 truncate">{fileName}{report ? ` · the deliverable — evidence stays in the working paper · ${included.length} controls` : control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
           <div className="flex items-center gap-2 shrink-0">
+            {/* A half-tested control's paper is a document that states nothing yet.
+                It stays readable — the auditor works from it while testing — but it
+                cannot leave the tool until both tracks have concluded, because a
+                file that goes out is a file somebody will treat as final. */}
+            {downloadBlocked && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mitigated-800 bg-mitigated-50/70 border border-mitigated-200 rounded-lg px-2.5 h-9">
+                <Eye size={12} /> View only — {blockedWhy}
+              </span>
+            )}
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
-              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            <button disabled={downloadBlocked}
+              title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
+              onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
+              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
           </div>
         </div>
       </div>
@@ -253,7 +291,7 @@ export default function WorkingPaperModal({ eng, control, controls, onClose, onD
 
     {/* attest confirm — an irreversible signature never commits on a bare click */}
     {attest && (
-      <div className="modal-backdrop" style={{ alignItems: 'center' }} onClick={() => setAttest(null)}>
+      <div className="modal-backdrop" onClick={() => setAttest(null)}>
         <div className="modal" onClick={e => e.stopPropagation()}>
           <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
             <div className="flex items-center justify-between gap-3">
