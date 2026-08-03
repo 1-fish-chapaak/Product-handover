@@ -109,11 +109,19 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const audit = eng.audits.find(a => a.id === openAuditId);
   const inAudit = !!audit;
 
-  // The owner's SOX is a to-do list, not a workspace: just their inbox and their
-  // controls. RACM and the audit register are auditor-side surfaces.
+  // The owner's SOX is a to-do list, not a workspace: their inbox, their controls
+  // and their exceptions. RACM and the audit register stay auditor-side.
+  //
+  // The exceptions tab is not optional for them. Steps ③ and ④ — writing the plan
+  // and doing the fix — are the owner's, and a role that cannot reach its own
+  // work cannot do it. The list scopes itself to their controls, so this is their
+  // queue rather than the engagement's exposure.
   const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
   const tabs = role === 'risk-owner'
-    ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
+    ? [
+        ...levelTabs.filter(t => t.id === 'overview' || t.id === 'controls'),
+        { id: 'deficiencies' as const, label: W.mine },
+      ]
     : levelTabs;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 

@@ -6,12 +6,15 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle,
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, formatINR,
+  // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
+  // the deficiency banner below. Both go back together.
+  // formatINR,
+  controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, EXTRACT_WOBBLE,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
@@ -26,10 +29,14 @@ import WorkingPaperModal from './WorkingPaperModal';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
-import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, EXPOSURE_LABEL, exposureTotal, FIVE_W_1H, GAP_LABEL, ipeSuggestion, ROUND_TAG } from './types';
+// PARKED (Aug 2026) — Gap type and Priced impact left this screen; the banners in
+// types.ts say why. The imports go back with the blocks that used them:
+//   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
+//   Exposure                                    (type)
+import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
 import type {
-  AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, Exposure, OperatingStep,
+  AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, OperatingStep,
   FileOrigin, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -1567,19 +1574,38 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                 <input value={account} onChange={e => setAccount(e.target.value)} placeholder="e.g. 2100 — Trade payables"
                   className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
               </label>
-              <div className="block min-w-0">
-                <span className="block text-[0.65625rem] text-ink-400 mb-1">Date from</span>
-                <DatePicker value={from} max={to || undefined} onChange={e => setFrom(e.target.value)}
-                  placeholder="Pick a date" aria-label="Filter date from"
-                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              </div>
-              <div className="block min-w-0">
-                <span className="block text-[0.65625rem] text-ink-400 mb-1">Date to</span>
-                <DatePicker value={to} min={from || undefined} onChange={e => setTo(e.target.value)}
-                  placeholder="Pick a date" aria-label="Filter date to"
-                  className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              </div>
+              {/* PARKED (Aug 2026) — Date from / Date to.
+                  The IPE check already asks whether the report was run over the
+                  audit period, and it asks it of the report's own parameters
+                  rather than of the auditor's memory. Typing the window again
+                  here could only produce a second answer to a question already
+                  answered — and when the two disagreed, nothing said which one
+                  the sample actually came off. The window now comes from the
+                  period, and the IPE proves it. Kept so it can be restored:
+
+                  <div className="block min-w-0">
+                    <span className="block text-[0.65625rem] text-ink-400 mb-1">Date from</span>
+                    <DatePicker value={from} max={to || undefined} onChange={e => setFrom(e.target.value)}
+                      placeholder="Pick a date" aria-label="Filter date from"
+                      className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  </div>
+                  <div className="block min-w-0">
+                    <span className="block text-[0.65625rem] text-ink-400 mb-1">Date to</span>
+                    <DatePicker value={to} min={from || undefined} onChange={e => setTo(e.target.value)}
+                      placeholder="Pick a date" aria-label="Filter date to"
+                      className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  </div>
+              */}
             </div>
+            {/* The window is stated, not asked for — it is the audit's own, which
+                the form was already defaulting to, and the IPE is what proves the
+                report actually covers it. */}
+            <p className="mt-2 text-[0.65625rem] text-ink-400">
+              {winFrom && winTo
+                ? <>Period covered · {winFrom} – {winTo} — the audit's own window.</>
+                : <>Period covered · the audit's own window.</>}{' '}
+              The IPE check on this report is what confirms it was run over that period.
+            </p>
 
             {/* ── the expectation, before the answer ──────────────────────────
                 The only way to tell whether the right number of rows came back
@@ -2299,6 +2325,73 @@ function ActivityRail({ control }: { control: Control }) {
   );
 }
 
+/** "Unable to test — waiting on owner".
+ *
+ *  Deliberately NOT an exception. An exception says a control failed; this says
+ *  nobody could tell, which is a different claim and carries none of the same
+ *  consequences — there is no exposure to size and no likelihood to judge, so a
+ *  severity here would be invented rather than assessed. It is a request in the
+ *  owner's court, like any other document request.
+ *
+ *  It only becomes an exception if the period closes with it still open: at that
+ *  point the control genuinely could not be evidenced as operating, so it
+ *  concludes ineffective and runs the ordinary ladder, carrying this reason across
+ *  so the paper says why rather than merely that. */
+function UnableToTestBanner({ control }: { control: Control }) {
+  const { role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const [needed, setNeeded] = useState('');
+  const block = control.unableToTest;
+  const isAuditor = role === 'auditor';
+
+  if (!block) {
+    if (!isAuditor || isControlLocked(control)) return null;
+    return asking ? (
+      <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 space-y-2">
+        <h3 className="text-[0.8125rem] font-bold text-mitigated-800 inline-flex items-center gap-1.5"><FileWarning size={15} /> Record that you can't test this</h3>
+        <p className="text-[0.75rem] text-ink-600">This is not a finding — nothing has been shown to have failed. It goes to {control.owner} as a request, and testing picks up where it left off once they produce it.</p>
+        <input value={reason} onChange={e => setReason(e.target.value)} placeholder="What is blocking the test — e.g. the approval log isn't retained by the system"
+          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+        <input value={needed} onChange={e => setNeeded(e.target.value)} placeholder="What the owner has to produce for testing to resume"
+          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+        <div className="flex items-center gap-2">
+          <button disabled={!reason.trim() || !needed.trim()} onClick={() => { markUnableToTest(control.id, 'operating', reason.trim(), needed.trim()); setAsking(false); setReason(''); setNeeded(''); }}
+            className="h-8 px-3 rounded-lg bg-mitigated-700 text-white text-[0.75rem] font-semibold enabled:hover:bg-mitigated-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send the request</button>
+          <button onClick={() => setAsking(false)} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+        </div>
+      </div>
+    ) : (
+      <button onClick={() => setAsking(true)} className="text-[0.75rem] font-semibold text-ink-500 hover:text-mitigated-800 cursor-pointer inline-flex items-center gap-1.5">
+        <FileWarning size={13} /> Can't test this — record why
+      </button>
+    );
+  }
+
+  return (
+    <div className={cn('rounded-xl border p-4', block.convertedTo ? 'border-risk-200 bg-risk-50/40' : 'border-mitigated-200 bg-mitigated-50/40')}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className={cn('text-[0.8125rem] font-bold inline-flex items-center gap-1.5', block.convertedTo ? 'text-risk-700' : 'text-mitigated-800')}>
+            <FileWarning size={15} />
+            {block.convertedTo ? `Never evidenced — raised as ${block.convertedTo}` : `Unable to test — waiting on ${control.owner}`}
+          </h3>
+          <p className="text-[0.75rem] text-ink-700 mt-1">{block.reason}</p>
+          <p className="text-[0.75rem] text-ink-600 mt-0.5"><span className="text-ink-400">Needed</span> · {block.needed}</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded by {block.raisedBy} · {block.raisedAt}. No severity applies — nothing has been shown to have failed.</p>
+        </div>
+        {isAuditor && !block.convertedTo && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => resolveUnableToTest(control.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">Received — resume testing</button>
+            <button onClick={() => escalateUnableToTest(control.id)} title="The period is closing and it never arrived — the control could not be evidenced, so it becomes an ordinary exception"
+              className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[0.75rem] font-semibold hover:bg-risk-50 cursor-pointer">Never arrived — raise it</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
@@ -2432,6 +2525,10 @@ export default function ControlDossier() {
         </motion.div>
       )}
 
+      {/* Blocked testing sits above the steps, because it is the reason none of
+          them can run — not a finding underneath them. */}
+      <UnableToTestBanner control={control} />
+
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
@@ -2497,9 +2594,16 @@ export default function ControlDossier() {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <AlertTriangle size={15} className="text-risk-700" /><h3 className="text-[0.8125rem] font-bold text-risk-700">Deficiency raised</h3>
                     {def && <span className="font-mono text-[0.6875rem] font-semibold text-risk-700/80">{def.id}</span>}
-                    {/* what kind of gap this is — a design gap needs a redesign, a
-                        testing gap needs discipline, and the fix follows the label */}
-                    {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>}
+                    {/* PARKED (Aug 2026) — Gap type: derivable from the control's
+                        nature and the failed track, so the pill was restating two
+                        answers the paper already holds. `gapNature` in types.ts
+                        writes the same sentence read-only for the working paper.
+                        The original line, and the note that went with it:
+
+                        what kind of gap this is — a design gap needs a redesign, a
+                        testing gap needs discipline, and the fix follows the label
+
+                        {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>} */}
                   </div>
                   <p className="text-[0.75rem] text-ink-600">
                     This control concluded ineffective. {def
@@ -2513,17 +2617,27 @@ export default function ControlDossier() {
                   </span>
                 )}
               </div>
-              {/* priced, if the auditor has priced it — the number is what moves a
+              {/* PARKED (Aug 2026) — Priced impact. Recovery, working-capital
+                  unblock and leakage say what the gap was WORTH to the business;
+                  ICFR asks what could have been MISSTATED, which is the magnitude
+                  the severity ladder already reads. Two different numbers sitting
+                  on one finding, and the strip showed the wrong one. Kept whole so
+                  it can be lifted to the Internal Audit engagement type intact —
+                  see the banner in types.ts. The original block, and the note that
+                  went with it:
+
+                  priced, if the auditor has priced it — the number is what moves a
                   CFO. Only while the card is shut: open, the card prices it in full
-                  and the same figures twice on one screen is one figure too many. */}
-              {def && !defOpen && exposureTotal(def.exposure) > 0 && (
-                <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.71875rem]">
-                  <span className="font-semibold text-risk-700">Exposure {formatINR(exposureTotal(def.exposure))}</span>
-                  {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[])
-                    .filter(k => (def.exposure as Exposure)[k] > 0)
-                    .map(k => <span key={k} className="text-ink-600"><span className="text-ink-400">{EXPOSURE_LABEL[k]}</span> · {formatINR((def.exposure as Exposure)[k])}</span>)}
-                </div>
-              )}
+                  and the same figures twice on one screen is one figure too many.
+
+                  {def && !defOpen && exposureTotal(def.exposure) > 0 && (
+                    <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.71875rem]">
+                      <span className="font-semibold text-risk-700">Exposure {formatINR(exposureTotal(def.exposure))}</span>
+                      {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[])
+                        .filter(k => (def.exposure as Exposure)[k] > 0)
+                        .map(k => <span key={k} className="text-ink-600"><span className="text-ink-400">{EXPOSURE_LABEL[k]}</span> · {formatINR((def.exposure as Exposure)[k])}</span>)}
+                    </div>
+                  )} */}
               {/* Fade-and-lift rather than a height animation: the card is most of
                   a screen, and no overflow-hidden wrapper means nothing inside it
                   gets clipped while it settles. */}

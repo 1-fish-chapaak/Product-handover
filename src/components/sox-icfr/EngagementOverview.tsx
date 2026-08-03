@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  AlertTriangle, ArrowRight, Building2, CalendarRange, Check, CheckCircle2, Circle, Grid3x3,
-  Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
+  AlertTriangle, ArrowRight, Building2, CalendarClock, CalendarRange, Check, CheckCircle2, ChevronDown, Circle,
+  Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
@@ -11,7 +11,7 @@ import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
 import NewAuditWizard from './NewAuditWizard';
 import RollForwardSheet from './RollForwardSheet';
-import { formatINR } from './helpers';
+import { formatINR, retestAtRisk } from './helpers';
 import { entitiesFor, processesFor } from './auditScope';
 import {
   auditDeficiencies, auditProgress, auditStatus, controlsInManyAudits, crossAuditAggregation,
@@ -392,10 +392,15 @@ function MasterRow({ icon: Icon, title, body, count, onClick }: {
 // ── The page ─────────────────────────────────────────────────────────────────
 
 export default function EngagementOverview() {
-  const { eng, role, openAudit, setTab, setView } = useIcfr();
+  const { eng, role, openAudit, openDeficiency, setTab, setView } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
+  /* The MW watchlist opens expanded — an entity-level finding is not something
+     the page gets to hide on first read. Folding it away is the user's call, and
+     it stays folded only for the visit. */
+  const [mwOpen, setMwOpen] = useState(true);
+  const still = useReducedMotion();
 
   const canCreate = role !== 'risk-owner';
 
@@ -470,6 +475,11 @@ export default function EngagementOverview() {
   // contributes nothing to any read-out on the board.
   const ids = useMemo(() => new Set(inRange.map(a => a.id)), [inRange]);
   const mw = useMemo(() => mwWatchlist(eng).filter(x => ids.has(x.audit.id)), [eng, ids]);
+  // Fixes whose retest lands after the books close. Not filtered by the applied
+  // range: these are the live cycle's open exceptions, which is the only cycle
+  // anyone can still move a date in — and the whole value of the card is saying
+  // so while there is still room to move it.
+  const atRisk = useMemo(() => retestAtRisk(eng), [eng]);
   const duplicates = useMemo(
     () => controlsInManyAudits(eng)
       .map(x => ({ ...x, audits: x.audits.filter(a => ids.has(a.id)) }))
@@ -602,35 +612,128 @@ export default function EngagementOverview() {
           {/* Two lines, not four (user ask). The tag sits BESIDE the headline —
               the register's own opener idiom — and each deficiency is one row
               with its cycle as mono meta on the right, so the card's height is
-              header + one line per weakness. */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className={cn(eyebrow, 'text-risk-700 inline-flex items-center gap-1.5 shrink-0')}>
-              <ShieldAlert size={13} /> Needs attention
-            </span>
-            <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900">
-              Material weakness open — the entity's conclusion is at risk
-            </h2>
-          </div>
+              header + one line per weakness.
+
+              The whole header is the disclosure control (APG's heading > button),
+              so the hit area is the line you already read rather than a 13px
+              chevron. The headline never folds away: collapsed, the card still
+              says an MW is open — only the list of which ones goes. */}
+          <h2>
+            <button
+              type="button"
+              onClick={() => setMwOpen(o => !o)}
+              aria-expanded={mwOpen}
+              aria-controls="mw-watchlist-rows"
+              className="group w-full text-left flex items-center gap-2.5 flex-wrap cursor-pointer"
+            >
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className={cn(
+                  'shrink-0 text-risk-400 group-hover:text-risk-700 transition-[color,transform] duration-200',
+                  !mwOpen && '-rotate-90',
+                )}
+              />
+              <span className={cn(eyebrow, 'text-risk-700 inline-flex items-center gap-1.5 shrink-0')}>
+                <ShieldAlert size={13} /> Needs attention
+              </span>
+              <span className="font-display text-[1.0625rem] leading-snug text-ink-900">
+                Material weakness open — the entity's conclusion is at risk
+              </span>
+              {/* Collapsed, the rows are gone and nothing else carries HOW MANY,
+                  so the count stands in for them — and only then, or it would
+                  say twice what the list already says. */}
+              {!mwOpen && (
+                <span className="shrink-0 text-[0.8125rem] font-semibold text-risk-700 tabular-nums">
+                  {mw.length} weakness{mw.length === 1 ? '' : 'es'}
+                </span>
+              )}
+            </button>
+          </h2>
           {/* Dividers and hover step UP off the tint — canvas-border and a
               translucent wash both vanish against risk-50. */}
-          <div className="mt-2 -mx-4 px-4 divide-y divide-risk-100">
-            {mw.map(({ audit, deficiency }) => (
-              <button
-                key={deficiency.id}
-                onClick={() => { openAudit(audit.id); setView('deficiencies'); }}
-                /* Truncated to hold the row to one line — the full text is a
-                   click away on the deficiency itself, and here as the tooltip. */
-                title={deficiency.description}
-                className="group w-full text-left flex items-center gap-2.5 py-2 -mx-4 px-4 text-[0.8125rem] text-ink-700 hover:bg-risk-100 transition-colors cursor-pointer"
+          <AnimatePresence initial={false}>
+            {mwOpen && (
+              <motion.div
+                key="mw-rows"
+                id="mw-watchlist-rows"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: still ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-risk-500 shrink-0" aria-hidden />
-                <span className="min-w-0 flex-1 font-medium truncate">{deficiency.description}</span>
-                <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
-                  {audit.period} · {ROUND_LABEL[audit.round].toLowerCase()}
-                </span>
-                <ArrowRight size={14} className="shrink-0 text-risk-300 group-hover:text-risk-700 transition-colors" />
-              </button>
-            ))}
+                <div className="mt-2 -mx-4 px-4 divide-y divide-risk-100">
+                  {mw.map(({ audit, deficiency }) => (
+                    <button
+                      key={deficiency.id}
+                      onClick={() => openDeficiency(deficiency.id)}
+                      /* Truncated to hold the row to one line — the full text is a
+                         click away on the deficiency itself, and here as the tooltip. */
+                      title={deficiency.description}
+                      className="group w-full text-left flex items-center gap-2.5 py-2 -mx-4 px-4 text-[0.8125rem] text-ink-700 hover:bg-risk-100 transition-colors cursor-pointer"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-risk-500 shrink-0" aria-hidden />
+                      <span className="min-w-0 flex-1 font-medium truncate">{deficiency.description}</span>
+                      <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                        {audit.period} · {ROUND_LABEL[audit.round].toLowerCase()}
+                      </span>
+                      <ArrowRight size={14} className="shrink-0 text-risk-300 group-hover:text-risk-700 transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* ── Attention: fixes that will not have a testable sample in time ────
+           A sibling of the MW card, not a replacement — that one reports what is
+           wrong, this one reports what will still be unproven when the year ends.
+           Amber rather than red: nothing has failed, a date has. A fix agreed in
+           January for an annual control cannot produce a testable sample before
+           March; saying so in January leaves room to move the date, saying so in
+           March does not. */}
+      {atRisk.length > 0 && (
+        <div className={cn(cardCls, 'mb-4 bg-high-50 border-high-100')}>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className={cn(eyebrow, 'text-high-700 inline-flex items-center gap-1.5 shrink-0')}>
+              <CalendarClock size={13} /> Period end
+            </span>
+            <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900">
+              Fixes that cannot be retested before period end
+            </h2>
+          </div>
+          <p className="mt-1 text-[0.8125rem] text-ink-600">
+            Raised now, while the date can still move — after period end the answer is fixed.
+          </p>
+          {/* Same row idiom as the watchlist above, one step up off the tint. Two
+              lines here rather than one: the reason IS the finding, so it cannot
+              be a tooltip. */}
+          <div className="mt-2 -mx-4 px-4 divide-y divide-high-100">
+            {atRisk.map(({ d, readiness }) => {
+              const c = eng.controls.find(x => x.id === d.controlId);
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => openDeficiency(d.id)}
+                  className="group w-full text-left flex items-start gap-2.5 py-2 -mx-4 px-4 text-[0.8125rem] text-ink-700 hover:bg-high-100 transition-colors cursor-pointer"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-high-500 shrink-0 mt-1.5" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[0.75rem] font-semibold text-ink-600">{d.id}</span>
+                      <span className="font-mono text-[0.75rem] text-ink-500">{c?.wpRef ?? d.controlId}</span>
+                      <span className="min-w-0 truncate font-medium">{c?.description ?? d.description}</span>
+                    </span>
+                    <span className="block text-[0.75rem] text-ink-500 mt-0.5">{readiness.reason}</span>
+                  </span>
+                  <span className="shrink-0 text-[0.75rem] font-semibold text-high-700 tabular-nums">{readiness.label}</span>
+                  <ArrowRight size={14} className="shrink-0 mt-0.5 text-high-300 group-hover:text-high-700 transition-colors" />
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

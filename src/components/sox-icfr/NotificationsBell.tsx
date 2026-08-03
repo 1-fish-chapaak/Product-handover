@@ -4,7 +4,7 @@ import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { controlConclusion, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -13,6 +13,10 @@ import { cn } from '../../lib/cn';
  * exceptions to assess; the risk owner sees assigned PBC / remediation tasks,
  * the auditor's remarks on their rows, and — first and unmissable — every
  * control the auditor has concluded ineffective.
+ *
+ * On the exception flow the bell follows the same rule as the flow itself: one
+ * role per state. Whoever the exception is waiting on is the only person told
+ * about it, and they are told what to DO rather than what the status is called.
  */
 
 type Item = {
@@ -33,7 +37,7 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, meOwner, openControl, openRegister, setTab, setView } = useIcfr();
+  const { eng, role, meOwner, openControl, openRegister, setTab, setView, openDeficiency } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // reduced-motion: the panel's scale/translate are JS transforms, which the
@@ -52,6 +56,15 @@ export default function NotificationsBell() {
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
     const go = (controlId: string) => { setOpen(false); openControl(controlId); };
+    // the exceptions page is where every step of an exception is actually worked
+    // A notification names one exception, so it opens that one. The bare list is
+    // still the fallback for anything that names none.
+    const goExceptions = () => { setOpen(false); setView('deficiencies'); };
+    const goException = (id: string) => () => { setOpen(false); openDeficiency(id); };
+    // How many times this fix has already been tested and missed. A round is
+    // never edited — a failure appends the next one — so this is the loop count.
+    const failedRetests = (d: { retests?: { result: 'Pass' | 'Fail' }[] }) =>
+      (d.retests ?? []).filter(r => r.result === 'Fail').length;
 
     // ── the auditor's verdicts — shown to the risk owner first, unmissable.
     //    Person-lane: only this persona's controls, tasks and rows. ───────────────
@@ -114,6 +127,31 @@ export default function NotificationsBell() {
       });
     }
 
+    // ── the exception steps that are MINE to move ───────────────────────────────
+    //    Two of the six steps belong to the owner: write the plan (③) and do the
+    //    fix, then show the proof (④). The other four sit with the auditor or the
+    //    reviewer, so they are not listed at all — a row you cannot act on is a
+    //    row that teaches you to ignore the bell.
+    if (role === 'risk-owner') {
+      for (const d of eng.deficiencies) {
+        if (d.status !== 'Planning' && d.status !== 'Remediation') continue;
+        const c = eng.controls.find(x => x.id === d.controlId);
+        // same person-lane as the tasks above — the control's owner, or the
+        // person the plan itself names. Either way it is this persona's to move.
+        if (c?.owner !== meOwner && d.remediation.owner !== meOwner) continue;
+        const planning = d.status === 'Planning';
+        out.push({
+          id: `def-mine-${d.id}`, kind: 'task',
+          title: planning ? `Write the plan for ${d.id}` : `Attach evidence and submit ${d.id} for retest`,
+          detail: planning
+            // the plan is judged against the root cause, so the owner is told it up front
+            ? `${d.rootCause} — say what fixes that, who does it and by when.${d.planReview?.decision === 'Rejected' ? ' Sent back once already.' : ''}`
+            : `${d.remediation.action || d.description} — “done” needs proof: attach it, then hand the fix to the auditor.`,
+          onOpen: goException(d.id),
+        });
+      }
+    }
+
     // ── the auditor's remarks on my rows ────────────────────────────────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
@@ -129,6 +167,36 @@ export default function NotificationsBell() {
 
     // ── the reviewer's court, mirrored from the queue — papers, notes, closes ────
     if (role === 'reviewer') {
+      // ── first, because it is a gate and not a queue: a Significant Deficiency
+      //    or worse does not move until the reviewer agrees the grade. Every hour
+      //    this sits here is an hour the owner cannot start planning the fix, so
+      //    it outranks the papers waiting to be countersigned. The status is the
+      //    gate on purpose — a grade that has since fallen still needs releasing,
+      //    and re-testing the grade here would strand it.
+      for (const d of eng.deficiencies.filter(x => x.status === 'Rating review')) {
+        const { grade } = gradeException(d, eng);
+        out.push({
+          id: `rate-${d.id}`, kind: 'exception',
+          title: `Confirm the ${grade} rating on ${d.id}`,
+          detail: `${d.description} — nothing moves until you do: ${d.remediation.owner} cannot start planning the fix.`,
+          onOpen: goException(d.id),
+        });
+      }
+      // ── a fix that has missed twice is no longer a remediation problem. The
+      //    plan is being retested against the same root cause and failing, so
+      //    what needs changing is the plan, the person, or the rating — all three
+      //    are the reviewer's call, not the owner's.
+      for (const d of eng.deficiencies) {
+        if (d.status === 'Closed') continue;   // already carries your signature
+        const n = failedRetests(d);
+        if (n < 2) continue;
+        out.push({
+          id: `loop-${d.id}`, kind: 'exception',
+          title: `${d.id} · ${n} retests failed — the fix is not working`,
+          detail: `${d.rootCause} — ${d.retests?.[d.retests.length - 1]?.rationale ?? 'the same root cause is still there'}. Two misses is a plan problem, not a deadline problem.`,
+          onOpen: goException(d.id),
+        });
+      }
       const papers = eng.controls.filter(isAwaitingReview);
       if (papers.length) {
         out.push({
@@ -166,8 +234,33 @@ export default function NotificationsBell() {
           onOpen: () => { setOpen(false); setTab('racm'); },
         });
       }
+      // ── the plan is up and waiting on the auditor's one say in it: does it
+      //    address the root cause? Named as the question rather than the status,
+      //    because "Plan review" does not tell anyone what to do with it.
+      for (const d of eng.deficiencies.filter(x => x.status === 'Plan review')) {
+        out.push({
+          id: `plan-${d.id}`, kind: 'exception',
+          title: `Judge the plan on ${d.id} against its root cause`,
+          detail: `${d.rootCause} — the plan says: ${d.remediation.action || 'nothing yet'}. Accept it or send it back with what it misses.`,
+          onOpen: goException(d.id),
+        });
+      }
+      // ── testing that never started. Not a finding — nothing has been shown to
+      //    have failed — but it stalls silently, and at period end a control that
+      //    could never be evidenced converts to an exception anyway. Chase it now.
+      for (const c of eng.controls) {
+        const u = c.unableToTest;
+        if (!u || u.resolvedAt || u.convertedTo) continue;
+        out.push({
+          id: `blocked-${c.id}`, kind: 'due',
+          title: `Testing blocked on ${c.wpRef} — waiting on ${c.owner}`,
+          detail: `Needed: ${u.needed} — raised ${u.raisedAt}. Still open at period end and it becomes an exception.`,
+          onOpen: () => go(c.id),
+        });
+      }
       for (const d of eng.deficiencies) {
         if (d.status === 'Closed') continue;
+        if (d.status === 'Plan review') continue;   // already named above, with its question
         out.push({
           id: `def-${d.id}`, kind: 'exception',
           title: `${d.id} · ${d.status}`,

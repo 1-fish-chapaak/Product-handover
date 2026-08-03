@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, needsRatingConfirmation, parseLooseDate, previewRegrades, sampleSizeGuide, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
-  Sampling, SignificantAccount, TestResult, TrackConclusion,
+  Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest,
 } from './types';
 
 let _uid = 0;
@@ -86,7 +86,8 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
   samp.samples.forEach((it, i) => { m[it.id] = res === 'Fail' && i === 0 ? 'Fail' : 'Pass'; });
   return { ...s, sampleResults: m };
 };
-import { defaultGapType, ipeChecklist, ROLE_LABEL } from './types';
+// PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
+import { ipeChecklist, ROLE_LABEL } from './types';
 import { normaliseProcess, processesForAudit } from './auditScope';
 
 // The five primary tabs — mirrors how other engagements are laid out.
@@ -138,6 +139,14 @@ interface IcfrCtx {
   openRacmMatrix: (process: string) => void;
   openRacmEditor: (meta: RacmEditorMeta) => void;
   openControl: (id: string) => void;
+  /** Open ONE exception, wherever it lives — the audit that owns it, the
+   *  deficiencies tab inside it, and that card expanded and scrolled to. A row
+   *  that names a specific finding should land on that finding, not on a list
+   *  the reader then has to search for the thing they just clicked. */
+  openDeficiency: (defId: string) => void;
+  /** The exception a navigation asked for, consumed once by the card. */
+  focusDefId: string | null;
+  clearFocusDef: () => void;
   back: () => void;
   // where back() would land — the dossier breadcrumb names it honestly
   returnView: View | null;
@@ -292,14 +301,32 @@ interface IcfrCtx {
    *  set: keep controls of still-in-scope processes, seed fresh shells for
    *  newly-scoped ones, drop the rest. */
   reconcileScope: (processes: string[]) => void;
-  // deficiencies / exception lifecycle
+  // deficiencies / exception lifecycle — the six steps
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
-  recordRetest: (id: string, result: 'Pass' | 'Fail') => void;
+  /** ② the auditor is done sizing — to the reviewer if significant or worse,
+   *  otherwise straight to the owner to plan. */
+  completeSizing: (id: string) => void;
+  /** ② the reviewer agrees the grade, or sends it back with a reason. */
+  confirmRating: (id: string) => void;
+  returnRating: (id: string, reason: string) => void;
+  /** ③ the owner puts the plan up; the auditor judges it against the root cause
+   *  and nothing else. A rejection must carry a reason. */
+  submitPlan: (id: string) => void;
+  reviewPlan: (id: string, decision: 'Accepted' | 'Rejected', reason?: string) => void;
+  /** ⑤ a fresh sample off the post-fix period, marked against the original
+   *  attributes, item by item. The verdict is derived from the grid, never typed. */
+  drawRetestSample: (id: string) => void;
+  setRetestResult: (id: string, sampleId: string, attrCode: string, result: TestResult) => void;
+  recordRetest: (id: string, rationale?: string) => void;
   signOffException: (id: string) => void;
   reopenException: (id: string, reason: string) => void;
   updateRemediation: (id: string, patch: Partial<Deficiency['remediation']>) => void;
   addRemediationEvidence: (id: string, fileName: string) => void;
+  /** Blocked testing — a status on the control, not an exception. See UnableToTest. */
+  markUnableToTest: (controlId: string, track: 'design' | 'operating', reason: string, needed: string) => void;
+  resolveUnableToTest: (controlId: string) => void;
+  escalateUnableToTest: (controlId: string) => void;
   // create control + engagement-level sign-off
   addControl: (draft: NewControlDraft) => string;
   /** Sign off the OPEN audit. There is no engagement-level ICFR sign-off — the
@@ -341,7 +368,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string })[]>([]);
   // Owner mode is a person-lane, not a role-lane: "mine" = this named owner's
   // controls, tasks and exceptions. The picker in the top bar switches personas.
-  const [meOwner, setMeOwner] = useState('M. Nair · Accounts Payable');
+  // Start on an owner who actually has something to do. A hard-coded name lands
+  // the owner's hat on an empty queue whenever the seeded exceptions belong to
+  // someone else, which reads as "nothing is assigned to me" rather than "you are
+  // looking at the wrong person".
+  const [meOwner, setMeOwner] = useState(() => {
+    const live = eng.deficiencies.find(d => d.status !== 'Closed');
+    const owner = live && eng.controls.find(c => c.id === live.controlId)?.owner;
+    return owner ?? eng.controls[0]?.owner ?? 'M. Nair · Accounts Payable';
+  });
 
   // Person-based identity: each hat acts as the engagement's named person, not a
   // role label — so self-review guards compare people, and the trail reads real names.
@@ -394,6 +429,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRacmEditor(meta); setTabState('racm'); setView('racm-editor');
   }, [view]);
 
+  const [focusDefId, setFocusDefId] = useState<string | null>(null);
+  const clearFocusDef = useCallback(() => setFocusDefId(null), []);
   const openControl = useCallback((id: string) => {
     setReturnView(RETURNABLE.includes(view) ? view : null);
     setSelectedControlId(id); setView('dossier');
@@ -449,25 +486,35 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         ? c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text)
         : c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.code);
       const next = Math.max(0, ...prev.deficiencies.map(d => parseInt(d.id.replace(/\D/g, ''), 10) || 0)) + 1;
+      // Which sampled items it was found in — the evidence behind the exception,
+      // and the thing the root cause has to explain rather than restate.
+      const failedSamples = track === 'operating'
+        ? Array.from(new Set(c.operating.steps.flatMap(s =>
+            Object.entries(s.sampleResults ?? {}).filter(([, r]) => r === 'Fail')
+              .map(([sid]) => c.operating.sampling?.samples.find(x => x.id === sid)?.ref ?? sid))))
+        : [];
       const def: Deficiency = {
         id: `DEF-${String(next).padStart(3, '0')}`,
         controlId, track,
-        // Named by where it was found and what broke: sampling finds testing gaps,
-        // the walkthrough finds design gaps. The auditor can re-type it on the card.
-        gapType: defaultGapType(track, c.nature),
         description: failed.length
           ? `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
           : `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef}.`,
-        rootCause: 'To be assessed — capture why the control failed.',
+        // Deliberately blank, not pre-filled with a plausible sentence: the whole
+        // exception turns on this, and a default here would be a guess the auditor
+        // never made. Step 1 is not complete until it is written.
+        rootCause: '',
+        failedSamples,
         likelihood: 'Reasonably possible',
         magnitude: 0,
         mwIndicators: [],
         compensatingControlId: undefined,
         aggregationGroup: c.process,
-        // Auto-routing (Materiality & scope rule): on ⇒ the exception lands straight
-        // in the owner's remediation lane; off ⇒ it waits at Identified for routing.
-        remediation: { action: 'To be agreed with the control owner.', date: null, owner: c.owner, status: prev.rules.autoRoute ? 'In progress' : 'Open' },
-        status: prev.rules.autoRoute ? 'Remediation' : 'Identified',
+        // The exception starts with the auditor whatever auto-routing says. It
+        // cannot go to the owner before it has a root cause and a grade — that is
+        // the point of steps 1 and 2, and the owner has nothing to plan against
+        // until they exist.
+        remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
+        status: 'Identified',
       };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track, kind: 'exception',
@@ -1047,9 +1094,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
             : a)),
         ],
         controls: prev.controls.map(c => (resetIds.has(c.id) ? untested(c) : c)),
-        // A deficiency is a conclusion about a control, so it cannot outlive the
-        // result it came from — but it lives on in the archive above.
-        deficiencies: prev.deficiencies.filter(d => !hit(d.controlId)),
+        // A CLOSED exception is a conclusion about a control, so it cannot outlive
+        // the result it came from — it lives on in the archive above, never deleted.
+        //
+        // An OPEN one carries forward. It did not stop being true because the year
+        // turned: the control is still broken, the fix is still owed, and the new
+        // cycle's first job is to verify the prior period's open items rather than
+        // rediscover them. Archiving them would have quietly reset the count to
+        // zero every roll-forward, which is the one number nobody should be able
+        // to lose by waiting.
+        deficiencies: prev.deficiencies.filter(d => !hit(d.controlId) || d.status !== 'Closed'),
         // The control page reads its history out of `executions`; leaving last
         // cycle's runs there would show "tested by A. Mehta" on a control the
         // page also calls Not tested.
@@ -1083,6 +1137,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setTabState('overview');
     setView('overview');
   }, []);
+
+  // Land on the exception itself. openAudit resets the tab by design, so the tab
+  // is set AFTER it rather than alongside — otherwise the reset wins and the
+  // reader arrives on the audit dashboard wondering what they clicked.
+  const openDeficiency = useCallback<IcfrCtx['openDeficiency']>((defId) => {
+    setFocusDefId(defId);
+    const target = eng.deficiencies.find(d => d.id === defId);
+    const owning = target && eng.audits.find(a => a.controlIds?.includes(target.controlId));
+    if (owning && owning.id !== openAuditId) { openAudit(owning.id); setTabState('deficiencies'); return; }
+    if (openAuditId) setTabState('deficiencies'); else setView('deficiencies');
+  }, [eng.deficiencies, eng.audits, openAuditId, openAudit]);
   // Leaving an audit lands on the engagement's own Overview. Without the reset,
   // closing from the audit's Configuration or Deficiency management tab — neither
   // of which the engagement level has — left the tab bar with nothing active and
@@ -1390,10 +1455,155 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me, role]);
 
   // Evaluation is the auditor's lane — the owner never grades their own exception.
+  // Any edit that MOVES the grade writes its own trail entry: the rule is that a
+  // severity never changes without the record saying what it was, what it became
+  // and who touched it. A confirmed rating that moves loses its confirmation —
+  // the reviewer agreed to a number, not to a field.
   const updateDeficiency = useCallback<IcfrCtx['updateDeficiency']>((id, patch) => {
     if (role !== 'auditor') return;
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
-  }, [role]);
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const before = prev.deficiencies.find(d => d.id === id);
+      if (!before) return prev;
+      const after = { ...before, ...patch };
+      const next = { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? after : d)) };
+      const g0 = gradeException(before, prev).grade;
+      const g1 = gradeException(after, next).grade;
+      if (g0 === g1) return next;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: before.controlId, track: before.track, kind: 'exception',
+        verb: `re-graded ${id}`, from: g0, to: g1, by: me, role, at: 'just now',
+        rationale: 'Severity inputs changed — the engine recomputed.',
+      };
+      // A grade that has moved is no longer the one the reviewer confirmed.
+      const cleared = before.ratingConfirm && needsRatingConfirmation(g1)
+        ? next.deficiencies.map(d => (d.id === id ? { ...d, ratingConfirm: undefined, status: 'Rating review' as const } : d))
+        : next.deficiencies;
+      return { ...next, deficiencies: cleared, executions: [event, ...next.executions] };
+    });
+  }, [me, role]);
+
+  // ─── Step 2 → 3 · the rating leaves the auditor's hands ───────────────────────
+  // Below significant it goes straight to the owner to plan. Significant or worse
+  // parks for the reviewer first: a wrong material weakness must not set weeks of
+  // remediation running, and it is cheaper to argue about the grade than to undo
+  // a fix built on it.
+  const completeSizing = useCallback<IcfrCtx['completeSizing']>((id) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Identified') return prev;
+      if (!target.rootCause.trim()) return prev;               // step 1 is not done
+      const grade = gradeException(target, prev).grade;
+      const next: ExceptionStatus = needsRatingConfirmation(grade) && !target.ratingConfirm ? 'Rating review' : 'Planning';
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: next === 'Rating review' ? `sent ${id} for rating confirmation` : `handed ${id} to ${target.remediation.owner} to plan`,
+        from: 'Identified', to: next, result: undefined, by: me, role, at: 'just now',
+        rationale: `Graded ${grade}.`,
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, status: next, ratingReturn: undefined } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // The reviewer agrees the grade, or sends it back with a reason. Nothing else
+  // can happen to the exception in between — that is what "blocking" means.
+  const confirmRating = useCallback<IcfrCtx['confirmRating']>((id) => {
+    if (role !== 'reviewer') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Rating review') return prev;
+      const grade = gradeException(target, prev).grade;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `confirmed ${id} as ${grade}`, from: 'Rating review', to: 'Planning', by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id
+          ? { ...d, ratingConfirm: { grade, by: me, at: 'just now' }, status: 'Planning' as const } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  const returnRating = useCallback<IcfrCtx['returnRating']>((id, reason) => {
+    if (role !== 'reviewer' || !reason.trim()) return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Rating review') return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `sent ${id} back to the auditor`, from: 'Rating review', to: 'Identified',
+        rationale: reason.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id
+          ? { ...d, status: 'Identified' as const, ratingReturn: { reason: reason.trim(), by: me, at: 'just now' } } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // ─── Step 3 · the plan, and the auditor's one say in it ───────────────────────
+  // The auditor judges the plan against the root cause and nothing else. They do
+  // not write it, do not execute it, and cannot edit it — a rejection carries a
+  // reason back to the owner, who rewrites it.
+  const submitPlan = useCallback<IcfrCtx['submitPlan']>((id) => {
+    if (role !== 'risk-owner') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Planning') return prev;
+      const r = target.remediation;
+      if (!r.action.trim() || !r.owner.trim() || !r.date) return prev;   // all three, or it is not a plan
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `submitted the plan for ${id}`, from: 'Planning', to: 'Plan review', by: me, role, at: 'just now',
+        rationale: short(r.action, 120),
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id
+          ? { ...d, status: 'Plan review' as const, planSubmitted: { by: me, at: 'just now' }, planReview: undefined } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  const reviewPlan = useCallback<IcfrCtx['reviewPlan']>((id, decision, reason) => {
+    if (role !== 'auditor') return;
+    if (decision === 'Rejected' && !reason?.trim()) return;             // no silent rejections
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Plan review') return prev;
+      const to: ExceptionStatus = decision === 'Accepted' ? 'Remediation' : 'Planning';
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: decision === 'Accepted' ? `accepted the plan for ${id}` : `rejected the plan for ${id}`,
+        from: 'Plan review', to, rationale: reason?.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id
+          ? {
+            ...d, status: to,
+            planReview: { decision, reason: reason?.trim(), by: me, at: 'just now' },
+            remediation: { ...d.remediation, status: decision === 'Accepted' ? 'In progress' as const : 'Open' as const },
+          } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
   // The ground rules are the auditor's to set — everyone else reads them (at most).
   const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
     if (role !== 'auditor') return;
@@ -1474,22 +1684,101 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role]);
-  // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
-  // the auditor records retest results; the owner never tests their own fix.
-  // A failed retest sends the plan back to In progress.
-  const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
+  // ─── Step 5 · the retest ──────────────────────────────────────────────────────
+  // The control is tested AGAIN, not re-read. A fresh sample comes off the period
+  // SINCE THE FIX LANDED — items from before it prove nothing about the repair —
+  // and it is marked against the same attributes the original test used, so a pass
+  // means the same thing it meant the first time.
+  const drawRetestSample = useCallback<IcfrCtx['drawRetestSample']>((id) => {
     if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
-      if (!target || target.status !== 'Retest') return prev;
+      if (!target || target.status !== 'Retest' || target.retestDraft) return prev;
+      const c = prev.controls.find(x => x.id === target.controlId);
+      if (!c) return prev;
+      // The same attributes, carried over verbatim — a retest that invents its own
+      // is not a retest of anything.
+      const attributes = c.operating.steps.map(s => ({ code: s.code, description: s.description }));
+      const size = sampleSizeGuide(c).suggested;
+      const from = parseLooseDate(target.remediation.date) ?? new Date();
+      const to = new Date();
+      const iso = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const span = Math.max(1, to.getTime() - from.getTime());
+      const samples = sampleRefs(c.process, size).map((ref, i) => {
+        const at = new Date(from.getTime() + (span * (i + 1)) / (size + 1));
+        return { id: uid('rs'), ref, date: iso(at) };
+      });
+      const round: RetestRound = {
+        n: (target.retests?.length ?? 0) + 1,
+        windowFrom: iso(from), windowTo: iso(to),
+        attributes, samples,
+        results: Object.fromEntries(samples.map(s => [s.id, Object.fromEntries(attributes.map(a => [a.code, 'Not tested' as TestResult]))])),
+        result: 'Fail', by: me, at: 'just now',
+      };
       const event: ExecutionEvent = {
-        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
-        verb: `recorded retest ${result.toLowerCase()} on ${id}`, result, by: me, role, at: 'just now',
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'sample',
+        verb: `drew ${samples.length} item${samples.length === 1 ? '' : 's'} for retest ${round.n} of ${id}`,
+        target: `${round.windowFrom} → ${round.windowTo}`, by: me, role, at: 'just now',
+        rationale: 'Post-fix period only — items from before the fix cannot evidence it.',
       };
       return {
         ...prev,
-        deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'In progress' } } : d),
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, retestDraft: round } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  const setRetestResult = useCallback<IcfrCtx['setRetestResult']>((id, sampleId, attrCode, result) => {
+    if (role !== 'auditor') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({
+      ...prev,
+      deficiencies: prev.deficiencies.map(d => {
+        if (d.id !== id || !d.retestDraft) return d;
+        const results = { ...d.retestDraft.results, [sampleId]: { ...d.retestDraft.results[sampleId], [attrCode]: result } };
+        return { ...d, retestDraft: { ...d.retestDraft, results } };
+      }),
+    }));
+  }, [role]);
+
+  // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
+  // the auditor records retest results; the owner never tests their own fix. A
+  // failure sends the plan back to step 3 with the auditor's rationale attached,
+  // where the owner can read it, and bumps the loop counter.
+  const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, rationale) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Retest' || !target.retestDraft) return prev;
+      const draft = target.retestDraft;
+      const marks = draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
+      if (marks.some(m => m === 'Not tested')) return prev;             // finish the grid first
+      const result: 'Pass' | 'Fail' = marks.includes('Fail') ? 'Fail' : 'Pass';
+      if (result === 'Fail' && !rationale?.trim()) return prev;         // the owner has to be told why
+      const round: RetestRound = { ...draft, result, rationale: rationale?.trim(), by: me, at: 'just now' };
+      const to: ExceptionStatus = result === 'Pass' ? 'Awaiting reviewer' : 'Planning';
+      const rounds = [...(target.retests ?? []), round];
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `recorded retest ${round.n} — ${result.toLowerCase()} on ${id}`, result,
+        from: 'Retest', to, rationale: rationale?.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => d.id === id ? {
+          ...d,
+          retests: rounds,
+          retestDraft: undefined,
+          retest: { result, at: 'just now', by: me },
+          status: to,
+          // A failure reopens the plan, and the plan's own verdict goes with it —
+          // the owner is writing a new one, not resubmitting the rejected one.
+          planReview: result === 'Pass' ? d.planReview : undefined,
+          planSubmitted: result === 'Pass' ? d.planSubmitted : undefined,
+          remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'Open' },
+        } : d),
         executions: [event, ...prev.executions],
       };
     });
@@ -1502,7 +1791,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'risk-owner') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
       if (d.id !== id) return d;
-      if (d.status !== 'Identified' && d.status !== 'Remediation') return d;
+      // Writable while the owner still holds it: step 3 before it goes up for
+      // review, and step 4 while the fix is being done. Once it is with the
+      // auditor — for the plan or for the retest — it is frozen.
+      if (d.status !== 'Planning' && d.status !== 'Remediation') return d;
       return { ...d, remediation: { ...d.remediation, ...patch } };
     }) }));
   }, [role]);
@@ -1550,6 +1842,103 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         deficiencies: prev.deficiencies.map(d => d.id === id
           ? { ...d, status: 'Remediation', signoff: undefined, retest: undefined, remediation: { ...d.remediation, status: 'In progress' } }
           : d),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // ─── Unable to test — a status on the CONTROL, never an exception ─────────────
+  // When the auditor cannot test — no evidence, the population is unavailable, the
+  // owner has not produced what was asked for — nothing has been shown to have
+  // failed. Exposure and likelihood do not apply, so a severity would be invented.
+  // It sits in the owner's court like any other document request until testing can
+  // resume, and only becomes an exception if the period closes with it still open.
+  const markUnableToTest = useCallback<IcfrCtx['markUnableToTest']>((controlId, track, reason, needed) => {
+    if (role !== 'auditor' || !reason.trim() || !needed.trim()) return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c || c.unableToTest) return prev;
+      const block: UnableToTest = { track, reason: reason.trim(), needed: needed.trim(), raisedBy: me, raisedAt: 'just now' };
+      const task: HandoffTask = {
+        id: `UTT-${prev.tasks.length + 1}`, type: 'pbc', controlId,
+        title: `Testing blocked on ${c.wpRef} — ${short(needed, 60)}`,
+        detail: reason.trim(), assignee: c.owner, assigneeRole: 'risk-owner',
+        raisedBy: me, dueLabel: 'Due in 5d', overdue: false, status: 'open',
+      };
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track, kind: 'request-docs',
+        verb: `recorded unable to test — waiting on ${c.owner}`, target: short(needed, 60),
+        rationale: reason.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => (x.id === controlId ? { ...x, unableToTest: block } : x)),
+        tasks: [...prev.tasks, task],
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // The owner produced it — testing resumes and the block simply goes away. It was
+  // never a finding, so there is nothing to close out.
+  const resolveUnableToTest = useCallback<IcfrCtx['resolveUnableToTest']>((controlId) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c?.unableToTest || c.unableToTest.convertedTo) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: c.unableToTest.track, kind: 'receive-doc',
+        verb: 'received what was missing — testing resumes', by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => (x.id === controlId ? { ...x, unableToTest: undefined } : x)),
+        tasks: prev.tasks.map(t => (t.controlId === controlId && t.type === 'pbc' && t.status === 'open' ? { ...t, status: 'cleared' as const } : t)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // Period end, still nothing. The control could not be evidenced as operating, so
+  // it concludes ineffective and runs the ordinary ladder — no second lifecycle,
+  // no special grade. The reason carries onto the exception so the working paper
+  // shows WHY it was never evidenced, not merely that it failed.
+  const escalateUnableToTest = useCallback<IcfrCtx['escalateUnableToTest']>((controlId) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c?.unableToTest || c.unableToTest.convertedTo) return prev;
+      const block = c.unableToTest;
+      const next = Math.max(0, ...prev.deficiencies.map(d => parseInt(d.id.replace(/\D/g, ''), 10) || 0)) + 1;
+      const defId = `DEF-${String(next).padStart(3, '0')}`;
+      const def: Deficiency = {
+        id: defId, controlId, track: block.track,
+        description: `${c.wpRef} could not be evidenced as operating — ${short(block.needed, 80)} was never produced.`,
+        rootCause: '',
+        failedSamples: [],
+        likelihood: 'Reasonably possible', magnitude: 0, mwIndicators: [],
+        aggregationGroup: c.process,
+        remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
+        status: 'Identified',
+        unableToTestReason: block.reason,
+      };
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: block.track, kind: 'exception',
+        verb: `raised ${defId} — never evidenced, scope limitation at period end`,
+        from: 'Unable to test', to: 'Identified', rationale: block.reason, by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => (x.id === controlId
+          ? {
+            ...x,
+            unableToTest: { ...block, convertedTo: defId },
+            [block.track]: { ...x[block.track], conclusion: 'Ineffective' as TrackConclusion, testedBy: me, testedAt: 'just now' },
+          } : x)),
+        deficiencies: [def, ...prev.deficiencies],
         executions: [event, ...prev.executions],
       };
     });
@@ -1744,7 +2133,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
-    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back, returnView,
+    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
@@ -1757,10 +2146,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

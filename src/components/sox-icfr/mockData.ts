@@ -3,7 +3,9 @@ import { validationQA } from './helpers';
 import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
   Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
-  EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, GapType, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
+  // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
+  // GapType,
+  EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
   ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
@@ -721,16 +723,23 @@ const TASKS: HandoffTask[] = [
 
 const DEFICIENCIES: Deficiency[] = [
   // DEF-001 was found by sampling — the control is designed correctly and did not
-  // operate, so it is a testing gap, and the four variant duplicates that posted
-  // are real money: two were paid and are recoverable, two were caught pre-payment.
-  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', gapType: 'TG', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
-    exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
+  // operate. Four variant duplicates posted in the period; the magnitude is what
+  // could have been misstated, which is the only number the ladder reads.
+  //
+  // PARKED (Aug 2026) — the gap type and the priced impact both left the record;
+  // see the banners in types.ts. Kept here so the seed can be restored with them:
+  //   gapType: 'TG',
+  //   exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
+  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
     remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair · Accounts Payable', status: 'In progress' }, status: 'Remediation' },
-  // DEF-002 was found in the walkthrough, on a manual control — a manual design
-  // gap. Nothing has gone wrong yet, so there is no recovery to price: the number
+  // DEF-002 was found in the walkthrough, on a manual control — the review sits
+  // after the posting it is meant to stop. Nothing has gone wrong yet; the number
   // is what could pass unchecked in a month of manual journals.
-  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', gapType: 'MDG', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', reportRef: '4.5',
-    exposure: { recovery: 0, workingCapital: 0, leakage: 640_000, basis: 'No error identified in the period. Priced at the average monthly value of manual AP journals posted without prior review (₹6.4L) — the amount that could reach the ledger unchecked before the next review cycle catches it.' },
+  //
+  // PARKED (Aug 2026) — as above:
+  //   gapType: 'MDG',
+  //   exposure: { recovery: 0, workingCapital: 0, leakage: 640_000, basis: 'No error identified in the period. Priced at the average monthly value of manual AP journals posted without prior review (₹6.4L) — the amount that could reach the ledger unchecked before the next review cycle catches it.' },
+  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', reportRef: '4.5',
     remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
 ];
 
@@ -959,7 +968,10 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       id: `def-cy25-0${i + 1}`,
       controlId,
       track: 'operating' as const,
-      gapType: 'Testing gap — sample exception' as GapType,
+      // PARKED (Aug 2026) — and it was wrong even while it lived: 'Testing gap —
+      // sample exception' is a sentence, not one of the three codes, and the cast
+      // is what let it through. The field is gone; nothing needs to replace it.
+      //   gapType: 'Testing gap — sample exception' as GapType,
       description: i === 0
         ? 'Two of five sampled payment approvals were released without the second signature.'
         : 'Quarterly reconciliation for Q3 was signed a month after the close deadline.',
@@ -1032,11 +1044,19 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  *   Procure 3      MW by INDICATOR — the cap is blocked (helpers.assessSeverity),
  *                  so this one stays a material weakness and drives the audit's
  *                  ICFR conclusion to "not effective"
- *   Order 3        Significant Deficiency in its own right, out for retest
+ *   Order 3        Significant Deficiency in its own right
  *   Order 4        a Deficiency that AGGREGATES with the one above — same group,
  *                  combined ₹6.4 Cr against a ₹2.4 Cr band
  *   Fixed 4        clearly trivial (₹45 L, under the ₹60 L floor) and closed —
  *                  logged, and deliberately never aggregated
+ *
+ * The five are also spread down the exception lifecycle, one per stage, so the
+ * tab shows the whole journey rather than five rows all sitting at the start:
+ *   DEF-A-01  Rating review    graded, waiting on the reviewer to confirm it
+ *   DEF-A-02  Planning         rating confirmed, owner writing the plan
+ *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
+ *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
+ *   DEF-A-05  Closed           passed its retest and countersigned
  *
  * Priced against Altura's own thresholds, not the flagship's: materiality
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
@@ -1067,6 +1087,20 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     }
   };
 
+  /* Every attribute against every sampled item, for one retest round. `failed`
+     names the odd ones out — sample id → the attribute code that failed — and
+     everything not named passes, because a round where most things go right is
+     the normal shape and listing 20 passes by hand helps nobody. */
+  const roundResults = (
+    samples: { id: string }[],
+    attrs: { code: string }[],
+    failed: Record<string, string>,
+  ): Record<string, Record<string, TestResult>> =>
+    Object.fromEntries(samples.map(s => [
+      s.id,
+      Object.fromEntries(attrs.map(a => [a.code, (failed[s.id] === a.code ? 'Fail' : 'Pass') as TestResult])),
+    ]));
+
   const payments = pick('Treasury', 0);          // Payment runs approved by two authorisers
   const bankRecs = pick('Treasury', 1);          // Bank reconciliations reviewed monthly — the compensating control
   const vendorMaster = pick('Procure to Pay', 2);
@@ -1079,108 +1113,223 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
   if (payments) {
     fail(payments, 'operating');
     out.push({
-      id: 'DEF-A-01', controlId: payments.id, track: 'operating', gapType: 'TG', reportRef: '4.1',
+      // PARKED (Aug 2026) — gapType: 'TG',   (see the banner in types.ts)
+      id: 'DEF-A-01', controlId: payments.id, track: 'operating', reportRef: '4.1',
       description: 'Nine of forty sampled payment runs were released on a single authorisation; the second approver was applied after the bank file had been sent.',
-      rootCause: 'The payment run releases on the first approval and holds the second as a review step, so dual authorisation is sequential rather than preventive.',
+      rootCause: 'The payment run releases on the first authorisation and queues the second as an after-the-fact review, so the bank file is transmitted before dual authorisation exists rather than because of it.',
+      failedSamples: ['F110-0417', 'F110-0503', 'F110-0528', 'F110-0611', 'F110-0702', 'F110-0719', 'F110-0806', 'F110-0821', 'F110-0912'],
       likelihood: 'Probable', magnitude: 168_000_000, mwIndicators: [],
-      // Priced by magnitude, not by loss: every payment tested was valid and owed.
-      // What failed is the authorisation, so nothing is recoverable — the number
-      // is the value that could have moved on one signature.
+      // Sized by what could have been misstated, not by what was lost: every
+      // payment tested was valid and owed. What failed is the authorisation, so
+      // the number is the value that could have moved on one signature.
       aggregationGroup: 'Treasury payments',
       // Bank reconciliations are monthly, independent and concluded effective —
       // they would catch an unauthorised payment within the cycle. That is a
       // genuine cap: MW down to SD, and never to nothing.
       compensatingControlId: bankRecs?.id,
       remediation: {
-        action: 'Reconfigure the payment run to hold release until both authorisations are recorded; re-test a fresh sample of runs after the change.',
-        date: '30 Sep', owner: 'A. Verma · Treasury', status: 'In progress',
+        // Blank on purpose. The plan is the OWNER's sentence to write at step ③,
+        // and the auditor judges it against the root cause — neither of which
+        // means anything if it arrives pre-worded.
+        action: '',
+        date: null, owner: 'A. Verma · Treasury', status: 'Open',
       },
-      status: 'Remediation',
+      // Freshly raised and still being sized — step ②, in the auditor's hands.
+      // The root cause is written, so the exception is past ①; the exposure,
+      // likelihood, indicators and compensating control are all live, and the
+      // conclusion recomputes as they move. It lands on Significant Deficiency
+      // (a material weakness by magnitude, capped by the bank reconciliation),
+      // so when the auditor is satisfied the button reads "send to the reviewer"
+      // rather than "hand to the owner". Nothing downstream has started.
+      status: 'Identified',
     });
   }
 
   if (vendorMaster) {
     fail(vendorMaster, 'operating');
     out.push({
-      id: 'DEF-A-02', controlId: vendorMaster.id, track: 'operating', gapType: 'TG', reportRef: '4.2',
+      // PARKED (Aug 2026) — gapType and exposure, kept so the seed restores whole:
+      //   gapType: 'TG',
+      //   exposure: { recovery: 0, workingCapital: 0, leakage: 4_100_000, basis: 'No fraudulent payee identified on inspection of the period\'s 214 master changes. Priced at the two payments (₹41 L) made to bank details amended in the same week the vendor was created — value that left the group and has not been recovered.' },
+      id: 'DEF-A-02', controlId: vendorMaster.id, track: 'operating', reportRef: '4.2',
       description: 'Vendor master changes were reviewed by the same team that raised them for the whole period; no independent review took place at any point in the cycle.',
-      rootCause: 'The reviewer role was granted to the shared services team during a staffing gap in February and never withdrawn.',
+      rootCause: 'The reviewer role was granted to the shared services team during a February staffing gap and never withdrawn, so the system accepts the person who raised a change as the person who approved it and says nothing about the two being the same.',
+      failedSamples: ['VMD-0042', 'VMD-0117', 'VMD-0206'],
       likelihood: 'Probable', magnitude: 132_000_000,
       // An indicator, not a number — this is a control-environment failure, so
       // the compensating-control cap is blocked outright and it stays an MW.
       mwIndicators: ['Ineffective control environment / oversight'],
       aggregationGroup: 'Procure to Pay',
-      exposure: {
-        recovery: 0, workingCapital: 0, leakage: 4_100_000,
-        basis: 'No fraudulent payee identified on inspection of the period\'s 214 master changes. Priced at the two payments (₹41 L) made to bank details amended in the same week the vendor was created — value that left the group and has not been recovered.',
-      },
+      // Deliberately NOT confirmed yet — this is the reviewer's gate, waiting.
       remediation: {
-        action: 'Withdraw the reviewer role from shared services, re-perform an independent review of every master change made in the period, and confirm the segregation in the access matrix.',
+        // Blank on purpose — see DEF-A-01 above. Nothing has reached the owner
+        // yet: the rating is still waiting on the reviewer.
+        action: '',
         date: null, owner: 'S. Iyer · Finance', status: 'Open',
       },
-      status: 'Identified',
+      // Parked at the rating gate. An indicator settles it as a Material Weakness
+      // on its own — no cap to argue, no number to weigh — and a grade that heavy
+      // is confirmed by the reviewer before anyone is asked to spend a quarter on
+      // it. Until they do, the owner cannot start: that is what blocking means.
+      status: 'Rating review',
     });
   }
 
   if (revenueCutoff) {
     fail(revenueCutoff, 'operating');
     out.push({
-      id: 'DEF-A-03', controlId: revenueCutoff.id, track: 'operating', gapType: 'TG', reportRef: '4.3',
+      // PARKED (Aug 2026) — gapType and exposure, kept so the seed restores whole:
+      //   gapType: 'TG',
+      //   exposure: { recovery: 0, workingCapital: 0, leakage: 0, basis: 'The three invoices were reversed and re-raised in the correct period before the close was signed. A timing error corrected within the cycle — no value has left the group and none is trapped.' },
+      id: 'DEF-A-03', controlId: revenueCutoff.id, track: 'operating', reportRef: '4.3',
       description: 'Six invoices raised in the last three days of the quarter were not agreed to a dispatch document; three related to goods dispatched in the following period.',
-      rootCause: 'The cut-off check samples the dispatch log rather than reconciling it to invoices raised, so an invoice with no dispatch never surfaces.',
+      rootCause: 'The cut-off check starts from the dispatch log and looks for the matching invoice, so an invoice raised with no dispatch behind it is never reached — the test can only find the errors it walks past.',
+      failedSamples: ['INV-26-44112', 'INV-26-44119', 'INV-26-44127', 'INV-26-44130', 'INV-26-44136', 'INV-26-44141'],
       likelihood: 'Reasonably possible', magnitude: 46_000_000, mwIndicators: [],
       aggregationGroup: 'Order to Cash',
-      exposure: {
-        recovery: 0, workingCapital: 0, leakage: 0,
-        basis: 'The three invoices were reversed and re-raised in the correct period before the close was signed. A timing error corrected within the cycle — no value has left the group and none is trapped.',
-      },
+      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes · Audit Manager', at: '26 Jun 2026' },
       remediation: {
         action: 'Reconcile invoices raised in the cut-off window to dispatch documents in both directions, rather than sampling one side.',
-        date: '15 Aug', owner: 'P. Sharma · Revenue', status: 'Done',
+        date: '15 Aug', owner: 'P. Sharma · Revenue', status: 'Open',
       },
-      status: 'Retest',
+      // The owner has put the plan up and the auditor has not judged it yet, so
+      // nothing is being built in the meantime. A plan aimed at the wrong mechanism
+      // is far cheaper to send back now than to discover on the retest in October.
+      planSubmitted: { by: 'P. Sharma · Revenue', at: '03 Jul 2026' },
+      status: 'Plan review',
     });
   }
 
   if (creditNotes) {
     fail(creditNotes, 'design');
+    // A retest asks the SAME questions of a post-fix sample, so the round carries
+    // the control's own attributes rather than a fresh list written for it.
+    const cnAttrs = creditNotes.operating.steps.map(s => ({ code: s.code, description: s.description }));
+    // Drawn from July alone: the rolling monthly total went live on 30 June, and a
+    // sample reaching back before that proves nothing about the fix.
+    const cnSamples = [
+      { id: 'cn-rt1-1', ref: 'CN-26-0902', date: '2026-07-06' },
+      { id: 'cn-rt1-2', ref: 'CN-26-0917', date: '2026-07-13' },
+      { id: 'cn-rt1-3', ref: 'CN-26-0928', date: '2026-07-21' },
+      { id: 'cn-rt1-4', ref: 'CN-26-0941', date: '2026-07-29' },
+    ];
     out.push({
-      id: 'DEF-A-04', controlId: creditNotes.id, track: 'design', gapType: 'MDG', reportRef: '4.4',
+      // PARKED (Aug 2026) — gapType: 'MDG',   (see the banner in types.ts)
+      id: 'DEF-A-04', controlId: creditNotes.id, track: 'design', reportRef: '4.4',
       description: 'Credit notes below ₹2 L are issued without approval by design; the walkthrough confirmed the threshold is applied per note rather than per customer per month.',
-      rootCause: 'The approval threshold was set per document when the policy was written, so a series of small notes to one customer never reaches it.',
+      rootCause: 'The approval threshold is evaluated against each note on its own, so any amount at all can be credited to one customer provided it arrives as a series of notes that each stay under ₹2 L.',
+      failedSamples: ['CN-26-0781', 'CN-26-0793', 'CN-26-0806', 'CN-26-0814'],
       likelihood: 'Reasonably possible', magnitude: 18_000_000, mwIndicators: [],
       // Individually a Deficiency. It shares a group with DEF-A-03, and the two
       // together clear the SD band — which is exactly what aggregation is for.
       aggregationGroup: 'Order to Cash',
+      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes · Audit Manager', at: '26 Jun 2026' },
+      planSubmitted: { by: 'P. Sharma · Revenue', at: '18 Jun 2026' },
+      // The auditor's whole say in the fix: does it address the mechanism? A
+      // rolling total measured per customer sees the thing the old threshold
+      // could not, so it was accepted and the owner went and built it.
+      planReview: { decision: 'Accepted', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta · Auditor', at: '20 Jun 2026' },
       remediation: {
         action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
-        date: '31 Oct', owner: 'P. Sharma · Revenue', status: 'Open',
+        date: '30 Jun', owner: 'P. Sharma · Revenue', status: 'Done',
+        evidence: [
+          { id: 'cn-ev-1', name: 'Credit note approval rule — rolling monthly total.pdf', kind: 'PDF', uploadedBy: 'P. Sharma · Revenue', uploadedAt: '30 Jun 2026' },
+          { id: 'cn-ev-2', name: 'Change ticket CHG-4471.pdf', kind: 'PDF', uploadedBy: 'P. Sharma · Revenue', uploadedAt: '30 Jun 2026' },
+        ],
       },
-      status: 'Identified',
+      // One round run and failed, which is the loop this counter exists to show.
+      // The round is never edited: round 2 will be appended alongside it, and
+      // `retests.length` is what the reviewer reads as "how many times now?".
+      retests: [{
+        n: 1,
+        windowFrom: '2026-07-01', windowTo: '2026-07-31',
+        attributes: cnAttrs,
+        samples: cnSamples,
+        results: roundResults(cnSamples, cnAttrs, { 'cn-rt1-3': cnAttrs[0]?.code ?? '' }),
+        result: 'Fail',
+        rationale: 'CN-26-0928 was approved by nobody. The customer had been set up under a second code that month, so the rolling total read ₹1.7 L against each code instead of ₹3.4 L against the customer. The rule works — the key it groups on does not.',
+        by: 'A. Mehta · Auditor', at: '05 Aug 2026',
+      }],
+      // The latest round's verdict, mirrored for readers that only want the answer.
+      retest: { result: 'Fail', at: '05 Aug 2026', by: 'A. Mehta · Auditor' },
+      // The control is monthly, so a second round needs a full month off the
+      // corrected grouping key — end of September at the earliest.
+      expectedRetestReady: '30 Sep 2026',
+      status: 'Retest',
     });
   }
 
   if (disposals) {
     fail(disposals, 'operating');
+    const dpAttrs = disposals.operating.steps.map(s => ({ code: s.code, description: s.description }));
+    const dpSamples = [
+      { id: 'fa-rt1-1', ref: 'FA-DSP-0203', date: '2026-07-02' },
+      { id: 'fa-rt1-2', ref: 'FA-DSP-0211', date: '2026-07-09' },
+      { id: 'fa-rt1-3', ref: 'FA-DSP-0218', date: '2026-07-16' },
+    ];
     out.push({
-      id: 'DEF-A-05', controlId: disposals.id, track: 'operating', gapType: 'TG', reportRef: '4.5',
+      // PARKED (Aug 2026) — gapType: 'TG',   (see the banner in types.ts)
+      id: 'DEF-A-05', controlId: disposals.id, track: 'operating', reportRef: '4.5',
       description: 'Two disposals were derecognised in the month after sale; the gain on both was recorded in the correct quarter.',
-      rootCause: 'Disposal paperwork reaches finance with the following month\'s asset run.',
+      rootCause: 'The disposal note travels to finance with the monthly asset run rather than on approval, so an asset sold after that month\'s run has closed cannot be derecognised until the next one comes round.',
+      failedSamples: ['FA-DSP-0119', 'FA-DSP-0126'],
       likelihood: 'Reasonably possible', magnitude: 4_500_000, mwIndicators: [],
       aggregationGroup: 'Fixed Assets',
+      // No ratingConfirm, and none is owed: ₹45 L is under Altura's ₹60 L floor,
+      // so it grades clearly trivial and never reached the reviewer's rating gate.
       remediation: {
         action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
         date: '30 Jun', owner: 'S. Iyer · Finance', status: 'Done',
+        evidence: [{ id: 'fa-ev-1', name: 'Disposal workflow — routing change.pdf', kind: 'PDF', uploadedBy: 'S. Iyer · Finance', uploadedAt: '30 Jun 2026' }],
       },
-      // Retested and closed by the reviewer — the terminal four-eyes act, so the
-      // tab has one row showing the end of the lifecycle rather than only its start.
-      status: 'Closed',
+      planSubmitted: { by: 'S. Iyer · Finance', at: '10 Jun 2026' },
+      planReview: { decision: 'Accepted', reason: 'Routing on approval removes the wait for the monthly run, which is the thing that made the disposals late. Accepted.', by: 'A. Mehta · Auditor', at: '12 Jun 2026' },
+      // Retested clean and closed by the reviewer — the terminal four-eyes act, so
+      // the tab has one row showing the end of the lifecycle rather than only its start.
+      retests: [{
+        n: 1,
+        windowFrom: '2026-07-01', windowTo: '2026-07-31',
+        attributes: dpAttrs,
+        samples: dpSamples,
+        results: roundResults(dpSamples, dpAttrs, {}),
+        result: 'Pass',
+        by: 'A. Mehta · Auditor', at: '18 Jul 2026',
+      }],
+      // The same verdict, mirrored — a reader who only wants the answer never has
+      // to open the round to find it.
       retest: { result: 'Pass', at: '18 Jul 2026', by: 'A. Mehta · Auditor' },
       signoff: { by: 'J. Fernandes · Audit Manager', at: '19 Jul 2026' },
+      status: 'Closed',
     });
   }
 
   return out;
+}
+
+/**
+ * "Unable to test — waiting on owner", on one Altura control, so the state has
+ * something to show.
+ *
+ * Deliberately NOT a deficiency: nothing has been shown to have failed, so there
+ * is no severity to grade and no plan to write. It sits on the control and waits
+ * on the owner like any other document request — and if it is still open at
+ * period end it converts, because a control that could never be evidenced cannot
+ * be concluded effective.
+ *
+ * It goes on the FX control because that is the one control per RACM the live
+ * seed leaves untested. A control already concluded Effective cannot also be
+ * blocked, and the two on one row would read as a data error.
+ */
+function alturaUnableToTest(controls: Control[]): void {
+  const fxDeals = controls.filter(c => c.process === 'Treasury')[4];
+  if (!fxDeals) return;
+  fxDeals.unableToTest = {
+    track: 'operating',
+    reason: 'The dealing system holds the deal ticket but not the counterparty confirmation, and the confirmations for the period sit in the dealer’s own mailbox rather than the treasury shared folder. Nothing can be traced from a deal to a confirmation raised independently of the dealer, so the attribute cannot be tested at all — not passed, not failed.',
+    needed: 'Counterparty confirmations for every FX deal struck between 1 January and 30 June 2026, exported to the treasury shared folder by someone outside dealing, each carrying its deal ticket reference.',
+    raisedBy: 'A. Mehta · Auditor',
+    raisedAt: '24 Jul 2026',
+  };
 }
 
 /**
@@ -1283,6 +1432,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
   const deficiencies = rich ? alturaDeficiencies(controls) : [];
+  // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
+  // the findings above; every other engagement stays clean.
+  if (rich) alturaUnableToTest(controls);
   const audits = rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls);
   stampPopulationWindows(controls, audits);
   return {
