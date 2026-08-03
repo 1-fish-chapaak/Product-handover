@@ -32,7 +32,6 @@ import { readTemplateFromReport, classifyUpload, PAGE_CAP, type UploadKind } fro
 import type { ReadResult, ReadOutcome } from './byot/byotRead';
 import SectionReviewCanvas from './SectionReviewCanvas';
 import { FormSelect } from '../shared/FilterSelect';
-import MadeUpPreview from './byot/PreviewStep';
 import { RowDeleteButton } from './RowDeleteButton';
 import { renderSectionShape, sectionTypeLabel, type ShapeFill } from './templateSectionShape';
 import { reviewChrome, belowTheReadFloor, type CanvasSection, type CanvasBlock } from './sectionReviewShared';
@@ -540,9 +539,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Their word for each of ours, proposed by the read and settled by the client
   // on the matching screen. Every rating a report prints goes through it.
   const [scaleMap, setScaleMap] = useState<ScaleMap>(template.scaleMap ?? {});
-  /** What the right-hand pane draws: the empty shape, or the same shape with
-   *  three invented findings in it. Never saved, never exported. */
-  const [previewMode, setPreviewMode] = useState<'shape' | 'filled'>('shape');
   // The import walks the same two steps the Bring Your Own Template tab walks:
   // what we found, and a report in their format before any of it lands.
   // Said plainly when the read was too poor to be worth checking, and the
@@ -1087,29 +1083,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     closingText: template.closingText ?? [],
     logoDataUrl: template.logoDataUrl ?? '',
   }));
-  /** The template exactly as it stands, in the shape the sheet renderer reads.
-   *  Assembled from the same fields the save writes, so the made-up preview
-   *  cannot show a page the save would not produce. */
-  const liveTemplate: EditableTemplate = {
-    ...template,
-    name: copyName || 'Untitled Template',
-    sections,
-    brand: brand.trim(),
-    theme,
-    brandColor: brandColor || undefined,
-    findingScale,
-    opinionScale,
-    scaleMap: Object.keys(scaleMap).length > 0 ? scaleMap : undefined,
-    headerText,
-    footerText: footerText || defaultFooterText(brand),
-    watermark,
-    pageNumbers,
-    signoffEnabled,
-    signatories,
-    closingEnabled,
-    closingText,
-    logoDataUrl: logoDataUrl || undefined,
-  };
   /* THE MATCHING SCREEN, on the check screen beside the to-be template. Their
      rating words are a property of the format the client is approving, not a
      setting to be found afterwards, so it is rendered into the review canvas.
@@ -1396,8 +1369,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={attemptClose}>
-      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className={`fixed inset-0 z-[60] flex items-center justify-center ${isNew ? 'p-6' : ''}`} onClick={attemptClose}>
+      {/* Editing an existing template opens full screen — there's no page
+          behind it worth hinting at, and a fixed-size dialog wasted the room
+          a real document needs to edit comfortably. New/create still opens as
+          a dialog over the reports page it was launched from. */}
+      {isNew && <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />}
       {/* A big dialog, not the page. Everything in here is a document — the
           start screen, the check screen, the outline the editor builds — so it
           takes nearly the whole window and leaves a margin that says the page
@@ -1411,8 +1388,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         role="dialog" aria-modal="true" aria-label="Edit Template"
         // The one size change in this dialog is the check screen arriving, so it
         // eases rather than snaps.
-        className={`relative flex max-h-full max-w-full flex-col overflow-hidden rounded-2xl border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
-          wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'
+        className={`relative flex max-h-full max-w-full flex-col overflow-hidden border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
+          isNew ? `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'}` : 'h-full w-full rounded-none border-none'
         }`}
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
@@ -1831,37 +1808,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 </div>
               </div>
             )}
-            {/* THE PREVIEW BEFORE SAVING. Up to here the client has only seen
-                empty boxes, so a wrong column or a card missing a field turns
-                up in their first real report, months later. Three invented
-                findings printed through their own template move that to minute
-                five. It is a view on this screen rather than a step in front of
-                Save, because the same decision was already taken for the check
-                screen: nothing stands between a read and a saved template. */}
-            {sections.length > 0 && (
-              <div className="shrink-0 flex items-center justify-end px-6 pt-5">
-                <div role="group" aria-label="What the preview shows" className="inline-flex rounded-md border border-canvas-border bg-white p-0.5">
-                  {([['shape', 'Empty shape'], ['filled', 'With made-up problems']] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setPreviewMode(key)}
-                      aria-pressed={previewMode === key}
-                      className={`h-7 rounded-sm px-2.5 text-[0.75rem] font-semibold transition-colors cursor-pointer ${
-                        previewMode === key ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800'
-                      }`}
-                    >{label}</button>
-                  ))}
-                </div>
-              </div>
-            )}
             {/* The report page — a white sheet on the canvas desk. Sections and the
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
-              {previewMode === 'filled' && sections.length > 0 ? (
-                <MadeUpPreview template={liveTemplate} />
-              ) : (
               <div className="relative mx-auto w-full max-w-3xl rounded-lg border border-canvas-border" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
@@ -1995,7 +1945,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 )}
               </div>
-              )}
 
               {/* The other way to build this: one card under the report, off the
                   page, with the primary action on it. It sits after the sheet
