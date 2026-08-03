@@ -1,6 +1,10 @@
 import * as XLSX from 'xlsx';
 import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
-import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
+import { FIVE_W_1H, gapNature } from './types';
+// ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
+// Restore this import alongside the blocks parked further down the file.
+//
+// import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -363,19 +367,35 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // Linked exception, if the testing raised one
   if (def) {
     const a = assessSeverity(def, eng);
-    const ex = def.exposure;
+    // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────────
+    // Recovery / working-capital unblock / leakage are internal-audit VALUE
+    // metrics. ICFR asks what could have been misstated, which is a different
+    // number. Restore with the Exposure rows parked inside the block below.
+    //
+    // const ex = def.exposure;
     blocks.push({
       kind: 'kv', title: `Exception — ${def.id}`, rows: [
         ['Description', def.description],
-        // Where it was found and what kind of thing broke — the label the fix follows
-        ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
+        // Where it was found and what kind of control broke — DERIVED from the
+        // track that failed and the control's own nature, never asked. The
+        // control is right here, so the paper states it rather than storing it.
+        ['Gap nature', gapNature(def.track, c.nature)],
+        // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────────
+        // The auditor used to classify this by hand (MDG / ITDG / TG). The
+        // control's own RACM row already answers it, so asking again could only
+        // produce a contradiction. Superseded by the derived row above.
+        //
+        // ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
         ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
-        // What the gap is worth, split the way the source RACM splits it
-        ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
-        ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
-        ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
-        ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
-        ['Exposure — basis', ex?.basis ?? '—'],
+        // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
+        // What the gap is worth, split the way the source RACM splits it — an
+        // internal-audit value metric, not an ICFR misstatement number.
+        //
+        // ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
+        // ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
+        // ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
+        // ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
+        // ['Exposure — basis', ex?.basis ?? '—'],
         ['Report reference', def.reportRef ?? c.reportRef ?? '—'],
         ['Status', def.status],
         ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${formatDueDate(def.remediation.date)}` : ''} · ${def.remediation.owner}`],
@@ -530,12 +550,49 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
       kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
-      headers: ['Deficiency', 'Control', 'Track', 'Gap type', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis', 'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
+      // The header and the row below are written one column per line and in the
+      // same order, so a column parked here has its cell parked there — the two
+      // lists must stay the same length or the sheet shears.
+      headers: [
+        'Deficiency', 'Control', 'Track',
+        // Derived off the failed track and the control's nature — read-only.
+        'Gap nature',
+        'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality',
+        'MW indicators', 'Compensating control', 'Severity',
+        // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
+        // Recovery / working-capital unblock / leakage are internal-audit VALUE
+        // metrics. ICFR asks what could have been misstated, which is a
+        // different number.
+        //
+        // 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis',
+        'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence',
+      ],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        const ex = d.exposure;
-        return [d.id, d.controlId, d.track, d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—', d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, ex ? formatINR(ex.recovery) : '—', ex ? formatINR(ex.workingCapital) : '—', ex ? formatINR(ex.leakage) : '—', ex ? formatINR(exposureTotal(ex)) : '—', ex?.basis ?? '—', d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
+        const ctl = controls.find(x => x.id === d.controlId);
+        // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
+        // const ex = d.exposure;
+        return [
+          d.id, d.controlId, d.track,
+          ctl ? gapNature(d.track, ctl.nature) : '—',
+          // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────
+          // Asked by hand (MDG / ITDG / TG) until the control's RACM row was
+          // found to answer it already. Superseded by the derived cell above.
+          //
+          // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
+          d.description, d.rootCause, d.likelihood, String(d.magnitude),
+          formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None',
+          d.compensatingControlId ?? 'None', sev,
+          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
+          // ex ? formatINR(ex.recovery) : '—',
+          // ex ? formatINR(ex.workingCapital) : '—',
+          // ex ? formatINR(ex.leakage) : '—',
+          // ex ? formatINR(exposureTotal(ex)) : '—',
+          // ex?.basis ?? '—',
+          d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date),
+          d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None',
+        ];
       }),
     }],
   };

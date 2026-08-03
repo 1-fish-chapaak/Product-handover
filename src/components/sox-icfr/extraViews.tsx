@@ -1,21 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp, Circle, History, Info, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, SEVERITY_RANK } from './helpers';
-import { SeverityPill, Toggle } from './parts';
+import { aggregationKeys, computeSeverity, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, needsRatingConfirmation, retestReadiness, type ExceptionGradeResult, type RetestReadiness } from './helpers';
+import { CourtBadge, SeverityPill, Toggle } from './parts';
 import { FormSelect } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { EXPOSURE_LABEL, exposureTotal, GAP_HINT, GAP_LABEL, MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type Exposure, type GapType, type IcfrEngagement, type Severity, type SignificantAccount, type TaskType } from './types';
-
-/** A blank price sheet — patching one line must never drop the other two. */
-const NO_EXPOSURE: Exposure = { recovery: 0, workingCapital: 0, leakage: 0 };
-const GAP_TYPES: GapType[] = ['MDG', 'ITDG', 'TG'];
+// PARKED (Aug 2026): EXPOSURE_LABEL, exposureTotal, GAP_HINT, GAP_LABEL and the
+// Exposure / GapType types — priced impact and the gap taxonomy are off the card.
+// `gapNature` replaces the latter, derived read-only from the track and the nature.
+import { EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -356,10 +355,10 @@ function Money({ label, value, onChange, hint }: { label: string; value: number;
 
 // Prudent-official override — judgment can raise the grade above the math, never
 // lower it, and always with a recorded rationale (the handbook's judgment floor).
-function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFinal: Severity; onApply: (to: Severity, rationale: string) => void; onClear: () => void }) {
+function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFinal: ExceptionGrade; onApply: (to: Severity, rationale: string) => void; onClear: () => void }) {
   const [pending, setPending] = useState<Severity | null>(null);
   const [note, setNote] = useState('');
-  const options = (['Significant Deficiency', 'Material Weakness'] as Severity[]).filter(s => SEVERITY_RANK[s] > SEVERITY_RANK[baseFinal]);
+  const options = (['Significant Deficiency', 'Material Weakness'] as Severity[]).filter(s => GRADE_RANK[s] > GRADE_RANK[baseFinal]);
   return (
     <div className="flex items-start gap-2 text-[12px] flex-wrap">
       <span className="text-ink-500 w-[120px] mt-1">Prudent official</span>
@@ -423,29 +422,41 @@ function formatDueLabel(date: string | null): string {
   return s;
 }
 
-// The remediation plan — the owner's commitment: the action on the root cause,
-// who does it, by when, plus the evidence behind "done". Editable only in the
-// owner's hat while the exception is still theirs; everyone else reads it.
-function RemediationPlan({ d, isOwner, locked = false, onPatch, onAttach }: { d: Deficiency; isOwner: boolean; locked?: boolean; onPatch: (patch: Partial<Deficiency['remediation']>) => void; onAttach: (fileName: string) => void }) {
+// ─── ③ The plan — the owner writes it, the auditor only judges it ────────────────
+// Editable in the owner's hat while the exception is still theirs: step ③ before
+// it goes up for review, step ④ while the fix is being done. Once it is with the
+// auditor it is frozen. Everyone else reads it.
+function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Deficiency; isOwner: boolean; locked?: boolean; onPatch: (patch: Partial<Deficiency['remediation']>) => void; onAttach: (fileName: string) => void }) {
   const r = d.remediation;
   // a sealed engagement retires the owner's pen along with everyone else's
-  const editable = isOwner && !locked && (d.status === 'Identified' || d.status === 'Remediation');
+  const editable = isOwner && !locked && (d.status === 'Planning' || d.status === 'Remediation');
+  const planning = d.status === 'Planning';
   const overdue = dueIsPast(r.date) && r.status !== 'Done';
   const files = r.evidence ?? [];
+  const rejected = d.planReview?.decision === 'Rejected';
   return (
     <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
       <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-ink-500 mb-1.5">
-        <RotateCcw size={12} /> Remediation{isOwner ? ' — your commitment' : ''}
+        <RotateCcw size={12} /> The fix{isOwner ? ' — your commitment' : ''}
         <span className="ml-auto normal-case tracking-normal font-medium text-ink-600">{r.status}</span>
         {overdue && <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5"><AlertTriangle size={10} /> overdue — escalate</span>}
       </div>
+
+      {/* A rejection is not a status change, it is a message — so it reads as one,
+          in the owner's lane, above the fields they have to rewrite. */}
+      {rejected && d.planReview?.reason && (
+        <div className="mb-2 rounded-md border border-high-200 bg-high-50/60 px-2.5 py-2 text-[0.75rem] text-high-800">
+          <b className="font-semibold">Sent back by {d.planReview.by}</b> — {d.planReview.reason}
+        </div>
+      )}
+
       {editable ? (
         <div className="space-y-1.5">
           <input value={r.action} onChange={e => onPatch({ action: e.target.value })}
             placeholder="What fixes the root cause — not the symptom (e.g. normalise the match key, not recover the 4 invoices)"
             className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-300" />
           <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
-            <span className="text-ink-400">Owner</span>
+            <span className="text-ink-400">Responsible person</span>
             <input value={r.owner} onChange={e => onPatch({ owner: e.target.value })} placeholder="Who does it"
               className="h-7 w-56 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
             <span className="text-ink-400">Due</span>
@@ -455,48 +466,210 @@ function RemediationPlan({ d, isOwner, locked = false, onPatch, onAttach }: { d:
         </div>
       ) : (
         <>
-          <div className="text-[12.5px] text-ink-700">{r.action}</div>
-          <div className="text-[11.5px] text-ink-400 mt-0.5">Owner {r.owner} · due {formatDueLabel(r.date)}{d.retest && <> · retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
+          <div className="text-[0.78125rem] text-ink-700">{r.action || <span className="text-ink-400">Not written yet.</span>}</div>
+          <div className="text-[0.71875rem] text-ink-400 mt-0.5">{r.owner} · due {formatDueLabel(r.date)}{d.retest && <> · latest retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
         </>
       )}
-      {/* evidence — "done" needs proof before the fix can be submitted for retest */}
-      <div className="flex items-center gap-1.5 flex-wrap mt-2">
-        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Evidence</span>
-        {files.map(f => (
-          <span key={f.id} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[10.5px] font-semibold text-ink-600"><Paperclip size={10} /> {f.name}</span>
-        ))}
-        {files.length === 0 && !editable && <span className="text-[11px] text-ink-400">none attached</span>}
-        {editable && (
-          <button onClick={() => onAttach(`${d.id.toLowerCase()}-fix-evidence${files.length ? `-${files.length + 1}` : ''}.pdf`)}
-            className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[10.5px] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
-        )}
-        {editable && files.length === 0 && <span className="text-[10.5px] text-mitigated-700">required before you can submit for retest</span>}
-      </div>
+
+      {/* The auditor's verdict on the plan, once given — their whole say in it. */}
+      {d.planReview?.decision === 'Accepted' && (
+        <p className="text-[0.71875rem] text-compliant-700 font-semibold mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Addresses the root cause — accepted by {d.planReview.by}</p>
+      )}
+
+      {/* ④ Evidence. Only once the plan is accepted and the fix is being done —
+          there is nothing to evidence while the plan is still being written. */}
+      {!planning && (
+        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+          <span className="text-[0.65625rem] uppercase tracking-wide font-semibold text-ink-400">Fix evidence</span>
+          {files.map(f => (
+            <span key={f.id} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.65625rem] font-semibold text-ink-600"><Paperclip size={10} /> {f.name}</span>
+          ))}
+          {files.length === 0 && !editable && <span className="text-[0.6875rem] text-ink-400">none attached</span>}
+          {editable && (
+            <button onClick={() => onAttach(`${d.id.toLowerCase()}-fix-evidence${files.length ? `-${files.length + 1}` : ''}.pdf`)}
+              className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
+          )}
+          {editable && files.length === 0 && <span className="text-[0.65625rem] text-mitigated-700">required before you can submit for retest</span>}
+        </div>
+      )}
     </div>
   );
 }
 
-// The severity conclusion — lead with the FINAL grade as a pill; the derivation (the
-// struck-through cap/bump chain) is "working", tucked behind a toggle so the card
-// reads as an answer first, an equation only on request.
-function SeverityConclusion({ d, assess, M, showMateriality }: { d: Deficiency; assess: ReturnType<typeof assessSeverity>; M: number; showMateriality: boolean }) {
+// ─── The conclusion, and the working behind it ───────────────────────────────────
+// Lead with the grade; the derivation is folded away, so the card reads as an
+// answer first and an equation only on request. The working is not prose written
+// alongside the calculation — it IS the calculation, emitted by the engine in the
+// order the rules ran, which is why a rule that did nothing still gets a line.
+function SeverityConclusion({ result, showMateriality }: { result: ExceptionGradeResult; showMateriality: boolean }) {
   const [showWorking, setShowWorking] = useState(false);
+  const shown = showMateriality ? result.working : result.working.filter(w => w.n !== 5 || !w.fired);
   return (
     <div className="pt-2 border-t border-canvas-border">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
-        <SeverityPill s={assess.final} />
+        <SeverityPill s={result.grade} />
         <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
           {showWorking ? 'Hide working' : 'Show working'} <span className="text-[9px] leading-none">{showWorking ? '▾' : '▸'}</span>
         </button>
       </div>
       {showWorking && (
-        <p className="text-[12px] text-ink-600 mt-2">
-          → {d.likelihood} × {fmt(d.magnitude)}{showMateriality && <> (vs {fmt(M)})</>}{d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
-          {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
-          {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
-        </p>
+        <ol className="mt-2 space-y-1">
+          {shown.map((w, i) => (
+            <li key={`${w.n}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-relaxed">
+              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.59375rem] font-bold tabular-nums',
+                w.fired ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>{w.n}</span>
+              <span className={cn('min-w-0', w.fired ? 'text-ink-800' : 'text-ink-400')}>
+                <b className="font-semibold">{w.rule}</b> — {w.detail}
+              </span>
+            </li>
+          ))}
+        </ol>
       )}
+    </div>
+  );
+}
+
+// ─── ⑤ The retest ────────────────────────────────────────────────────────────────
+// A fresh sample off the period SINCE THE FIX, marked against the SAME attributes
+// the original test used, item by item. The verdict is derived from the grid and
+// never typed — a retest whose result can be asserted independently of its marks
+// is not evidence of anything.
+function RetestPanel({ d }: { d: Deficiency }) {
+  const { drawRetestSample, setRetestResult, recordRetest } = useIcfr();
+  const [rationale, setRationale] = useState('');
+  const draft = d.retestDraft;
+
+  if (!draft) {
+    return (
+      <div className="rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-3">
+        <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500 mb-1">Retest — draw the sample</div>
+        <p className="text-[0.75rem] text-ink-600 mb-2.5">
+          Items come off the period since the fix landed only. Anything from before it was produced by the broken control and proves nothing about the repair.
+        </p>
+        <button onClick={() => drawRetestSample(d.id)}
+          className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Target size={13} /> Draw post-fix sample</button>
+      </div>
+    );
+  }
+
+  const marks = draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
+  const done = !marks.includes('Not tested');
+  const willFail = marks.includes('Fail');
+  const cell = (sampleId: string, code: string) => draft.results[sampleId]?.[code] ?? 'Not tested';
+
+  return (
+    <div className="rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-3 space-y-2.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500">Retest {draft.n} — {draft.samples.length} items</span>
+        <span className="text-[0.6875rem] text-ink-500">drawn from {draft.windowFrom} → {draft.windowTo}</span>
+        <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-500">{marks.filter(m => m !== 'Not tested').length} / {marks.length} marked</span>
+      </div>
+      <p className="text-[0.6875rem] text-ink-400">Same attributes as the original test — a retest that invents its own is not a retest of anything.</p>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[0.71875rem] border-collapse">
+          <thead>
+            <tr className="text-left">
+              <th className="py-1.5 pr-3 font-semibold text-ink-500 whitespace-nowrap">Item</th>
+              <th className="py-1.5 pr-3 font-semibold text-ink-500 whitespace-nowrap">Date</th>
+              {draft.attributes.map(a => (
+                <th key={a.code} title={a.description} className="py-1.5 px-2 font-semibold text-ink-500 whitespace-nowrap">{a.code}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {draft.samples.map(s => (
+              <tr key={s.id} className="border-t border-canvas-border">
+                <td className="py-1.5 pr-3 font-mono text-ink-700 whitespace-nowrap">{s.ref}</td>
+                <td className="py-1.5 pr-3 tabular-nums text-ink-500 whitespace-nowrap">{s.date}</td>
+                {draft.attributes.map(a => {
+                  const v = cell(s.id, a.code);
+                  return (
+                    <td key={a.code} className="py-1.5 px-2">
+                      <div className="inline-flex rounded-md border border-canvas-border overflow-hidden">
+                        {(['Pass', 'Fail'] as const).map(r => (
+                          <button key={r} onClick={() => setRetestResult(d.id, s.id, a.code, r)}
+                            aria-label={`${s.ref} ${a.code} ${r}`}
+                            className={cn('h-6 px-2 text-[0.65625rem] font-bold cursor-pointer transition-colors',
+                              v === r
+                                ? (r === 'Pass' ? 'bg-compliant-600 text-white' : 'bg-risk-600 text-white')
+                                : 'bg-canvas-elevated text-ink-400 hover:bg-paper-100')}>{r === 'Pass' ? 'P' : 'F'}</button>
+                        ))}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {done && willFail && (
+        <textarea value={rationale} onChange={e => setRationale(e.target.value)} rows={2}
+          placeholder="Why it failed again — the owner reads this when the plan comes back to them"
+          className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300" />
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {done ? (
+          <button onClick={() => recordRetest(d.id, rationale.trim() || undefined)} disabled={willFail && !rationale.trim()}
+            title={willFail && !rationale.trim() ? 'A failed retest goes back to the owner — tell them why' : undefined}
+            className={cn('h-8 px-3 rounded-lg text-white text-[0.75rem] font-semibold cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+              willFail ? 'bg-risk-600 enabled:hover:bg-risk-700' : 'bg-compliant-600 enabled:hover:bg-compliant-700')}>
+            {willFail ? <><XCircle size={13} /> Record retest {draft.n} — failed</> : <><CheckCircle2 size={13} /> Record retest {draft.n} — passed</>}
+          </button>
+        ) : (
+          <span className="text-[0.71875rem] text-ink-400">Mark every item against every attribute — the verdict comes off the grid, not a button.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Every retest that has already run. Two failures put it in front of the reviewer:
+ *  a fix that has missed twice is not a remediation problem any more. */
+function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
+  if (!rounds.length) return null;
+  const failures = rounds.filter(r => r.result === 'Fail').length;
+  return (
+    <div className="rounded-lg border border-canvas-border px-3 py-2.5">
+      <div className="flex items-center gap-2 flex-wrap text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500 mb-1.5">
+        <History size={12} /> Retest history
+        <span className="normal-case tracking-normal font-medium text-ink-500">attempt {rounds.length}</span>
+        {failures >= 2 && (
+          <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[0.65625rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5">
+            <AlertTriangle size={10} /> {failures} failures — flagged to the reviewer
+          </span>
+        )}
+      </div>
+      <ol className="space-y-1">
+        {rounds.map(r => (
+          <li key={r.n} className="text-[0.75rem] text-ink-600 flex items-start gap-2">
+            <span className="tabular-nums text-ink-400 shrink-0">{r.n}.</span>
+            <span className="min-w-0">
+              <b className={cn('font-semibold', r.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}>{r.result}</b>
+              <span className="text-ink-400"> · {r.samples.length} items from {r.windowFrom} → {r.windowTo} · {r.by}</span>
+              {r.rationale && <span className="block text-ink-600">{r.rationale}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** When the fix will have run long enough to be worth sampling — and, when that
+ *  lands after the books close, the warning that says so NOW rather than in March. */
+function RetestReadyLine({ readiness }: { readiness: RetestReadiness }) {
+  return (
+    <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
+      readiness.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
+      {readiness.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
+      <span className="min-w-0">
+        <b className="font-semibold">Retestable from {readiness.label}</b> — {readiness.reason}
+      </span>
     </div>
   );
 }
@@ -559,13 +732,31 @@ export function HandoffsView() {
   );
 }
 
-// ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
-const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
-const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
+// ─── Exceptions — the six steps ──────────────────────────────────────────────────
+// Eight states, six steps: sizing parks for the reviewer when it lands on
+// significant or worse, and planning parks for the auditor to judge the plan. Both
+// handoffs happen INSIDE a step, so the stepper stays six wide.
+const STATUS_TONE: Record<ExceptionStatus, Tone> = {
+  Identified: 'high',
+  'Rating review': 'info',
+  Planning: 'mitigated',
+  'Plan review': 'info',
+  Remediation: 'mitigated',
+  Retest: 'evidence',
+  'Awaiting reviewer': 'info',
+  Closed: 'compliant',
+};
+/** Which of the six steps this exception is standing on. 'Identified' spans steps
+ *  ① and ②: it is still being raised until the root cause is written, and being
+ *  sized once it is. */
+function currentStep(d: Deficiency): number {
+  if (d.status === 'Identified') return d.rootCause.trim() ? 2 : 1;
+  return EXCEPTION_STEPS.find(s => s.states.includes(d.status))?.n ?? 1;
+}
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, role, meOwner } = useIcfr();
+  const { eng, role, meOwner, focusDefId } = useIcfr();
   // Classic engagements still call these exceptions; the rework renamed them.
   const W = defWord(eng.id);
   const M = eng.materiality; const rules = eng.rules;
@@ -598,38 +789,43 @@ export function DeficienciesView() {
         </div>
       </div>
 
-      {/* aggregation — engagement-wide math, audit-side only; clearly-trivial items
-          are logged but never aggregated (5% rule) */}
+      {/* Aggregation — engagement-wide, audit-side only. The groups are the ones
+          the engine itself uses at rule 6: a shared process or assertion, both read
+          off the control and the attributes that failed, plus whatever the auditor
+          linked by root cause. Clearly-trivial items never join a group — rule 3
+          stopped them before aggregation was reached. */}
       {rules.aggregate && !isOwner && (() => {
         const LRANK: Record<string, number> = { Remote: 0, 'Reasonably possible': 1, Probable: 2 };
         const LBYR = ['Remote', 'Reasonably possible', 'Probable'] as const;
-        const groups = new Map<string, typeof eng.deficiencies>();
-        const trivialByGroup = new Map<string, number>();
+        const groups = new Map<string, { kind: string; label: string; ds: typeof eng.deficiencies }>();
+        let trivial = 0;
         eng.deficiencies.forEach(d => {
-          const k = d.aggregationGroup ?? 'Ungrouped';
-          if (isClearlyTrivial(d.magnitude, rules)) { trivialByGroup.set(k, (trivialByGroup.get(k) ?? 0) + 1); return; }
-          groups.set(k, [...(groups.get(k) ?? []), d]);
+          if (d.status === 'Closed') return;
+          if (isClearlyTrivial(d.magnitude, rules)) { trivial += 1; return; }
+          aggregationKeys(d, eng).forEach(k => {
+            const hit = groups.get(k.key) ?? { kind: k.kind, label: k.key.split(':').slice(1).join(':'), ds: [] };
+            groups.set(k.key, { ...hit, ds: [...hit.ds, d] });
+          });
         });
-        const agg = Array.from(groups.entries()).filter(([, ds]) => ds.length > 1);
+        const agg = Array.from(groups.entries()).filter(([, g]) => g.ds.length > 1);
         if (!agg.length) return null;
         return (
           <div className="space-y-2">
             <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide">Aggregation — individually-minor deficiencies combine by commonality</h2>
-            {agg.map(([group, ds]) => {
-              const sum = ds.reduce((n, d) => n + d.magnitude, 0);
-              const lk = LBYR[Math.max(...ds.map(d => LRANK[d.likelihood] ?? 0))]!;
-              const mw = Array.from(new Set(ds.flatMap(d => d.mwIndicators)));
-              const trivial = trivialByGroup.get(group) ?? 0;
+            {agg.map(([key, g]) => {
+              const sum = g.ds.reduce((n, d) => n + d.magnitude, 0);
+              const lk = LBYR[Math.max(...g.ds.map(d => LRANK[d.likelihood] ?? 0))]!;
+              const mw = Array.from(new Set(g.ds.flatMap(d => d.mwIndicators)));
               return (
-                <div key={group} className="rounded-xl border border-mitigated-200 bg-mitigated-50/30 px-4 py-3 flex items-center justify-between gap-3">
+                <div key={key} className="rounded-xl border border-mitigated-200 bg-mitigated-50/30 px-4 py-3 flex items-center justify-between gap-3">
                   <div className="text-[12.5px] text-ink-700">
-                    <span className="font-semibold">{group}</span> · {ds.length} deficiencies · combined {fmt(sum)} (vs {fmt(M)})
-                    {trivial > 0 && <span className="text-ink-400"> · {trivial} clearly-trivial logged, not aggregated</span>}
+                    <span className="text-ink-400">{g.kind}</span> <span className="font-semibold">{g.label}</span> · {g.ds.length} exceptions ({g.ds.map(d => d.id).join(', ')}) · combined {fmt(sum)} (vs {fmt(M)})
                   </div>
                   <SeverityPill s={computeSeverity(lk, sum, M, mw, rules.sdBandPct / 100)} />
                 </div>
               );
             })}
+            {trivial > 0 && <p className="text-[0.71875rem] text-ink-400">{trivial} clearly-trivial logged, never aggregated — the ladder stops at rule 3.</p>}
           </div>
         );
       })()}
@@ -638,7 +834,7 @@ export function DeficienciesView() {
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? `No ${W.many} on your controls.` : `No ${W.many} — all tested controls effective.`}</div>
       ) : (
         <div className="space-y-3">
-          {defs.map(d => <DeficiencyCard key={d.id} d={d} />)}
+          {defs.map(d => <DeficiencyCard key={d.id} d={d} defaultOpen={d.id === focusDefId} />)}
         </div>
       )}
     </div>
@@ -664,36 +860,72 @@ export function DeficienciesView() {
  *  accordion, because comparing two findings side by side is a real thing an
  *  auditor does, and snapping one shut to open another would take that away. */
 export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean }) {
-  const { eng, role, me, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence } = useIcfr();
+  const {
+    eng, role, me, openControl, updateDeficiency, setExceptionStatus, completeSizing, confirmRating, returnRating,
+    submitPlan, reviewPlan, signOffException, reopenException, updateRemediation, addRemediationEvidence,
+    focusDefId, clearFocusDef,
+  } = useIcfr();
   const { addToast } = useToast();
   const W = defWord(eng.id);
-  const M = eng.materiality; const rules = eng.rules;
+  const M = eng.materiality;
   const [open, setOpen] = useState(defaultOpen);
+  // Asked-for cards bring themselves into view. The focus is consumed on arrival:
+  // it answers one click, and coming back to this page later should open nothing.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!defaultOpen || focusDefId !== d.id) return;
+    const t = window.setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      clearFocusDef();
+    }, 160);
+    return () => window.clearTimeout(t);
+  }, [defaultOpen, focusDefId, d.id, clearFocusDef]);
   // closing an exception is the terminal four-eyes act — it commits behind an attest
   // confirm; a mistaken close comes back only with a recorded reason, same weight.
   const [closing, setClosing] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
+  // a rejection — of the rating or of the plan — never commits without a reason
+  const [rejecting, setRejecting] = useState<null | 'rating' | 'plan'>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
+  const isReviewer = role === 'reviewer';
   // a countersigned engagement is a sealed record — the store already drops
   // every write, so the card must say so and put its pens away
   const locked = isEngagementLocked(eng);
-  // aggregation groups on offer: every group already in use plus each process name
-  const groupOptions = useMemo(() => Array.from(new Set([
-    ...eng.deficiencies.map(x => x.aggregationGroup).filter((g): g is string => !!g),
-    ...eng.controls.map(c => c.process),
-  ])).sort(), [eng.deficiencies, eng.controls]);
+  // Root-cause links on offer: the other live exceptions this one could be said to
+  // share a mechanism with. Process and assertion group themselves; this is the one
+  // the auditor has to state, because free prose cannot be matched.
+  const linkOptions = useMemo(
+    () => eng.deficiencies.filter(x => x.id !== d.id && x.status !== 'Closed').map(x => ({ value: x.id, label: `${x.id} — ${x.controlId}` })),
+    [eng.deficiencies, d.id],
+  );
 
-  const ct = isClearlyTrivial(d.magnitude, rules);
-  const assess = assessSeverity(d, eng);
-  const sev = assess.final;
+  const control = eng.controls.find(c => c.id === d.controlId);
+  const result = gradeException(d, eng);
+  const grade = result.grade;
+  const ct = grade === 'Clearly Trivial';
   const material = d.magnitude >= M;
-  const stageIdx = STAGES.indexOf(d.status);
+  const step = currentStep(d);
+  const rounds = d.retests ?? [];
+  const failures = rounds.filter(r => r.result === 'Fail').length;
+  const readiness = retestReadiness(d, control, eng.periodEnd);
+  const court = exceptionCourtDetail(d, eng);
+  // ② Severity is the auditor's throughout, so the inputs stay live while the
+  // exception is still on the audit side — including during the reviewer's
+  // confirmation, which is a conversation about the grade and often changes it.
+  // Once the owner has it the numbers freeze: re-grading a fix already underway
+  // moves the goalposts. A grade that does move loses its confirmation, which
+  // `updateDeficiency` handles, so the reviewer never silently owns a number
+  // they did not agree.
+  const sizing = isAuditor && !locked && (d.status === 'Identified' || d.status === 'Rating review');
+  const r = d.remediation;
+  const planReady = !!r.action.trim() && !!r.owner.trim() && !!r.date;
 
   return (
     <>
-      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+      <div ref={cardRef} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
         {/* The whole header strip is the toggle — a card this tall needs a
             target bigger than a chevron. A div rather than a button because
             the control link inside it is itself a button, and a button
@@ -727,13 +959,15 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
                 ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
                 : <span className="font-mono text-[12px] text-ink-500">{d.controlId}</span>}
               <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
-              {/* the gap taxonomy — a design gap needs a redesign, a testing
-                  gap needs discipline, so the label is what the fix follows */}
-              {d.gapType && <span title={GAP_HINT[d.gapType]}><Pill tone={d.gapType === 'TG' ? 'evidence' : 'high'}>{GAP_LABEL[d.gapType]}</Pill></span>}
-              {ct && <Pill tone="draft">Clearly trivial</Pill>}
-              {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-600 tabular-nums">worth {fmt(exposureTotal(d.exposure))}</span>}
+              {/* PARKED (Aug 2026) — the Gap type pill and the priced-impact teaser.
+                  Manual vs IT is already settled by the control's nature, design vs
+                  operating by the track pill beside this, and priced impact is an
+                  internal-audit number that was never ICFR magnitude. */}
+              {/* A fix that has missed twice is not a remediation problem any more,
+                  so the count rides the collapsed row where triage happens. */}
+              {failures >= 2 && <Pill tone="risk">{failures} failed retests</Pill>}
             </div>
-            <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={sev} /></div>
+            <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={grade} /></div>
           </div>
           {/* The finding itself stays on the collapsed row — clamped to one
               line. Without it the row reads as an id and some pills, and you
@@ -742,36 +976,68 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
         </div>
 
         {open && (<>
-        <p className="text-[12px] text-ink-500 mt-1"><span className="font-semibold">Root cause:</span> {d.rootCause}</p>
+        {/* ① The mechanism — what has to change for the fix to be a fix. It sits at
+            the top of the card because everything below is judged against it: the
+            plan at ③, and the auditor's one question at plan review. */}
+        <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+          <div className="text-[0.65625rem] uppercase tracking-wide font-semibold text-ink-400 mb-1">Root cause</div>
+          {sizing ? (
+            <>
+              <textarea value={d.rootCause} onChange={e => updateDeficiency(d.id, { rootCause: e.target.value })} rows={2}
+                placeholder="The mechanism, not the count — “the system allows manual posting that bypasses approval”, not “3 of 25 lacked approval”"
+                className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 resize-none focus:outline-none focus:border-brand-300" />
+              {!d.rootCause.trim() && <p className="text-[0.65625rem] text-mitigated-700 mt-1">Needed before this can be sized — the grade and the plan both hang off it.</p>}
+            </>
+          ) : (
+            <p className="text-[0.78125rem] text-ink-700">{d.rootCause || <span className="text-ink-400">Not written yet.</span>}</p>
+          )}
+          {d.failedSamples && d.failedSamples.length > 0 && (
+            <p className="text-[0.6875rem] text-ink-400 mt-1.5">Found in {d.failedSamples.slice(0, 6).join(', ')}{d.failedSamples.length > 6 ? ` +${d.failedSamples.length - 6} more` : ''}</p>
+          )}
+          {d.unableToTestReason && (
+            <p className="text-[0.6875rem] text-high-700 mt-1.5"><b className="font-semibold">Never evidenced</b> — {d.unableToTestReason}</p>
+          )}
+        </div>
 
-        {/* lifecycle stepper */}
+        {/* the six steps */}
         <div className="flex items-center gap-1.5 my-3">
-          {STAGES.map((s, i) => (
-            <div key={s} className="flex items-center gap-1.5 flex-1 last:flex-none">
-              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold whitespace-nowrap', i < stageIdx ? 'bg-compliant-50 text-compliant-700' : i === stageIdx ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
-                {i < stageIdx ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{i + 1}</span>}{s}
+          {EXCEPTION_STEPS.map((s, i) => (
+            <div key={s.n} className="flex items-center gap-1.5 flex-1 last:flex-none">
+              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap', s.n < step ? 'bg-compliant-50 text-compliant-700' : s.n === step ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
+                {s.n < step ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{s.n}</span>}{s.title}
               </span>
-              {i < STAGES.length - 1 && <span className={cn('h-px flex-1', i < stageIdx ? 'bg-compliant-300' : 'bg-paper-200')} />}
+              {i < EXCEPTION_STEPS.length - 1 && <span className={cn('h-px flex-1', s.n < step ? 'bg-compliant-300' : 'bg-paper-200')} />}
             </div>
           ))}
         </div>
 
-        {/* severity + remediation — the owner's card leads with THEIR work (visual reverse) */}
+        {/* ─── Current state — whose court, and what they are doing with it ─────
+            The same baton the control's own paper carries, answered for an
+            exception. The stepper says where it has got to; this says who is
+            holding it up, by name — a role cannot be chased for an answer. It
+            replaces the per-status "with X" lines that used to sit down beside
+            the buttons, so the fact is stated once and in one place. */}
+        <div className="flex items-center gap-2.5 flex-wrap rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-2">
+          <span className="text-[0.65625rem] font-semibold text-ink-400 uppercase tracking-wide">Current state</span>
+          <CourtBadge court={courtForException(d)} fromRole={role} />
+          {d.status === 'Closed'
+            ? <span className="text-[0.75rem] text-ink-600">Signed off by <b className="font-semibold text-ink-800">{court.who}</b></span>
+            : <span className="text-[0.75rem] text-ink-600"><b className="font-semibold text-ink-800">{court.who}</b> — {court.doing}</span>}
+          <span className="ml-auto text-[0.71875rem] font-semibold text-ink-400">Step {step} of 6 · {d.status}</span>
+        </div>
+
+        {/* severity + the fix — the owner's card leads with THEIR work (visual reverse) */}
         <div className={cn('mt-3 flex flex-col gap-3', isOwner && 'flex-col-reverse')}>
-        {/* severity — the auditor evaluates; owner and reviewer read the
-            grade. A sealed engagement retires the auditor's pens too. */}
-        {isAuditor && !locked ? (
+        {/* ② Sizing — the auditor's, and only while it is still with them. Once the
+            rating has gone up for confirmation it is a record, not a form. */}
+        {sizing ? (
           <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
             <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
-            {/* what kind of gap it is — defaulted when the exception was
-                raised, re-typed here when the walkthrough says otherwise */}
-            <div className="flex items-center gap-2 flex-wrap text-[12px]">
-              <span className="text-ink-500 w-[120px]">Gap type</span>
-              {GAP_TYPES.map(g => (
-                <button key={g} title={GAP_HINT[g]} onClick={() => updateDeficiency(d.id, { gapType: g })}
-                  className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapType === g ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_LABEL[g]}</button>
-              ))}
-            </div>
+            {d.ratingReturn && (
+              <div className="rounded-md border border-high-200 bg-high-50/60 px-2.5 py-2 text-[0.75rem] text-high-800">
+                <b className="font-semibold">Sent back by {d.ratingReturn.by}</b> — {d.ratingReturn.reason}
+              </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap text-[12px]">
               <span className="text-ink-500 w-[120px]">Likelihood</span>
               {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
@@ -780,33 +1046,10 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
             </div>
             <div className="flex items-center gap-2 text-[12px]">
               <span className="text-ink-500 w-[120px]">Exposure ₹</span>
-              <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+              <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} aria-label="Exposure in rupees" className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
               <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
             </div>
             <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
-            {/* …and what the gap is actually worth, split three ways. This
-                is money already on the table, not the exposure above: it is
-                what makes a finding something the CFO acts on. */}
-            <div className="rounded-md border border-canvas-border bg-paper-50/40 p-2.5 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Priced impact — what the gap is worth</span>
-                {exposureTotal(d.exposure) > 0 && <span className="text-[11.5px] font-semibold text-ink-700 tabular-nums">total {fmt(exposureTotal(d.exposure))}</span>}
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).map(k => (
-                  <label key={k} className="block min-w-0">
-                    <span className="block text-[10.5px] text-ink-500 mb-1">{EXPOSURE_LABEL[k]}</span>
-                    <input type="number" value={d.exposure?.[k] ?? 0}
-                      onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, [k]: Number(e.target.value) || 0 } })}
-                      className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-                  </label>
-                ))}
-              </div>
-              <input value={d.exposure?.basis ?? ''}
-                onChange={e => updateDeficiency(d.id, { exposure: { ...NO_EXPOSURE, ...d.exposure, basis: e.target.value } })}
-                placeholder="How the numbers were arrived at — the arithmetic behind the claim"
-                className="h-8 w-full px-2.5 rounded-md border border-canvas-border text-[12px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-            </div>
             <div className="flex items-start gap-2 text-[12px] flex-wrap">
               <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
               {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} title={ind} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
@@ -818,60 +1061,172 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
                 className="h-8 max-w-[300px] px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
                 menuCls="w-[340px]" ariaLabel="Compensating control" />
               {d.compensatingControlId && (
-                assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
-                : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
-                : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
+                result.cap ? <span className="text-compliant-700 text-[0.6875rem] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
+                : result.capBlocked === 'not-effective' ? <span className="text-high-700 text-[0.6875rem] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
+                : result.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[0.6875rem] font-semibold">no cap — MW indicators can't be argued down</span>
                 : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
               )}
             </div>
-            <div className="flex items-center gap-2 text-[12px] flex-wrap">
-              <span className="text-ink-500 w-[120px]">Aggregation group</span>
-              <FormSelect value={d.aggregationGroup ?? ''} onChange={v => updateDeficiency(d.id, { aggregationGroup: v || undefined })}
-                options={[{ value: '', label: 'Ungrouped' }, ...groupOptions]}
-                className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
-                ariaLabel="Aggregation group" />
-              <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
+            {/* Aggregation. Process and assertion come off the control and the
+                attributes that failed, so they are shown, not asked. The only thing
+                the auditor has to state is a shared MECHANISM — free prose cannot
+                be matched, so it is named by pointing at the other exception. */}
+            <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
+              <span className="text-ink-500 w-[120px] mt-1.5">Aggregation</span>
+              <div className="flex-1 min-w-[260px] space-y-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {aggregationKeys(d, eng).map(k => (
+                    <span key={k.key} className="inline-flex items-center h-6 px-2 rounded-md bg-paper-100 text-[0.65625rem] font-semibold text-ink-600">{k.kind} · {k.key.split(':')[1]}</span>
+                  ))}
+                  <span className="text-[0.65625rem] text-ink-400">derived — not asked</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <FormSelect value={d.rootCauseLinkId ?? ''} onChange={v => updateDeficiency(d.id, { rootCauseLinkId: v || undefined })}
+                    options={[{ value: '', label: 'Not linked' }, ...linkOptions]}
+                    className="h-8 px-2.5 rounded-md border border-canvas-border text-[0.75rem] bg-canvas-elevated focus:outline-none focus:border-brand-300"
+                    ariaLabel="Same root cause as" />
+                  <span className="text-ink-400 text-[0.6875rem]">same root cause as — links two exceptions the derivation can't see</span>
+                </div>
+              </div>
             </div>
-            <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
+            <PrudentRow d={d} baseFinal={gradeException({ ...d, prudentOverride: undefined }, eng).grade}
               onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
               onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
-            <SeverityConclusion d={d} assess={assess} M={M} showMateriality />
+            <SeverityConclusion result={result} showMateriality />
           </div>
         ) : (
           <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
-            <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the remediation below' : ''}</div>
+            <div className="text-[0.65625rem] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the fix below' : ''}</div>
             <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
               <span className="text-ink-700"><span className="text-ink-400">Likelihood</span> · {d.likelihood}</span>
               <span className="text-ink-700"><span className="text-ink-400">Exposure</span> · {fmt(d.magnitude)}{ct ? ' (clearly trivial)' : ''}</span>
               <span className="text-ink-700"><span className="text-ink-400">MW indicators</span> · {d.mwIndicators.length ? `${d.mwIndicators.length} in force` : 'None'}</span>
               <span className="text-ink-700"><span className="text-ink-400">Compensating control</span> · {d.compensatingControlId ?? 'None'}</span>
-              <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
-              <span className="text-ink-700"><span className="text-ink-400">Gap type</span> · {d.gapType ? GAP_LABEL[d.gapType] : 'Not typed'}</span>
-              {exposureTotal(d.exposure) > 0 && (
-                <span className="text-ink-700 sm:col-span-2">
-                  <span className="text-ink-400">Priced impact</span> · {fmt(exposureTotal(d.exposure))}
-                  <span className="text-ink-400"> ({(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[]).filter(k => (d.exposure as Exposure)[k] > 0).map(k => `${EXPOSURE_LABEL[k].toLowerCase()} ${fmt((d.exposure as Exposure)[k])}`).join(' · ')})</span>
-                </span>
-              )}
-              {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
+              {/* "Nothing else" and "never asked" are different answers, and only
+                  one of them is a result. When rule 1 or rule 3 settles the grade
+                  the ladder stops before aggregation is reached, so this says the
+                  rule that stopped it rather than reporting an empty search. */}
+              <span className="text-ink-700"><span className="text-ink-400">Aggregates with</span> · {
+                !result.working.some(w => w.n === 6)
+                  ? (d.mwIndicators.length > 0 ? 'not reached — an indicator settled it at rule 1' : 'not reached — the exposure is clearly trivial')
+                  : result.aggregate
+                    ? `${result.aggregate.members - 1} more, sharing ${result.aggregate.sharedBy}`
+                    : 'nothing else shares its process, assertion or root cause'
+              }</span>
+              {control && <span className="text-ink-700"><span className="text-ink-400">Gap nature</span> · {gapNature(d.track, control.nature)}</span>}
+              {d.prudentOverride && <span className="text-high-700 font-medium sm:col-span-2">Prudent-official — raised to {d.prudentOverride.to}</span>}
             </div>
             {/* the owner sees their classification, never the engagement's thresholds */}
-            <SeverityConclusion d={d} assess={assess} M={M} showMateriality={!isOwner} />
+            <SeverityConclusion result={result} showMateriality={!isOwner} />
           </div>
         )}
 
-        {/* remediation — the owner's plan; editable in their hat until submitted */}
-        <RemediationPlan d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
+        {/* The reviewer's confirmation, once it exists — the grade is agreed, and
+            the record says by whom.
+            A confirmation is agreement to a NUMBER, not to a field, and the number
+            can move without anyone touching this exception: aggregation reads the
+            whole engagement, so a new finding elsewhere sharing its process or
+            assertion re-grades it. When that happens the old signature is stale,
+            and showing it beside a different conclusion would put two grades on
+            one card and let the reviewer own one they never saw. */}
+        {d.ratingConfirm && (
+          d.ratingConfirm.grade === grade ? (
+            <p className="text-[0.71875rem] text-compliant-700 font-semibold inline-flex items-center gap-1.5"><ShieldCheck size={12} /> Rated {d.ratingConfirm.grade}, confirmed by {d.ratingConfirm.by}</p>
+          ) : (
+            <div className="rounded-lg border border-high-200 bg-high-50/60 px-3 py-2 text-[0.75rem] text-high-800 flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-[2px] shrink-0" />
+              <span className="min-w-0">
+                <b className="font-semibold">The confirmed rating no longer matches.</b> {d.ratingConfirm.by} confirmed this as {d.ratingConfirm.grade}; it now grades <b className="font-semibold">{grade}</b>
+                {result.aggregate?.raised ? ' after combining with other exceptions' : ''}. It needs confirming again.
+              </span>
+            </div>
+          )
+        )}
+
+        {/* ③④ The fix. Nothing to show before the exception reaches the owner —
+            there is no plan to read while it is still being graded. */}
+        {step >= 3 && (
+          <PlanBlock d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
+        )}
+
+        {/* When it can actually be retested — and the warning when that is after the
+            books close, raised now while a date can still be moved. */}
+        {step >= 3 && d.status !== 'Closed' && <RetestReadyLine readiness={readiness} />}
+
+        {/* ⑤ The retest itself — the auditor's grid, in their hat only. */}
+        {!locked && d.status === 'Retest' && isAuditor && <RetestPanel d={d} />}
+
+        <RetestHistory rounds={rounds} />
         </div>
 
+        {/* One role per state. Whatever this hat cannot do is ABSENT here, not
+            greyed out — a disabled button teaches you the shape of someone else's
+            job. What everyone does get is a plain line saying whose court it is in,
+            because "nothing to do" and "nothing happening" are different answers. */}
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest.
-              A sealed engagement shows the standing stage, never a pen. */}
+          {/* ② the auditor finishes sizing */}
           {!locked && d.status === 'Identified' && (
-            role !== 'reviewer'
-              ? <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>
-              : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> Awaiting remediation — {d.remediation.owner}</span>
+            isAuditor ? (
+              d.rootCause.trim()
+                ? <button onClick={() => completeSizing(d.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5">
+                    <Scale size={13} /> {needsRatingConfirmation(grade) ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
+                  </button>
+                : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> Write the root cause first — the grade and the plan both hang off it.</span>
+            ) : null
           )}
+
+          {/* ② blocking confirmation: significant or worse does not move until the
+              reviewer agrees the grade */}
+          {!locked && d.status === 'Rating review' && (
+            isReviewer ? (
+              rejecting === 'rating' ? (
+                <div className="flex items-center gap-2 flex-wrap w-full">
+                  <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                    placeholder="Why the grade is wrong — the auditor rewrites it against this"
+                    className="h-8 flex-1 min-w-[240px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
+                  <button disabled={!rejectReason.trim()} onClick={() => { returnRating(d.id, rejectReason.trim()); setRejecting(null); setRejectReason(''); }}
+                    className="h-8 px-3 rounded-lg bg-high-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-high-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send back</button>
+                  <button onClick={() => { setRejecting(null); setRejectReason(''); }} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+                </div>
+              ) : <>
+                <button onClick={() => confirmRating(d.id)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Confirm {grade}</button>
+                <button onClick={() => { setRejecting('rating'); setRejectReason(''); }} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.75rem] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Send back — reason required</button>
+              </>
+            ) : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Blocked — no fix starts until the {grade} rating is confirmed</span>
+          )}
+
+          {/* ③ the owner writes the plan */}
+          {!locked && d.status === 'Planning' && (
+            isOwner ? (
+              planReady
+                ? <button onClick={() => submitPlan(d.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><ArrowRight size={13} /> Submit the plan for review</button>
+                : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> The action, who does it and a due date — all three before it can go up.</span>
+            ) : null
+          )}
+
+          {/* ③ the auditor's one say in the plan: does it address the root cause? */}
+          {!locked && d.status === 'Plan review' && (
+            isAuditor ? (
+              rejecting === 'plan' ? (
+                <div className="flex items-center gap-2 flex-wrap w-full">
+                  <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                    placeholder="What it misses about the root cause — the owner rewrites the plan against this"
+                    className="h-8 flex-1 min-w-[240px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
+                  <button disabled={!rejectReason.trim()} onClick={() => { reviewPlan(d.id, 'Rejected', rejectReason.trim()); setRejecting(null); setRejectReason(''); }}
+                    className="h-8 px-3 rounded-lg bg-high-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-high-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send back</button>
+                  <button onClick={() => { setRejecting(null); setRejectReason(''); }} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+                </div>
+              ) : <>
+                <span className="text-[0.71875rem] text-ink-500 w-full">Does this address the root cause? You judge the plan — you never write or execute it.</span>
+                <button onClick={() => reviewPlan(d.id, 'Accepted')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Accept the plan</button>
+                <button onClick={() => { setRejecting('plan'); setRejectReason(''); }} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.75rem] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reject — reason required</button>
+              </>
+            ) : null
+          )}
+
+          {/* ④ the owner does the work, and "done" needs proof: this is the one gate
+              the flow keeps as a disabled button rather than an absent one, because
+              it is the owner's OWN action they have not finished qualifying for */}
           {!locked && d.status === 'Remediation' && (
             isOwner
               ? (() => {
@@ -879,21 +1234,20 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
                   return (
                     <button onClick={() => setExceptionStatus(d.id, 'Retest')} disabled={!hasEvidence}
                       title={hasEvidence ? 'Marks your fix as done and hands it to the auditor' : 'Attach evidence of the fix first — "done" needs proof'}
-                      className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                      className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
                   );
                 })()
-              : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
+              : null
           )}
-          {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
-          {!locked && d.status === 'Retest' && (
-            isAuditor ? <>
-              <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
-              <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
-            </> : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><CheckCircle2 size={14} className="text-ink-400" /> With the auditor for retest{isOwner ? ' — you never test your own fix' : ''}</span>
+
+          {/* ⑤ the retest is the auditor's; the panel above carries its actions */}
+          {!locked && d.status === 'Retest' && isOwner && (
+            <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Target size={14} className="text-ink-400" /> You never test your own fix — the auditor retests it.</span>
           )}
-          {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
+
+          {/* ⑥ four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
           {!locked && d.status === 'Awaiting reviewer' && (
-            role !== 'reviewer' ? (
+            !isReviewer ? (
               <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
             ) : d.retest && d.retest.by === me ? (
               <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>

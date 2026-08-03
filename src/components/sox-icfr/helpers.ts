@@ -1,6 +1,6 @@
-import { isInquiryOnly } from './types';
+import { isInquiryOnly, GRADE_RANK } from './types';
 import type {
-  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, HandoffTask, IcfrEngagement,
+  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
@@ -34,22 +34,344 @@ export interface SeverityAssessment {
   capBlocked?: 'not-effective' | 'mw-indicator';
   bumped?: boolean;   // prudent-official judgment raised the grade above the math
 }
+// The three-value view of the grade, for the report, the archive and the
+// roll-ups — all of which name only the three reportable severities. It is a
+// projection of `gradeException` below, never a second calculation: one engine,
+// so the card, the working paper and the engagement conclusion cannot disagree.
 export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
-  const raw = severityOf(d, eng.materiality, eng.rules);
-  let out: SeverityAssessment;
-  if (!d.compensatingControlId) out = { raw, final: raw, capped: false };
-  else if (d.mwIndicators.length > 0) out = { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
-  else {
+  const g = gradeException(d, eng);
+  const asSeverity = (x: ExceptionGrade): Severity => (x === 'Clearly Trivial' ? 'Deficiency' : x);
+  return {
+    raw: asSeverity(g.ladderGrade),
+    final: asSeverity(g.grade),
+    capped: !!g.cap,
+    capBlocked: g.capBlocked === 'none-chosen' ? undefined : g.capBlocked,
+    bumped: !!g.bumped,
+  };
+}
+
+// ─── The severity engine — the seven rules, in order ─────────────────────────────
+// Every conclusion on an exception is this function's output. Nothing hand-sets a
+// severity, which is why "Show working" can list the rules that fired: the trail
+// below IS the calculation, not a description written alongside it.
+//
+//   1  any MW indicator in force        → Material Weakness, exposure ignored
+//   2  compensating control             → may CAP the grade, never clears it
+//   3  exposure ≤ clearly trivial       → Clearly Trivial, and STOP
+//   4  likelihood remote                → capped at Deficiency whatever the exposure
+//   5  the ladder                       → < SD band · ≥ SD band · ≥ materiality
+//   6  aggregation                      → the group's summed exposure, re-laddered
+//   7  prudent official                 → raises only, and only with a rationale
+
+export interface GradeStep {
+  /** The rule number above, so the working reads in the order the rules run. */
+  n: number;
+  rule: string;
+  /** Did this rule change anything? Rules that were reached and did nothing are
+   *  still listed — "the cap did not apply, and here is why" is the answer to the
+   *  commonest question anyone asks of a severity. */
+  fired: boolean;
+  detail: string;
+}
+
+export interface ExceptionGradeResult {
+  grade: ExceptionGrade;
+  /** Where rule 5's ladder landed, before cap, aggregation or judgment. */
+  ladderGrade: ExceptionGrade;
+  working: GradeStep[];
+  cap?: { from: ExceptionGrade; to: ExceptionGrade; by: string };
+  capBlocked?: 'not-effective' | 'mw-indicator' | 'none-chosen';
+  aggregate?: { members: number; sum: number; grade: ExceptionGrade; raised: boolean; sharedBy: string };
+  bumped?: { from: ExceptionGrade; to: ExceptionGrade; rationale: string };
+}
+
+const RUPEE = (n: number): string =>
+  n >= 1e7 ? `₹${(n / 1e7).toFixed(2)} Cr` : n >= 1e5 ? `₹${(n / 1e5).toFixed(1)} L` : `₹${n.toLocaleString('en-IN')}`;
+
+/** Rule 5 on its own — the pure ladder, no cap, no judgment, no aggregation. */
+function ladder(magnitude: number, materiality: number, bandPct: number): ExceptionGrade {
+  if (magnitude >= materiality) return 'Material Weakness';
+  if (magnitude >= materiality * (bandPct / 100)) return 'Significant Deficiency';
+  return 'Deficiency';
+}
+
+/** What this exception aggregates on. Process comes off the control and assertion
+ *  off the attributes that actually failed — both already known, so neither is
+ *  asked for. A shared root cause cannot be read off free prose, so it is the one
+ *  the auditor states, by linking two exceptions together. */
+export function aggregationKeys(d: Deficiency, eng: IcfrEngagement): { kind: 'process' | 'assertion' | 'root cause'; key: string }[] {
+  const c = eng.controls.find(x => x.id === d.controlId);
+  const keys: { kind: 'process' | 'assertion' | 'root cause'; key: string }[] = [];
+  if (c) keys.push({ kind: 'process', key: `process:${c.process}` });
+  if (c) {
+    const failed = d.track === 'operating'
+      ? c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.assertion)
+      : c.assertions;
+    Array.from(new Set(failed)).forEach(a => keys.push({ kind: 'assertion', key: `assertion:${a}` }));
+  }
+  if (d.rootCauseLinkId) keys.push({ kind: 'root cause', key: `root:${d.rootCauseLinkId}` });
+  return keys;
+}
+
+/** The other live exceptions this one combines with. Clearly-trivial items never
+ *  join a group — rule 3 stopped them before aggregation was reached — and closed
+ *  ones have been remediated, so they are not part of what is still wrong. */
+export function aggregationGroup(d: Deficiency, eng: IcfrEngagement): { members: Deficiency[]; sharedBy: string } {
+  const mine = new Set(aggregationKeys(d, eng).map(k => k.key));
+  const shared = new Set<string>();
+  const members = eng.deficiencies.filter(o => {
+    if (o.id === d.id || o.status === 'Closed') return false;
+    if (isClearlyTrivial(o.magnitude, eng.rules)) return false;
+    const hits = aggregationKeys(o, eng).filter(k => mine.has(k.key));
+    hits.forEach(h => shared.add(h.kind));
+    return hits.length > 0;
+  });
+  return { members, sharedBy: Array.from(shared).join(' and ') };
+}
+
+export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGradeResult {
+  const M = eng.materiality;
+  const band = eng.rules.sdBandPct;
+  const working: GradeStep[] = [];
+
+  // ── 1 ── an indicator in force settles it on its own.
+  if (d.mwIndicators.length > 0) {
+    working.push({ n: 1, rule: 'MW indicator', fired: true, detail: `${d.mwIndicators[0]}${d.mwIndicators.length > 1 ? ` (and ${d.mwIndicators.length - 1} more)` : ''} — a material weakness whatever the amount.` });
+    working.push({ n: 2, rule: 'Compensating control', fired: false, detail: 'No cap available — an indicator cannot be argued down by another control.' });
+    return { grade: 'Material Weakness', ladderGrade: 'Material Weakness', working, capBlocked: d.compensatingControlId ? 'mw-indicator' : undefined };
+  }
+  working.push({ n: 1, rule: 'MW indicator', fired: false, detail: 'None recorded on this exception.' });
+
+  // ── 2 ── is a cap available, and does it actually stand up?
+  let capValid = false;
+  let capBlocked: ExceptionGradeResult['capBlocked'];
+  if (!d.compensatingControlId) {
+    capBlocked = 'none-chosen';
+    working.push({ n: 2, rule: 'Compensating control', fired: false, detail: 'None named.' });
+  } else {
     const cc = eng.controls.find(c => c.id === d.compensatingControlId);
-    if (!cc || controlConclusion(cc) !== 'Effective') out = { raw, final: raw, capped: false, capBlocked: 'not-effective' };
-    else if (raw === 'Material Weakness') out = { raw, final: 'Significant Deficiency', capped: true };
-    else out = { raw, final: raw, capped: false };
+    if (!cc || controlConclusion(cc) !== 'Effective') {
+      capBlocked = 'not-effective';
+      working.push({ n: 2, rule: 'Compensating control', fired: false, detail: `${d.compensatingControlId} is not concluded effective in this engagement, so it caps nothing.` });
+    } else {
+      capValid = true;
+      working.push({ n: 2, rule: 'Compensating control', fired: true, detail: `${d.compensatingControlId} is tested effective — it can cap a material weakness down to significant, and never clears the exception.` });
+    }
   }
-  // prudent-official: judgment argues UP only — applied after the cap, never below it
-  if (d.prudentOverride && SEVERITY_RANK[d.prudentOverride.to] > SEVERITY_RANK[out.final]) {
-    out = { ...out, final: d.prudentOverride.to, bumped: true };
+
+  // ── 3 ── below the de-minimis line nothing further is evaluated.
+  if (isClearlyTrivial(d.magnitude, eng.rules)) {
+    working.push({ n: 3, rule: 'Clearly trivial', fired: true, detail: `${RUPEE(d.magnitude)} is at or under ${RUPEE(eng.rules.clearlyTrivial)} — logged, not evaluated further.` });
+    return { grade: 'Clearly Trivial', ladderGrade: 'Clearly Trivial', working, capBlocked };
   }
-  return out;
+  working.push({ n: 3, rule: 'Clearly trivial', fired: false, detail: `${RUPEE(d.magnitude)} is above the ${RUPEE(eng.rules.clearlyTrivial)} floor.` });
+
+  // ── 4 & 5 ── the ladder, with the remote-likelihood ceiling over it.
+  let ladderGrade: ExceptionGrade;
+  if (!isReasonablyPossible(d.likelihood)) {
+    ladderGrade = 'Deficiency';
+    working.push({ n: 4, rule: 'Likelihood', fired: true, detail: 'Remote — capped at a deficiency however large the exposure.' });
+    working.push({ n: 5, rule: 'Exposure ladder', fired: false, detail: 'Not reached — rule 4 already set the ceiling.' });
+  } else {
+    working.push({ n: 4, rule: 'Likelihood', fired: false, detail: `${d.likelihood} — the ladder applies.` });
+    ladderGrade = ladder(d.magnitude, M, band);
+    const line = ladderGrade === 'Material Weakness' ? `at or above materiality ${RUPEE(M)}`
+      : ladderGrade === 'Significant Deficiency' ? `at or above the ${band}% band, ${RUPEE(M * band / 100)}`
+      : `below the ${band}% band, ${RUPEE(M * band / 100)}`;
+    working.push({ n: 5, rule: 'Exposure ladder', fired: true, detail: `${RUPEE(d.magnitude)} is ${line} ⇒ ${ladderGrade}.` });
+  }
+
+  let grade = ladderGrade;
+  let cap: ExceptionGradeResult['cap'];
+  if (capValid && grade === 'Material Weakness') {
+    cap = { from: grade, to: 'Significant Deficiency', by: d.compensatingControlId! };
+    grade = 'Significant Deficiency';
+    working.push({ n: 2, rule: 'Compensating control — applied', fired: true, detail: `Capped from Material Weakness to Significant Deficiency by ${d.compensatingControlId}. The exception stands.` });
+  }
+
+  // ── 6 ── individually minor, collectively not.
+  let aggregate: ExceptionGradeResult['aggregate'];
+  if (eng.rules.aggregate) {
+    const { members, sharedBy } = aggregationGroup(d, eng);
+    if (members.length > 0) {
+      const sum = members.reduce((n, o) => n + o.magnitude, 0) + d.magnitude;
+      const anyReasonable = [d, ...members].some(o => isReasonablyPossible(o.likelihood));
+      const aggGrade: ExceptionGrade = anyReasonable ? ladder(sum, M, band) : 'Deficiency';
+      const raised = GRADE_RANK[aggGrade] > GRADE_RANK[grade];
+      aggregate = { members: members.length + 1, sum, grade: aggGrade, raised, sharedBy };
+      working.push({
+        n: 6, rule: 'Aggregation', fired: raised,
+        detail: raised
+          ? `Combines with ${members.length} other exception${members.length > 1 ? 's' : ''} sharing ${sharedBy} — ${RUPEE(sum)} together ⇒ ${aggGrade}.`
+          : `Combines with ${members.length} other exception${members.length > 1 ? 's' : ''} sharing ${sharedBy} — ${RUPEE(sum)} together, which does not raise it.`,
+      });
+      if (raised) grade = aggGrade;
+    } else {
+      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Nothing else shares its process, assertion or root cause.' });
+    }
+  } else {
+    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Switched off in the engagement ground rules.' });
+  }
+
+  // ── 7 ── judgment, upward only.
+  let bumped: ExceptionGradeResult['bumped'];
+  if (d.prudentOverride && GRADE_RANK[d.prudentOverride.to] > GRADE_RANK[grade]) {
+    bumped = { from: grade, to: d.prudentOverride.to, rationale: d.prudentOverride.rationale };
+    working.push({ n: 7, rule: 'Prudent official', fired: true, detail: `Raised to ${d.prudentOverride.to} by ${d.prudentOverride.by} — ${d.prudentOverride.rationale}` });
+    grade = d.prudentOverride.to;
+  } else {
+    working.push({ n: 7, rule: 'Prudent official', fired: false, detail: d.prudentOverride ? 'Recorded, but it does not sit above the calculated grade.' : 'No judgment applied.' });
+  }
+
+  return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
+}
+
+/** Significant or worse has to be confirmed by the reviewer before the owner is
+ *  sent off to plan a fix — a wrong rating must not drive weeks of remediation. */
+export function needsRatingConfirmation(grade: ExceptionGrade): boolean {
+  return GRADE_RANK[grade] >= GRADE_RANK['Significant Deficiency'];
+}
+
+// ─── Baton — whose court an exception is in ──────────────────────────────────────
+// The same question `courtFor` answers for a control, answered for an exception.
+// Here it needs no inference: one role owns each state by construction, which is
+// what makes the flow's "absent, not disabled" rule enforceable in the first place.
+export function courtForException(d: Deficiency): Court {
+  switch (d.status) {
+    case 'Identified': return 'auditor';        // ② sizing it
+    case 'Rating review': return 'reviewer';    // ② confirming the grade
+    case 'Planning': return 'risk-owner';       // ③ writing the plan
+    case 'Plan review': return 'auditor';       // ③ judging it against the root cause
+    case 'Remediation': return 'risk-owner';    // ④ doing the work
+    case 'Retest': return 'auditor';            // ⑤ retesting the fix
+    case 'Awaiting reviewer': return 'reviewer';// ⑥ reading the evidence and closing
+    case 'Closed': return 'none';
+  }
+}
+
+/** The named person the baton actually sits with, and what they are doing with
+ *  it — "the auditor" is a role, and a role cannot be chased for an answer. */
+export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who: string; doing: string } {
+  const court = courtForException(d);
+  const who = court === 'auditor' ? eng.preparer : court === 'reviewer' ? eng.reviewer : d.remediation.owner;
+  const doing =
+    d.status === 'Identified' ? (d.rootCause.trim() ? 'sizing it' : 'writing the root cause')
+    : d.status === 'Rating review' ? 'confirming the rating before any fix starts'
+    : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
+    : d.status === 'Plan review' ? 'checking the plan against the root cause'
+    : d.status === 'Remediation' ? 'implementing the fix and attaching evidence'
+    : d.status === 'Retest' ? 'retesting on a post-fix sample'
+    : d.status === 'Awaiting reviewer' ? 'reading the retest evidence and closing'
+    : 'closed';
+  return { who: court === 'none' ? (d.signoff?.by ?? who) : who, doing };
+}
+
+// ─── When the fix can actually be retested ───────────────────────────────────────
+// A repaired control has to RUN before it can be sampled again — you cannot retest
+// a monthly control the week after it was fixed and call the result evidence. The
+// wait comes off the control's own frequency.
+
+export const OPERATING_PERIOD: Record<Frequency, { months: number | null; label: string }> = {
+  Daily: { months: 1, label: 'about a month of daily runs' },
+  Weekly: { months: 2, label: 'one to two months of weekly runs' },
+  Monthly: { months: 4, label: 'three to four monthly closes' },
+  Quarterly: { months: 6, label: 'two quarters' },
+  Recurring: { months: 1, label: 'about a month — it runs many times a day' },
+  Annual: { months: null, label: 'it runs once a year, so it cannot run again before period end' },
+  'Ad-hoc': { months: null, label: 'no fixed rhythm to count from' },
+};
+
+/** Reads ISO 'YYYY-MM-DD', '31 Mar 2026', 'Mar 2026' and the legacy '30 Jun'. */
+export function parseLooseDate(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const t = s.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) { const n = Date.parse(`${t}T00:00:00`); return Number.isNaN(n) ? null : new Date(n); }
+  const withYear = /\b\d{4}\b/.test(t) ? t : `${t} ${new Date().getFullYear()}`;
+  const n = Date.parse(withYear);
+  return Number.isNaN(n) ? null : new Date(n);
+}
+
+const shortDate = (d: Date): string => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+export interface RetestReadiness {
+  /** Null when there is nothing to compute from, or nothing to compute. */
+  date: Date | null;
+  label: string;
+  reason: string;
+  beyondPeriodEnd: boolean;
+  /** Ad-hoc — no rhythm, so the auditor states the date instead. */
+  needsManualDate: boolean;
+  /** Annual — it cannot produce another occurrence inside this period at all. */
+  neverThisPeriod: boolean;
+}
+
+/** A period end written as 'Dec 2026' means the END of December, not the 1st.
+ *  Read literally it moves the cliff a month early and puts fixes on the at-risk
+ *  list that were always going to land in time. */
+function parsePeriodEnd(label: string): Date | null {
+  const d = parseLooseDate(label);
+  if (!d) return null;
+  const hasDay = /\d{4}-\d{2}-\d{2}/.test(label) || /\b\d{1,2}\b\s*[A-Za-z]/.test(label.trim());
+  return hasDay ? d : new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+}
+
+export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd: string): RetestReadiness {
+  const period = OPERATING_PERIOD[c?.frequency ?? 'Monthly'];
+  const end = parsePeriodEnd(periodEnd);
+  const fixed = parseLooseDate(d.remediation.date);
+
+  // Stated by the auditor — it wins over the arithmetic wherever it exists.
+  const stated = parseLooseDate(d.expectedRetestReady);
+  if (stated) {
+    return {
+      date: stated, beyondPeriodEnd: !!end && stated > end, needsManualDate: false, neverThisPeriod: false,
+      label: shortDate(stated),
+      reason: `Set by the auditor rather than counted off the frequency.${end && stated > end ? ` That lands after period end (${periodEnd}).` : ''}`,
+    };
+  }
+
+  if (c?.frequency === 'Annual') {
+    return {
+      date: null, beyondPeriodEnd: true, needsManualDate: false, neverThisPeriod: true,
+      label: 'Not retestable this period',
+      reason: `It ${period.label}. Whatever is fixed now, there is no second occurrence to sample before ${periodEnd} — this carries forward.`,
+    };
+  }
+
+  if (c?.frequency === 'Ad-hoc') {
+    return {
+      date: null, beyondPeriodEnd: false, needsManualDate: true, neverThisPeriod: false,
+      label: 'Auditor to set',
+      reason: 'The control runs when it runs — there is no frequency to count forward from, so the expected date has to be stated.',
+    };
+  }
+
+  if (!fixed || period.months === null) {
+    return {
+      date: null, beyondPeriodEnd: false, needsManualDate: false, neverThisPeriod: false,
+      label: 'Once the fix has a date',
+      reason: `The wait is ${period.label}, counted from the day the fix lands. The plan has no date yet.`,
+    };
+  }
+
+  const ready = new Date(fixed);
+  ready.setMonth(ready.getMonth() + period.months);
+  const beyond = !!end && ready > end;
+  return {
+    date: ready, beyondPeriodEnd: beyond, needsManualDate: false, neverThisPeriod: false,
+    label: shortDate(ready),
+    reason: `Fixed ${shortDate(fixed)} plus ${period.label}.${beyond ? ` That lands after period end (${periodEnd}) — there will be no testable sample in time.` : ''}`,
+  };
+}
+
+/** Every exception whose fix cannot be retested before the books close. The
+ *  engagement needs this NOW, while there is still room to move a date — not in
+ *  March when the answer is already fixed. */
+export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: RetestReadiness }[] {
+  return eng.deficiencies
+    .filter(d => d.status !== 'Closed')
+    .map(d => ({ d, readiness: retestReadiness(d, eng.controls.find(c => c.id === d.controlId), eng.periodEnd) }))
+    .filter(x => x.readiness.beyondPeriodEnd);
 }
 
 // ─── Ground-rules change preview ──────────────────────────────────────────────────
