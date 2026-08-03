@@ -8,8 +8,8 @@
 // is indistinguishable from a hand-assembled one.
 
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import { sectionBlurb } from './reportShared';
-import type { WorkflowResult } from './reportShared';
+import { sectionBlurb, sayRating, OUR_SCALE } from './reportShared';
+import type { WorkflowResult, ScaleMap, OurRating } from './reportShared';
 
 export type QuerySource = 'report';
 
@@ -26,6 +26,9 @@ export type GeneratedQueryDef = {
   addedBy: string;
   kpis: { label: string; value: string; color: string }[];
   chartData: number[];
+  /** A bulk run's own output rows — the exception records behind the finding,
+   *  which is what an evidence annexure in a custom template prints. */
+  outputTable?: { columns: string[]; rows: (string | number)[][] };
 };
 
 export type PickableQuery = {
@@ -176,6 +179,9 @@ export function workflowToQueryDef(w: WorkflowResult): GeneratedQueryDef {
     addedBy: 'Workflow',
     kpis: [],
     chartData: [],
+    // The run's own output rows travel with it: they are the exception records
+    // an evidence annexure prints, so they must not be dropped in translation.
+    outputTable: w.outputTable,
   };
 }
 
@@ -235,10 +241,29 @@ export function arrangeForTemplate(templateId: string, defs: GeneratedQueryDef[]
  *  reader can see. */
 const SECTION_SEVERITY = /\b(critical|high|medium|low)\b/i;
 
-export function composeSectionContent(sectionName: string, defs: GeneratedQueryDef[]): string {
+/** A heading that names a rating in THEIR word ("Detailed observations —
+ *  Moderate"), read back to ours. A split section written in their language is
+ *  still a split section. */
+function ourRatingNamed(sectionName: string, map?: ScaleMap): OurRating | undefined {
+  if (!map) return undefined;
+  for (const { value } of OUR_SCALE) {
+    const word = map[value];
+    if (word && new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sectionName)) return value;
+  }
+  return undefined;
+}
+
+export function composeSectionContent(sectionName: string, defs: GeneratedQueryDef[], scaleMap?: ScaleMap): string {
+  // The writing step is given the client's words and writes in them from the
+  // start. It may only use words from that list, so every rating below is said
+  // through the map rather than translated after the fact.
+  const say = (s: string) => sayRating(s, scaleMap);
   // Scope the numbers to the section's own rating before anything is counted,
-  // so no two sections of a split can end up with the same sentence.
-  const severity = sectionName.match(SECTION_SEVERITY)?.[1]?.toLowerCase();
+  // so no two sections of a split can end up with the same sentence. A heading
+  // rating in their word ("Observations — Moderate") names ours through the map.
+  const named = sectionName.match(SECTION_SEVERITY)?.[1]?.toLowerCase()
+    ?? ourRatingNamed(sectionName, scaleMap);
+  const severity = named;
   const scoped = severity
     ? defs.filter(d => (d.severity ?? '').toLowerCase() === severity)
     : defs;
@@ -251,8 +276,8 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
     // has nothing this time. It never borrows the report's totals.
     if (/quer(y|ies)|findings|observations|results|register/i.test(sectionName)) {
       return n > 0
-        ? `${n} ${qWord} rated ${severity}. The detail follows.`
-        : `No ${severity}-rated findings in this report.`;
+        ? `${n} ${qWord} rated ${say(severity)}. The detail follows.`
+        : `No findings rated ${say(severity)} in this report.`;
     }
   }
   // Data-anchored sections summarise the attached queries — richer, data-aware
@@ -261,11 +286,11 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
   // descriptive one-liner, so nothing ever reads "0 queries".
   if (n > 0) {
     if (/testing results|quer(y|ies)|findings|assessment|register/i.test(sectionName))
-      return `${n} ${qWord} executed${high > 0 ? `, ${high} of them returning high-severity results` : ''}. Detailed results follow.`;
+      return `${n} ${qWord} executed${high > 0 ? `, ${high} of them rated ${say('high')}` : ''}. Detailed results follow.`;
     if (/deficienc|detailed description/i.test(sectionName))
       return high > 0
-        ? `${high} of ${n} ${qWord} surfaced high-severity exceptions requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
-        : 'No high-severity exceptions surfaced by the attached queries. Classify any residual items during review.';
+        ? `${high} of ${n} ${qWord} surfaced exceptions rated ${say('high')} requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
+        : `No exceptions rated ${say('high')} surfaced by the attached queries. Classify any residual items during review.`;
     if (/gap|non-?compliance/i.test(sectionName))
       return high > 0
         ? `${high} of ${n} ${qWord} surfaced potential non-compliance requiring action. Each gap maps to its requirement and owner in the results above.`
@@ -276,7 +301,7 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
     }
     if (/conclusion|opinion|assertion/i.test(sectionName))
       return high > 0
-        ? `Based on the ${n} ${qWord} reviewed, control weaknesses were identified (${high} high-severity). A qualified conclusion is warranted pending remediation of the exceptions above.`
+        ? `Based on the ${n} ${qWord} reviewed, control weaknesses were identified (${high} rated ${say('high')}). A qualified conclusion is warranted pending remediation of the exceptions above.`
         : `Based on the ${n} ${qWord} reviewed, no significant exceptions were noted. Controls over the covered areas operated effectively for the period.`;
     if (/appendix/i.test(sectionName))
       return `Source queries: ${scoped.map(d => d.id).join(', ')}. Full query outputs, parameters, and evidence references are retained with this report.`;
@@ -287,14 +312,17 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
 }
 
 /** Deterministic executive-summary rollup composed from the selected queries. */
-export function composeExecSummary(templateName: string, defs: GeneratedQueryDef[]): string {
+export function composeExecSummary(templateName: string, defs: GeneratedQueryDef[], scaleMap?: ScaleMap): string {
   if (defs.length === 0) {
     return `${templateName} draft. Attach queries to populate this report — the executive summary will roll up their findings here.`;
   }
+  // Written in the client's words from the start, and only in words from their
+  // own list.
+  const worst = sayRating('high', scaleMap);
   const high = defs.filter(d => d.severity === 'High').length;
   const sevNote = high > 0
-    ? `${high} of ${defs.length} ${defs.length === 1 ? 'query is' : 'queries are'} high severity`
-    : `${defs.length} ${defs.length === 1 ? 'query' : 'queries'} reviewed, none high severity`;
+    ? `${high} of ${defs.length} ${defs.length === 1 ? 'query is' : 'queries are'} rated ${worst}`
+    : `${defs.length} ${defs.length === 1 ? 'query' : 'queries'} reviewed, none rated ${worst}`;
   // Lead sentences from the first few queries — deduped so repeated/identical
   // summaries (common when several queries share a source) don't echo.
   const leads = [...new Set(

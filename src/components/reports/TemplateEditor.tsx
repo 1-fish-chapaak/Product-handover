@@ -12,25 +12,30 @@ import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'moti
 import {
   Check, ChevronRight, FileText, GripVertical,
   Loader2, Plus, X, Pencil, ShieldCheck, Trash2,
-  BookOpen, Search, Upload, Info, Maximize2, Minimize2,
+  BookOpen, Search, Upload, Maximize2, Minimize2,
+  UploadCloud, AlertTriangle, ArrowRight,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportSignoffBlock, ReportClosingBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
-  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
+  ICON_MAP, CATEGORY_COLORS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
   sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
-  collectBlockLibrary,
-  type EditableTemplate, type WatermarkConfig,
+  collectBlockLibrary, DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText,
+  proposeScaleMap, unusedScaleWords, OUR_SCALE,
+  type EditableTemplate, type WatermarkConfig, type ScaleMap,
   type TemplateSection, type SignatorySlot, type TemplateBlock,
 } from './reportShared';
-import { extractTemplateFromReport, type ExtractedTemplate, type ExtractOutcome } from './byotExtraction';
+import { readTemplateFromReport, classifyUpload, PAGE_CAP, type UploadKind } from './byot/byotRead';
+import type { ReadResult, ReadOutcome } from './byot/byotRead';
 import SectionReviewCanvas from './SectionReviewCanvas';
+import { FormSelect } from '../shared/FilterSelect';
+import MadeUpPreview from './byot/PreviewStep';
 import { RowDeleteButton } from './RowDeleteButton';
-import { renderSectionShape, sectionTypeLabel } from './templateSectionShape';
-import { type CanvasSection, type CanvasBlock } from './sectionReviewShared';
+import { renderSectionShape, sectionTypeLabel, type ShapeFill } from './templateSectionShape';
+import { reviewChrome, belowTheReadFloor, type CanvasSection, type CanvasBlock } from './sectionReviewShared';
 import { useAuditLog } from '../../context/AdminDataContext';
 
 // Soft length guide for letterhead header/footer text — past this the counter
@@ -104,39 +109,51 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-// "Import from a report" scan theatre — the six passes, narrated while the PDF is
-// read. The scan runs for a deliberate ~10s so the document-scanner animation
-// plays out in full and each pass stays legible; the real parse (usually much
-// faster) resolves behind it, and its sections land in the outline when the scan
-// finishes (optimistic apply).
-const IMPORT_SCAN_MESSAGES = [
-  'Unpacking the document…',
-  'Setting aside headers and footers…',
-  'Finding the sections…',
-  'Classifying tables, stats and callouts…',
-  'Spotting repeating finding cards…',
-  'Labelling the structure…',
-];
-// Deliberate on-screen scan duration — the parse resolves behind it, but the
-// theatre always plays for this long so the animation reads as a real scan.
-const SCAN_DURATION_MS = 10000;
-// Fail a PDF parse that hasn't settled by here, so the progress card can't hang.
-// Kept above SCAN_DURATION_MS so a slow-but-fine parse still lands.
-const EXTRACT_TIMEOUT_MS = 30000;
+// ─── Bring Your Own Template, inside the editor ─────────────────────────────
+// Building a template from a past report is the same journey here as it is on
+// the Bring Your Own Template tab: one file, six reads, a review you actually
+// do, then the format is yours. Same engine, same passes, same words — so a
+// format read here and a format read there come out identical.
+//
+// One read, one question. Six separate reads means that when the result is
+// wrong we can point at exactly which read failed instead of debugging magic.
+const PDF_PASSES = [
+  { title: 'Pull the text out', question: 'Every bit of text with its page, its spot, its size and its weight.' },
+  { title: 'Take off tops and bottoms', question: 'Page numbers and “Confidential” stamps come off, and are saved as settings you check.' },
+  { title: 'Find the headings', question: 'Big, rare and numbered means a heading. That gives the sections, in order.' },
+  { title: 'Work out each block', question: 'Paragraph, table, row of numbers, box to fill in, highlighted note or chart?' },
+  { title: 'Look for repeats', question: 'A shape that repeats is saved once and marked “as many as needed”.' },
+  { title: 'The AI names things', question: 'What each section is for, and which words you use for how bad a problem is.' },
+] as const;
 
-// V1 reads one format, done well: digital PDF. Everything else converts to PDF
-// in one click — nothing converts the other way — so the picker accepts .pdf
-// only and stops advertising what we can't read. Word/PowerPoint drops get an
-// honest "save it as PDF" message instead of a fabricated outline.
-const IMPORT_ACCEPT = '.pdf';
-type ImportKind = 'pdf' | 'word' | 'ppt';
-const IMPORT_KIND_LABEL: Record<ImportKind, string> = { pdf: 'PDF', word: 'Word', ppt: 'PowerPoint' };
-function classifyImport(name: string): ImportKind | null {
-  if (/\.pdf$/i.test(name)) return 'pdf';
-  if (/\.docx?$/i.test(name)) return 'word';
-  if (/\.pptx?$/i.test(name)) return 'ppt';
-  return null;
-}
+// A deck runs the same six, but the first five have almost nothing to do: the
+// file says outright which box is the title, which shape is a table and which
+// layout repeats. Only the reading changes.
+const DECK_PASSES = [
+  { title: 'Open the slides', question: 'Every box with what PowerPoint calls it, where it sits and what it says.' },
+  { title: 'Take off the running header', question: 'A box saying the same thing on every slide is a running header, even if it is the title box. It is saved as a setting.' },
+  { title: 'Read the headings', question: 'The title box names the slide, and a divider slide names the run that follows it. Nothing to guess.' },
+  { title: 'Work out each block', question: 'A table object is a table, with its real columns. Same for the rest of the boxes.' },
+  { title: 'Look for repeats', question: 'One slide per finding, or a run of slides repeating together. Saved once, marked “as many as needed”.' },
+  { title: 'The AI names things', question: 'What each part is for, and which words you use for how bad a problem is.' },
+] as const;
+
+// Each pass holds the screen long enough to read. The real parse resolves
+// behind the list, so this is the floor on the wait, never the whole of it.
+const PASS_MS = 900;
+const SCAN_DURATION_MS = PDF_PASSES.length * PASS_MS;
+// Fail a parse that hasn't settled by here, so the progress card can't hang.
+// Kept well above SCAN_DURATION_MS so a slow but fine parse still lands.
+const EXTRACT_TIMEOUT_MS = 60000;
+
+// Two formats, both done well: the PowerPoint a client presents to a committee
+// and the PDF they keep on file. A deck is the easier read of the two, because
+// the file labels its own parts. Everything else converts to one of those in a
+// click, nothing converts the other way, so the picker accepts .pptx and .pdf
+// and stops advertising what we can't read. Word, the older binary .ppt and
+// everything else get an honest way out instead of a fabricated outline.
+const IMPORT_ACCEPT = '.pptx,.pdf';
+const IMPORT_KIND_LABEL: Record<UploadKind, string> = { pdf: 'PDF', deck: 'PowerPoint' };
 // Detected headings often carry their own enumerator ("1. Executive Summary",
 // "2.1 Scope"). The outline already numbers every row with its own index badge,
 // so we strip the leading enumerator to avoid a doubled "2. 1. Executive Summary".
@@ -150,12 +167,14 @@ function stripLeadingEnumerator(name: string): string {
 // fully usable behind it. Shows an extracting state (with Minimize while the
 // modal is open, or Open while minimized) and a done state (Open to review).
 function ExtractionCard({
-  filename, messages = IMPORT_SCAN_MESSAGES, done = false, sectionCount,
+  filename, messages, done = false, sectionCount,
   progress = 0, msgIdx = 0,
   onMinimize, onOpen, onClose,
 }: {
   filename: string;
-  messages?: string[];
+  /** The pass titles, so the corner card narrates the same six reads the
+      full-screen scan does. */
+  messages: readonly string[];
   done?: boolean;
   sectionCount?: number;
   /** Controlled progress + message step — driven by the parent so the run stays
@@ -180,10 +199,10 @@ function ExtractionCard({
           {done ? <Check size={16} strokeWidth={2.5} /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
+          <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">{done ? 'Finished reading' : 'Reading your report'}</div>
           <div className="text-[0.75rem] text-ink-500 truncate mt-0.5">
             {done
-              ? (sectionCount != null ? `${sectionCount} section${sectionCount === 1 ? '' : 's'} ready to review` : 'Ready to review')
+              ? (sectionCount ? `${sectionCount} section${sectionCount === 1 ? '' : 's'} ready to check` : 'Ready to check')
               : (
                 <AnimatePresence mode="wait">
                   <motion.span key={msgIdx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -204,7 +223,7 @@ function ExtractionCard({
         </div>
       )}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background. Keep working.'}</span>
+        <span className="text-[0.6875rem] text-ink-400">{done ? 'Open it to check what we found.' : 'Running in the background. Keep working.'}</span>
         {onOpen ? (
           <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
             <Maximize2 size={13} /> Open
@@ -321,7 +340,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 // direction — on release it snaps to the slot nearest the drop point), and a
 // hover control removes it. Reordering drives the same `sections` state.
 
-function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe, blockLibrary }: {
+function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe, blockLibrary, fill }: {
   section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
@@ -331,6 +350,9 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   onDescribe: (description: string) => void;
   /** Blocks the template stores by id, so a placement resolves to its shape. */
   blockLibrary?: Record<string, TemplateBlock>;
+  /** Made-up problems to draw the shapes with, when the preview is switched to
+   *  show a filled report rather than an empty shape. */
+  fill?: ShapeFill;
 }) {
   // BYOT sections carry typed blocks — their body renders through the shared
   // shape renderer, and the chip says where the content comes from (fill case).
@@ -374,7 +396,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   };
   // The body placeholder — null for a plain prose section, where the editable
   // description takes its place.
-  const shape = renderSectionShape(section, blockLibrary, shownDesc);
+  const shape = renderSectionShape(section, blockLibrary, shownDesc, fill);
   return (
     <motion.div
       layout
@@ -489,21 +511,8 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
   );
 }
 
-// The sections a report commonly carries — offered as click-to-add suggestion
-// chips under the composer so a blank template fills in fast. A static set, not
-// tied to any report type.
-const SUGGESTED_SECTIONS: { name: string; icon: string }[] = [
-  { name: 'Executive Summary', icon: 'file-text' },
-  { name: 'Scope & Objectives', icon: 'file-text' },
-  { name: 'Testing Methodology', icon: 'file-text' },
-  { name: 'Findings / Observations', icon: 'check-circle' },
-  { name: 'Recommendations', icon: 'trending-up' },
-  { name: 'Management Response', icon: 'book-open' },
-  { name: 'Conclusion', icon: 'shield' },
-  { name: 'Sign-off', icon: 'shield' },
-];
 
-export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string }) {
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName, openingNote }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string; /** One honest line above the sheet when the builder was opened because a report read badly, rather than by choice. */ openingNote?: string }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -519,8 +528,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // auto-generated name doesn't start over the limit (counter red on open).
   const defaultName = (initialName ?? template.name).slice(0, TEMPLATE_NAME_MAX);
   const [copyName, setCopyName] = useState(defaultName);
-  const [brand, setBrand] = useState(template.brand ?? 'Irame');
-  const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
+  const [brand, setBrand] = useState(template.brand ?? DEFAULT_TEMPLATE_BRAND);
+  const [theme, setTheme] = useState(template.theme ?? DEFAULT_THEME);
   // Custom brand colour (hex). Empty = use the named theme. When set (and valid)
   // it drives the cover gradient + body accent everywhere the report renders.
   // Importing a report samples this from the uploaded cover (the brand kit).
@@ -528,17 +537,28 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // The document's own rating language, captured at import (template settings).
   const [findingScale, setFindingScale] = useState<string[] | undefined>(template.findingScale);
   const [opinionScale, setOpinionScale] = useState<string[] | undefined>(template.opinionScale);
+  // Their word for each of ours, proposed by the read and settled by the client
+  // on the matching screen. Every rating a report prints goes through it.
+  const [scaleMap, setScaleMap] = useState<ScaleMap>(template.scaleMap ?? {});
+  /** What the right-hand pane draws: the empty shape, or the same shape with
+   *  three invented findings in it. Never saved, never exported. */
+  const [previewMode, setPreviewMode] = useState<'shape' | 'filled'>('shape');
+  // The import walks the same two steps the Bring Your Own Template tab walks:
+  // what we found, and a report in their format before any of it lands.
+  // Said plainly when the read was too poor to be worth checking, and the
+  // builder opened with what little we found instead of a check screen.
+  const [badRead, setBadRead] = useState<string | null>(openingNote ?? null);
   // Cover gradient + accent for the live preview — the named theme, overridden
   // by the captured brand colour when present.
-  const coverGradient = reportGradient(theme, brandColor) ?? TEMPLATE_THEME_GRADIENT['Purple & White'];
+  const coverGradient = reportGradient(theme, brandColor) ?? TEMPLATE_THEME_GRADIENT[DEFAULT_THEME];
   const coverAccent = reportAccent(theme, brandColor);
-  const [headerText, setHeaderText] = useState(template.headerText ?? 'Confidential — For Internal Use Only');
+  const [headerText, setHeaderText] = useState(template.headerText ?? '');
   // Footer auto-tracks the brand ("Generated by <brand>") until the author edits it
   // directly; an existing saved footer or an imported one counts as customised.
-  const [footerText, setFooterText] = useState(template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`);
+  const [footerText, setFooterText] = useState(template.footerText ?? defaultFooterText(template.brand));
   const [footerCustom, setFooterCustom] = useState(!!template.footerText);
   useEffect(() => {
-    if (!footerCustom) setFooterText(`Generated by ${brand.trim() || 'Irame'}`);
+    if (!footerCustom) setFooterText(defaultFooterText(brand));
   }, [brand, footerCustom]);
   // Page numbers on the exported report — on by default (undefined = on).
   const [pageNumbers, setPageNumbers] = useState(template.pageNumbers ?? true);
@@ -549,6 +569,16 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setSignoffEnabled(on);
     if (on && signatories.length === 0) setSignatories(DEFAULT_SIGNATORIES.map(s => ({ ...s })));
   };
+  // Closing page — the "thank you" slide a committee deck ends on. Same kind of
+  // thing as the sign-off block: shape, not writing, so there is nothing to
+  // generate in it. Off unless their own report had one.
+  const [closingEnabled, setClosingEnabled] = useState(template.closingEnabled ?? false);
+  const [closingText, setClosingText] = useState<string[]>(template.closingText ?? []);
+  const toggleClosing = (on: boolean) => {
+    setClosingEnabled(on);
+    if (on && closingText.length === 0) setClosingText(['Thank you']);
+  };
+  const cleanClosing = closingText.map(l => l.trim()).filter(Boolean);
   const addSignatory = () => setSignatories(prev => [...prev, { id: `sig-${Date.now()}`, role: '' }]);
   const updateSignatory = (id: string, patch: Partial<SignatorySlot>) => setSignatories(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
   const removeSignatory = (id: string) => setSignatories(prev => prev.filter(s => s.id !== id));
@@ -557,6 +587,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     .filter(s => s.role.trim() || (s.name ?? '').trim())
     .map(s => ({ id: s.id, role: s.role.trim() || 'Signatory', ...(s.name?.trim() ? { name: s.name.trim() } : {}) }));
   const logEvent = useAuditLog();
+  // Their brand mark on the letterhead. Read off an uploaded deck when there is
+  // one, and replaceable here either way.
+  const [logoDataUrl, setLogoDataUrl] = useState<string>(template.logoDataUrl ?? '');
+  const logoInputRef = useRef<HTMLInputElement>(null);
   // Diagonal page watermark — the full-document branding.
   const [watermark, setWatermark] = useState<WatermarkConfig>(template.watermark ?? DEFAULT_WATERMARK);
   const watermarkImgInputRef = useRef<HTMLInputElement>(null);
@@ -578,36 +612,37 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Left settings column is split into two segmented groups so the form reads as
   // a structured panel instead of a flat six-field stack.
   const [panel, setPanel] = useState<'identity' | 'branding'>('identity');
+  // A new template opens on the question that actually matters first: do you
+  // already have a report that looks the way you want, or are you building one?
+  // Uploading one is the shorter road by a mile, so it leads. Editing an
+  // existing template skips straight to the builder.
+  // A new template opens on the two ways in — unless it arrives with sections
+  // already in it, which means a report was read badly elsewhere and handed
+  // here to build on. Offering "start from a report" again would be offering
+  // the step that just failed.
 
-  // Add one or more sections, skipping any already in the outline (case-insensitive).
-  const addSections = (list: { name: string; icon: string }[]) => {
-    if (!list.length) return;
-    setSections(prev => {
-      const have = new Set(prev.map(s => s.name.toLowerCase()));
-      const fresh = list.filter(s => !have.has(s.name.toLowerCase()));
-      return [...prev, ...fresh.map(s => ({ name: s.name, icon: s.icon }))];
-    });
-  };
-  // Suggested sections that aren't in the outline yet — a static set of the
-  // sections a report commonly carries, offered as click-to-add chips under the
-  // composer. Not tied to any report type.
-  const recommendations = SUGGESTED_SECTIONS.filter(
-    rec => !sections.some(s => s.name.toLowerCase() === rec.name.toLowerCase()),
-  );
-
-  // ── Import from a report ──────────────────────────────────────────────────
-  // Reads an existing PDF report and pre-fills the outline + letterhead, so the
-  // author starts from the real document instead of a blank page. This is the
-  // merged "Upload template" path, folded into the editor (one creation surface).
+  // ── Build this template from a past report ────────────────────────────────
+  // The Bring Your Own Template journey, run inside the editor: upload one past
+  // report, six reads take its shape apart, you review what was found beside
+  // your own document, and the format lands here as a template you can still
+  // tune. The words and numbers in the file are thrown away; only the shape
+  // survives. Review is a real step, not a formality — being 80% right and
+  // letting you fix the rest in two minutes is the design choice.
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [scanningName, setScanningName] = useState<string | null>(null);
+  // Which reader is running, so the pass list names what it is actually doing.
+  const [importKind, setImportKind] = useState<UploadKind>('pdf');
+  const passes = importKind === 'deck' ? DECK_PASSES : PDF_PASSES;
   // Minimize-and-continue: when true the editor collapses to the bottom-right
   // extraction card and the full modal isn't rendered, so extraction keeps
   // running (this component stays mounted) with the app fully usable behind it.
   const [minimized, setMinimized] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importMsgIdx, setImportMsgIdx] = useState(0);
+  // Which read the pointer is over, so a client can open any of the six and
+  // read what it does without waiting for it to come round.
+  const [peekPass, setPeekPass] = useState<number | null>(null);
   const reduceMotion = useReducedMotion();
   // Drive the extraction progress + status message here (not in the card) so the
   // same run feeds both the full-modal overlay and the minimized corner card —
@@ -617,14 +652,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // shy of 100% if the real parse outlasts the scan window.
   useEffect(() => {
     if (!importing) { setImportProgress(0); setImportMsgIdx(0); return; }
-    const msgs = IMPORT_SCAN_MESSAGES;
+    const steps = PDF_PASSES.length;
     const start = performance.now();
     let raf = 0;
     const loop = (now: number) => {
       const t = Math.min(1, (now - start) / SCAN_DURATION_MS);
       const eased = 1 - Math.pow(1 - t, 2);
       setImportProgress(Math.min(99, eased * 100));
-      setImportMsgIdx(Math.min(msgs.length - 1, Math.floor(t * msgs.length)));
+      setImportMsgIdx(Math.min(steps - 1, Math.floor(t * steps)));
       if (t < 1) raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -635,25 +670,27 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // counter avoids the flicker that dragenter/dragleave cause over child nodes.
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
-  // After a successful extraction the detected sections land in the shared review
-  // canvas (§4) for curation — nothing is applied to the outline until the author
-  // confirms. This is the same detect-and-curate step the format-check modal uses,
-  // so "import" behaves identically to "upload".
-  // The curation canvas is now opt-in (opened from the post-import banner's
-  // "Review"), not a required gate. pendingImport drives that on-demand canvas;
-  // reviewSections is its working copy while open.
-  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: ImportKind; result: ExtractedTemplate | null } | null>(null);
+  // After the read finishes the detected sections land in the shared review
+  // canvas beside the pages of the uploaded document. Nothing touches the
+  // outline until it is confirmed there, which is the Bring Your Own Template
+  // rule: the reader proposes, the human decides. pendingImport drives the
+  // canvas; reviewSections is its working copy while open.
+  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: UploadKind; result: ReadResult | null } | null>(null);
   const [reviewSections, setReviewSections] = useState<CanvasSection[]>([]);
-  // Optimistic apply: detected sections + letterhead land in the outline the
-  // moment the parse finishes. This banner then offers Undo (revert the whole
-  // import in one tap) and Review (open the curation canvas). Curation is a
-  // choice, not a step — the common path is one gesture: pick file → done.
+  /** What the read proposed, frozen the moment the check screen opened. The
+   *  counting on that screen is the difference between this and what the client
+   *  ends up confirming, and there is nowhere else to get it from once they
+   *  start renaming rows. */
+  const [reviewBaseline, setReviewBaseline] = useState<CanvasSection[]>([]);
+  // Once confirmed, a banner sits over the outline with what was captured, a
+  // way back into the review canvas, and one-tap Undo of the whole import.
   type ImportSnapshot = {
     sections: typeof sections; headerText: string; footerText: string; brand: string; copyName: string; importedFrom: string | null;
     brandColor: string; findingScale?: string[]; opinionScale?: string[]; signoffEnabled: boolean; signatories: SignatorySlot[];
+    closingEnabled: boolean; closingText: string[]; logoDataUrl: string;
   };
   const [importBanner, setImportBanner] = useState<
-    { fileName: string; kind: ImportKind; result: ExtractedTemplate | null; detected: CanvasSection[]; count: number; gotLetterhead: boolean; captured: string[] } | null
+    { fileName: string; kind: UploadKind; result: ReadResult | null; detected: CanvasSection[]; count: number; gotLetterhead: boolean; captured: string[] } | null
   >(null);
   // The state as it was just before the import applied, so Undo is exact.
   const preImportRef = useRef<ImportSnapshot | null>(null);
@@ -675,7 +712,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   };
 
   const applyToOutline = (
-    secs: CanvasSection[], result: ExtractedTemplate | null, fileName: string,
+    secs: CanvasSection[], result: ReadResult | null, fileName: string,
   ): { count: number; gotLetterhead: boolean; captured: string[] } => {
     // Pass 2's furniture lands as pre-filled template settings — the user
     // verifies them here instead of typing them in.
@@ -698,12 +735,24 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // existing signature block, seeded with the document's own roles — it isn't
     // duplicated as a prose section.
     const signRolesOf = (s: CanvasSection) => (s.blocks ?? []).find(b => b.kind === 'signoff' && (b.signRoles?.length ?? 0) > 0)?.signRoles;
-    const signRoles = secs.map(signRolesOf).find(Boolean);
+    const signRoles = result?.signoff?.roles ?? secs.map(signRolesOf).find(Boolean);
     if (signRoles) {
       setSignoffEnabled(true);
       setSignatories(signRoles.map((role, i) => ({ id: `sig-imp-${i}`, role })));
       captured.push(`${signRoles.length} signature slot${signRoles.length === 1 ? '' : 's'}`);
     }
+    // A closing page is captured the same way and for the same reason: the
+    // shape is the whole feature, so it prints as it is at the end of every
+    // report rather than being generated.
+    if (result?.closing?.lines.length) {
+      setClosingEnabled(true);
+      setClosingText(result.closing.lines);
+      captured.push('closing page');
+    }
+    // Their mark off the deck's own master. A picture repeating in the same
+    // place slide after slide is the brand, by the same rule that finds the
+    // running header.
+    if (result?.logo) { setLogoDataUrl(result.logo); captured.push('logo'); }
     // Name: only fill if still the untouched default, and never fill a name that
     // already exists — a fresh import landing on an instant "already exists" error
     // reads as a failure. Suffix "(2)", "(3)"… until unique.
@@ -739,35 +788,41 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   };
 
   const handleImportFile = async (file: File) => {
-    const kind = classifyImport(file.name);
-    // V1 is PDF-only, said honestly: Word gets the one-click conversion path
-    // (phase 2 is coming), PowerPoint and everything else a plain "not
-    // supported" — never a fabricated outline.
+    const kind = classifyUpload(file.name);
+    // Every decline is said out loud, and each one names the way out of it.
+    // Never a fabricated outline.
     if (kind === 'word') {
-      addToast({ type: 'info', message: 'Word support is coming. Save it as a PDF (File → Save as PDF) and upload that.' });
+      addToast({ type: 'info', message: 'Word files come later. Save it as a PDF (File → Save as PDF) and upload that.' });
       return;
     }
-    if (kind === 'ppt') {
-      addToast({ type: 'info', message: 'PowerPoint isn’t supported. Export the report as a PDF and upload that.' });
+    if (kind === 'legacy-ppt') {
+      addToast({ type: 'info', message: 'That is an older .ppt, which is a different file format. Open it in PowerPoint, save it as .pptx and upload that.' });
+      return;
+    }
+    if (kind === 'spreadsheet') {
+      addToast({ type: 'info', message: 'A spreadsheet has no report format in it. Upload a past report as a PowerPoint or a PDF.' });
       return;
     }
     if (!kind) {
-      addToast({ type: 'error', message: 'Upload a past report as a PDF. That’s the one format we can read today.' });
+      addToast({ type: 'error', message: 'Upload one past report as a PowerPoint (.pptx) or a PDF. Those are the two we can read.' });
       return;
     }
 
-    // Read the PDF for real — structure preserved with evidence + source lines.
+    // Read the file for real. One engine for both shapes: a deck goes to the
+    // PowerPoint reader, a PDF to the PDF one, and the template that comes out
+    // is identical either way, because only the reading differs.
+    setImportKind(kind);
     setImporting(true);
     setScanningName(file.name);
-    // The scan theatre plays in full; the parse resolves behind it. A timeout
-    // guards a hung read (e.g. the pdf.js worker failing to load) so the
+    // The six passes play in full; the parse resolves behind them. A timeout
+    // guards a hung read (the pdf.js worker failing to load, say) so the
     // progress card can't stick forever — it falls through to the decline path.
-    let outcome: ExtractOutcome;
+    let outcome: ReadOutcome;
     try {
       const [res] = await Promise.all([
-        Promise.race<ExtractOutcome>([
-          extractTemplateFromReport(file),
-          new Promise<ExtractOutcome>((_, reject) =>
+        Promise.race<ReadOutcome>([
+          readTemplateFromReport(file),
+          new Promise<ReadOutcome>((_, reject) =>
             setTimeout(() => reject(new Error('extract-timeout')), EXTRACT_TIMEOUT_MS)),
         ]),
         new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS)),
@@ -785,15 +840,27 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       // reason gets its own honest message — never a silent failure.
       setMinimized(false);
       const message =
-        outcome.reason === 'password' ? `“${file.name}” is password-protected. Remove the password and upload it again.`
-        : outcome.reason === 'scanned' ? 'This looks like a scanned copy, so there’s no text inside to read. Please upload the original digital PDF.'
-        : outcome.reason === 'too-long' ? `This report is ${outcome.pageCount} pages. Upload a representative report of 50 pages or fewer. One typical report is enough.`
+        outcome.reason === 'password' ? `“${file.name}” is password protected. Remove the password and upload it again.`
+        : outcome.reason === 'scanned' ? 'This looks like a scan, so there is no text inside, only a picture. Please upload the original PDF.'
+        : outcome.reason === 'empty-deck' ? 'Every slide in this deck is a picture, so there is no text to read. Upload the deck you actually edit in PowerPoint.'
+        : outcome.reason === 'legacy-ppt' ? 'That is an older .ppt. Open it in PowerPoint and save it as .pptx, then upload that.'
+        // "Upload a shorter one, typical of your work" was a lie for half the
+        // corpus: there is no short version of a 276-slide SOP, and 16 of 35
+        // real files came back too long. Until the cap itself is settled, the
+        // message says what is true — this is our limit, not their file's
+        // fault — and points at the one thing that actually works today.
+        : outcome.reason === 'too-long' ? `We read up to ${PAGE_CAP} ${kind === 'deck' ? 'slides' : 'pages'} and this one is ${outcome.pageCount}. If you have a shorter report in the same format, that will build the same template. If you do not, tell us: raising this is on our list.`
         : outcome.reason === 'too-large' ? `“${file.name}” is too big to read here. Keep it under 30 MB.`
-        : `Couldn’t read “${file.name}”. Try re-exporting it as a PDF and uploading again.`;
+        : `We could not read “${file.name}”. Try saving it again from ${kind === 'deck' ? 'PowerPoint' : 'the tool you wrote it in'} and uploading that.`;
       addToast({ type: 'error', message });
       return;
     }
-    const result = outcome.template;
+    const result = outcome.result;
+    // Their word for each of ours, matched off their own scale as soon as the
+    // read lands, and saved with the template. Where a rating of ours has no
+    // plain match, `sayRating` falls back to their scale by position, so a
+    // report never prints our wording in their document.
+    if (result.findingScale?.length) setScaleMap(proposeScaleMap(result.findingScale));
     // The engine's hierarchical output → review rows: a section with its typed
     // blocks, pre-filled description, and guessed fill case intact.
     const detected: CanvasSection[] = result.sections.map((s, i) => ({
@@ -806,31 +873,53 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       binding: s.binding,
       blocks: s.blocks.map((b, bi) => ({ ...b, id: `imp-${i}-b${bi}` })),
       confidence: s.confidence,
+      flag: s.flag,
       page: s.page,
       appendix: s.appendix,
       wrapper: s.wrapper,
       source: s.source,
     }));
 
-    // Snapshot pre-import state, then apply optimistically and raise the banner.
-    preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom, brandColor, findingScale, opinionScale, signoffEnabled, signatories };
-    const { count, gotLetterhead, captured } = applyToOutline(detected, result, file.name);
-    setImportBanner({ fileName: file.name, kind, result, detected, count, gotLetterhead, captured });
+    // Name it now, not on confirm: the letterhead they are approving in review
+    // has to carry their own title, or they approve a preview that lies. Their
+    // document's title wins; the filename is the fallback. Never a name that is
+    // already taken, so a fresh read can't land on an instant "already exists".
+    if (copyName === defaultName) {
+      const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+      const candidate = result.furniture?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
+      setCopyName(uniqueTemplateName(candidate).slice(0, TEMPLATE_NAME_MAX));
+    }
 
-    // §4.5 — headings with no content beneath aren't auto-added, but never silently
-    // dropped: tell the user and offer a one-tap add-back.
+    // Below the floor there is not enough to check: two parts out of fifteen
+    // makes the review canvas a pretence. Skip it, put what we did find into
+    // the outline, and say plainly that we read it badly.
+    if (belowTheReadFloor(result)) {
+      const claimed = result.toc?.docEntries ?? 0;
+      applyToOutline(detected, result, file.name);
+      setBadRead(
+        `We could not read ${file.name} well. We found ${detected.length} ${detected.length === 1 ? 'part' : 'parts'}`
+        + `${claimed >= 6 ? ` out of the ${claimed} your contents page lists` : ''}, which is too little to check `
+        + 'against your document, so this is the builder with what we found. Everything else is yours to add.',
+      );
+      return;
+    }
+
+    // Review is where the import lands, not the outline. Nothing is applied
+    // until it is confirmed beside the pages of the real document.
+    setReviewSections(detected);
+    setReviewBaseline(detected);
+    setPendingImport({ fileName: file.name, kind, result });
+
+    // Headings with nothing beneath them aren't turned into sections, but they
+    // are never dropped in silence either: say so, and offer a one-tap add-back.
     const skipped = result?.skipped ?? [];
     if (skipped.length > 0) {
+      // Said, never silently dropped, and with no way to add it back here: a
+      // heading with nothing underneath is not a section, and inventing one at
+      // review would print an empty part in every report from then on.
       addToast({
         type: 'info',
-        message: `Skipped ${skipped.length} empty heading${skipped.length === 1 ? '' : 's'} (no content beneath): ${skipped.map(s => `"${s}"`).join(', ')}.`,
-        secondaryAction: {
-          label: `Add ${skipped.length === 1 ? 'it' : 'all'}`,
-          onClick: () => setSections(prev => {
-            const have = new Set(prev.map(s => s.name.toLowerCase()));
-            return [...prev, ...skipped.filter(s => !have.has(s.toLowerCase())).map(s => ({ name: s, icon: 'file-text' }))];
-          }),
-        },
+        message: `${skipped.length} heading${skipped.length === 1 ? ' had' : 's had'} nothing underneath, so ${skipped.length === 1 ? 'it was' : 'they were'} left out: ${skipped.map(s => `"${s}"`).join(', ')}.`,
       });
     }
   };
@@ -852,6 +941,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       setOpinionScale(snap.opinionScale);
       setSignoffEnabled(snap.signoffEnabled);
       setSignatories(snap.signatories);
+      setClosingEnabled(snap.closingEnabled);
+      setClosingText(snap.closingText);
+      setLogoDataUrl(snap.logoDataUrl);
     }
     preImportRef.current = null;
     setImportBanner(null);
@@ -859,20 +951,25 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setReviewSections([]);
     addToast({ type: 'info', message: 'Imported file removed.' });
   };
-  // Review — open the curation canvas, seeded from the detected sections.
-  const openReview = () => {
-    if (!importBanner) return;
-    setReviewSections(importBanner.detected);
-    setPendingImport({ fileName: importBanner.fileName, kind: importBanner.kind, result: importBanner.result });
+  // Cancel the review. Before anything has been applied that means discarding
+  // the read altogether, so it says so; afterwards it just closes the canvas.
+  const cancelImport = () => {
+    setPendingImport(null);
+    if (!importBanner) setReviewSections([]);
   };
-  // Cancel the review canvas — the already-applied import is untouched.
-  const cancelImport = () => { setPendingImport(null); };
-  // Confirm the review: re-apply the curated sections and keep the banner (and
-  // its one-tap Undo, still pointing at the pre-import snapshot) in sync.
+  // Confirm the review: the curated sections become the outline, the captured
+  // settings become template settings, and the banner takes over with Undo.
   const applyImport = () => {
     if (!pendingImport) return;
+    // Snapshot the state as it was before the first apply, so Undo is exact.
+    if (!importBanner) {
+      preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom, brandColor, findingScale, opinionScale, signoffEnabled, signatories, closingEnabled, closingText, logoDataUrl };
+    }
     const { count, gotLetterhead, captured } = applyToOutline(reviewSections, pendingImport.result, pendingImport.fileName);
-    setImportBanner(b => (b ? { ...b, detected: reviewSections, count, gotLetterhead, captured } : b));
+    setImportBanner({
+      fileName: pendingImport.fileName, kind: pendingImport.kind, result: pendingImport.result,
+      detected: reviewSections, count, gotLetterhead, captured,
+    });
     setPendingImport(null);
   };
 
@@ -881,6 +978,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const blockLibrary = collectBlockLibrary(sections);
 
   const [newSectionName, setNewSectionName] = useState('');
+  // The moment they touch the composer they have chosen to write the format
+  // themselves, so the upload offer stops being the answer and becomes a tool:
+  // it leaves the page and reappears as the footer button. Sticky, because a
+  // block that came back on every blur would jump the page under their cursor.
+  const [writingByHand, setWritingByHand] = useState(false);
   const addSection = () => {
     const name = newSectionName.trim();
     if (!name) return;
@@ -944,7 +1046,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Soft advisory at save (non-blocking): the suggested sections not yet added.
   // A template built without them tends to generate incomplete, so we surface the
   // gap on "Create" but always let the author proceed.
-  const [suggestedConfirm, setSuggestedConfirm] = useState<string[] | null>(null);
   const nearDuplicate = (): { name: string; shared: number; total: number } | null => {
     const mine = sections.map(s => s.name.toLowerCase());
     if (mine.length < 3) return null;
@@ -969,19 +1070,134 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // mount, so the setter is intentionally unused.
   const [initial] = useState(() => ({
     copyName: defaultName,
-    brand: template.brand ?? 'Irame',
-    theme: template.theme ?? 'Purple & White',
+    brand: template.brand ?? DEFAULT_TEMPLATE_BRAND,
+    theme: template.theme ?? DEFAULT_THEME,
     brandColor: template.brandColor ?? '',
     findingScale: template.findingScale,
     opinionScale: template.opinionScale,
-    headerText: template.headerText ?? 'Confidential — For Internal Use Only',
-    footerText: template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`,
+    scaleMap: template.scaleMap ?? {},
+    headerText: template.headerText ?? '',
+    footerText: template.footerText ?? defaultFooterText(template.brand),
     sections: seededSections,
     watermark: template.watermark ?? DEFAULT_WATERMARK,
     pageNumbers: template.pageNumbers ?? true,
     signoffEnabled: template.signoffEnabled ?? false,
     signatories: template.signatories ?? [],
+    closingEnabled: template.closingEnabled ?? false,
+    closingText: template.closingText ?? [],
+    logoDataUrl: template.logoDataUrl ?? '',
   }));
+  /** The template exactly as it stands, in the shape the sheet renderer reads.
+   *  Assembled from the same fields the save writes, so the made-up preview
+   *  cannot show a page the save would not produce. */
+  const liveTemplate: EditableTemplate = {
+    ...template,
+    name: copyName || 'Untitled Template',
+    sections,
+    brand: brand.trim(),
+    theme,
+    brandColor: brandColor || undefined,
+    findingScale,
+    opinionScale,
+    scaleMap: Object.keys(scaleMap).length > 0 ? scaleMap : undefined,
+    headerText,
+    footerText: footerText || defaultFooterText(brand),
+    watermark,
+    pageNumbers,
+    signoffEnabled,
+    signatories,
+    closingEnabled,
+    closingText,
+    logoDataUrl: logoDataUrl || undefined,
+  };
+  /* THE MATCHING SCREEN, on the check screen beside the to-be template. Their
+     rating words are a property of the format the client is approving, not a
+     setting to be found afterwards, so it is rendered into the review canvas.
+     The easy ones arrive filled in from `proposeScaleMap`; this is
+     verify-and-sort, not data entry, and the "ours" side is `OUR_SCALE`, the
+     same list the severity picker reads. */
+  // The scales come from the READ while the check screen is up: the editor's
+  // own state is only filled once the format is applied, so reading it here
+  // left the panel empty on the one screen it belongs to.
+  const rwFinding = pendingImport?.result?.findingScale ?? findingScale;
+  const rwOpinion = pendingImport?.result?.opinionScale ?? opinionScale;
+  const ratingWordsPanel = (rwFinding?.length || rwOpinion?.length) ? (
+    <>
+                {/* THE MATCHING SCREEN. Our three words against theirs, which
+                    is the one thing about their scale we cannot work out on our
+                    own: we can read that a report grades things Significant /
+                    Moderate / Minor, but only the client knows which of those
+                    they would call a High. The easy ones arrive filled in from
+                    `proposeScaleMap`, so this is verify-and-sort, not data
+                    entry, and the "ours" side is `OUR_SCALE` — the same list
+                    the severity picker reads, from one place, so the two can
+                    never drift. Until this existed the map was proposed at
+                    import, saved, and never once shown to the person who is the
+                    only authority on it. */}
+                  <div className="mt-5 pt-4 border-t border-canvas-border">
+                    <GroupEyebrow hint="captured from your report">Rating words</GroupEyebrow>
+                    {rwFinding && rwFinding.length > 0 && (
+                      <>
+                        <p className="mb-2.5 text-[0.6875rem] leading-relaxed text-ink-500">
+                          Your word for each of ours. Every report swaps through this, so your document never prints our wording.
+                        </p>
+                        <div className="space-y-1.5">
+                          {OUR_SCALE.map(o => (
+                            <div key={o.value} className="flex items-center gap-2">
+                              <span className="flex w-[4.25rem] shrink-0 items-center gap-1.5 text-[0.75rem] font-medium text-ink-700">
+                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${o.dot}`} aria-hidden="true" />
+                                {o.label}
+                              </span>
+                              <ArrowRight size={12} className="shrink-0 text-ink-300" aria-hidden="true" />
+                              <FormSelect
+                                value={scaleMap[o.value] ?? ''}
+                                options={[{ value: '', label: 'Not used' }, ...rwFinding.map(w => ({ value: w, label: w }))]}
+                                onChange={v => setScaleMap(m => {
+                                  const next = { ...m };
+                                  // One of their words per rating of ours. Pointing
+                                  // two of ours at one of theirs makes the swap
+                                  // ambiguous in the other direction, so the earlier
+                                  // claim is released rather than silently doubled.
+                                  if (v) for (const k of Object.keys(next) as (keyof ScaleMap)[]) {
+                                    if (next[k] === v) delete next[k];
+                                  }
+                                  if (v) next[o.value] = v; else delete next[o.value];
+                                  return next;
+                                })}
+                                ariaLabel={`Your word for ${o.label}`}
+                                className="h-8 min-w-0 flex-1 rounded-md border border-canvas-border bg-white px-2.5 text-[0.75rem] text-ink-900"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {/* The odd ones. A client using four levels against our
+                            three always has a leftover, and it is their call
+                            what happens to it, not ours to guess. */}
+                        {unusedScaleWords(rwFinding, scaleMap).length > 0 && (
+                          <p className="mt-2 text-[0.6875rem] leading-relaxed text-ink-400">
+                            {unusedScaleWords(rwFinding, scaleMap).join(', ')} {unusedScaleWords(rwFinding, scaleMap).length === 1 ? 'is a level' : 'are levels'} your report has and we never raise. Point one of ours at it, or leave it and no report will use it.
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {rwOpinion && (
+                      <div className={rwFinding?.length ? 'mt-4 border-t border-canvas-border pt-3' : ''}>
+                        {/* Not matched, because the overall verdict is not one
+                            of ours to raise. Captured so the report prints their
+                            word where their report printed one. */}
+                        <span className="mb-1 block text-[0.6875rem] font-semibold text-ink-600">Overall opinion</span>
+                        <div className="flex flex-wrap gap-1">
+                          {rwOpinion.map(w => (
+                            <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
+                          ))}
+                        </div>
+                        <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-ink-400">Your words for the verdict on the whole audit. We do not write that one, so there is nothing to match.</p>
+                      </div>
+                    )}
+                  </div>
+    </>
+  ) : null;
+
   const isDirty =
     copyName !== initial.copyName ||
     brand !== initial.brand ||
@@ -989,13 +1205,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     brandColor !== initial.brandColor ||
     findingScale !== initial.findingScale ||
     opinionScale !== initial.opinionScale ||
+    // Sorting the odd rating word is an edit like any other, and leaving it out
+    // of here meant a client could match their scale and find Save still greyed.
+    scaleMap !== initial.scaleMap ||
     headerText !== initial.headerText ||
     footerText !== initial.footerText ||
     sections !== initial.sections ||
     watermark !== initial.watermark ||
     pageNumbers !== initial.pageNumbers ||
     signoffEnabled !== initial.signoffEnabled ||
-    signatories !== initial.signatories;
+    signatories !== initial.signatories ||
+    closingEnabled !== initial.closingEnabled ||
+    closingText !== initial.closingText ||
+    logoDataUrl !== initial.logoDataUrl;
 
   // Inline duplicate-name check (#4) — warn before save, not only on submit. An
   // existing template's own name isn't "taken"; only a real collision is.
@@ -1022,8 +1244,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     : !sections || sections.length === 0,
   );
 
-  // Land focus in the name field on open and select its text, so typing replaces
-  // the "Untitled Template" default rather than shipping it verbatim (#1).
+  // Land focus in the name field as the builder opens and select its text, so
+  // typing replaces the "Untitled Template" default rather than shipping it
+  // verbatim (#1).
   useEffect(() => {
     const t = setTimeout(() => { const el = copyNameRef.current; if (el) { el.focus(); el.select(); } }, 80);
     return () => clearTimeout(t);
@@ -1035,11 +1258,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     sections: sectionsRef,
   };
 
-  const handleSave = (skipDup = false, skipSuggested = false) => {
+  const handleSave = (skipDup = false) => {
     // Required-field validation: name + brand are required; sections non-empty.
     const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
     if (!copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
-    if (!brand.trim()) next.push({ field: 'brand', label: 'Brand Name' });
+    if (!brand.trim()) next.push({ field: 'brand', label: 'Organisation Name' });
     if (!sections || sections.length === 0) next.push({ field: 'sections', label: 'At least one section' });
     if (next.length > 0) {
       setErrors(next);
@@ -1052,13 +1275,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
         first?.focus?.();
       });
-      return;
-    }
-    // Missing suggested sections (non-blocking): warn once, then proceed on confirm.
-    // New templates built from scratch only — an imported report's own format is
-    // authoritative, so it's never audited against our generic section list.
-    if (isNew && !skipSuggested && !importedFrom && recommendations.length > 0) {
-      setSuggestedConfirm(recommendations.map(r => r.name));
       return;
     }
     // Near-duplicate structure warning (§9) — new templates only.
@@ -1089,12 +1305,16 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           brandColor: brandColor || undefined,
           findingScale,
           opinionScale,
+          scaleMap: Object.keys(scaleMap).length > 0 ? scaleMap : undefined,
           headerText: headerText.trim(),
           footerText: footerText.trim(),
           watermark,
           pageNumbers,
           signoffEnabled,
           signatories: cleanSignatories,
+          closingEnabled,
+          closingText: cleanClosing,
+          logoDataUrl: logoDataUrl || undefined,
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
@@ -1120,12 +1340,16 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             brandColor: brandColor || undefined,
             findingScale,
             opinionScale,
+            scaleMap: Object.keys(scaleMap).length > 0 ? scaleMap : undefined,
             headerText: headerText.trim(),
             footerText: footerText.trim(),
             watermark,
             pageNumbers,
             signoffEnabled,
             signatories: cleanSignatories,
+            closingEnabled,
+            closingText: cleanClosing,
+            logoDataUrl: logoDataUrl || undefined,
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
@@ -1141,6 +1365,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     }, 320);
   };
 
+  // The builder is a settings panel beside one page of preview, so it does not
+  // need the 1600×1000 workbench: at that size half the dialog was empty. Only
+  // the check screen earns the big box, because it puts their real document next
+  // to the template we propose. The scan stays in the box the dialog is already
+  // in: growing the window while they are watching a progress bar is a jump for
+  // nothing, and the size change belongs to the arrival of the result.
+  const wideShell = !!pendingImport;
+
+  // The upload door is the offer on the desk only while the page is untouched.
+  // Writing a section by hand, or reading one from a file, answers the question
+  // it was asking, so it moves to the footer as a plain button and stays there.
+  const showImportOffer = sections.length === 0 && !importedFrom && !importing && !writingByHand;
+
   // Minimized — the full modal is not rendered, so the app behind is usable while
   // extraction runs (or after it finishes). Only the corner card shows; Open
   // restores the editor with the imported outline in place.
@@ -1148,9 +1385,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     return (
       <ExtractionCard
         filename={scanningName ?? importedFrom ?? 'your report'}
-        messages={IMPORT_SCAN_MESSAGES}
+        messages={passes.map(p => p.title)}
         done={!importing}
-        sectionCount={!importing ? importBanner?.count : undefined}
+        sectionCount={!importing ? (importBanner?.count ?? reviewSections.length) : undefined}
         progress={importProgress}
         msgIdx={importMsgIdx}
         onOpen={() => setMinimized(false)}
@@ -1159,16 +1396,24 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
-      <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={attemptClose}>
+      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+      {/* A big dialog, not the page. Everything in here is a document — the
+          start screen, the check screen, the outline the editor builds — so it
+          takes nearly the whole window and leaves a margin that says the page
+          is still there behind it. */}
       <motion.div
         ref={containerRef}
-        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        initial={{ opacity: 0, scale: 0.98, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        exit={{ opacity: 0, scale: 0.98, y: 10 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
+        // The one size change in this dialog is the check screen arriving, so it
+        // eases rather than snaps.
+        className={`relative flex max-h-full max-w-full flex-col overflow-hidden rounded-2xl border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
+          wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'
+        }`}
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
           // Only react to file drags, and not while a scan/review is already up.
@@ -1192,18 +1437,28 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           if (f) void handleImportFile(f);
         }}
       >
-        <div className="px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
-            <div className="min-w-0">
-              <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
-              <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'A reusable layout for your reports' : template.name}</p>
-            </div>
+        {/* The file picker for every "start from a report" door in this modal —
+            the start step, the footer link and the banner's replace. Mounted
+            once, above the stages, so any of them can open it. */}
+        <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
+
+        {/* Header, footer and shell all follow shared/Modal (DESIGN.md §7.9.1)
+            rather than a smaller set of one-off values, so this dialog reads as
+            the same object as every other create surface in the product. */}
+        <header className="px-7 py-3.5 border-b border-canvas-border flex items-center justify-between gap-4 shrink-0">
+          <div className="min-w-0">
+            <h3 className="text-[0.875rem] font-semibold leading-tight tracking-tight text-ink-900">{isNew ? 'Create template' : 'Edit template'}</h3>
+            <p className="mt-0.5 text-[0.75rem] text-ink-500 leading-snug truncate">
+              {!isNew ? template.name
+                : importedFrom ? `Your format, read from ${importedFrom}`
+                : 'A reusable layout for your reports'}
+            </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></motion.button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={18} /></motion.button>
           </div>
-        </div>
+        </header>
 
         <div className="flex-1 min-h-0 flex">
           {/* Left pane — settings split into Identity / Branding groups so the
@@ -1303,69 +1558,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     {nameTaken && <p className="mt-1 text-[0.6875rem] text-high-700 font-medium">A template named “{copyName.trim()}” already exists — choose a different name to save.</p>}
                   </div>
                   <div>
-                    <FieldLabel>Brand name</FieldLabel>
+                    <FieldLabel>Organisation name</FieldLabel>
                     <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                     <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
                   </div>
                 </div>
 
-                {/* Letterhead — header & footer shown on every printed page. */}
+                {/* Letterhead — footer only. There is NO header-text field and
+                    NO platform header line, by request (the field was removed
+                    three times, once after a19bcde re-added it). The header
+                    prints only the confidentiality line a read of the client's
+                    own report captured; a hand-built template has none. Do not
+                    put the field or a default back. */}
                 <div className="mt-5 pt-4 border-t border-canvas-border">
                   <GroupEyebrow hint="shown on every page">Letterhead</GroupEyebrow>
                   <div className="space-y-4">
                     <div>
                       <FieldLabel
-                        right={<span className={`text-[0.6875rem] tabular-nums ${headerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{headerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
-                      >Header text</FieldLabel>
-                      <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Confidential — For Internal Use Only" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
-                      {headerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long header text may be truncated in the letterhead.</p>}
-                    </div>
-                    <div>
-                      <FieldLabel
                         right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
                       >Footer text</FieldLabel>
-                      <input value={footerText} onChange={e => { setFooterCustom(true); setFooterText(e.target.value); }} placeholder={`Generated by ${brand.trim() || 'Irame'}`} className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <input value={footerText} onChange={e => { setFooterCustom(true); setFooterText(e.target.value); }} placeholder={defaultFooterText(brand)} className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       {footerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long footer text may be truncated in the letterhead.</p>}
                     </div>
                   </div>
                 </div>
 
-                {/* Rating language — the words the uploaded report rates things
-                    in, captured at import. Generated reports speak these words. */}
-                {(findingScale || opinionScale) && (
-                  <div className="mt-5 pt-4 border-t border-canvas-border">
-                    <GroupEyebrow hint="captured from your report">Rating language</GroupEyebrow>
-                    <div className="space-y-2.5">
-                      {findingScale && (
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Finding ratings</span>
-                            <div className="flex flex-wrap gap-1">
-                              {findingScale.map(w => (
-                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
-                              ))}
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => setFindingScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
-                        </div>
-                      )}
-                      {opinionScale && (
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className="block text-[0.6875rem] font-semibold text-ink-600 mb-1">Overall opinion</span>
-                            <div className="flex flex-wrap gap-1">
-                              {opinionScale.map(w => (
-                                <span key={w} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[0.6875rem] font-medium text-ink-700">{w}</span>
-                              ))}
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => setOpinionScale(undefined)} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
-                        </div>
-                      )}
-                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">Generated reports rate findings in these words, not ours.</p>
-                    </div>
-                  </div>
-                )}
               </motion.div>
             ) : (
               <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-6">
@@ -1420,6 +1637,29 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 </div>
 
 
+                {/* Logo — their mark on the cover, read off an uploaded deck
+                    when there was one. A brand asset, so it lives beside the
+                    colour it sits on rather than in the text settings. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <span className="block mb-2.5 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Logo <span className="font-normal normal-case tracking-normal text-ink-400">· on the report cover</span></span>
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, setLogoDataUrl); if (logoInputRef.current) logoInputRef.current.value = ''; }} />
+                  {logoDataUrl ? (
+                    <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
+                      <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
+                        <img src={logoDataUrl} alt="Logo" className="max-h-9 max-w-[56px] object-contain" />
+                      </div>
+                      <button type="button" onClick={() => logoInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
+                      <button type="button" onClick={() => setLogoDataUrl('')} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => logoInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
+                      <Upload size={15} /> Upload a logo
+                    </button>
+                  )}
+                </div>
+
                 {/* Page numbers — shown on every page of the exported report. */}
                 <div className="mt-4 pt-3.5 border-t border-canvas-border">
                   <div className="flex items-center justify-between">
@@ -1464,6 +1704,36 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         </div>
                       ))}
                       <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Closing page — the last slide a committee deck ends on. Same
+                    kind of setting as the signature block: the shape is the
+                    whole feature, so nothing about it is generated. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Closing page <span className="font-normal normal-case tracking-normal text-ink-400">· the last page, printed exactly as written</span></span>
+                    <Toggle checked={closingEnabled} onChange={toggleClosing} label="Enable closing page" />
+                  </div>
+                  {closingEnabled && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+                        Whatever you write here prints at the end of every report, word for word. Nothing in it is filled in from audit results.
+                      </p>
+                      {closingText.map((line, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            value={line}
+                            onChange={e => setClosingText(prev => prev.map((l, li) => (li === i ? e.target.value : l)))}
+                            placeholder={i === 0 ? 'Thank you' : 'Another line (optional)'}
+                            aria-label={`Closing page line ${i + 1}`}
+                            className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                          />
+                          <button type="button" onClick={() => setClosingText(prev => prev.filter((_, li) => li !== i))} aria-label={`Remove closing line ${i + 1}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setClosingText(prev => [...prev, ''])} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add line</button>
                     </div>
                   )}
                 </div>
@@ -1547,60 +1817,73 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               template renders as the report page it will produce: gradient
               letterhead cover, editorial numbered sections, footer strip. */}
           <div className="relative flex-1 min-w-0 flex flex-col bg-canvas min-h-0">
-            {/* Post-import banner — the sections below are ALREADY applied. This is
-                the whole "flow": pick a file, it lands, and this offers to Review
-                (curate in the canvas) or Undo (revert the entire import). */}
-            <AnimatePresence>
-              {importBanner && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                  className="shrink-0 px-6 pt-4"
-                >
-                  <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/70 px-4 py-2.5">
-                    <span className="w-7 h-7 rounded-full bg-compliant-500 text-white flex items-center justify-center shrink-0"><Check size={15} strokeWidth={2.5} /></span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
-                        Imported {importBanner.count} section{importBanner.count === 1 ? '' : 's'}{importBanner.gotLetterhead ? ' + letterhead' : ''}
-                      </p>
-                      <p className="text-[0.75rem] text-ink-500 leading-tight truncate">
-                        from {importBanner.fileName}
-                        {importBanner.captured.length > 0 && <> · captured {importBanner.captured.join(', ')}</>}
-                        {' '}· edit inline below
-                      </p>
-                    </div>
+            {/* Read badly, said plainly: the check screen was skipped because
+                there was too little to check. */}
+            {badRead && (
+              <div className="shrink-0 px-6 pt-4">
+                <div className="flex items-start gap-2.5 rounded-lg border border-mitigated-300 bg-mitigated-50/60 px-4 py-2.5">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-mitigated-700" />
+                  <p className="min-w-0 flex-1 text-[0.75rem] leading-relaxed text-ink-700">{badRead}</p>
+                  <button
+                    type="button" onClick={() => setBadRead(null)} aria-label="Dismiss"
+                    className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-700 hover:bg-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                  ><X size={15} /></button>
+                </div>
+              </div>
+            )}
+            {/* THE PREVIEW BEFORE SAVING. Up to here the client has only seen
+                empty boxes, so a wrong column or a card missing a field turns
+                up in their first real report, months later. Three invented
+                findings printed through their own template move that to minute
+                five. It is a view on this screen rather than a step in front of
+                Save, because the same decision was already taken for the check
+                screen: nothing stands between a read and a saved template. */}
+            {sections.length > 0 && (
+              <div className="shrink-0 flex items-center justify-end px-6 pt-5">
+                <div role="group" aria-label="What the preview shows" className="inline-flex rounded-md border border-canvas-border bg-white p-0.5">
+                  {([['shape', 'Empty shape'], ['filled', 'With made-up problems']] as const).map(([key, label]) => (
                     <button
-                      type="button" onClick={openReview}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-white border border-brand-200 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-                    ><Pencil size={13} /> Review</button>
-                    <button
-                      type="button" onClick={() => setConfirmRemoveImport(true)} aria-label="Remove imported file"
-                      title="Remove imported file"
-                      className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-700 hover:bg-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                    ><X size={15} /></button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      key={key}
+                      type="button"
+                      onClick={() => setPreviewMode(key)}
+                      aria-pressed={previewMode === key}
+                      className={`h-7 rounded-sm px-2.5 text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                        previewMode === key ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800'
+                      }`}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* The report page — a white sheet on the canvas desk. Sections and the
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
-              <div className="relative mx-auto w-full max-w-3xl rounded-lg shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
+              {previewMode === 'filled' && sections.length > 0 ? (
+                <MadeUpPreview template={liveTemplate} />
+              ) : (
+              <div className="relative mx-auto w-full max-w-3xl rounded-lg border border-canvas-border" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
+                  logo={logoDataUrl || undefined}
                   className="rounded-t-lg"
                   gradient={coverGradient}
                   headerText={headerText}
                   footer={
                     /* All report facts live in the letterhead as one full-width
                        strip — no duplicated meta panel below. */
-                    <div className="grid grid-cols-3 gap-6">
+                    /* Only what a generated report really prints. The period comes
+                       from the report (the wizard's period, else the current
+                       fiscal quarter), so it fills the same way whether this
+                       template was read from a file or typed here. A reference
+                       number is NOT held for reports built from a custom
+                       template — only ATR documents carry one — so no box
+                       promises one. */
+                    <div className="grid grid-cols-2 gap-6">
                       {[
-                        { label: 'Brand', value: brand || 'Irame' },
-                        { label: 'Generated On', value: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
-                        { label: 'Sections', value: `${sections.length}` },
+                        { label: 'Prepared by', value: brand || DEFAULT_TEMPLATE_BRAND },
+                        { label: 'Period', value: 'Fills from the report' },
                       ].map(f => (
                         <div key={f.label} className="min-w-0">
                           <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50">{f.label}</div>
@@ -1635,14 +1918,18 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 )}
 
                 {/* Composer — add a section, in the flow of the document (not a
-                    detached toolbar). Suggested sections sit right beneath it. */}
+                    detached toolbar). */}
                 <div ref={sectionsRef} tabIndex={-1} className="border-x border-canvas-border bg-white px-9 pt-5 pb-7">
                   {sections.length === 0 && (
-                    <p className="mb-3 text-[0.8125rem] text-ink-400">This report has no sections yet — add one below, or tap a suggested section.</p>
+                    <p className="mb-3 text-[0.8125rem] text-ink-400">No sections yet. Write the first one below.</p>
                   )}
-                  <div className="flex items-center gap-2">
+                  {/* Touching either half of the composer is the choice to write
+                      it by hand, so the upload offer leaves the desk on the
+                      first click, not on the first saved section. */}
+                  <div className="flex items-center gap-2" onPointerDown={() => setWritingByHand(true)}>
                     <input
                       value={newSectionName}
+                      onFocus={() => setWritingByHand(true)}
                       onChange={e => setNewSectionName(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
                       placeholder="Add a section, then press ↵"
@@ -1661,54 +1948,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <Plus size={14} /> Add
                     </button>
                   </div>
-                  {recommendations.length > 0 && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-600">
-                          <ShieldCheck size={13} className="text-brand-500 shrink-0" />
-                          <span className="truncate">Suggested sections</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addSections(recommendations)}
-                          className="no-focus-ring shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                        >
-                          Add all
-                        </button>
-                      </div>
-                      {/* Non-blocking advisory: these aren't required, but a report
-                          built without them tends to generate incomplete. Placed above
-                          the chips so the trade-off is clear before the author skips them. */}
-                      <p className="mb-2.5 flex items-start gap-1.5 text-[0.6875rem] leading-relaxed text-ink-400">
-                        <Info size={12} className="mt-[1.5px] shrink-0 text-brand-400" />
-                        <span>Recommended, not required. Skipping these may leave parts of the generated report incomplete.</span>
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <AnimatePresence initial={false}>
-                          {recommendations.map((rec, ri) => {
-                            const RecIcon = SECTION_ICONS[rec.icon] || FileText;
-                            return (
-                              <motion.button
-                                key={rec.name}
-                                type="button"
-                                layout
-                                initial={{ opacity: 0, scale: 0.96 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.94 }}
-                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1], delay: ri * 0.02 }}
-                                whileTap={{ scale: 0.97 }}
-                                onClick={() => addSections([rec])}
-                                className="no-focus-ring group/rec inline-flex items-center gap-1.5 h-8 pl-1.5 pr-3 rounded-full border border-dashed border-canvas-border bg-canvas/40 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 cursor-pointer"
-                              >
-                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><RecIcon size={11} /></span>
-                                {rec.name}
-                              </motion.button>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Sign-off block — the Approvals section on the finished report.
@@ -1719,11 +1958,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 )}
 
+                {/* Closing page — printed word for word at the end of every
+                    report, so the preview shows it the same way. */}
+                {closingEnabled && cleanClosing.length > 0 && (
+                  <div className="border-x border-canvas-border bg-white px-9">
+                    <ReportClosingBlock lines={cleanClosing} />
+                  </div>
+                )}
+
                 {/* Footer strip — closes the page. With page numbers on, the
                     footer text sits left and a page number sits right, mirroring
                     the numbered footer the export produces. */}
                 <div className={`border-x border-b border-canvas-border bg-canvas/60 rounded-b-lg px-9 py-3 flex items-center ${pageNumbers ? 'justify-between' : 'justify-center'}`}>
-                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || `Generated by ${brand.trim() || 'Irame'}`}</span>
+                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || defaultFooterText(brand)}</span>
                   {pageNumbers && <span className="text-[0.6875rem] text-ink-400 tabular-nums tracking-wide">Page 1</span>}
                 </div>
 
@@ -1748,34 +1995,62 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 )}
               </div>
+              )}
+
+              {/* The other way to build this: one card under the report, off the
+                  page, with the primary action on it. It sits after the sheet
+                  because the page is the thing being built and this is the
+                  shortcut past it, and it goes the moment they start writing
+                  sections by hand or a file has been read, where the footer
+                  button takes over. */}
+              {showImportOffer && (
+                <div className="mx-auto mt-5 w-full max-w-3xl rounded-lg border border-canvas-border bg-white px-6 py-5">
+                  {/* The memo's promise, said once, in the memo's own words: we
+                      copy how it looks, not what it says. The footer's import
+                      door says the same thing in fewer words, so the two doors
+                      into this journey read as one offer, not two. */}
+                  <p className="text-[0.875rem] font-semibold text-ink-900">Build this template from one of your reports</p>
+                  <p className="mt-1 text-[0.875rem] text-ink-500">
+                    Upload a past report and the template copies how it looks: its sections, its tables, its
+                    letterhead. Nothing the report says is kept, and the file goes when you save.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={isSaving}
+                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-4 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-500 cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    <UploadCloud size={15} /> Upload a report
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2 shrink-0">
-          {/* Left — import from a past report (PDF only, said honestly). The
-              shape is read — sections, tables, repeating cards, letterhead —
-              and the content thrown away. Drop a file anywhere, or browse. */}
-          <div className="min-w-0 flex items-center gap-2.5">
-            <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
-            <motion.button
-              type="button"
-              onClick={() => importInputRef.current?.click()}
-              disabled={isSaving || importing}
-              whileTap={isSaving || importing ? undefined : { scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              title="Upload a past report as a PDF. Its sections, tables, cards and letterhead are detected; its words and numbers are thrown away"
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-            >
-              {importing
-                ? <><Loader2 size={15} className="animate-spin shrink-0" /> Reading the report…</>
-                : importedFrom
-                  ? <><FileText size={15} className="shrink-0" /> <span className="truncate">Imported · {importedFrom}</span> <Upload size={13} className="shrink-0 opacity-70" /></>
-                  : <><Upload size={15} className="shrink-0" /> Import from a report</>}
-            </motion.button>
-            {!importing && !importedFrom && (
-              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Using Word? Save it as PDF first.</span>
+        <footer className="px-7 py-3 border-t border-canvas-border flex items-center justify-between gap-4 shrink-0">
+          {/* Left — once there is an outline, whether it was typed by hand or
+              read from a file, the import door lives here as a plain bordered
+              button. The offer on the blank page is only for a template with
+              nothing in it yet, so the two never show together. */}
+          <div className="min-w-0 flex items-center gap-3">
+            {!showImportOffer && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={isSaving || importing}
+                  title="Upload a past report as a PowerPoint or a PDF. The template takes its shape, and everything the report says stays out"
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-canvas-border bg-white px-4 text-[0.875rem] font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-50/50 cursor-pointer disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                >
+                  {importing
+                    ? <><Loader2 size={15} className="animate-spin" /> Reading it now…</>
+                    : <><Upload size={15} /> {importedFrom ? 'Use a different report' : 'Build from a report'}</>}
+                </button>
+                {importedFrom && !importing && (
+                  <p className="min-w-0 truncate text-[0.75rem] text-ink-400">Shape taken from {importedFrom}</p>
+                )}
+              </>
             )}
           </div>
           {/* Right — primary actions. */}
@@ -1810,7 +2085,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             </AnimatePresence>
           </motion.button>
           </div>
-        </div>
+        </footer>
 
         {/* Drop-to-import affordance — shown whenever a file is dragged over the
             editor. The whole modal is the drop target, so there's nothing to aim at. */}
@@ -1821,29 +2096,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               transition={{ duration: 0.14 }}
               className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-brand-950/40 backdrop-blur-[2px] pointer-events-none"
             >
-              <div className="w-full h-full rounded-lg border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
+              <div className="w-full h-full rounded-xl border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
                 <motion.span
                   initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }}
-                  className="w-14 h-14 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"
+                  className="w-14 h-14 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"
                 >
                   <Upload size={24} />
                 </motion.span>
                 <div>
-                  <div className="text-[0.9375rem] font-semibold text-ink-900">Drop a past report (PDF) to import</div>
-                  <div className="mt-1 text-[0.8125rem] text-ink-500">We read its shape (sections, tables, cards, letterhead) and throw away its words and numbers</div>
+                  <div className="text-[1rem] font-semibold text-ink-900">Drop a past report to read its format</div>
+                  <div className="mx-auto mt-1 max-w-[58ch] text-[0.875rem] leading-relaxed text-ink-500">A PowerPoint or a PDF. We keep its sections, tables, cards and letterhead, and throw away its words and numbers.</div>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Import scan theatre — a real document-scanner: the uploaded page sits
-            under a sweeping scan light inside a focus frame, the passed region
-            "digitizing" behind it. Minimize (top-right) collapses the whole modal
-            to the bottom-right card, where the same run keeps advancing. */}
+        {/* Reading the report — a real document-scanner on the left, and on the
+            right the six reads, named as they run. The scanner says something is
+            happening; the list says what, so a wrong result can be pointed at
+            the read that got it wrong. Minimize collapses the whole modal to the
+            bottom-right card, where the same run keeps advancing. */}
         <AnimatePresence>
           {importing && (() => {
-            const kind = scanningName ? classifyImport(scanningName) : null;
+            const kind = scanningName ? classifyUpload(scanningName) : null;
+            const kindLabel = kind === 'deck' || kind === 'pdf' ? IMPORT_KIND_LABEL[kind] : 'File';
             const CORNERS = [
               '-top-1.5 -left-1.5 border-t-2 border-l-2 rounded-tl-md',
               '-top-1.5 -right-1.5 border-t-2 border-r-2 rounded-tr-md',
@@ -1855,42 +2132,70 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="absolute inset-0 z-50 bg-canvas-elevated overflow-y-auto"
+              className="absolute inset-0 z-50 flex bg-canvas-elevated"
               role="status" aria-busy="true" aria-label={`Scanning ${scanningName ?? 'your document'}`}
             >
-              <div className="min-h-full flex flex-col items-center justify-center px-8 py-12">
-                <h3 className="text-[1rem] font-semibold text-ink-900 mb-8">Scanning your document</h3>
-
+                {/* Left panel — the page being read. It is a panel of its own,
+                    edge to edge, so the room around the page reads as a surface
+                    rather than as blank space in the middle of a big window. */}
+                <div className="relative flex shrink-0 basis-[38%] min-w-[268px] max-w-[420px] flex-col items-center justify-center gap-8 overflow-hidden border-r border-canvas-border bg-canvas px-8 py-10">
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ background: 'radial-gradient(115% 68% at 50% 0%, rgba(136,56,222,0.08), transparent 72%)' }}
+                    aria-hidden="true"
+                  />
                 {/* Scanner stage — the document page under the sweeping light. */}
-                <div className="relative w-[228px] h-[300px]">
+                <div className="relative z-10 w-[236px] h-[310px]">
                   {/* focus-frame corner brackets */}
                   {CORNERS.map((c, i) => (
                     <span key={i} className={`absolute w-5 h-5 border-brand-500/70 ${c}`} aria-hidden="true" />
                   ))}
 
                   <div className="absolute inset-0 rounded-lg bg-white border border-canvas-border shadow-[0_22px_50px_-20px_rgba(15,8,30,0.4)] overflow-hidden">
-                    {/* the page content — reads as a real report page */}
+                    {/* The page content, reading as a real report page. Each
+                        part of it answers to one of the six reads, so the read
+                        that is running lights its own part and the rest of the
+                        page steps back. The client can see what "find the
+                        headings" means without being told: the two big bars are
+                        the only thing still lit while it runs. Hovering a read
+                        on the right lights its part here too. */}
                     <div className="p-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-sm bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
-                        <div className="flex-1 space-y-1">
-                          <div className="h-1.5 w-20 rounded-full bg-ink-200" />
-                          <div className="h-1 w-12 rounded-full bg-paper-200" />
-                        </div>
-                      </div>
-                      <div className="mt-4 space-y-1.5">
-                        <div className="h-2.5 w-11/12 rounded bg-ink-300" />
-                        <div className="h-2.5 w-2/3 rounded bg-ink-300" />
-                      </div>
-                      <div className="mt-4 space-y-[7px]">
-                        {[100, 94, 98, 86].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
-                      </div>
-                      <div className="mt-4 grid grid-cols-3 gap-1">
-                        {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-xs bg-paper-100 border border-paper-200" />)}
-                      </div>
-                      <div className="mt-4 space-y-[7px]">
-                        {[96, 82, 90].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
-                      </div>
+                      {(() => {
+                        const shown = peekPass ?? importMsgIdx;
+                        // read → the part of the page it is about, in the order
+                        // the six run. The last one names what was found, so it
+                        // is about the whole page and lights all of it.
+                        const FOCUS = ['text', 'furniture', 'headings', 'blocks', 'repeats', null] as const;
+                        const focus = FOCUS[Math.min(shown, FOCUS.length - 1)];
+                        const part = (key: string) =>
+                          `transition-all duration-500 ${focus && focus !== key ? 'opacity-20' : 'opacity-100'} ${
+                            focus === key ? 'rounded-xs outline outline-1 outline-brand-400/70 outline-offset-[3px]' : ''
+                          }`;
+                        return (
+                          <>
+                            <div className={`flex items-center gap-2 ${part('furniture')}`}>
+                              <div className="w-6 h-6 rounded-sm bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
+                              <div className="flex-1 space-y-1">
+                                <div className="h-1.5 w-20 rounded-full bg-ink-200" />
+                                <div className="h-1 w-12 rounded-full bg-paper-200" />
+                              </div>
+                            </div>
+                            <div className={`mt-4 space-y-1.5 ${part('headings')}`}>
+                              <div className="h-2.5 w-11/12 rounded bg-ink-300" />
+                              <div className="h-2.5 w-2/3 rounded bg-ink-300" />
+                            </div>
+                            <div className={`mt-4 space-y-[7px] ${part('text')}`}>
+                              {[100, 94, 98, 86].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                            </div>
+                            <div className={`mt-4 grid grid-cols-3 gap-1 ${part('blocks')}`}>
+                              {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-xs bg-paper-100 border border-paper-200" />)}
+                            </div>
+                            <div className={`mt-4 space-y-[7px] ${part('repeats')}`}>
+                              {[96, 82, 90].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {/* digitized region — grows top→down behind the beam, with a
@@ -1924,119 +2229,326 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 </div>
 
-                {/* filename + status + progress */}
-                <div className="mt-9 flex flex-col items-center text-center w-full max-w-[340px]">
-                  <div className="flex items-center gap-2 max-w-full">
-                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-brand-600 text-white text-[0.5625rem] font-bold tracking-wider uppercase shrink-0">
-                      {kind ? IMPORT_KIND_LABEL[kind] : 'File'}
-                    </span>
-                    {scanningName && <span className="text-[0.8125rem] font-medium text-ink-700 truncate">{scanningName}</span>}
-                  </div>
+                {/* What is being read, said quietly under the page: the kind as a
+                    label rather than a filled pill, the name in one line, and a
+                    hairline track. The scan itself is the moving part here, so
+                    the meter does not compete with it. */}
+                <div className="relative z-10 flex w-[236px] max-w-full flex-col items-center text-center">
+                  <p className="text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-ink-400">{kindLabel}</p>
+                  {scanningName && (
+                    <p className="mt-1.5 max-w-full truncate text-[0.875rem] font-medium text-ink-800" title={scanningName}>{scanningName}</p>
+                  )}
 
-                  <p className="mt-3 h-4 text-[0.8125rem] text-ink-500">
-                    <AnimatePresence mode="wait">
-                      <motion.span key={importMsgIdx} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.2 }} className="inline-block">
-                        {IMPORT_SCAN_MESSAGES[importMsgIdx]}
-                      </motion.span>
-                    </AnimatePresence>
+                  <div className="mt-5 flex w-full items-center gap-3">
+                    <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-brand-100">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded-full bg-brand-600"
+                        animate={{ width: `${importProgress}%` }}
+                        transition={{ ease: 'easeOut', duration: 0.25 }}
+                      />
+                    </div>
+                    <span className="w-9 shrink-0 text-right text-[0.75rem] font-medium tabular-nums text-ink-500">{Math.round(importProgress)}%</span>
+                  </div>
+                </div>
+                </div>
+
+                {/* The six reads, named as they run. One read, one question, so
+                    a wrong answer can be pointed at the read that gave it.
+                    Six boxed rows each carrying a line of explanation was a wall
+                    of text nobody reads while they wait, so only the read that
+                    is running says what it is doing. The rest are titles on a
+                    rail, and any of them opens on hover for a client who wants
+                    to know what read four was before it gets there. */}
+                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-9 py-8">
+                  <div className="flex items-baseline justify-between gap-8">
+                    <h3 className="text-[1.125rem] font-semibold tracking-tight text-ink-900">Reading your report</h3>
+                    <span className="shrink-0 text-[0.75rem] font-medium tabular-nums text-ink-400">
+                      {Math.min(importMsgIdx + 1, passes.length)} of {passes.length}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 max-w-[62ch] text-[0.875rem] leading-relaxed text-ink-500">
+                    {importKind === 'deck'
+                      ? 'A deck labels its own parts, so the first five reads have little to work out. The AI runs last, only to name what was found.'
+                      : 'Five reads are just measuring. The AI runs last, only to name what the measuring found.'}
                   </p>
 
-                  <div className="mt-3.5 w-full flex items-center gap-3">
-                    <div className="relative flex-1 h-2.5 rounded-full bg-brand-100 overflow-hidden">
-                      <motion.div
-                        className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
-                        style={{ background: 'linear-gradient(90deg, #550FA5 0%, #6A12CD 55%, #8838DE 100%)', boxShadow: '0 0 4px 0 rgba(106,18,205,0.25)' }}
-                        animate={{ width: `${importProgress}%` }}
-                        transition={{ ease: 'easeOut', duration: 0.2 }}
-                      >
-                        {/* subtle leading edge — the "scan head" */}
-                        <div className="absolute right-0 inset-y-0 w-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(233,213,255,0.55))' }} />
-                        {/* light sheen sweeping the fill — echoes the scan */}
-                        {!reduceMotion && (
-                          <motion.div
-                            className="absolute inset-y-0 w-1/2"
-                            style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)' }}
-                            initial={{ x: '-140%' }}
-                            animate={{ x: ['-140%', '320%'] }}
-                            transition={{ duration: 1.5, ease: 'easeInOut', repeat: Infinity, repeatDelay: 0.25 }}
-                          />
-                        )}
-                      </motion.div>
-                    </div>
-                    <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 w-10 text-right">{Math.round(importProgress)}%</span>
-                  </div>
+                  {/* The thread runs the height of the panel, so the six reads
+                      are spaced by the room there is rather than bunched at the
+                      top with the rest of the page left empty. */}
+                  <ol className="relative mt-8 flex flex-1 flex-col justify-between">
+                    {/* One thread behind the six, filled as far as the reading
+                        has got. Drawn once for the whole list, so it stays
+                        unbroken however the rows space themselves. */}
+                    <span aria-hidden="true" className="pointer-events-none absolute left-[7px] top-2.5 bottom-2.5 w-px bg-canvas-border">
+                      <motion.span
+                        className="absolute inset-x-0 top-0 block bg-brand-400"
+                        animate={{ height: `${Math.min(100, (importMsgIdx / Math.max(1, passes.length - 1)) * 100)}%` }}
+                        transition={{ duration: 0.45, ease: [0.2, 0, 0, 1] }}
+                      />
+                    </span>
+                    {passes.map((p, i) => {
+                      const done = i < importMsgIdx;
+                      const active = i === importMsgIdx;
+                      const open = active || peekPass === i;
+                      // How far through its own read this one is, taken from the
+                      // same run as the meter, so the ring is never ahead of it.
+                      const within = Math.max(0, Math.min(1, (importProgress / 100) * passes.length - i));
+                      return (
+                        <motion.li layout={!reduceMotion} transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }} key={p.title} className="relative flex pb-7 last:pb-0">
+                          {/* The whole row is the control: pointer or keyboard,
+                              it opens the read and lights that read's part of
+                              the page on the left. */}
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            onMouseEnter={() => setPeekPass(i)}
+                            onMouseLeave={() => setPeekPass(c => (c === i ? null : c))}
+                            onFocus={() => setPeekPass(i)}
+                            onBlur={() => setPeekPass(c => (c === i ? null : c))}
+                            className="group flex w-full min-w-0 gap-4 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-4 cursor-default"
+                          >
+                            <span
+                              role="img"
+                              aria-label={done ? 'done' : active ? 'running now' : 'not started yet'}
+                              className="relative mt-1 flex h-[15px] w-[15px] shrink-0 items-center justify-center bg-canvas-elevated"
+                            >
+                              {done ? (
+                                <motion.span
+                                  initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+                                  className="flex h-[15px] w-[15px] items-center justify-center rounded-full bg-brand-600 text-white"
+                                >
+                                  <Check size={9} strokeWidth={3.5} />
+                                </motion.span>
+                              ) : active ? (
+                                <>
+                                  {/* The read's own progress, drawn round its
+                                      dot. The meter under the page says how far
+                                      the whole run is; this says how far THIS
+                                      read is, which is the thing being waited on. */}
+                                  <svg viewBox="0 0 20 20" className="absolute h-[21px] w-[21px] -rotate-90 overflow-visible" aria-hidden="true">
+                                    <circle cx="10" cy="10" r="8" fill="none" strokeWidth="2" className="stroke-brand-100" />
+                                    <motion.circle
+                                      cx="10" cy="10" r="8" fill="none" strokeWidth="2" strokeLinecap="round"
+                                      className="stroke-brand-600"
+                                      initial={reduceMotion ? false : { pathLength: 0 }}
+                                      animate={{ pathLength: within }}
+                                      transition={{ ease: 'linear', duration: 0.3 }}
+                                    />
+                                  </svg>
+                                  <span className="relative h-[7px] w-[7px] rounded-full bg-brand-600" />
+                                </>
+                              ) : (
+                                <span className="h-[7px] w-[7px] rounded-full bg-canvas-border transition-colors group-hover:bg-ink-300" />
+                              )}
+                            </span>
 
-                  <button
-                    onClick={() => setMinimized(true)}
-                    className="mt-6 inline-flex items-center gap-2 h-10 px-5 rounded-md text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-                  >
-                    <Minimize2 size={15} aria-hidden="true" /> Minimize
-                  </button>
-                  <p className="mt-2.5 text-[0.6875rem] text-ink-400">It’ll keep running in the background — keep working.</p>
+                            <span className="min-w-0 flex-1">
+                              <span className={`block text-[0.875rem] transition-colors ${
+                                active ? 'font-semibold text-ink-900'
+                                  : done ? 'font-medium text-ink-700 group-hover:text-ink-900'
+                                  : 'font-medium text-ink-400 group-hover:text-ink-700'
+                              }`}>{p.title}</span>
+                              {/* Only the read that is running explains itself.
+                                  Hovering or tabbing to any other opens it too,
+                                  so nothing is hidden, it just is not all
+                                  shouting at once. */}
+                              <AnimatePresence initial={false}>
+                                {open && (
+                                  <motion.span
+                                    key="q"
+                                    initial={reduceMotion ? false : { opacity: 0, y: -2 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                                    className="block pt-1 text-[0.875rem] leading-relaxed text-ink-500"
+                                  >
+                                    {p.question}
+                                  </motion.span>
+                                )}
+                              </AnimatePresence>
+                            </span>
+                          </button>
+                        </motion.li>
+                      );
+                    })}
+                  </ol>
+
+                  <div className="mt-auto flex items-center gap-3 pt-8">
+                    <button
+                      onClick={() => setMinimized(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-canvas-border bg-white px-4 text-[0.875rem] font-semibold text-ink-800 transition-colors hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Minimize2 size={15} aria-hidden="true" /> Minimize
+                    </button>
+                    <p className="text-[0.875rem] text-ink-400">It keeps running in the background. Keep working.</p>
+                  </div>
                 </div>
-              </div>
             </motion.div>
             );
           })()}
         </AnimatePresence>
 
-        {/* Import review step — the shared "AI proposes, the human curates" canvas.
-            Detected sections are curated here before anything touches the outline,
-            so importing behaves exactly like the format-check upload flow (§4). */}
+        {/* The review step — a real step, not a formality. The reader proposes,
+            the human decides, side by side with the pages of their own document.
+            Being 80% right and letting the rest be fixed in two minutes is the
+            design choice, which is why nothing lands until this is confirmed. */}
         <AnimatePresence>
           {pendingImport && (() => {
+            const kept = reviewSections.filter(s => s.name.trim() && !s.wrapper);
             const namedCount = reviewSections.filter(s => s.name.trim()).length;
             const hasLetterhead = !!pendingImport.result?.furniture;
             const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
+            const dropped = pendingImport.result?.dropped ?? [];
+            // The check queue — one of the four named situations, or a detector
+            // that could not call it cleanly — is counted and shown by the
+            // canvas itself, in a callout that jumps to the first one. This
+            // header does not count it again.
+            // Some decks are built free-hand: text boxes drawn anywhere, titles
+            // typed into plain boxes. Those lose their labels and get read by
+            // position and size instead, the way a PDF is, so it is worth saying.
+            // The memo's own word for its parts: a deck calls them slides and
+            // a PDF calls them pages. Said back in the client's vocabulary
+            // rather than in "sections", which is ours.
+            const partWord = pendingImport.result?.unit === 'slide' ? 'slide' : 'page';
+            const freehandDeck = pendingImport.result?.unit === 'slide'
+              && reviewSections.length > 0
+              && reviewSections.filter(s => s.evidence === 'inferred').length > reviewSections.length * 0.4;
             return (
               <motion.div
                 initial={{ opacity: 1, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.99 }}
                 transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                // Fills the dialog, which is nearly the whole window anyway.
                 className="absolute inset-0 z-40 bg-canvas-elevated flex flex-col"
               >
-                <header className="shrink-0 px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+                {/* Same header scale as the dialog it replaces (DESIGN.md
+                    §7.9.1). It covers the whole dialog, so a smaller title here
+                    read as a different, lesser window. */}
+                <header className="shrink-0 border-b border-canvas-border px-7 py-3.5">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
-                        <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 text-ink-500 text-[0.625rem] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5">{kindLabel}</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <h3 className="truncate text-[0.875rem] font-semibold leading-tight tracking-tight text-ink-900">
+                          {`What we found in ${pendingImport.fileName}`}
+                        </h3>
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500">{kindLabel}</span>
                       </div>
-                      {/* Layer 1: don't make them choose — every dropdown is
-                          pre-set; the user's job is verify, not choose. */}
-                      <p className="text-[0.75rem] text-ink-500 leading-snug truncate">
-                        From {pendingImport.fileName} — we’ve set up each section. Just confirm, or change anything that looks wrong.
-                      </p>
+                      {/* Don't make them choose: every dropdown is already set,
+                          so the job here is verify, not decide. */}
+                      <>
+                        <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-500">
+                          We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
+                          {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}
+                        </p>
+                        {/* Its own line, under the sentence. Spliced into it, the
+                            whole thing read as one run-on paragraph in three
+                            colours. The "N we are unsure about" count is not
+                            here at all: the canvas below already says it, in a
+                            callout that jumps to the first one. */}
+                        {freehandDeck && (
+                          <p className="mt-1 flex items-start gap-1.5 text-[0.75rem] leading-relaxed text-mitigated-700">
+                            <span aria-hidden="true" className="mt-[0.4375rem] h-1 w-1 shrink-0 rounded-full bg-mitigated-600" />
+                            This deck looks hand built, with text typed into plain boxes rather than the title and layout slots, so we read it by position and size. Worth a closer look than usual.
+                          </p>
+                        )}
+                      </>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} aria-label="Cancel import" className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-canvas hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={18} /></motion.button>
                     </div>
                   </div>
-                  <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} aria-label="Cancel import" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></motion.button>
                 </header>
-                <div className="flex-1 min-h-0 px-6 py-4 flex flex-col">
+                {/* One canvas, one layout. It draws the as-is state (the
+                    report they actually uploaded, page by page) beside the
+                    to-be state (the template, in its own letterhead) itself,
+                    which is what the other door shows. This screen used to
+                    hand-roll two columns and put our reading of their report
+                    on the left instead of their report. */}
+                <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
                   <SectionReviewCanvas
+                    ratingWords={ratingWordsPanel}
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
                     pages={pendingImport.result?.pages}
                     pageCount={pendingImport.result?.pageCount}
+                    unit={pendingImport.result?.unit ?? 'page'}
                     toc={pendingImport.result?.toc}
-                    reportChrome={{
-                      title: copyName || 'Untitled Template',
+                    notIncluded={dropped}
+                    partWord={partWord}
+                    // Their captured letterhead where the read found one, the
+                    // editor's own live values next, the platform's defaults
+                    // last, so the cover approved here is the cover the save
+                    // produces whichever door they came through.
+                    reportChrome={reviewChrome(pendingImport.result, {
+                      title: copyName,
                       desc: template.desc,
                       brand,
                       headerText,
                       footerText,
-                      gradient: coverGradient,
-                      accent: coverAccent,
-                    }}
+                      theme,
+                      brandColor,
+                      logo: logoDataUrl,
+                    })}
                   />
                 </div>
-                <footer className="shrink-0 px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2">
-                  <span className="text-[0.75rem] text-ink-500">
-                    {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer">Discard</motion.button>
-                    <motion.button whileTap={namedCount === 0 ? undefined : { scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                      Use these sections
+
+                <footer className="shrink-0 px-7 py-3 border-t border-canvas-border flex items-center justify-between gap-4">
+                  {/* The file this all came out of, in the same shape the
+                      editor's own footer names it, with the same way to swap it
+                      for another. Then what it produced, then the trade-off. */}
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => importInputRef.current?.click()}
+                      title="Read a different report instead"
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-sm text-[0.75rem] font-semibold text-ink-500 transition-colors hover:text-brand-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                    >
+                      <FileText size={14} className="shrink-0" />
+                      <span className="truncate">Read from {pendingImport.fileName}</span>
+                      <span className="shrink-0 text-ink-400">· replace</span>
+                    </button>
+                    <span className="mt-0.5 block text-[0.75rem] text-ink-500">
+                      {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} kept, none of their words · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
+                      {/* THE COUNTING, on the screen where the editing happens.
+                          How much of the read stood without a correction is the
+                          number that says whether this is working, and it can
+                          only be taken here: once the client leaves this screen
+                          what they changed is indistinguishable from what we
+                          proposed. Reported plainly, never scored — the target
+                          behind it is ours to hit, not theirs to be graded on. */}
+                      {reviewBaseline.length > 0 && (() => {
+                        const before = new Map(reviewBaseline.map(s => [s.id, s.name]));
+                        const here = new Set(reviewSections.map(s => s.id));
+                        const renamed = reviewSections.filter(s => before.has(s.id) && before.get(s.id) !== s.name).length;
+                        const unticked = reviewBaseline.filter(s => !here.has(s.id)).length;
+                        if (!renamed && !unticked) return <> · all of them as we read them</>;
+                        return (
+                          <> · {reviewBaseline.length - renamed - unticked} of {reviewBaseline.length} as we read them
+                            {renamed > 0 && `, ${renamed} renamed`}
+                            {unticked > 0 && `, ${unticked} unticked`}
+                          </>
+                        );
+                      })()}
+                    </span>
+                    <span className="block text-[0.6875rem] leading-snug text-ink-400">
+                      We make the findings and the summary in your format. What was checked, replies from management and admin pages come one report at a time.
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer">
+                      {importBanner ? 'Cancel' : 'Discard'}
+                    </motion.button>
+                    <motion.button
+                      whileTap={namedCount === 0 ? undefined : { scale: 0.97 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      // Straight in. The preview is a view on this same screen,
+                      // not a gate on the way to using the format.
+                      onClick={applyImport}
+                      disabled={namedCount === 0}
+                      className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ShieldCheck size={14} /> Use this format
                     </motion.button>
                   </div>
                 </footer>
@@ -2056,20 +2568,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         destructive
       />
       <ConfirmDialog
-        open={suggestedConfirm !== null}
-        onClose={() => setSuggestedConfirm(null)}
-        onConfirm={() => { setSuggestedConfirm(null); handleSave(false, true); }}
-        title="Create without the suggested sections?"
-        description={
-          <>Your template is missing {suggestedConfirm?.length} suggested section{suggestedConfirm?.length === 1 ? '' : 's'} ({suggestedConfirm?.join(', ')}). A report built without {suggestedConfirm?.length === 1 ? 'it' : 'them'} may come out incomplete. You can go back and add {suggestedConfirm?.length === 1 ? 'it' : 'them'}, or create the template as is.</>
-        }
-        confirmLabel="Create anyway"
-        cancelLabel="Go back and add"
-      />
-      <ConfirmDialog
         open={dupConfirm !== null}
         onClose={() => setDupConfirm(null)}
-        onConfirm={() => { setDupConfirm(null); handleSave(true, true); }}
+        onConfirm={() => { setDupConfirm(null); handleSave(true); }}
         title={dupConfirm && dupConfirm.shared === dupConfirm.total ? 'You already have this template' : 'This looks like a duplicate'}
         description={
           dupConfirm && dupConfirm.shared === dupConfirm.total
@@ -2083,9 +2584,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         open={confirmRemoveImport}
         onClose={() => setConfirmRemoveImport(false)}
         onConfirm={() => { setConfirmRemoveImport(false); undoImport(); }}
-        title="Remove imported file?"
+        title="Remove this format?"
         description={
-          <>This clears the {importBanner?.count ?? ''} imported section{importBanner?.count === 1 ? '' : 's'}{importBanner?.gotLetterhead ? ' and letterhead' : ''}{importBanner?.fileName ? <> from <span className="font-semibold">{importBanner.fileName}</span></> : ''}. You can import again anytime.</>
+          <>This clears the {importBanner?.count ?? ''} section{importBanner?.count === 1 ? '' : 's'}{importBanner?.gotLetterhead ? ' and the letterhead' : ''} we read{importBanner?.fileName ? <> from <span className="font-semibold">{importBanner.fileName}</span></> : ''}. You can start from a report again anytime.</>
         }
         confirmLabel="Remove"
         destructive

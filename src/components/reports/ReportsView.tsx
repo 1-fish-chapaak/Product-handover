@@ -9,9 +9,8 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, CloudUpload, FileUp,
+  WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
-import BringYourOwnTemplateTab from './byot/BringYourOwnTemplateTab';
 import TemplatePreview from './TemplatePreview';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
@@ -197,14 +196,17 @@ export default function ReportsView({
   const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
-  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports' | 'byot'>(() => {
+  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports' || t === 'byot') return t;
+    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
     // Legacy deep-links to the old top-level ATR / Evidence tabs land in My Reports.
     if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
     return 'my-reports';
   });
+  // The template that just came out of an import, so the library can say what
+  // was kept, what was left out and that their file is gone. Cleared on the
+  // next tab change: it is a receipt, not a state of the page.
   // Segmented sub-tabs inside My Reports: the 3 report types + the evidence repository.
   const [reportType, setReportType] = useState<'all' | 'atr' | 'sox' | 'ia' | 'evidence'>(() => {
     if (typeof window === 'undefined') return 'all';
@@ -340,13 +342,16 @@ export default function ReportsView({
 
   // Save with collision-proof naming — upload + save-as-template flows suffix
   // "(2)", "(3)"… instead of erroring like the editor's copy flow does.
-  const addCustomTemplateUnique = (t: EditableTemplate) => {
+  /** `quiet` is for the import, which lands on this tab with a notice of its
+   *  own above the library. A toast saying the same thing at the same moment is
+   *  the message twice. */
+  const addCustomTemplateUnique = (t: EditableTemplate, quiet = false) => {
     const names = [...REPORT_TEMPLATES.map(x => x.name), ...customTemplates.map(x => x.name)];
     let name = t.name;
     let i = 2;
     while (names.some(n => n.toLowerCase() === name.toLowerCase())) name = `${t.name} (${i++})`;
     addCustomTemplate({ ...t, name });
-    addToast({ type: 'success', message: `Template "${name}" saved to Custom templates.` });
+    if (!quiet) addToast({ type: 'success', message: `Template "${name}" saved to Custom templates.` });
   };
   const [hydrationFailed, setHydrationFailed] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
@@ -855,8 +860,14 @@ export default function ReportsView({
       pageNumbers: (rt as EditableTemplate).pageNumbers,
       signoffEnabled: (rt as EditableTemplate).signoffEnabled,
       signatories: (rt as EditableTemplate).signatories,
+      closingEnabled: (rt as EditableTemplate).closingEnabled,
+      closingText: (rt as EditableTemplate).closingText,
+      logoDataUrl: (rt as EditableTemplate).logoDataUrl,
       findingScale: (rt as EditableTemplate).findingScale,
       opinionScale: (rt as EditableTemplate).opinionScale,
+      // Their word for each of ours, settled at import. Carried onto the report
+      // so every rating it prints comes out in the client's own language.
+      scaleMap: (rt as EditableTemplate).scaleMap,
     };
     setGeneratedReports(prev => [newReport, ...prev]);
     setWizardTemplate(null);
@@ -1004,8 +1015,9 @@ export default function ReportsView({
     );
   }
 
-  // Template preview — the template as the page it produces, read only. No
-  // generate action here: this page answers "what report is this?", nothing else.
+  // Template preview — the template as the page it produces. Picking a template
+  // and making the report are one action, not two, so the page that answers
+  // "what report is this?" is also where you say yes to it.
   if (previewTemplate) {
     const isCustom = customTemplates.some(t => t.id === previewTemplate.id);
     return (
@@ -1018,6 +1030,10 @@ export default function ReportsView({
           // The confirm dialog lives on the list page, so return there first.
           setPreviewTemplate(null);
           setTemplateToDelete({ id: previewTemplate.id, name: previewTemplate.name });
+        }}
+        onGenerate={() => {
+          setPreviewTemplate(null);
+          setWizardTemplate(previewTemplate as EditableTemplate);
         }}
       />
     );
@@ -1082,8 +1098,6 @@ export default function ReportsView({
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
-                : activeTab === 'byot'
-                ? <>Upload one old report as a PDF. We copy how it looks, not what it says, and every report we make for you after that looks the same way.</>
                 : activeTab === 'templates'
                 ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
                 : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, grouped by type across ATR, SOX, IA, and evidence.</>}
@@ -1102,7 +1116,6 @@ export default function ReportsView({
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
             { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
-            { id: 'byot', label: 'Bring Your Own Template', icon: FileUp, count: 0 },
           ] as const).map(tab => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1461,16 +1474,6 @@ export default function ReportsView({
           );
         })()}
 
-        {/* Bring Your Own Template — upload one past report, read its shape,
-            review what we found, save it as a template. The Templates tab and
-            its editor are untouched; this is the import journey on its own. */}
-        {activeTab === 'byot' && (
-          <BringYourOwnTemplateTab
-            onSaveTemplate={addCustomTemplateUnique}
-            onDone={() => setActiveTab('templates')}
-          />
-        )}
-
         {activeTab === 'templates' && (() => {
           // Custom templates open straight into the editor (edit in place).
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
@@ -1539,17 +1542,8 @@ export default function ReportsView({
                 )}
                 <div className="mt-auto pt-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    {sectionNames.length > 0 ? (
-                      <>
-                        <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
-                          {sectionNames.length} {sectionNames.length === 1 ? 'section' : 'sections'}
-                        </span>
-                        <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-400 whitespace-nowrap shrink-0">
-                        No sections
-                      </span>
+                    {sectionNames.length > 0 && (
+                      <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -1589,7 +1583,6 @@ export default function ReportsView({
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
-            const sectionCount = rt.sections?.length ?? 0;
             return (
               <motion.div
                 key={rt.id}
@@ -1627,9 +1620,6 @@ export default function ReportsView({
                 {/* Meta + actions — always visible (no hover fade). */}
                 <div className="shrink-0 flex items-center gap-3">
                   <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
-                  <span className="hidden sm:inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap">
-                    {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
-                  </span>
                   <div className="flex items-center gap-0.5 pl-1">
                     {isCustom && (
                       // Single Edit action — renames inline in the editor (or double-
@@ -1810,7 +1800,9 @@ export default function ReportsView({
             template={editingTemplate}
             // New templates open with an empty name field so the author must name
             // it — a shared "Untitled Template" default collided for everyone.
-            initialName={editingTemplate.id === 'ct-blank' ? '' : undefined}
+            // One that arrives with sections came from a report we read, so it
+            // keeps the name that read gave it.
+            initialName={editingTemplate.id === 'ct-blank' && (editingTemplate.sections?.length ?? 0) === 0 ? '' : undefined}
             // Save dismisses everything (terminal); Cancel just closes the
             // editor so the still-mounted wizard reappears with its selections.
             onClose={() => { setEditingTemplate(null); setWizardTemplate(null); }}

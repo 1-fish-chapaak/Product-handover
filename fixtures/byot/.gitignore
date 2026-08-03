@@ -1,0 +1,5 @@
+# The fixtures are real client reports. They hold real findings, real names and
+# real numbers, so they live on disk beside the harness and never in the repo.
+# Anyone running the harness copies their own six in; README.md says which.
+*.pdf
+*.pptx

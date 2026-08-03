@@ -64,6 +64,10 @@ interface Props {
   brandColor?: string;
   /** Sign-off block — signatory slots + their sign state (rendered in exports). */
   signatories?: import('./reportShared').SignatorySlot[];
+  /** The template's closing page, printed word for word at the end. */
+  closingText?: string[];
+  /** The template's brand mark, stamped on the exported letterhead. */
+  logoDataUrl?: string;
   signoffs?: Record<string, import('./reportShared').Signoff>;
   sections: DownloadPreviewSection[];
   /** Sections still awaiting content (manual fill or a person's input) — named
@@ -104,6 +108,8 @@ export default function ReportDownloadModal({
   pageNumbers,
   brandColor,
   signatories,
+  closingText,
+  logoDataUrl,
   signoffs,
   sections,
   incomplete,
@@ -150,7 +156,7 @@ export default function ReportDownloadModal({
     // Brief preparing window so the in-place spinner registers visually
     // before the export fires and the modal closes.
     window.setTimeout(() => {
-      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, signoffs };
+      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, closingText, logoDataUrl, signoffs };
       if (format === 'xlsx') {
         onExcelExport?.();
         addToast({ type: 'success', message: `${reportName}.xlsx downloaded.` });

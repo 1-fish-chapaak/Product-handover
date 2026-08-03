@@ -97,6 +97,23 @@ export function loadVersions(id: string, seed: VersionSeed): AtrVersion[] {
   write(VKEY(id), trail);
   return trail;
 }
+
+// Like loadVersions, but seeds a SINGLE real baseline (v1 = the generated
+// report) instead of the demo trail — so the version history is nothing but
+// real user actions from there on. Used by the section-driven reports.
+export function loadBaselineVersions(id: string, baseline: { by: string; at: string; label?: string }): AtrVersion[] {
+  const existing = read<AtrVersion[]>(VKEY(id));
+  if (existing && existing.length) return existing;
+  const trail: AtrVersion[] = [{
+    version: 1,
+    label: baseline.label ?? 'Report generated',
+    status: 'draft',
+    at: baseline.at || nowStamp(),
+    by: baseline.by || 'You',
+  }];
+  write(VKEY(id), trail);
+  return trail;
+}
 // Current (latest) version number for list surfaces — reads the stored trail if
 // present, else computes the seeded trail WITHOUT persisting (no render-time
 // side effects), so it matches what the review drawer shows.

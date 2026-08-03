@@ -166,6 +166,25 @@ export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, c
   );
 }
 
+// The closing page — the last slide a committee deck ends on, brought across
+// as a setting rather than a section. Nothing in it is generated: the shape and
+// the client's own words ARE the feature, so it prints exactly as written.
+export function ReportClosingBlock({ lines, className = '' }: { lines: string[]; className?: string }) {
+  const clean = lines.map(l => l.trim()).filter(Boolean);
+  if (!clean.length) return null;
+  return (
+    <div className={`text-center py-14 ${className}`}>
+      <span className="mx-auto mb-6 block h-px w-16" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }} />
+      <p className="text-[1.5rem] font-semibold tracking-[-0.015em] leading-tight" style={{ color: 'var(--rep-accent, #550fa5)' }}>
+        {clean[0]}
+      </p>
+      {clean.slice(1).map((line, i) => (
+        <p key={i} className="mt-2 text-[0.875rem] text-ink-500 leading-relaxed">{line}</p>
+      ))}
+    </div>
+  );
+}
+
 export function ReportMetaCell({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
@@ -265,7 +284,7 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
   );
 }
 
-export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts, footer, aside, eyebrow, titleClassName }: {
+export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts, footer, aside, eyebrow, titleClassName, logo }: {
   title: string;
   /** Tailwind size class for the title (defaults to the 33px letterhead size). */
   titleClassName?: string;
@@ -290,6 +309,10 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
   aside?: React.ReactNode;
   /** Small overline rendered directly above the title (e.g. a report ID). */
   eyebrow?: React.ReactNode;
+  /** The client's brand mark (data URL), read from the report they uploaded.
+   *  Sits above the title, where a real letterhead puts it, on a light chip so
+   *  a dark logo stays legible on the gradient. */
+  logo?: string;
 }) {
   // Purple gradient letterhead — title + byline over floating-line art, with
   // actions stacked top-right. A template's theme gradient overrides the default.
@@ -329,6 +352,16 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
           preserves the reading hierarchy — title first, actions second. */}
       <div className="relative z-10 flex items-start justify-between gap-5 lg:gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
+          {logo && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="mb-3 inline-flex items-center rounded-md bg-white/92 px-2.5 py-1.5"
+            >
+              <img src={logo} alt="" aria-hidden="true" className="h-7 max-w-[168px] object-contain" />
+            </motion.div>
+          )}
           {eyebrow && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}

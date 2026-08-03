@@ -29,6 +29,89 @@ export const ICON_MAP: Record<string, ElementType> = {
   'book-open': BookOpen,
 };
 
+// ─── Our words for how bad a problem is ──────────────────────────────────────
+//
+// One place. The severity picker shows this list, and it is the "ours" side of
+// the rating-word matching screen an imported template opens with. Two lists
+// would drift, and then the screen would offer a word the picker cannot set.
+
+export type OurRating = 'high' | 'medium' | 'low';
+
+export const OUR_SCALE: { value: OurRating; label: string; dot: string }[] = [
+  { value: 'low', label: 'Low', dot: 'bg-compliant' },
+  { value: 'medium', label: 'Medium', dot: 'bg-mitigated' },
+  { value: 'high', label: 'High', dot: 'bg-risk' },
+];
+
+/** Our word → their word, settled once on the matching screen and saved on the
+ *  template. Every rating a report prints is swapped through this. */
+export type ScaleMap = Partial<Record<OurRating, string>>;
+
+/** The words that plainly mean one of ours, worst first inside each rating so
+ *  a client using both High and Critical gets the closer of the two. Only the
+ *  easy ones: anything else is left for the client to sort on the screen. */
+const RATING_SYNONYMS: Record<OurRating, RegExp[]> = {
+  high: [/^high$/i, /^critical$/i, /^significant$/i, /^major$/i, /^severe$/i, /^(priority\s*)?(1|i|one)$/i, /^p1$/i, /^red$/i, /^unsatisfactory$/i],
+  medium: [/^medium$/i, /^moderate$/i, /^med$/i, /^(priority\s*)?(2|ii|two)$/i, /^p2$/i, /^amber$/i, /^needs improvement$/i],
+  low: [/^low$/i, /^minor$/i, /^(priority\s*)?(3|iii|three)$/i, /^p3$/i, /^green$/i, /^observation$/i, /^advisory$/i],
+};
+
+/**
+ * The easy ones, filled in. One of their words per rating of ours, never the
+ * same word twice, and nothing guessed: a rating we cannot match plainly is
+ * left blank for the client to sort on the screen.
+ */
+export function proposeScaleMap(theirWords: string[] | undefined): ScaleMap {
+  const words = (theirWords ?? []).map(w => w.trim()).filter(Boolean);
+  if (words.length === 0) return {};
+  const map: ScaleMap = {};
+  const taken = new Set<string>();
+  for (const { value } of OUR_SCALE) {
+    for (const re of RATING_SYNONYMS[value]) {
+      const hit = words.find(w => re.test(w) && !taken.has(w));
+      if (hit) { map[value] = hit; taken.add(hit); break; }
+    }
+  }
+  return map;
+}
+
+/** Their words the matching screen left unused: levels they have and we never
+ *  raise, which is the client's call to make, not ours. */
+export function unusedScaleWords(theirWords: string[] | undefined, map: ScaleMap): string[] {
+  const used = new Set(Object.values(map).map(w => w.toLowerCase()));
+  return (theirWords ?? []).filter(w => w.trim() && !used.has(w.trim().toLowerCase()));
+}
+
+/** Say one of our ratings in the client's own word. Always swapped through the
+ *  map they settled, so the client never sees our wording in their document. */
+export function sayRating(severity: string | undefined, map?: ScaleMap, scale?: string[]): string {
+  const raw = (severity ?? '').trim();
+  if (!raw) return raw;
+  const ours = raw.toLowerCase();
+  const mapped = map?.[ours as OurRating]
+    // Our data carries Critical as well as High. It is not a level the picker
+    // offers, so it prints as their worst word rather than as ours.
+    ?? (ours === 'critical' ? map?.high : undefined);
+  if (mapped) return mapped;
+  // A template imported before the matching screen existed: fall back to the
+  // captured scale by position, which is what it did before.
+  if (scale?.length) {
+    const hit = scale.find(s => s.toLowerCase() === ours);
+    if (hit) return hit;
+    if (ours === 'high' || ours === 'critical') return scale[0];
+    if (ours === 'medium' || ours === 'moderate') return scale[Math.floor((scale.length - 1) / 2)];
+    return scale[scale.length - 1];
+  }
+  return raw;
+}
+
+/** The letter a problem number carries for its rating, taken from the word the
+ *  card prints, so the two can never disagree. */
+export function ratingLetter(severity: string | undefined, map?: ScaleMap, scale?: string[]): string {
+  const word = sayRating(severity, map, scale);
+  return (word.match(/[A-Za-z]/)?.[0] ?? '').toUpperCase();
+}
+
 export const CATEGORY_COLORS: Record<string, string> = {
   Compliance: 'text-evidence-700 bg-evidence-50',
   Risk: 'text-high-700 bg-high-50',
@@ -204,6 +287,17 @@ export function reportAccent(theme?: string, brandColor?: string): string {
   return (theme && TEMPLATE_THEME_ACCENT[theme]) || '#550fa5';
 }
 
+// What a template prints when it carries none of its own. One source, because
+// the letterhead a client approves at review has to be the letterhead the save
+// actually produces — a preview that guesses differently is a preview of a
+// different report.
+export const DEFAULT_TEMPLATE_BRAND = 'Irame';
+/* No platform letterhead line. A template prints the confidentiality line a
+ * read of the client's own report captured, and nothing at all otherwise: the
+ * old "Confidential · For Internal Use Only" default was ours, not theirs. */
+export const DEFAULT_THEME = 'Purple & White';
+export const defaultFooterText = (brand?: string) => `Generated by ${brand?.trim() || DEFAULT_TEMPLATE_BRAND}`;
+
 // Blank base for the create-from-scratch flow — the TemplateEditor opens on
 // this with an empty section list and a name the user is expected to replace.
 export const BLANK_TEMPLATE = {
@@ -351,7 +445,16 @@ export type SectionFill = BlockFill | 'mixed';
 /** Our side of a query-filled section's two identities: the DISPLAY NAME is
  *  theirs (printed exactly); the BINDING is ours — which concept fills it.
  *  Filling by binding works in any wording; matching heading text wouldn't. */
-export type DataBinding = 'findings' | 'summary' | 'metrics' | 'actions';
+export type DataBinding =
+  | 'findings' | 'summary' | 'metrics' | 'actions'
+  /** The in-scope list, drafted from the category tags the report's queries
+   *  carry. The client edits it; we never claim to know what was excluded. */
+  | 'scope'
+  /** An evidence annexure a finding points at ("Refer Annexure 1.1"): the
+   *  exception rows the finding was raised from, in their annexure layout.
+   *  Amounts inside our own exception rows are query output, so the money rule
+   *  does not bar them — it bars figures from the client's books. */
+  | 'evidence';
 
 /** The kinds of building block a client report uses. */
 export type TemplateBlockKind =
@@ -373,6 +476,17 @@ export type TemplateBlock = {
   binding?: DataBinding;
   /** Tables — column names from the header row (names only, rows discarded). */
   columns?: string[];
+  /** Tables — the header row's column spans, so a merged header survives. A
+   *  table's merge pattern is part of its shape; its values never are. */
+  columnSpans?: number[];
+  /** Charts — how the chart existed in their file. Only a real chart object
+   *  carries labels we can read; a hand-drawn one is guessed from how its
+   *  boxes are arranged, and a pasted one is an image with nothing in it. */
+  chartKind?: 'object' | 'drawn' | 'picture';
+  /** Charts — the slice / axis labels. "High, Medium, Low" makes a chart we
+   *  can fill from severity counts; "Revenue" makes one we cannot. The old
+   *  numbers are never kept either way. */
+  chartLabels?: string[];
   /** Tables — set when rows reuse the finding IDs: auto-built from findings. */
   linkedTo?: string;
   /** Cards — field labels, human-only fields, ID shape, repeat count. */
@@ -382,6 +496,25 @@ export type TemplateBlock = {
   cardCount?: number;
   /** Fixed text — the verbatim lines this block prints, word-for-word. */
   fixedBody?: string[];
+  /** Fixed text whose only changing values are report details we hold: the
+   *  client name, the period, the date, the report title. The wording is kept
+   *  exactly and those spots become blanks ({{entity}}, {{period}}, {{date}},
+   *  {{title}}, {{reference}}, {{preparedBy}}) filled from the report each
+   *  time. A disclaimer naming the client is textbook fixed wording, and the
+   *  no-changing-values gate would otherwise throw it away. */
+  frame?: boolean;
+  /** Fixed wording that still speaks in the voice of whoever wrote their old
+   *  report — "we have completed the audit", "our procedures", a firm's name.
+   *  Printing another firm's voice on the client's own reports would certify an
+   *  engagement that never happened, so the wording is kept as a STARTING DRAFT
+   *  and flagged. The client edits it once and the flag clears: from then on it
+   *  is locked wording like any other. Definitions and scale rules carry no
+   *  voice, so they never get this. */
+  authored?: boolean;
+  /** Evidence annexures — which one this is, in the order the report prints
+   *  them. An annexure holds ONE finding's exception rows, so annexure n fills
+   *  from finding n's rows rather than from the first finding's every time. */
+  evidenceIndex?: number;
   /** Stat strips / slots — the captions or labels kept (values discarded). */
   slotLabels?: string[];
   /** Sign-off — signatory roles found (Prepared by, Approved by…). */
@@ -489,11 +622,22 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
    *  (Prepared by, Approved by…) each report gets a manual sign / sign-off for. */
   signoffEnabled?: boolean;
   signatories?: SignatorySlot[];
+  /** A closing page — the "thank you" slide a committee deck ends on. Captured
+   *  the same way the sign-off block is, and for the same reason: the shape IS
+   *  the feature, so there is nothing to generate. Off unless their own report
+   *  had one, and then it prints their exact closing line at the end. */
+  closingEnabled?: boolean;
+  closingText?: string[];
   /** The document's own rating language, captured at import — the finding scale
    *  (e.g. Critical / High / Medium / Low) and the overall-opinion scale (e.g.
    *  Effective → Unsatisfactory). Generated reports speak these words. */
   findingScale?: string[];
   opinionScale?: string[];
+  /** Their word for each of ours, settled on the matching screen at import.
+   *  Every rating a report prints goes through this — the tag on the card, the
+   *  severity picker, the count strips, the letter in the problem number and
+   *  the written sentences — so the client never sees our wording. */
+  scaleMap?: ScaleMap;
   /** Free-form tags for findability once the library grows (§9). */
   tags?: string[];
 };
@@ -572,9 +716,17 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   /** Sign-off block config carried from the template. */
   signoffEnabled?: boolean;
   signatories?: SignatorySlot[];
+  /** Closing page carried from the template. */
+  closingEnabled?: boolean;
+  closingText?: string[];
+  /** Brand mark carried from the template, shown on the report letterhead. */
+  logoDataUrl?: string;
   /** Rating language carried from the template (captured at import). */
   findingScale?: string[];
   opinionScale?: string[];
+  /** Their word for each of ours, carried from the template. Every rating this
+   *  report prints is swapped through it. */
+  scaleMap?: ScaleMap;
   /** Runtime sign state, keyed by signatory-slot id — set when a report is
    *  manually signed, cleared on sign-off. */
   signoffs?: Record<string, Signoff>;

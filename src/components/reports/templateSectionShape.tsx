@@ -8,8 +8,20 @@
 
 import type { ReactNode } from 'react';
 import TemplateBlockBody from './TemplateBlockBody';
-import { FILL_META } from './sectionReviewShared';
-import type { TemplateSection, TemplateBlock } from './reportShared';
+import { FILL_META, fillTag } from './sectionReviewShared';
+import type { TemplateSection, TemplateBlock, ScaleMap } from './reportShared';
+import type { ReportFacts } from './byot/templateBinding';
+import type { CardFinding } from './TemplateBlockBody';
+
+/** Data to draw the shape WITH, where a surface has some. The template
+ *  surfaces pass nothing and get the empty shape; the preview before saving
+ *  passes made-up findings, which is the point of that step. */
+export type ShapeFill = {
+  facts?: ReportFacts;
+  cards?: CardFinding[];
+  findingScale?: string[];
+  scaleMap?: ScaleMap;
+};
 
 /** The small chip beside the heading — where this section's content comes from. */
 export function sectionTypeLabel(section: TemplateSection): string | null {
@@ -17,13 +29,18 @@ export function sectionTypeLabel(section: TemplateSection): string | null {
   const blocks = section.blocks ?? [];
   const onlyProse = blocks.length > 0 && blocks.every(b => (b.kind === 'narrative' || b.kind === 'callout') && b.fill === 'query');
   const showBlocks = blocks.length > 0 && !onlyProse;
-  if (showBlocks || section.fill) return FILL_META[section.fill ?? 'query'].label;
+  // The tag the review screen agreed on, printed on the page it produced, so
+  // one part carries one tag wherever it is shown.
+  if (showBlocks || section.fill) {
+    const frame = blocks.length > 0 && blocks.every(b => b.fill !== 'fixed' || b.frame);
+    return fillTag(section.fill ?? 'query', frame).label;
+  }
   return kind === 'kpi' ? 'KPI'
     : kind === 'table' ? 'Table'
     : kind === 'chart' ? 'Chart'
     : kind === 'cards' ? `Card × ${section.cardCount ?? 'N'}`
     : kind === 'human' ? 'Human input'
-    : section.fixed ? 'Fixed text'
+    : section.fixed ? FILL_META.fixed.label
     : null;
 }
 
@@ -33,6 +50,7 @@ export function renderSectionShape(
   section: TemplateSection,
   blockLibrary: Record<string, TemplateBlock> | undefined,
   shownDesc: string,
+  fill?: ShapeFill,
 ): ReactNode | null {
   const kind = section.kind ?? 'text';
   const metric = section.metric?.trim();
@@ -44,7 +62,14 @@ export function renderSectionShape(
     return (
       <div className="space-y-3">
         <p className="max-w-[80ch] text-[0.875rem] leading-relaxed text-ink-600">{shownDesc}</p>
-        <TemplateBlockBody tsec={section} blockLibrary={blockLibrary} />
+        <TemplateBlockBody
+          tsec={section}
+          blockLibrary={blockLibrary}
+          facts={fill?.facts}
+          cards={fill?.cards}
+          findingScale={fill?.findingScale}
+          scaleMap={fill?.scaleMap}
+        />
       </div>
     );
   }
