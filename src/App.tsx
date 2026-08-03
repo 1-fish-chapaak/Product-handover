@@ -297,13 +297,27 @@ function AppInner() {
   // The old demo seeds — filtered out of any previously persisted blob so the
   // Custom section only ever shows templates the user actually created.
   const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
+  // The two platform letterhead lines this product used to print before the
+  // header line was dropped altogether. Templates saved back then still carry
+  // one on the object, so it is cleared on load.
+  const LEGACY_HEADER_TEXTS = new Set([
+    'Confidential \u2014 For Internal Use Only',
+    'Confidential \u00b7 For Internal Use Only',
+  ]);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
+          return (parsed as CustomTemplate[])
+            .filter(t => !DEMO_TEMPLATE_IDS.has(t.id))
+            // Templates saved while the platform still printed its own
+            // letterhead line carry that string on the object, so it keeps
+            // printing after the line was dropped. Clear it here. Only the exact
+            // platform wording is cleared: a confidentiality line captured from
+            // a client's own report is theirs and stays.
+            .map(t => (t.headerText && LEGACY_HEADER_TEXTS.has(t.headerText) ? { ...t, headerText: '' } : t));
         }
       }
     } catch { /* ignore */ }
