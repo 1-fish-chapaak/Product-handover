@@ -16,8 +16,13 @@ export interface GroupEntity {
   id: string;
   name: string;
   type: EntityType;
-  /** Group ownership, % */
+  /** Group ownership, % — the DIRECT holding of whoever sits above it. */
   ownership: number;
+  /** The entity that holds this one, when it is not held by the listed parent
+   *  directly. Set by an org-chart extraction, which is the only input that
+   *  knows the shape of the group; absent means "sits under the top company",
+   *  which is every hand-added row. */
+  parentId?: string;
   /** Simulated trial-balance upload — set once the file is "parsed". */
   tbFile?: string;
   tbLines?: number;

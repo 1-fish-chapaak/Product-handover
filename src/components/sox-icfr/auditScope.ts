@@ -64,13 +64,33 @@ export interface ScopeEntityRow {
   type: GroupEntity['type'];
   inRegister: boolean;
   inData: boolean;
+  /** Who holds this company, when it is not held by the top company directly.
+   *  Carried through from the engagement's register so the scope list can show
+   *  the group's shape: taking a parent in while leaving its subsidiary out is
+   *  a real scoping decision, and a flat list hides that it was even made. */
+  parentId?: string;
+}
+
+/** How deep a company sits in the ownership chain — 0 for the top company.
+ *  Tolerates a parent that is not in the list (dropped from this audit, or
+ *  never registered) by stopping where the chain breaks. */
+export function chainDepth(row: { id: string; parentId?: string }, all: { id: string; parentId?: string }[]): number {
+  let depth = 0;
+  let cur: { id: string; parentId?: string } | undefined = row;
+  while (cur?.parentId && depth < 8) {
+    const parent: { id: string; parentId?: string } | undefined = all.find(x => x.id === cur!.parentId);
+    if (!parent) break;
+    cur = parent;
+    depth++;
+  }
+  return depth;
 }
 
 /** Merge the engagement's entity register with what the files carry, by name —
  *  names are what a trial balance actually gives you; ids are ours. */
 export function mergeScopeEntities(registered: GroupEntity[], inFiles: GroupEntity[]): ScopeEntityRow[] {
   const rows = new Map<string, ScopeEntityRow>();
-  registered.forEach(e => rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: true, inData: false }));
+  registered.forEach(e => rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: true, inData: false, parentId: e.parentId }));
   inFiles.forEach(e => {
     const hit = rows.get(e.name);
     if (hit) hit.inData = true;

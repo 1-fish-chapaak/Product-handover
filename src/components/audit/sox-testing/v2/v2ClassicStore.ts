@@ -20,15 +20,32 @@ import {
 
 export const V2C_GROUP = 'Altura Infra Holdings Ltd (Listed)';
 
+/**
+ * The group, with the chain that actually holds it together — three levels, not
+ * a flat list of eight. Ordered as the chart reads (parent, then what it holds)
+ * because the entity table and the audit Scope step indent rather than sort.
+ *
+ * `ownership` is the DIRECT holding of the company above it, which is not always
+ * what reaches the top: Smart Metering is wholly owned by Transmission, and
+ * Transmission is 74% owned, so 74% of Metering is the group's. That chain is
+ * the reason the scope step shows effective ownership at all — it is the one
+ * number a flat list cannot give you.
+ */
 const ENTITIES: GroupEntity[] = [
   { id: 'a-hold', name: 'Altura Infra Holdings Ltd', type: 'Holding', ownership: 100 },
-  { id: 'a-solar', name: 'Altura Solar Pvt Ltd', type: 'Subsidiary', ownership: 100 },
-  { id: 'a-wind', name: 'Altura Wind Pvt Ltd', type: 'Subsidiary', ownership: 100 },
-  { id: 'a-road', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100 },
-  { id: 'a-tran', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74 },
-  { id: 'a-water', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 100 },
-  { id: 'a-park', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100 },
-  { id: 'a-meter', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100 },
+  // Renewables — wind generation is held through the solar platform.
+  { id: 'a-solar', name: 'Altura Solar Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-hold' },
+  { id: 'a-wind', name: 'Altura Wind Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-solar' },
+  // Roads — the logistics parks sit on the road corridors.
+  { id: 'a-road', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-hold' },
+  { id: 'a-park', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-road' },
+  // Grid — 26% of Transmission sits outside the group, and metering rides on it,
+  // so only 74% of the metering business reaches Altura.
+  { id: 'a-tran', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'a-hold' },
+  { id: 'a-meter', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-tran' },
+  // Last in the list is the company whose trial balance is late — see
+  // entitiesInFiles in auditScope.ts, which drops the final row on purpose.
+  { id: 'a-water', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'a-hold' },
 ];
 
 const TB_FILES: Record<string, { file: string; lines: number }> = {
