@@ -1396,8 +1396,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={attemptClose}>
-      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className={`fixed inset-0 z-[60] flex items-center justify-center ${isNew ? 'p-6' : ''}`} onClick={attemptClose}>
+      {/* Editing an existing template opens full screen — there's no page
+          behind it worth hinting at, and a fixed-size dialog wasted the room
+          a real document needs to edit comfortably. New/create still opens as
+          a dialog over the reports page it was launched from. */}
+      {isNew && <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />}
       {/* A big dialog, not the page. Everything in here is a document — the
           start screen, the check screen, the outline the editor builds — so it
           takes nearly the whole window and leaves a margin that says the page
@@ -1411,8 +1415,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         role="dialog" aria-modal="true" aria-label="Edit Template"
         // The one size change in this dialog is the check screen arriving, so it
         // eases rather than snaps.
-        className={`relative flex max-h-full max-w-full flex-col overflow-hidden rounded-2xl border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
-          wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'
+        className={`relative flex max-h-full max-w-full flex-col overflow-hidden border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
+          isNew ? `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'}` : 'h-full w-full rounded-none border-none'
         }`}
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
