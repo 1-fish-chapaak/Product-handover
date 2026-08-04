@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
+import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
 // Restore this import alongside the blocks parked further down the file.
 //
@@ -83,7 +84,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const def = eng.deficiencies.find(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
 
-  blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — Test of Design & Operating Effectiveness`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
+  blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — TOD & TOE`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
   const guide = sampleSizeGuide(c);
   // The two population checks are computed, not attested — so the paper prints
@@ -103,6 +104,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   blocks.push({
     kind: 'kv', title: 'Control', rows: [
       ['Control owner', c.owner],
+      // The paper names both: a reviewer asking "who was this chased from" needs
+      // the process owner, and it is not always the accountable name above.
+      ...(ownersOf(c).single ? [] : [['Process owner', ownersOf(c).processOwner] as [string, string]]),
       ['Control number', c.id],
       // what the control is FOR, above what it does and how it is worded
       ['Control objective', c.objective ?? '—'],
@@ -192,7 +196,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // somebody's word reads very differently from one the auditor reperformed, and
   // a paper that prints only the tick invites the reader to assume the stronger.
   blocks.push({
-    kind: 'table', title: 'Test of design',
+    kind: 'table', title: 'TOD',
     note: [
       `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
       `basis: ${c.design.walkthrough ? `one transaction traced (${c.design.walkthrough.sampleRef})` : 'documents on file only'}`,
@@ -356,13 +360,20 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const d = trackResult(c.design); const o = trackResult(c.operating);
   const totalFails = steps.reduce((n, s) => n + samples.filter(smp => s.sampleResults?.[smp.id] === 'Fail').length, 0);
   const results = [
-    `Design: ${d}${c.design.points.length ? ` — ${c.design.points.filter(p => (p.override?.result ?? p.result) === 'Pass').length}/${c.design.points.length} considerations satisfied` : ''}.`,
-    `Operating: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`,
+    `TOD: ${d}${c.design.points.length ? ` — ${c.design.points.filter(p => (p.override?.result ?? p.result) === 'Pass').length}/${c.design.points.length} considerations satisfied` : ''}.`,
+    `TOE: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`,
     c.operating.testedBy ? `Tested by ${c.operating.testedBy}, ${c.operating.testedAt}.` : '',
   ].filter(Boolean).join(' ');
   const concl = controlConclusion(c);
   blocks.push({ kind: 'note', label: 'Test results', text: results, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
   blocks.push({ kind: 'note', label: 'Conclusion', text: `${concl} control`, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
+  // The auditor's own words behind each track's conclusion. The box that collects
+  // them says "retained in the working paper", so this is that promise being kept.
+  const rationales = [
+    c.design.rationale ? `TOD — ${c.design.rationale}` : '',
+    c.operating.rationale ? `TOE — ${c.operating.rationale}` : '',
+  ].filter(Boolean);
+  if (rationales.length) blocks.push({ kind: 'note', label: 'Rationale', text: rationales.join(' '), tone: 'neutral' });
 
   // Linked exception, if the testing raised one
   if (def) {
@@ -411,27 +422,27 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
  *  The .xlsx stays ONE flowing sheet (real-audit format) — the tabs just page
  *  through that same reading order. */
 export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet[] {
-  const order = ['Control', 'Sign-off', 'Design Testing', 'Operating Testing', 'Results'] as const;
+  const order = ['Control', 'Sign-off', 'TOD', 'TOE', 'Results'] as const;
   const sectionOf = (b: PaperBlock): (typeof order)[number] => {
     if (b.kind === 'heading') return 'Control';
     if (b.kind === 'kv') {
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
-      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'Operating Testing';
+      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'TOE';
       // the walkthrough and the judgements are the design's own work, so they read
       // on the design tab beside the considerations they support
-      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'Design Testing';
+      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'TOD';
       return 'Results'; // linked exception
     }
     if (b.kind === 'table') {
-      if (b.title === 'Test of design' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'Design Testing';
+      if (b.title === 'TOD' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'TOD';
       // the programme is what the auditor was instructed to do, so it reads with
       // the control it belongs to rather than inside one track's results
       if (b.title === 'Audit programme — steps performed') return 'Control';
-      return 'Operating Testing';
+      return 'TOE';
     }
-    if (b.label === 'Walkthrough') return 'Design Testing';
-    return b.label === 'Samples' || b.label === 'IPE' ? 'Operating Testing' : 'Results'; // notes
+    if (b.label === 'Walkthrough') return 'TOD';
+    return b.label === 'Samples' || b.label === 'IPE' ? 'TOE' : 'Results'; // notes
   };
   const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));
   buildControlPaper(eng, c).forEach(b => grouped.get(sectionOf(b))!.push(b));
@@ -497,8 +508,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
         kind: 'kv', title: 'Progress', rows: [
           ['Controls in scope', String(controls.length)],
           ['Key controls', String(controls.filter(c => c.isKey).length)],
-          ['Design concluded', String(controls.filter(c => trackResult(c.design) !== 'Not tested').length)],
-          ['Operating concluded', String(controls.filter(c => trackResult(c.operating) !== 'Not tested').length)],
+          ['TOD concluded', String(controls.filter(c => trackResult(c.design) !== 'Not tested').length)],
+          ['TOE concluded', String(controls.filter(c => trackResult(c.operating) !== 'Not tested').length)],
           ['Effective', String(concl.filter(c => c === 'Effective').length)],
           ['Ineffective', String(concl.filter(c => c === 'Ineffective').length)],
           ['Deficiencies', String(defs.length)],
@@ -520,19 +531,23 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'Root cause', 'TOD (design)', 'Report (IPE)', 'TOE (operating)', 'TOE method', 'Conclusion', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
-      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c), c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Control owner', 'Process owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
+        // one column, both tracks — the register answers "why does this read the
+        // way it does" without opening the control's own paper
+        [c.design.rationale && `TOD — ${c.design.rationale}`, c.operating.rationale && `TOE — ${c.operating.rationale}`].filter(Boolean).join(' ') || '—',
+        c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
     }],
   };
 
   // Design testing — documents + considerations + conclusion
   const design: IcfrSheet = {
-    name: 'Design Testing', blocks: [{
-      kind: 'table', title: 'Test of design', note: 'documents received · considerations ticked · conclusion per control',
-      headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Override', 'Tested by'],
+    name: 'TOD', blocks: [{
+      kind: 'table', title: 'TOD', note: 'documents received · considerations ticked · conclusion per control',
+      headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Rationale', 'Override', 'Tested by'],
       rows: controls.map(c => {
         const p = designProgress(c);
-        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
+        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.rationale ?? '—', c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
       }),
     }],
   };
@@ -540,8 +555,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   // Operating testing — attribute-level (each attribute has its own workflow / attestation)
   const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const operating: IcfrSheet = {
-    name: 'Operating Testing', blocks: [{
-      kind: 'table', title: 'Test of operating effectiveness', note: `${opRows.length} attribute rows`,
+    name: 'TOE', blocks: [{
+      kind: 'table', title: 'TOE', note: `${opRows.length} attribute rows`,
       headers: ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'],
       rows: opRows,
     }],

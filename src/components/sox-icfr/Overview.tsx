@@ -162,8 +162,8 @@ export default function Overview() {
 
   // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
-    { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700', view: 'design-done' },
-    { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700', view: 'operating-done' },
+    { k: 'TOD concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700', view: 'design-done' },
+    { k: 'TOE concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700', view: 'operating-done' },
     { k: 'Effective', v: stats.effective, t: 'text-compliant-700', view: 'effective' },
     { k: 'Ineffective', v: stats.ineffective, t: 'text-risk-700', view: 'exceptions' },
     { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700', view: 'review' },
@@ -491,7 +491,7 @@ export default function Overview() {
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
                   {p.inProgress > 0 && <span><b className="text-brand-700">{p.inProgress}</b> in progress</span>}
                   {notStarted > 0 && <span><b className="text-ink-600">{notStarted}</b> not tested</span>}
-                  <span className="ml-auto tabular-nums">Design {p.designDone}/{p.total} · Operating {p.operatingDone}/{p.total}</span>
+                  <span className="ml-auto tabular-nums">TOD {p.designDone}/{p.total} · TOE {p.operatingDone}/{p.total}</span>
                 </div>
               </button>
             );
@@ -566,7 +566,7 @@ export function engagementRagMeters(controls: Control[]): RagMeterDef[] {
       },
       {
         label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
-        explainer: 'Sample-by-attribute checks completed across the operating tests — how much of the drawn testing ground is actually covered.',
+        explainer: 'Sample-by-attribute checks completed across TOE — how much of the drawn testing ground is actually covered.',
       },
     ];
 }

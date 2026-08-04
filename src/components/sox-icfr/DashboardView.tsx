@@ -64,8 +64,8 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
   // Read-outs, not links: the Control Library lives inside an audit, and there
   // is no non-arbitrary audit to send someone to from the engagement level.
   const tiles = [
-    { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
-    { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
+    { k: 'TOD concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
+    { k: 'TOE concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
     { k: 'Effective', v: String(stats.effective), t: 'text-compliant-700' },
     { k: 'Ineffective', v: String(stats.ineffective), t: 'text-risk-700' },
     { k: 'Awaiting review', v: String(stats.awaitingReview), t: 'text-evidence-700' },

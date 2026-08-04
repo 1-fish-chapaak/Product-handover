@@ -40,7 +40,7 @@ test('working-paper preview is sheet-wise and follows filters', async ({ page })
   await expect(modal.getByText('TOE method', { exact: true })).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/03-summary.png` });
 
-  await modal.getByRole('button', { name: 'Operating Testing', exact: true }).click();
+  await modal.getByRole('button', { name: 'TOE', exact: true }).click();
   await expect(modal.getByText(/\d+ attribute rows/)).toBeVisible();
 
   await modal.getByRole('button', { name: 'Scope', exact: true }).click();
@@ -79,14 +79,14 @@ test('working-paper preview is sheet-wise and follows filters', async ({ page })
   await page.waitForTimeout(400);
   await expect(modal.getByText('Working paper — preview')).toBeVisible();
   // Control section opens first — header + control facts
-  await expect(modal.getByText(/Working paper PX-01 — Test of Design/)).toBeVisible();
+  await expect(modal.getByText(/Working paper PX-01 — TOD & TOE/)).toBeVisible();
   await expect(modal.getByText('Control frequency', { exact: true })).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/06-control-paper.png` });
   await modal.getByRole('button', { name: 'Sign-off', exact: true }).click();
   await expect(modal.getByText('Sign-off — audit record')).toBeVisible();
-  await modal.getByRole('button', { name: 'Design Testing', exact: true }).click();
-  await expect(modal.getByText('Test of design', { exact: true })).toBeVisible();
-  await modal.getByRole('button', { name: 'Operating Testing', exact: true }).click();
+  await modal.getByRole('button', { name: 'TOD', exact: true }).click();
+  await expect(modal.getByText('TOD', { exact: true }).first()).toBeVisible();
+  await modal.getByRole('button', { name: 'TOE', exact: true }).click();
   await expect(modal.getByText(/Details of samples tested|attribute-level/).first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/07-control-operating.png` });
   await modal.getByRole('button', { name: 'Results', exact: true }).click();

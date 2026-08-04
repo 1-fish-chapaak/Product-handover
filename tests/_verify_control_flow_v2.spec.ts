@@ -7,7 +7,7 @@ const SHOTS = 'test-results/flow-v2';
 
 /**
  * The audit-level control page, simplified to exactly five steps:
- *   ① Population  ② Test of design  ③ Sample  ④ Test of operating  ⑤ Sign-off
+ *   ① TOD  ② Population  ③ Sample  ④ TOE  ⑤ Sign-off
  *
  * This spec checks BOTH halves of the instruction — that the five steps and their
  * contents are there, and that everything the brief said to remove is actually
@@ -34,7 +34,7 @@ async function openAuditLevelControl(page: import('@playwright/test').Page) {
   await runCard.first().click();
   await page.waitForTimeout(1400);
   // sanity: we are on the tester, not the library detail
-  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('five steps, and only five', async ({ page }) => {
@@ -45,18 +45,21 @@ test('five steps, and only five', async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/01-page.png`, fullPage: true });
 
   // ── the five steps, in order ──────────────────────────────────────────────
-  for (const title of ['Population', 'Test of design', 'Sample', 'Test of operating', 'Sign-off']) {
+  for (const title of ['TOD', 'Population', 'Sample', 'TOE', 'Sign-off']) {
     await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
   }
 
   // ── step ① — source file, filter, checks, lock ────────────────────────────
   const populated = await page.getByText(/Population (locked|extracted)/).count() > 0;
   if (!populated) {
-    await expect(page.getByText('Select the source file')).toBeVisible();
-    await expect(page.getByText('Filter criteria')).toBeVisible();
-    await expect(page.getByText('Transaction type')).toBeVisible();
-    await expect(page.getByText('Account', { exact: true })).toBeVisible();
-    await expect(page.getByText('Date from')).toBeVisible();
+    await expect(page.getByText('Select the source')).toBeVisible();
+    // One drafted statement, not a type/account pair — see extractionCriteria.
+    // A system pull's criteria ARE the query, and no fixed field set fits them.
+    await expect(page.getByText('Extraction criteria')).toBeVisible();
+    await expect(page.getByText('Transaction type')).toHaveCount(0);
+    await expect(page.getByText('Account', { exact: true })).toHaveCount(0);
+    // Date from / to were parked earlier — the window comes from the audit.
+    await expect(page.getByText('Date from')).toHaveCount(0);
     // The expectation is stated BEFORE the extract runs, and gates it — a number
     // written down afterwards can only ever agree with the answer.
     await expect(page.getByText('Expected instances')).toBeVisible();
@@ -73,11 +76,11 @@ test('five steps, and only five', async ({ page }) => {
     // 2026-01-01 anywhere west of UTC, which silently misstates the period the
     // audit covers. Run this spec with TZ=America/New_York to exercise it.
     await expect(page.getByText(/Covers the whole audit period, 1 Jan 2026/)).toBeVisible();
-    // What it cannot work out — asked as facts.
-    await expect(page.getByText('Where this data came from')).toBeVisible();
-    await expect(page.getByText('System of record')).toBeVisible();
-    await expect(page.getByText('Extracted by')).toBeVisible();
-    await expect(page.getByText('Extracted on')).toBeVisible();
+    // Provenance is NOT asked here. It moved onto the file record (b5e3f96) —
+    // per file, once, rather than per extraction — so the three-field form is
+    // gone and a file that hasn't answered is disabled in the source list above.
+    await expect(page.getByText('Where this data came from')).toHaveCount(0);
+    await expect(page.getByText('System of record')).toHaveCount(0);
   }
 
   // ── step ② — the derived basis line replaced the pickers ──────────────────
@@ -153,17 +156,12 @@ test('header, sign-off gating and the working paper', async ({ page }) => {
   await page.goto('/');
   await openAuditLevelControl(page);
 
-  // ── the stamp is one line, with the court badge beside it ─────────────────
-  const stamp = page.locator('.leadsheet-stamp').first();
-  await expect(stamp).toBeVisible();
-  const stampBox = await stamp.boundingBox();
-  expect(stampBox!.height).toBeLessThan(40);          // one line, not two
-  const court = page.getByText(/court$/i).first();
-  if (await court.count() > 0) {
-    const courtBox = await court.boundingBox();
-    const dy = Math.abs((stampBox!.y + stampBox!.height / 2) - (courtBox!.y + courtBox!.height / 2));
-    expect(dy).toBeLessThan(24);                       // same row
-  }
+  // ── the W/P stamp is gone; the court badge stays ──────────────────────────
+  // A working-paper reference is an audit output, not a fact about the control,
+  // so it came off every control surface and survives only in the exports. The
+  // court badge kept its place in the header.
+  await expect(page.locator('.leadsheet-stamp')).toHaveCount(0);
+  await expect(page.getByText(/court$/i).first()).toBeVisible();
 
   // ── the working paper is view-only until both tracks conclude ─────────────
   await page.getByRole('button', { name: /Working paper/ }).first().click();

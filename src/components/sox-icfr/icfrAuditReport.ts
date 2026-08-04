@@ -247,7 +247,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
       {
         kind: 'table', title: 'Appendix — controls tested',
         note: `${controls.length} control${controls.length === 1 ? '' : 's'} · the working paper reference for each`,
-        headers: ['W/P', 'Control', 'Objective', 'Process', 'Class', 'Key', 'Risk rating', 'Frequency', 'Design', 'Report (IPE)', 'Operating', 'Conclusion', 'Performed by', 'Report ref'],
+        headers: ['W/P', 'Control', 'Objective', 'Process', 'Class', 'Key', 'Risk rating', 'Frequency', 'TOD', 'Report (IPE)', 'TOE', 'Conclusion', 'Performed by', 'Report ref'],
         rows: controls.map(c => [
           c.wpRef,
           `${c.id} — ${c.description}`,

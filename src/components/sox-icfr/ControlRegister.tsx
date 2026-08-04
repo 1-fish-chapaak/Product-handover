@@ -19,6 +19,7 @@ import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
+import { isOwnerOf, ownersOf } from './auditScope';
 import type { Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
@@ -27,10 +28,10 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'due', label: 'Due now' },
   { id: 'court', label: 'My court' },
-  { id: 'design', label: 'Design' },
-  { id: 'design-done', label: 'Design concluded' },
-  { id: 'operating', label: 'Operating' },
-  { id: 'operating-done', label: 'Operating concluded' },
+  { id: 'design', label: 'TOD' },
+  { id: 'design-done', label: 'TOD concluded' },
+  { id: 'operating', label: 'TOE' },
+  { id: 'operating-done', label: 'TOE concluded' },
   { id: 'effective', label: 'Effective' },
   { id: 'exceptions', label: 'Exceptions' },  // relabelled per engagement — see viewOptions below
   { id: 'review', label: 'Awaiting review' },
@@ -93,7 +94,6 @@ function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
           {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10px] font-bold text-high-700"><StickyNote size={9} />{noteN}</span>}
-          <span className="font-mono text-[10.5px] text-ink-400">{c.wpRef}</span>
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
@@ -114,8 +114,8 @@ function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }
       )}
       <div className="ac-div" />
       <div className="space-y-1.5">
-        <CardTrack label="Design" res={trackResult(c.design)} started={designStarted(c)} />
-        <CardTrack label="Operating" res={trackResult(c.operating)} started={operatingStarted(c)} />
+        <CardTrack label="TOD" res={trackResult(c.design)} started={designStarted(c)} />
+        <CardTrack label="TOE" res={trackResult(c.operating)} started={operatingStarted(c)} />
       </div>
       <div className="mt-3"><ConclusionPill c={controlConclusion(c)} /></div>
     </div>
@@ -185,8 +185,9 @@ export default function ControlRegister() {
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   // Person-lane: the owner's register is their own controls, never the engagement's.
+  // Either capacity counts — accountable for it, or running it. See ownersOf.
   const scoped = useMemo(
-    () => (role === 'risk-owner' ? auditScoped.filter(c => c.owner === meOwner) : auditScoped),
+    () => (role === 'risk-owner' ? auditScoped.filter(c => isOwnerOf(c, meOwner)) : auditScoped),
     [auditScoped, role, meOwner],
   );
   const stats = useMemo(() => ({
@@ -199,7 +200,7 @@ export default function ControlRegister() {
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
   const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
   const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
-  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.owner))).sort()], [scoped]);
+  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.flatMap(c => { const o = ownersOf(c); return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner]; }))).sort()], [scoped]);
   const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
 
   const matchesView = (c: Control, v: SavedView): boolean => {
@@ -227,8 +228,8 @@ export default function ControlRegister() {
       if (entity !== 'All' && c.entity !== entity) return false;
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
-      if (owner !== 'All' && c.owner !== owner) return false;
-      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
+      if (term && !(`${controlCode(c)} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
   }, [scoped, q, process, nature, entity, ctype, frequency, owner]);
@@ -246,7 +247,7 @@ export default function ControlRegister() {
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(c);
     }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -265,7 +266,7 @@ export default function ControlRegister() {
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         {/* Toolbar filter dropdowns — COMMENTED OUT by user instruction
             (Jul 24): filtering moved into the table's column headers
@@ -341,7 +342,7 @@ export default function ControlRegister() {
                   <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                   <span className="shelf-title">{g.key}</span>
                   <span className="text-[11.5px] text-ink-400 font-medium">· {g.rows.length}</span>
-                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded</span>
+                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} TOD · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} TOE concluded</span>
                   <span className="shelf-board" />
                 </div>
               )}
@@ -380,8 +381,8 @@ export default function ControlRegister() {
               <Th {...th('owner')}><HeaderFilter label="Owner" value={owner} options={owners} allLabel="All owners" onChange={setOwner} ariaLabel="Filter by owner" /></Th>
               <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
               <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
-              <Th {...th('design')}>① Design</Th>
-              <Th {...th('operating')}>② Operating</Th>
+              <Th {...th('design')}>① TOD</Th>
+              <Th {...th('operating')}>② TOE</Th>
               <Th {...th('conclusion')}>
                 <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
                   options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
@@ -397,7 +398,7 @@ export default function ControlRegister() {
                   <tr className="reg-group-row"><td colSpan={colSpan}>
                     <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
                       <span className="ml-2 text-[10.5px] font-semibold text-ink-400">
-                        {g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded
+                        {g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} TOD · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} TOE concluded
                       </span>
                     </span>
                   </td></tr>

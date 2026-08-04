@@ -88,7 +88,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { normaliseProcess, processesForAudit } from './auditScope';
+import { normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
 
 // The five primary tabs — mirrors how other engagements are laid out.
 // 'deficiencies' is a TAB now, not a drill-in: deficiency management is a place
@@ -116,7 +116,11 @@ export interface NewControlDraft {
   riskDescription: string;
   nature: Nature;
   frequency: Frequency;
+  /** Accountable for the control. */
   owner: string;
+  /** Runs the process, and is who evidence requests reach. Falls back to the
+   *  process's people from the scoping wizard, then to `owner`. */
+  processOwner?: string;
   isKey: boolean;
   assertions: Assertion[];
 }
@@ -157,7 +161,7 @@ interface IcfrCtx {
   // design track
   setDocStatus: (controlId: string, docId: string, status: DocStatus) => void;
   setDesignPoint: (controlId: string, pointId: string, result: TestResult) => void;
-  concludeDesign: (controlId: string, conclusion: TrackConclusion) => void;
+  concludeDesign: (controlId: string, conclusion: TrackConclusion, rationale?: string) => void;
   overrideDesign: (controlId: string, override: Override | null) => void;
   // design CRUD + validation
   // `custom` names an element the standard kinds don't cover — its title is the
@@ -173,7 +177,7 @@ interface IcfrCtx {
   /** Edit the control's own identity — objective, classification, key judgement,
    *  risk rating. Key/non-key and the rating are agreed with management, never
    *  read off an SOP, so they have to be editable rather than displayed. */
-  updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating'>) => void;
+  updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating' | 'owner' | 'processOwner'>) => void;
   /** The design judgements the paper states — 5W+1H coverage, compensating
    *  control, is the frequency right, is the type right. */
   setDesignJudgements: (controlId: string, patch: Partial<DesignJudgements>) => void;
@@ -247,7 +251,7 @@ interface IcfrCtx {
   attestStep: (controlId: string, stepId: string, note: string, result: 'Pass' | 'Fail') => void;
   addStepEvidence: (controlId: string, stepId: string, fileName: string) => void;
   setStepInputFile: (controlId: string, stepId: string, fileName: string) => void;
-  concludeOperating: (controlId: string, conclusion: TrackConclusion) => void;
+  concludeOperating: (controlId: string, conclusion: TrackConclusion, rationale?: string) => void;
   overrideOperating: (controlId: string, override: Override | null) => void;
   // operating CRUD + workflow mapping + attest toggle + test-all
   addAttribute: (controlId: string, description: string) => void;
@@ -497,8 +501,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         id: `DEF-${String(next).padStart(3, '0')}`,
         controlId, track,
         description: failed.length
-          ? `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
-          : `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef}.`,
+          ? `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
+          : `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef}.`,
         // Deliberately blank, not pre-filled with a plausible sentence: the whole
         // exception turns on this, and a default here would be a guess the auditor
         // never made. Step 1 is not complete until it is written.
@@ -513,6 +517,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // cannot go to the owner before it has a root cause and a grade — that is
         // the point of steps 1 and 2, and the owner has nothing to plan against
         // until they exist.
+        //
+        // Deliberately the CONTROL owner, not the process owner: evidence is
+        // asked of whoever runs the process, but a broken control is answered
+        // for by whoever is accountable for it. Only the first of those two
+        // moved when controls gained a second name.
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
       };
@@ -524,10 +533,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
-  const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion) => {
+  const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     // re-concluding clears a reviewer's return note — the rework happened
-    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, design: { ...c.design, conclusion, testedBy: me, testedAt: 'just now' } }));
+    // Clearing the conclusion clears its rationale too: words explaining a
+    // conclusion that no longer exists would outlive the thing they explain.
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, design: { ...c.design, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.design.rationale), testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: `concluded design ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
@@ -662,7 +673,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       const ctrl = prev.controls.find(c => c.id === controlId);
       const kinds = ctrl ? ctrl.design.documents.filter(d => docIds.includes(d.id)).map(d => d.kind) : [];
-      const task: HandoffTask = { id: uid('PBC'), type: 'pbc', controlId, title: `Provide design documents (${docIds.length})`, detail: `Requested from ${emails.join(', ')} — ${kinds.join(', ')}.`, assignee: emails[0] ?? 'Risk Owner', assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' };
+      // The task lands on the process owner by name — they are who the email was
+      // addressed to, and an address is not something you can look up a person by.
+      const assignee = ctrl ? ownersOf(ctrl).processOwner : (emails[0] ?? 'Risk Owner');
+      const task: HandoffTask = { id: uid('PBC'), type: 'pbc', controlId, title: `Provide design documents (${docIds.length})`, detail: `Requested from ${emails.join(', ')} — ${kinds.join(', ')}.`, assignee, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' };
       return { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, design: { ...c.design, documents: c.design.documents.map(d => docIds.includes(d.id) ? { ...d, status: 'Requested' as DocStatus } : d) } } : c), tasks: [...prev.tasks, task] };
     });
     pushExec(() => ({ controlId, track: 'design', kind: 'request-docs', verb: `requested ${docIds.length} design document${docIds.length === 1 ? '' : 's'}` }));
@@ -1280,10 +1294,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [patchControl, pushExec, pushRun, role]);
 
-  const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
+  const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     // re-concluding clears a reviewer's return note — the rework happened
-    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
@@ -1392,8 +1406,18 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // The company the matrix belongs to, stamped on every control it creates:
       // a group audit tests the same process separately at each entity, and a
       // row that cannot say which company it is for cannot be concluded.
+      //
+      // Its two owners come off the same shelf. The scoping wizard already asked
+      // who runs this process and who is accountable for it; a RACM uploaded
+      // afterwards used to land with neither, so every control it made arrived
+      // with a template name on it and nobody real to ask for evidence.
+      const people = peopleForProcess(process);
       const rows = racmTemplateForProcesses([process], 'fresh')
-        .map(c => (entity ? { ...c, entity } : c));
+        .map(c => ({
+          ...c,
+          ...(entity ? { entity } : {}),
+          ...(people ? { owner: people.controlOwner, processOwner: people.processOwner } : {}),
+        }));
       return { ...prev, controls: [...prev.controls, ...rows] };
     });
     if (sourceFileName) addRacmDoc(sourceFileName, process);
@@ -1450,7 +1474,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // holds it, or there is nothing to hold. Asking for it anyway is noise.
         const missing = c.design.documents.filter(d => d.status === 'Missing' && !d.waiver);
         if (missing.length) {
-          newTasks.push({ id: `PBC-${prev.tasks.length + newTasks.length + 1}`, type: 'pbc', controlId: c.id, title: `Provide design documents (${missing.length})`, detail: `Needed for TOD: ${missing.map(d => d.kind).join(', ')}.`, assignee: c.owner, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' });
+          // Evidence is asked of whoever runs the process, not whoever answers for it.
+          newTasks.push({ id: `PBC-${prev.tasks.length + newTasks.length + 1}`, type: 'pbc', controlId: c.id, title: `Provide design documents (${missing.length})`, detail: `Needed for TOD: ${missing.map(d => d.kind).join(', ')}.`, assignee: ownersOf(c).processOwner, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' });
           newExecs.push({ id: uid('ex'), controlId: c.id, track: 'design', kind: 'request-docs', verb: `requested ${missing.length} design document${missing.length === 1 ? '' : 's'}`, by: me, role, at: 'just now' });
         }
         return { ...c, design: { ...c.design, documents: c.design.documents.map(d => d.status === 'Missing' && !d.waiver ? { ...d, status: 'Requested' as DocStatus } : d) } };
@@ -1873,7 +1898,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const task: HandoffTask = {
         id: `UTT-${prev.tasks.length + 1}`, type: 'pbc', controlId,
         title: `Testing blocked on ${c.wpRef} — ${short(needed, 60)}`,
-        detail: reason.trim(), assignee: c.owner, assigneeRole: 'risk-owner',
+        // Blocked testing is waiting on evidence, so it waits on the process owner.
+        detail: reason.trim(), assignee: ownersOf(c).processOwner, assigneeRole: 'risk-owner',
         raisedBy: me, dueLabel: 'Due in 5d', overdue: false, status: 'open',
       };
       const event: ExecutionEvent = {
@@ -2096,6 +2122,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       subProcess: draft.subProcess.trim() || 'General',
       nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
       isKey: draft.isKey, precision: draft.description, owner: draft.owner,
+      // Falls through to the process's recorded process owner when the form
+      // didn't name one, so a control created by hand still knows who to ask.
+      processOwner: draft.processOwner?.trim() || peopleForProcess(draft.process)?.processOwner,
       riskId: draft.riskId, riskDescription: draft.riskDescription,
       assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
       design: {

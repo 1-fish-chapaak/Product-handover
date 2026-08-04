@@ -9,7 +9,7 @@ import Drawer from '../shared/Drawer';
 import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
 import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
-import { auditCovers } from './auditScope';
+import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
   controlCode, controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
 } from './helpers';
@@ -116,8 +116,8 @@ const COVERAGE_OPTIONS: { value: Coverage; label: string }[] = [
 /** The Overview's counts still deep-link in. They are testing questions, so the
  *  lens has no dropdown for them — it honours the preset once and says so. */
 const PRESET_LABEL: Record<string, string> = {
-  due: 'Tests due now', court: 'In your court', design: 'Design not tested', 'design-done': 'Design concluded',
-  operating: 'Operating not tested', 'operating-done': 'Operating concluded', effective: 'Effective',
+  due: 'Tests due now', court: 'In your court', design: 'TOD not tested', 'design-done': 'TOD concluded',
+  operating: 'TOE not tested', 'operating-done': 'TOE concluded', effective: 'Effective',
   exceptions: 'Not effective', review: 'Awaiting review', owner: 'Waiting on owner',
   open: 'Not concluded', papers: 'Awaiting sign-off', key: 'Key controls',
 };
@@ -175,7 +175,6 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
         <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
         <span className="ml-auto inline-flex items-center gap-2 shrink-0">
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
-          <span className="font-mono text-[0.65625rem] text-ink-400">{c.wpRef}</span>
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
@@ -327,8 +326,11 @@ export default function ControlLibrary() {
   }, [registerPreset, clearRegisterPreset]);
 
   // Person-lane: the owner's library is their own controls, never the engagement's.
+  // "Their own" means either capacity — accountable for it, or running it. The
+  // process owner is who evidence requests reach, so a list that showed them
+  // nothing would be showing nothing to the person being chased.
   const scoped = useMemo(
-    () => (role === 'risk-owner' ? auditScoped.filter(c => c.owner === meOwner) : auditScoped),
+    () => (role === 'risk-owner' ? auditScoped.filter(c => isOwnerOf(c, meOwner)) : auditScoped),
     [auditScoped, role, meOwner],
   );
   // Column-filter option lists — built from what is actually in front of you, so a
@@ -336,7 +338,9 @@ export default function ControlLibrary() {
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
   const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
   const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
-  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.owner))).sort()], [scoped]);
+  // Both names are filterable — you may be looking for what someone is
+  // accountable for, or for what they run.
+  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.flatMap(c => { const o = ownersOf(c); return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner]; }))).sort()], [scoped]);
   const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
 
   // run history per control, computed once for the whole list
@@ -396,10 +400,10 @@ export default function ControlLibrary() {
       if (entity !== 'All' && c.entity !== entity) return false;
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
-      if (owner !== 'All' && c.owner !== owner) return false;
+      if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
       if (!matchesCoverage(c)) return false;
       if (preset && !matchesPreset(c)) return false;
-      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${controlCode(c)} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
   }, [scoped, q, process, nature, entity, ctype, frequency, owner, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
@@ -408,7 +412,7 @@ export default function ControlLibrary() {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
     for (const c of filtered) { const k = groupKeyOf(c, groupBy); if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -430,7 +434,7 @@ export default function ControlLibrary() {
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <div className="flex-1" />
         {/* Same three controls as the audit register, in the same shapes: no "GROUP"

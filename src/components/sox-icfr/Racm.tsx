@@ -7,7 +7,7 @@ import { useAuditControls } from './useAuditControls';
 import { entitiesFor } from './auditScope';
 import { defWord } from './flow';
 import { useIcfr } from './store';
-import { controlConclusion, trackResult } from './helpers';
+import { controlCode, controlConclusion, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -393,8 +393,8 @@ function ReviewCell({ c }: { c: Control }) {
 }
 
 /**
- * One business process's RACM — the full risks & controls matrix, rows in W/P
- * order. Every row carries the auditor's approval / remark status; the
+ * One business process's RACM — the full risks & controls matrix, rows in
+ * control-code order. Every row carries the auditor's approval / remark status; the
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
@@ -451,9 +451,9 @@ export default function Racm() {
       if (natureF.length && !natureF.includes(c.nature)) return false;
       if (designF.length && !designF.includes(trackResult(c.design))) return false;
       if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
-      if (term && !(`${c.id} ${c.wpRef} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${c.id} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
-    }).sort((a, b) => a.wpRef.localeCompare(b.wpRef));
+    }).sort((a, b) => controlCode(a).localeCompare(controlCode(b)));
   }, [controls, q, review, classF, natureF, designF, operatingF]);
 
   const allVisible = filtered.map(c => c.id);
@@ -465,9 +465,9 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  // 13 columns: W/P · Risk · Root cause · Control · Nature · Design · Operating ·
+  // 12 columns: Risk · Root cause · Control · Class · Nature · TOD · TOE ·
   // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
-  const colSpan = isAuditor ? 14 : 13;
+  const colSpan = isAuditor ? 13 : 12;
 
   return (
     <div>
@@ -525,9 +525,9 @@ export default function Racm() {
         </div>
       )}
 
-      {/* the matrix — flat rows in W/P order (already scoped to one process).
+      {/* the matrix — flat rows in control-code order (already scoped to one process).
           The tickmark legend is VISIBLE — hover-titles alone fail touch and
-          keyboard users, and Design→Operating is the one rule worth teaching. */}
+          keyboard users, and TOD→TOE is the one rule worth teaching. */}
       <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-ink-400">
         <span className="text-compliant-700 font-semibold">✓</span> effective
         <span className="text-ink-300" aria-hidden>·</span>
@@ -535,14 +535,13 @@ export default function Racm() {
         <span className="text-ink-300" aria-hidden>·</span>
         <span className="font-semibold">–</span> not tested
         <span className="text-ink-300" aria-hidden>·</span>
-        <span>Design → Operating is the test order</span>
+        <span>TOD → TOE is the test order</span>
       </div>
       <div className="reg-wrap">
         <table className="w-full border-collapse">
           <thead className="reg-head">
             <tr>
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
-              <th style={{ width: 56 }} title="Working-paper reference">W/P</th>
               <th style={{ width: 200 }}>Risk</th>
               {/* why the risk exists — the source RACM carries it beside the risk,
                   because a control aimed at the symptom is the commonest design gap */}
@@ -558,14 +557,14 @@ export default function Racm() {
                   <ColumnFilter label="Nature" options={['Manual', 'Automated', 'IT-dependent']} value={natureF} onChange={setNatureF} />
                 </span>
               </th>
-              <th style={{ width: 88 }} title="Test of design — tested first; operating unlocks after design passes">
-                <span className="inline-flex items-center gap-1">Design
-                  <ColumnFilter label="Design" options={['Effective', 'Ineffective', 'Not tested']} value={designF} onChange={setDesignF} />
+              <th style={{ width: 88 }} title="Test of design — tested first; TOE unlocks after TOD passes">
+                <span className="inline-flex items-center gap-1">TOD
+                  <ColumnFilter label="TOD" options={['Effective', 'Ineffective', 'Not tested']} value={designF} onChange={setDesignF} />
                 </span>
               </th>
-              <th style={{ width: 104 }} title="Test of operating effectiveness — tested after design">
-                <span className="inline-flex items-center gap-1">Operating
-                  <ColumnFilter label="Operating" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
+              <th style={{ width: 104 }} title="Test of operating effectiveness — tested after TOD">
+                <span className="inline-flex items-center gap-1">TOE
+                  <ColumnFilter label="TOE" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
                 </span>
               </th>
               {/* who did the work, where the evidence lives, and which report
@@ -586,7 +585,6 @@ export default function Racm() {
                   style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>
                   {/* row-select — auditor only (they alone have bulk actions); toggle from the input's change only, a td-level toggle would double-fire when the checkbox itself is clicked */}
                   {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
-                  <td><span className="wp-ref">{c.wpRef}</span></td>
                   <td className="tight">
                     <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
                     <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
@@ -614,8 +612,8 @@ export default function Racm() {
                   </td>
                   <td>{c.clazz ? <Pill tone="draft">{c.clazz}</Pill> : <span className="text-ink-300">—</span>}</td>
                   <td><NatureChip nature={c.nature} small /></td>
-                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Design — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
-                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Operating — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOD — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOE — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td>{c.performedBy ? <span className="text-[11.5px] text-ink-600">{c.performedBy}</span> : <span className="text-ink-300">—</span>}</td>
                   <td className="tight">
                     {c.wpRefHard || c.wpRefSoft ? (
@@ -699,7 +697,7 @@ export default function Racm() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Remark — <span className="wp-ref">{remarkFor.wpRef}</span></h2>
+                <h2 className="text-[15px] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
                 <button onClick={() => setRemarkFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
               <p className="text-[12px] text-ink-500 mt-1 line-clamp-2">{remarkFor.description}</p>

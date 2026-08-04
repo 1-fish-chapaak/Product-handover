@@ -35,12 +35,12 @@ async function openT05(page: Page) {
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
   await runCard.first().click();
   await page.waitForTimeout(1400);
-  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 /** Step ① end to end: filter a file down, agree the count, lock it. */
 async function extractAndLockPopulation(page: Page) {
-  await expect(page.getByText('Select the source file')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Select the source')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button').filter({ hasText: /altura-group-gl-2026\.csv/ }).first().click();
   await page.getByPlaceholder('e.g. 1,400').fill('1200');
   await page.getByRole('button', { name: /Extract population/ }).click();
@@ -137,7 +137,7 @@ test('the sample step is a size and a draw — nothing else', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Send' })).toHaveCount(0);
   await expect(page.getByPlaceholder(/Explain how to filter the transactions/)).toHaveCount(0);
   // and no filter control of any kind reachable from this step
-  await expect(page.getByText('Filter criteria')).toHaveCount(0);
+  await expect(page.getByText('Extraction criteria')).toHaveCount(0);
 });
 
 test('draw → reject → draw again → approve', async ({ page }) => {
