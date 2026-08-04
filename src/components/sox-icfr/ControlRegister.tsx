@@ -309,10 +309,10 @@ export default function ControlRegister() {
               it: buildIcfrPaper still assembles Index, Control Summary, TOE and
               Scope, and nothing opened them. Audit report is a different
               document — what management reads, not the evidence file — so it was
-              never a substitute. Labelled rather than icon-only this time, so it
-              reads as its own deliverable beside the report.
+              never a substitute. Icon-only, as it was: the name is in the
+              tooltip and on the modal it opens.
               Absent for the risk owner: see the note on the control page. */}
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="The audit's evidence file — every control the filters leave visible" aria-label="Export working paper" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
