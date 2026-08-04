@@ -16,7 +16,7 @@ import {
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, EXTRACT_WOBBLE,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay, EXTRACT_WOBBLE,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
@@ -27,6 +27,7 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import WorkingPaperModal from './WorkingPaperModal';
+import RemediationBriefModal from './RemediationBriefModal';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -34,11 +35,11 @@ import { cn } from '../../lib/cn';
 // types.ts say why. The imports go back with the blocks that used them:
 //   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
 //   Exposure                                    (type)
-import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROUND_TAG } from './types';
-import { sampleRefs } from './mockData';
+import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
+import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, OperatingStep,
-  FileOrigin, IpeCheck, IpeConclusion, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -454,12 +455,26 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 const VALIDATE_MS = 6000;
 function PointRow({ control, point, canEdit }: { control: Control; point: DesignPoint; canEdit: boolean }) {
-  const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint } = useIcfr();
+  const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
   const [over, setOver] = useState(false);
   const [validating, setValidating] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [proving, setProving] = useState(false);
   const eff = pointResult(point);
   const runValidate = () => { setValidating(true); window.setTimeout(() => { validateDesignPoint(control.id, point.id); setValidating(false); }, VALIDATE_MS); };
+
+  // The elements this check points at. Resolved by id every render rather than
+  // cached — an element that was removed must stop being cited, not linger as a
+  // reference to a document nobody can open.
+  const linked = control.design.documents.filter(d => point.evidencedBy?.includes(d.id));
+  const attach = (kind: AuditorProofKind) => {
+    setDesignPointProof(control.id, point.id, {
+      kind,
+      file: { id: `ap-${point.id}`, name: `${kind.replace(/[^A-Za-z0-9]+/g, '_')}_${control.id}.pdf`, kind: 'PDF', uploadedBy: me, uploadedAt: 'just now' },
+    });
+    setProving(false);
+  };
 
   return (
     <div className="subcard px-3.5 py-3">
@@ -469,6 +484,75 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
           {point.override && <div className="text-[0.6875rem] text-high-700 mt-1 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {point.override.rationale}</div>}
+
+          {/* ── what proves this check ──────────────────────────────────────────
+              Two lines, and the difference between them is the whole point: the
+              first cites what the CLIENT gave us, by reference to the element it
+              was uploaded against — the same file never enters the audit twice.
+              The second is the auditor's own work, which has no element to live
+              on because elements are client-supplied. A check with only the first
+              was read; a check with the second was tested. */}
+          <div className="mt-2 space-y-1">
+            <div className="flex items-start gap-1.5 flex-wrap text-[0.6875rem]">
+              <span className="text-ink-400 shrink-0">Evidenced by</span>
+              {linked.length > 0
+                ? linked.map(d => (
+                  <span key={d.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-1.5 py-0.5 text-ink-600" title={d.files?.[0]?.name ?? 'no file attached to this element yet'}>
+                    <Link2 size={9} /> {docLabel(d)}
+                  </span>
+                ))
+                : <span className="text-ink-300">nothing linked</span>}
+              {canEdit && <button onClick={() => setLinking(l => !l)} className="text-brand-600 font-semibold hover:underline cursor-pointer">{linked.length ? 'Change' : 'Link elements'}</button>}
+            </div>
+
+            <div className="flex items-start gap-1.5 flex-wrap text-[0.6875rem]">
+              <span className="text-ink-400 shrink-0">Auditor's proof</span>
+              {point.auditorProof ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-evidence-200 bg-evidence-50/50 px-1.5 py-0.5 text-evidence-700" title={point.auditorProof.file.name}>
+                  <Paperclip size={9} /> {point.auditorProof.kind}
+                </span>
+              ) : <span className="text-ink-300">none — taken on the documents</span>}
+              {canEdit && (point.auditorProof
+                ? <button onClick={() => setDesignPointProof(control.id, point.id, null)} className="text-ink-400 font-semibold hover:text-risk-600 hover:underline cursor-pointer">Remove</button>
+                : <button onClick={() => setProving(p => !p)} className="text-brand-600 font-semibold hover:underline cursor-pointer">Attach your own</button>)}
+            </div>
+          </div>
+
+          {/* pick from what is already on this control — never an upload box */}
+          {linking && canEdit && (
+            <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5">
+              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Which elements evidence this check?</span>
+              {control.design.documents.length === 0 ? (
+                <p className="text-[0.6875rem] text-ink-400">No design elements on this control yet — add one above first.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {control.design.documents.map(d => {
+                    const on = point.evidencedBy?.includes(d.id) ?? false;
+                    return (
+                      <button key={d.id}
+                        onClick={() => linkDesignPointEvidence(control.id, point.id, on ? (point.evidencedBy ?? []).filter(x => x !== d.id) : [...(point.evidencedBy ?? []), d.id])}
+                        className={cn('h-7 px-2.5 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer', on ? 'bg-brand-50 border-brand-300 text-brand-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300')}>
+                        {on && <Check size={10} className="inline -mt-0.5 mr-1" />}{docLabel(d)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-[0.625rem] text-ink-400 mt-2">A link, not a copy — the file stays on the element it was uploaded against.</p>
+            </div>
+          )}
+
+          {proving && canEdit && (
+            <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5">
+              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What did you do on this check?</span>
+              <div className="flex flex-wrap gap-1.5">
+                {AUDITOR_PROOF_KINDS.map(k => (
+                  <button key={k} onClick={() => attach(k)} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-700 hover:border-evidence-300 hover:text-evidence-700 transition-colors cursor-pointer">{k}</button>
+                ))}
+              </div>
+              <p className="text-[0.625rem] text-ink-400 mt-2">This is what the conclusion's basis is read from — nobody types the basis.</p>
+            </div>
+          )}
         </div>
         {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
@@ -867,7 +951,11 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, validateDesignPoint } = useIcfr();
+  const { role, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, validateDesignPoint } = useIcfr();
+  // The owner keeps the evidence lane and loses the testing lane — see the note
+  // on the dossier's own canEdit / canTest split.
+  const isOwner = role === 'risk-owner';
+  const canTest = canEdit && role === 'auditor';
   const logEvent = useAuditLog();
   const d = control.design;
   const [modal, setModal] = useState(false);
@@ -922,6 +1010,12 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const completeness = designCompleteness(control);
   const complete = completeness.total > 0 && completeness.pct === 100;
   const docsIn = d.documents.filter(x => x.status === 'Received').length;
+  const proven = auditorProvenChecks(control);
+  // Dismissed for this sitting only. Not persisted: a suggestion waved away on
+  // Monday should come back when the control is picked up again in a later
+  // round, because what the control does may have moved since.
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const suggestions = suggestedDesignChecks(control).filter(s => !dismissed.includes(s));
   const unvalidated = d.points.filter(p => pointResult(p) === 'Not tested').length;
   // outstanding = neither evidenced nor waived. A waived element is accounted for,
   // so it must not read as missing or push the suggestion to Ineffective.
@@ -1017,7 +1111,40 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
             </div>
           )}
 
-          {/* considerations */}
+          {/* ── considerations — the auditor's checks, not the owner's ──────────
+              Each row is an attribute-level test outcome with the auditor's
+              validation, override and rationale on it. Shown to the first line,
+              it tells them exactly what is being assessed and how it is going. */}
+          {isOwner ? null : (<>
+          {/* ── what the list is missing ────────────────────────────────────────
+              Above the checks rather than below them, because it is about the
+              set as a whole. Nothing is inserted for you: an auditor who did not
+              choose a check is an auditor who will not defend it at review. */}
+          {canTest && suggestions.length > 0 && (
+            <div className="mb-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3.5">
+              <div className="flex items-start gap-2">
+                <Sparkles size={14} className="text-brand-600 mt-0.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.75rem] text-ink-700 leading-relaxed">
+                    <span className="font-bold text-ink-900">Ira read this control.</span> {suggestions.length} consideration{suggestions.length === 1 ? '' : 's'} worth testing {suggestions.length === 1 ? 'is' : 'are'} not on the list yet — from its objective, assertions and nature.
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {suggestions.map(s => (
+                      <div key={s} className="flex items-start justify-between gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+                        <span className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">{s}</span>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => { addDesignPoint(control.id, s); logEvent({ action: 'Create', description: `Added a suggested design check to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                            className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Add</button>
+                          <button onClick={() => setDismissed(d => [...d, s])} title="Not relevant to this control"
+                            className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><X size={12} /></button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
             <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· AI-validated against the evidence</span></h4>
             <div className="flex items-center gap-2">
@@ -1045,10 +1172,13 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           {/* What the conclusion rests on, DERIVED rather than asked: a control
               with a traced transaction was walked; one without was read. Nobody
               types this, so nobody can overstate it. */}
+          {/* Read off the auditor's own proof across the checks — see designBasis.
+              It used to be read off the walkthrough alone, which meant a control
+              could carry three reperformed checks and still describe itself as
+              documents-only. */}
           <p className="mt-3 text-[0.71875rem] text-ink-500 leading-relaxed">
-            <span className="text-ink-400">Basis</span> · {control.design.walkthrough
-              ? <>one transaction traced end-to-end on <span className="font-mono text-ink-700">{control.design.walkthrough.sampleRef}</span>, plus the documents</>
-              : <>the documents on file — no transaction traced</>}
+            <span className="text-ink-400">Basis</span> · {designBasis(control)}
+            {proven > 0 && <span className="text-ink-400"> — {proven} of {control.design.points.length} check{control.design.points.length === 1 ? '' : 's'} carry the auditor's own proof</span>}
             <span className="text-ink-300"> · </span>
             <span className="text-ink-400">In operation</span> · {control.design.walkthrough ? 'yes — seen running on a live transaction' : docsIn > 0 ? 'evidenced by the documents on file' : 'not yet evidenced'}
           </p>
@@ -1060,13 +1190,22 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               considerations WARN rather than block here (the standard treats a
               walkthrough's inquiry and observation as ordinarily sufficient for
               design); operating is where inquiry alone actually refuses. */}
-          <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canEdit}
+          <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canTest}
             disableEffective={!complete || unvalidated > 0}
             disableEffectiveNote={!complete
               ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
               : unvalidated > 0
                 ? `Locked — ${unvalidated} design check${unvalidated === 1 ? '' : 's'} not validated yet`
                 : undefined} />
+          </>)}
+          {/* What the owner gets in its place: the state of their own lane. */}
+          {isOwner && (
+            <p className="mt-3 text-[0.71875rem] text-ink-500 leading-relaxed rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
+              {missing.length > 0
+                ? <><span className="font-semibold text-ink-700">{missing.length} document{missing.length > 1 ? 's' : ''} still outstanding.</span> Attach what you hold — the auditor takes it from there.</>
+                : <><span className="font-semibold text-ink-700">Everything asked for is on file.</span> The auditor's testing and its conclusion are not shown here.</>}
+            </p>
+          )}
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>
@@ -1837,6 +1976,12 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   // A filter that changed nothing didn't filter.
   const unfiltered = !!pop && pop.sourceCount != null && pop.count === pop.sourceCount;
 
+  // Stated above the list, never applied to it. See suggestPopulationFile.
+  const hint = useMemo(
+    () => (pop ? null : suggestPopulationFile(eng, control, files, requiredDatasetsFor(control).map(r => r.name))),
+    [eng, control, files, pop],
+  );
+
   // The two sums the application does for itself, and what is still missing
   // before the population can be locked.
   const cv = countVerdict(control);
@@ -1879,6 +2024,20 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                   className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><Database size={12} /> Add a source</button>
               )}
             </div>
+            {/* ── which one it would take, and why ─────────────────────────────
+                Stated above the list, not applied to it. Nothing is pre-selected:
+                a row already ticked when the screen opens gets confirmed without
+                being read, and the auditor owns this choice. The reason is the
+                part worth printing — "31 P2P controls draw off it" can be argued
+                with, a confidence score cannot. */}
+            {hint && (
+              <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
+                <Sparkles size={13} className="text-brand-600 mt-0.5 shrink-0" />
+                <p className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">
+                  <span className="font-semibold text-ink-900">Likely {hint.name}</span> — {hint.reason}. Pick it below if you agree.
+                </p>
+              </div>
+            )}
             <div className="rounded-xl border border-canvas-border overflow-hidden mb-4">
               {files.length === 0 ? (
                 /* No trial balance or general ledger was attached when the audit
@@ -2132,6 +2291,12 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
         title="Add a population source"
         confirmLabel="Use this source"
         attachHint="Pick the file or table this control's population comes out of."
+        // The chat tabs PLUS Connect. A population legitimately comes from either
+        // side — a file the client sent, or a pull the audit team makes itself
+        // from the system of record — and until this was passed the Connect tab
+        // was unreachable here, which left the connect-db branch below as code
+        // that could never run. The default tab list is untouched everywhere else.
+        tabs={['favourites', 'upload', 'all', 'file', 'integrated', 'connect']}
         onConfirm={(selections: AttachmentSelection[]) => {
           setSourcePicker(false);
           const sel = selections[0];
@@ -2636,11 +2801,19 @@ function ExecResult({ result }: { result?: TestResult | TrackConclusion }) {
 
 // ── execution history — the shared sign-off trail (both personas, both tracks) ─────
 function ExecutionTrail({ control }: { control: Control }) {
-  const { eng } = useIcfr();
+  const { eng, role } = useIcfr();
+  const isOwner = role === 'risk-owner';
   const [track, setTrack] = useState<'all' | 'design' | 'operating'>('all');
   const events = useMemo(
-    () => eng.executions.filter(e => e.controlId === control.id && (track === 'all' || e.track === track)),
-    [eng.executions, control.id, track],
+    // The trail used to filter on control id alone, so every auditor verb and
+    // every Pass/Fail sat in the owner's right rail: what was tested, what was
+    // concluded, what was overridden. The owner sees THEIR OWN actions and the
+    // things addressed to them — a record of what they did and what was asked,
+    // which is what a trail is for from where they stand.
+    () => eng.executions.filter(e => e.controlId === control.id
+      && (track === 'all' || e.track === track)
+      && (!isOwner || e.role === 'risk-owner' || e.kind === 'request-docs' || e.kind === 'receive-doc')),
+    [eng.executions, control.id, track, isOwner],
   );
   return (
     <>
@@ -2809,6 +2982,8 @@ export default function ControlDossier() {
   const logEvent = useAuditLog();
   // preview-before-download for this control's working paper
   const [wpPreview, setWpPreview] = useState(false);
+  // The owner's own document — see RemediationBriefModal.
+  const [briefOpen, setBriefOpen] = useState(false);
   // the way back into a concluded control — reason required, trail recorded
   const [reopening, setReopening] = useState(false);
   const [reopenWhy, setReopenWhy] = useState('');
@@ -2816,8 +2991,27 @@ export default function ControlDossier() {
   const [defOpen, setDefOpen] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
-  // Both personas can now execute TOD and TOE; the shared trail records who did what.
-  const canEdit = role === 'auditor' || role === 'risk-owner';
+  // ── who is standing here, and what that permits ─────────────────────────────
+  // Rewritten Aug 2026 (Step-2 action item 23). The risk owner is the FIRST LINE:
+  // they supply evidence and remediate. They are not the tester, and the working
+  // paper is the audit's evidence file, not the auditee's — it carries sample
+  // lists and results, materiality thresholds, the severity rule set, review
+  // notes, override rationales and other people's controls. Handing it over
+  // breaks independence outright: the owner learns exactly what will be tested
+  // and at what threshold, and reads findings that are not final yet.
+  //
+  // Everything this hat cannot do is ABSENT, not greyed out — the rule the
+  // deficiency screens already follow. Absent also fixes a live bug: `canEdit`
+  // used to be true for the owner, so they were shown Conclude and Override
+  // buttons that the store then silently dropped on the floor.
+  const isAuditor = role === 'auditor';
+  const isOwner = role === 'risk-owner';
+  // The evidence lane stays theirs — attaching documents, answering a request,
+  // self-attesting. That is the whole reason they are on this page.
+  const canEdit = isAuditor || isOwner;
+  // The testing pen does not. Conclusions, overrides, the draw, attribute
+  // results and the sign-off are the auditor's alone.
+  const canTest = isAuditor;
   const headOwners = ownersOf(control);
   // Automated + ITGCs holding = the design test IS the test. Everything on this
   // page that asked "have both tracks concluded?" now asks the narrower question.
@@ -2907,18 +3101,39 @@ export default function ControlDossier() {
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3.5 pt-3 border-t border-canvas-border flex-wrap">
-            <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Overall status</span>
-            {concl === 'Effective' || concl === 'Ineffective' ? <Stamp result={concl} animate={false} /> : <ConclusionPill c={concl} />}
-            <span className="w-px h-4 bg-canvas-border" />
-            <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult}</span>
-            <ChevronRight size={13} className="text-ink-300" />
-            <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult}</span>
+            {/* The conclusion and the two track verdicts are the auditor's read,
+                and an owner watching it move learns what is being tested and how
+                it is going. They see what is asked of them instead. */}
+            {isOwner ? (
+              <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
+            ) : (
+              <>
+                <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Overall status</span>
+                {concl === 'Effective' || concl === 'Ineffective' ? <Stamp result={concl} animate={false} /> : <ConclusionPill c={concl} />}
+                <span className="w-px h-4 bg-canvas-border" />
+                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult}</span>
+                <ChevronRight size={13} className="text-ink-300" />
+                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult}</span>
+              </>
+            )}
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
-              {role === 'auditor' && isControlLocked(control) && (
+              {/* The register already hides this from the owner. The same document
+                  reachable from a different screen is not a restriction. */}
+              {isOwner ? (
+                /* What they get instead — built from owner-safe fields upwards,
+                   never by filtering the paper down. */
+                <button onClick={() => setBriefOpen(true)}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={13} /> Remediation brief</button>
+              ) : (
+                <button onClick={() => { setWpPreview(true); logEvent({ action: 'Export', description: `Opened the working paper for ${control.id} — ${ROLE_LABEL[role]}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
+              )}
+              {isAuditor && isControlLocked(control) && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
-              <span className="text-[0.6875rem] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
+              <span className="text-[0.6875rem] text-ink-400 inline-flex items-center gap-1">
+                {isOwner ? 'You supply the evidence — the auditor tests it. Every upload is logged in History.' : 'Every run is logged in History'}
+              </span>
             </div>
           </div>
         </div>
@@ -2964,14 +3179,24 @@ export default function ControlDossier() {
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
               a population at all — building one first was work done on spec. */}
-          <VStep n={1} title="TOD" subtitle="Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective." status={designResult}>
+          <VStep n={1} title={isOwner ? 'Documents' : 'TOD'}
+            subtitle={isOwner
+              ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
+              : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective.'}
+            status={designResult} hideStatus={isOwner}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see
               operatingApplies. The steps are not rendered locked, they are not
               rendered at all: a greyed-out Population would say "you still owe
               this", and the whole point is that nobody does. */}
-          {!opApplies ? (
+          {/* ── steps ②–⑤ are the audit's own work ──────────────────────────────
+              The sample and its results, the attribute outcomes, the conclusion
+              and the sign-off state are all things the first line must not see:
+              knowing what will be tested, and at what threshold, is the whole
+              reason the three lines are separate. The owner's page ends at the
+              documents they supply and the exception they have to fix. */}
+          {isOwner ? null : !opApplies ? (
             <ShortFormNote control={control} />
           ) : (
           <>
@@ -3001,7 +3226,7 @@ export default function ControlDossier() {
           </VStep>
           </>
           )}
-          <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
+          {!isOwner && <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
             status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!controlLocked}
             right={control.wpSignoff?.reviewer
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>
@@ -3011,7 +3236,7 @@ export default function ControlDossier() {
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400">Ready to sign</span>
                   : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once {opApplies ? 'both tracks conclude' : 'the design concludes'}</span>}>
             <SignOffSection control={control} />
-          </VStep>
+          </VStep>}
           {concl === 'Ineffective' && (
             <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
               {/* ── graded here, and only here ───────────────────────────────
@@ -3048,9 +3273,18 @@ export default function ControlDossier() {
                         {def?.gapType && <Pill tone="risk">{GAP_LABEL[def.gapType]}</Pill>} */}
                   </div>
                   <p className="text-[0.75rem] text-ink-600">
-                    This control concluded ineffective. {def
-                      ? <>Assess severity (likelihood × magnitude) and remediation {defOpen ? 'below' : 'here'} — it opens on this paper.</>
-                      : <>Severity and remediation are assessed once the deficiency is raised.</>}
+                    {/* The owner has to see their own finding — they cannot fix
+                        what they cannot read. What they do not get is the ruler:
+                        likelihood × magnitude against materiality is the grading
+                        basis, and an auditee who knows the threshold knows what
+                        will and will not be pursued. The card below already
+                        redacts it (showMateriality={'{'}!isOwner{'}'}); this line has to
+                        stop advertising it. */}
+                    {isOwner
+                      ? <>A gap was found on this control. {def ? <>Open it {defOpen ? 'below' : 'here'} for what failed, the root cause and what is owed — and record your fix.</> : <>The detail follows once it is raised.</>}</>
+                      : <>This control concluded ineffective. {def
+                        ? <>Assess severity (likelihood × magnitude) and remediation {defOpen ? 'below' : 'here'} — it opens on this paper.</>
+                        : <>Severity and remediation are assessed once the deficiency is raised.</>}</>}
                   </p>
                 </div>
                 {def && (
@@ -3141,6 +3375,7 @@ export default function ControlDossier() {
         <WorkingPaperModal eng={eng} control={control} onClose={() => setWpPreview(false)}
           onDownload={() => logEvent({ action: 'Export', description: `Exported working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' })} />
       )}
+      {briefOpen && <RemediationBriefModal defId={def?.id} onClose={() => setBriefOpen(false)} />}
     </motion.div>
   );
 }

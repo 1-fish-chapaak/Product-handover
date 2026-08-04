@@ -13,7 +13,7 @@ import {
   conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, Th, Tickmark } from './parts';
+import { ConclusionPill, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -63,7 +63,9 @@ const REG_COLS = [
   { key: 'design', w: 150 },
   { key: 'operating', w: 168 },
   { key: 'conclusion', w: 126 },
-  { key: 'court', w: 122 },
+  // Court removed Aug 2026 (Step-2 action item 3). Whose move it is still drives
+  // the 'My court' saved view and the badge in the control-page header — only the
+  // register column went.
 ] as const;
 /** Widths are the reader's, not ours — they survive the session. */
 const COLW_KEY = 'sox-register-colw';
@@ -388,7 +390,6 @@ export default function ControlRegister() {
                   options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
                   onChange={v => setSavedView(v as SavedView)} ariaLabel="Filter by status" />
               </Th>
-              <Th {...th('court')} title="Whose move it is — the auditor tests, the risk owner evidences and remediates, the reviewer countersigns">Court</Th>
             </tr>
           </thead>
           <tbody>
@@ -449,7 +450,6 @@ export default function ControlRegister() {
                         ? <TrackCell result={trackResult(c.operating)} a={op.passed} b={op.total} label={`${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`} />
                         : <span className="text-[0.6875rem] text-ink-400" title="Automated control — the design test is the whole test while the ITGCs hold">n/a · automated</span>}</td>
                       <td><ConclusionPill c={conclusionOf(eng, c)} /></td>
-                      <td><CourtBadge court={courtFor(c, eng.tasks, eng.reviewNotes)} fromRole={role} /></td>
                     </tr>
                   );
                 })}
