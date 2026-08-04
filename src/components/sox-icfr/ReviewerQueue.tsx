@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, PenLine, RotateCcw, Scale, ShieldCheck, StickyNote } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, controlConclusion, gradeException, isAwaitingReview, pendingReviewNoteCount } from './helpers';
+import { assessSeverity, conclusionOf, gradeException, isAwaitingReview, pendingReviewNoteCount } from './helpers';
 import { SeverityPill, Stamp } from './parts';
 import { cn } from '../../lib/cn';
 import type { Deficiency } from './types';
@@ -95,7 +95,7 @@ export default function ReviewerQueue() {
                     {noteN > 0 && <span className="text-high-700 font-semibold"> · {noteN} review note{noteN === 1 ? '' : 's'} to clear</span>}
                   </div>
                 </div>
-                <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
+                <Stamp result={conclusionOf(eng, c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
                 {/* gap-3 (12px) + ml-2 (8px) = 20px between stamp and arrow */}
                 <ArrowRight size={15} className="text-ink-300 shrink-0 ml-2" />
               </button>

@@ -29,6 +29,11 @@ async function openT05(page: Page) {
   await page.waitForTimeout(1200);
   await page.getByText('Control Library', { exact: true }).first().click();
   await page.waitForTimeout(900);
+  // T-05 is the last shell in its process, so it is the one control whose design
+  // and operating tracks are both untested — the whole journey is reachable from
+  // its opening state. It used to come out Automated (4 % 3 === 1), which after
+  // operatingApplies landed meant it short-formed to TOD and had no sample step
+  // at all; the seed now keeps the fresh control Manual for exactly this reason.
   await page.getByText('FX deals confirmed independently of dealing.').first().click();
   await page.waitForTimeout(1300);
   const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
@@ -61,7 +66,29 @@ async function extractAndLockPopulation(page: Page) {
     await page.waitForTimeout(500);
   }
 
+  // The report the population came out of is under test too, and it holds the
+  // lock shut until it concludes reliable — so step ① is not finished without
+  // it. Register it, work all three checks, conclude.
   const lock = page.getByRole('button', { name: 'Lock the population' });
+  await expect(lock).toBeDisabled();
+  await expect(page.getByText('IPE test', { exact: true })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByPlaceholder('e.g. SAP S/4HANA — Production').fill('SAP S/4HANA — Production');
+  await page.getByPlaceholder('e.g. S_ALR_87012086').fill('S_ALR_87012086');
+  await page.getByPlaceholder('who generated it').fill('R. Kulkarni · Treasury');
+  await page.getByRole('button', { name: /Register the report/ }).click();
+  await page.waitForTimeout(700);
+
+  for (const dim of ['Source & parameters', 'Completeness', 'Accuracy']) {
+    const row = page.locator('.subcard').filter({ hasText: dim }).first();
+    await expect(row.locator('textarea')).toBeVisible({ timeout: 10_000 });
+    await row.locator('textarea').fill(`Proven — ${dim} agreed to the source system.`);
+    await row.getByRole('button', { name: 'Pass', exact: true }).click();
+    await page.waitForTimeout(450);
+  }
+  await page.getByRole('button', { name: 'Reliable', exact: true }).click();
+  await page.waitForTimeout(700);
+
   await expect(lock).toBeEnabled();
   await lock.click();
   await page.waitForTimeout(900);

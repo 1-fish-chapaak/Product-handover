@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle, ArrowRight, CalendarRange, Building2, Grid3x3, Inbox, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, controlConclusion, engagementProgress } from './helpers';
+import { assessSeverity, conclusionOf, engagementProgress } from './helpers';
 import { engagementRagMeters } from './Overview';
 import { RagStrip } from './parts';
 import { processesForAudit, normaliseProcess } from './auditScope';
@@ -34,13 +34,13 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
     const inScope = procs
       ? eng.controls.filter(c => procs.includes(normaliseProcess(c.process)))
       : eng.controls;
-    const effective = inScope.filter(c => controlConclusion(c) === 'Effective').length;
+    const effective = inScope.filter(c => conclusionOf(eng, c) === 'Effective').length;
     return { total: inScope.length, effective, open: inScope.length - effective };
   };
 
   const W = defWord(eng.id);
   const stats = engagementProgress(eng);
-  const ragMeters = useMemo(() => engagementRagMeters(eng.controls), [eng.controls]);
+  const ragMeters = useMemo(() => engagementRagMeters(eng, eng.controls), [eng]);
 
   // Severity is assessed, not stored — a validly-capped material weakness counts
   // as a significant deficiency here exactly as it does on the Overview.

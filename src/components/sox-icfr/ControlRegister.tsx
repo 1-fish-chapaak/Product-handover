@@ -10,7 +10,7 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import {
-  controlCode, controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
+  conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Th, Tickmark } from './parts';
@@ -20,7 +20,7 @@ import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
 import { isOwnerOf, ownersOf } from './auditScope';
-import type { Control } from './types';
+import type { Conclusion, Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
   | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key';
@@ -80,7 +80,7 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   );
 }
 
-function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }: { c: Control; discN: number; noteN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onToggle }: { c: Control; concl: Conclusion; discN: number; noteN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
       onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
@@ -117,7 +117,7 @@ function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }
         <CardTrack label="TOD" res={trackResult(c.design)} started={designStarted(c)} />
         <CardTrack label="TOE" res={trackResult(c.operating)} started={operatingStarted(c)} />
       </div>
-      <div className="mt-3"><ConclusionPill c={controlConclusion(c)} /></div>
+      <div className="mt-3"><ConclusionPill c={concl} /></div>
     </div>
   );
 }
@@ -191,7 +191,7 @@ export default function ControlRegister() {
     [auditScoped, role, meOwner],
   );
   const stats = useMemo(() => ({
-    effective: scoped.filter(c => controlConclusion(c) === 'Effective').length,
+    effective: scoped.filter(c => conclusionOf(eng, c) === 'Effective').length,
     awaitingReview: scoped.filter(isAwaitingReview).length,
     waitingOnOwner: scoped.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
   }), [scoped, eng.tasks, eng.reviewNotes]);
@@ -210,12 +210,12 @@ export default function ControlRegister() {
     if (v === 'design-done') return trackResult(c.design) !== 'Not tested';
     if (v === 'operating') return trackResult(c.operating) === 'Not tested';
     if (v === 'operating-done') return trackResult(c.operating) !== 'Not tested';
-    if (v === 'effective') return controlConclusion(c) === 'Effective';
-    if (v === 'exceptions') return controlConclusion(c) === 'Ineffective';
+    if (v === 'effective') return conclusionOf(eng, c) === 'Effective';
+    if (v === 'exceptions') return conclusionOf(eng, c) === 'Ineffective';
     if (v === 'review') return isAwaitingReview(c);
     if (v === 'owner') return courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner';
-    if (v === 'open') return controlConclusion(c) === 'In progress';
-    if (v === 'papers') return controlConclusion(c) !== 'In progress' && !isControlFinal(c);
+    if (v === 'open') return conclusionOf(eng, c) === 'In progress';
+    if (v === 'papers') return conclusionOf(eng, c) !== 'In progress' && !isControlFinal(c);
     if (v === 'key') return c.isKey;
     return true;
   };
@@ -348,7 +348,7 @@ export default function ControlRegister() {
               )}
               <div className="card-grid">
                 {g.rows.map(c => (
-                  <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} noteN={pendingReviewNoteCount(eng, c.id)} onOpen={() => openControl(c.id)}
+                  <ControlCard key={c.id} c={c} concl={conclusionOf(eng, c)} discN={openDiscussionCount(eng, c.id)} noteN={pendingReviewNoteCount(eng, c.id)} onOpen={() => openControl(c.id)}
                     selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} />
                 ))}
               </div>
@@ -378,7 +378,7 @@ export default function ControlRegister() {
                 <HeaderFilter label="Control type" value={ctype} options={ctypes} allLabel="All types" onChange={setCtype} ariaLabel="Filter by control type" />
               </Th>
               <Th {...th('frequency')}><HeaderFilter label="Frequency" value={frequency} options={frequencies} allLabel="All frequencies" onChange={setFrequency} ariaLabel="Filter by frequency" /></Th>
-              <Th {...th('owner')}><HeaderFilter label="Owner" value={owner} options={owners} allLabel="All owners" onChange={setOwner} ariaLabel="Filter by owner" /></Th>
+              <Th {...th('owner')}><HeaderFilter label="Control Owner" value={owner} options={owners} allLabel="All control owners" onChange={setOwner} ariaLabel="Filter by control owner" /></Th>
               <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
               <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
               <Th {...th('design')}>① TOD</Th>
@@ -442,8 +442,13 @@ export default function ControlRegister() {
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><TrackCell result={trackResult(c.design)} a={dp.docsReceived} b={dp.docsTotal} label={`${dp.docsReceived}/${dp.docsTotal} docs`} /></td>
-                      <td><TrackCell result={trackResult(c.operating)} a={op.passed} b={op.total} label={`${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`} /></td>
-                      <td><ConclusionPill c={controlConclusion(c)} /></td>
+                      {/* An automated control with its ITGCs holding never gets a
+                          TOE, so the cell says so rather than reading "Not tested"
+                          — which would put it on the auditor's list forever. */}
+                      <td>{operatingApplies(eng, c)
+                        ? <TrackCell result={trackResult(c.operating)} a={op.passed} b={op.total} label={`${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`} />
+                        : <span className="text-[0.6875rem] text-ink-400" title="Automated control — the design test is the whole test while the ITGCs hold">n/a · automated</span>}</td>
+                      <td><ConclusionPill c={conclusionOf(eng, c)} /></td>
                       <td><CourtBadge court={courtFor(c, eng.tasks, eng.reviewNotes)} fromRole={role} /></td>
                     </tr>
                   );

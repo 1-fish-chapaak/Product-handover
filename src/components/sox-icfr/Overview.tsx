@@ -9,14 +9,14 @@ import NewAuditWizard from './NewAuditWizard';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { RagStrip, type RagMeterDef } from './parts';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
-import type { Control, Severity, TaskType } from './types';
+import type { Control, IcfrEngagement, Severity, TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 
@@ -144,7 +144,7 @@ export default function Overview() {
     const map = new Map<string, Control[]>();
     scoped.forEach(c => { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); });
     return Array.from(map, ([name, rows]) => {
-      const concl = rows.map(controlConclusion);
+      const concl = rows.map(c => conclusionOf(eng, c));
       return {
         name, total: rows.length,
         designDone: rows.filter(c => trackResult(c.design) !== 'Not tested').length,
@@ -158,7 +158,7 @@ export default function Overview() {
 
   // engagement-wide RAG trio — the control-level trio (completeness, evidence
   // validated, TOD coverage) lives on each control's own page
-  const ragMeters = useMemo<RagMeterDef[]>(() => engagementRagMeters(scoped), [scoped]);
+  const ragMeters = useMemo<RagMeterDef[]>(() => engagementRagMeters(eng, scoped), [eng, scoped]);
 
   // each tile lands on the register view computing the SAME predicate as its count
   const tiles = [
@@ -198,8 +198,8 @@ export default function Overview() {
 
       {/* Owner mode stops here-ish: their controls and their exceptions, nothing engagement-wide. */}
       {isOwner && (() => {
-        const eff = myControls.filter(c => controlConclusion(c) === 'Effective').length;
-        const ineff = myControls.filter(c => controlConclusion(c) === 'Ineffective').length;
+        const eff = myControls.filter(c => conclusionOf(eng, c) === 'Effective').length;
+        const ineff = myControls.filter(c => conclusionOf(eng, c) === 'Ineffective').length;
         const due = testsDueNow(myControls).length;
         const openDefs = myDefs.filter(d => d.status !== 'Closed');
         const inRem = openDefs.filter(d => d.status === 'Identified' || d.status === 'Remediation').length;
@@ -537,11 +537,11 @@ export default function Overview() {
  * an audit) both read it. One computation, so the two can never disagree about
  * the same engagement.
  */
-export function engagementRagMeters(controls: Control[]): RagMeterDef[] {
+export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): RagMeterDef[] {
     const total = controls.length;
     const approved = controls.filter(c => c.racmReview?.status === 'Approved').length;
     const remarks = controls.filter(c => c.racmReview?.status === 'Remark').length;
-    const concl = controls.map(controlConclusion);
+    const concl = controls.map(c => conclusionOf(eng, c));
     const effective = concl.filter(x => x === 'Effective').length;
     const ineffective = concl.filter(x => x === 'Ineffective').length;
     // sample testing counts every sample × attribute verdict across the register;

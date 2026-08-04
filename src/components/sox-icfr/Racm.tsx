@@ -7,7 +7,7 @@ import { useAuditControls } from './useAuditControls';
 import { entitiesFor } from './auditScope';
 import { defWord } from './flow';
 import { useIcfr } from './store';
-import { controlCode, controlConclusion, trackResult } from './helpers';
+import { conclusionOf, controlCode, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -16,7 +16,7 @@ import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
 import { CONTROL_CLASSES } from './types';
-import type { Control } from './types';
+import type { Control, IcfrEngagement } from './types';
 
 /** The processes a SOX RACM can be created for — the scoping wizard's seven
  *  plus the two cycles it doesn't scope from the trial balance. A process
@@ -60,9 +60,9 @@ function openEditorTab(engId: string, process: string): void {
 type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
 
 /** Roll-up status of one RACM — shared by the landing cards and the matrix header. */
-function matrixStatusOf(controls: Control[], engagementId: string): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
-  const concl = controls.map(controlConclusion);
-  if (concl.includes('Ineffective')) return { label: defWord(engagementId).Many, tone: 'risk' };
+function matrixStatusOf(controls: Control[], eng: IcfrEngagement): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
+  const concl = controls.map(c => conclusionOf(eng, c));
+  if (concl.includes('Ineffective')) return { label: defWord(eng.id).Many, tone: 'risk' };
   if (concl.every(x => x === 'Not started')) return { label: 'Not tested', tone: 'draft' };
   if (concl.every(x => x === 'Effective')) return { label: 'Concluded', tone: 'compliant' };
   return { label: 'In testing', tone: 'evidence' };
@@ -318,7 +318,7 @@ export function RacmLanding() {
         </thead>
         <tbody>
           {processes.map(({ name, rows }) => {
-            const status = matrixStatusOf(rows, eng.id);
+            const status = matrixStatusOf(rows, eng);
             const risks = new Set(rows.map(c => c.riskId)).size;
             const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
             const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
@@ -439,7 +439,7 @@ export default function Racm() {
     pending: controls.filter(c => !c.racmReview).length,
   }), [controls]);
 
-  const matrixStatus = useMemo(() => matrixStatusOf(controls, eng.id), [controls, eng.id]);
+  const matrixStatus = useMemo(() => matrixStatusOf(controls, eng), [controls, eng]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -579,7 +579,7 @@ export default function Racm() {
           <tbody>
             {filtered.map(c => {
               const d = trackResult(c.design); const o = trackResult(c.operating);
-              const ineffective = controlConclusion(c) === 'Ineffective';
+              const ineffective = conclusionOf(eng, c) === 'Ineffective';
               return (
                 <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}
                   style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>

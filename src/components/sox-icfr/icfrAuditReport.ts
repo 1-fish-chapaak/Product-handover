@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import {
-  assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion,
+  assessSeverity, conclusionOf, controlConclusion, formatDueDate, formatINR, icfrConclusion,
   openMaterialWeaknesses, trackResult,
 } from './helpers';
 import { gapNature } from './types';
@@ -53,7 +53,7 @@ function observationStatus(d: Deficiency): string {
 export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
-  const concl = controls.map(controlConclusion);
+  const concl = controls.map(c => conclusionOf(eng, c));
   const ineffective = concl.filter(x => x === 'Ineffective').length;
   const effective = concl.filter(x => x === 'Effective').length;
   const untested = concl.filter(x => x === 'Not started').length;

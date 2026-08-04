@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, combinedSample, conclusionOf, controlConclusion, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -295,9 +295,12 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     blocks.push({
       kind: 'table', title: 'IPE — validation of the report',
       note: `${ipe.checks.filter(k => k.result === 'Pass').length}/${ipe.checks.length} checks passed · a report that does not conclude reliable cannot be sampled from`,
-      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Tick'],
-      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', tick(k.result)]),
-      tickFrom: 5,
+      // The proof is its own column. A finding written down and a finding
+      // evidenced are not the same standard, and the reviewer reperforming this
+      // needs to see which one they are reading.
+      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Proof on file', 'Tick'],
+      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', k.evidence?.map(f => f.name).join('; ') || '—', tick(k.result)]),
+      tickFrom: 6,
     });
   } else {
     blocks.push({ kind: 'note', label: 'IPE', text: 'No entity-produced report registered — the population has not been validated for source, completeness or accuracy.', tone: 'neutral' });
@@ -359,12 +362,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // Results narrative + conclusion
   const d = trackResult(c.design); const o = trackResult(c.operating);
   const totalFails = steps.reduce((n, s) => n + samples.filter(smp => s.sampleResults?.[smp.id] === 'Fail').length, 0);
+  // A short-form control's paper has to say WHY there is no operating test, or it
+  // reads as a paper with a hole in it. The precondition is named too, because
+  // that is the thing a reviewer would otherwise have to go and check.
+  const opApplies = operatingApplies(eng, c);
   const results = [
     `TOD: ${d}${c.design.points.length ? ` — ${c.design.points.filter(p => (p.override?.result ?? p.result) === 'Pass').length}/${c.design.points.length} considerations satisfied` : ''}.`,
-    `TOE: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`,
-    c.operating.testedBy ? `Tested by ${c.operating.testedBy}, ${c.operating.testedAt}.` : '',
+    opApplies
+      ? `TOE: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`
+      : 'TOE: not applicable — the control is automated, so it performs identically on every transaction and the test of design is the whole test. Valid while the ITGCs behind it are effective; an ITGC failure puts the full population, sample and operating test back.',
+    opApplies && c.operating.testedBy ? `Tested by ${c.operating.testedBy}, ${c.operating.testedAt}.` : '',
   ].filter(Boolean).join(' ');
-  const concl = controlConclusion(c);
+  const concl = controlConclusion(c, opApplies);
   blocks.push({ kind: 'note', label: 'Test results', text: results, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
   blocks.push({ kind: 'note', label: 'Conclusion', text: `${concl} control`, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
   // The auditor's own words behind each track's conclusion. The box that collects
@@ -482,7 +491,7 @@ export const ENG_SIGNOFF_TITLE = 'Engagement sign-off';
 export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
-  const concl = controls.map(controlConclusion);
+  const concl = controls.map(c => conclusionOf(eng, c));
   const overall = concl.includes('Ineffective')
     ? 'Deficiencies identified — see Deficiencies sheet'
     : concl.length && concl.every(c => c === 'Effective') ? 'Effective — no exceptions' : 'Testing in progress';

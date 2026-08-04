@@ -14,7 +14,7 @@ import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
   // the deficiency banner below. Both go back together.
   // formatINR,
-  concludeRationale, controlCode, controlConclusion, courtFor, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
+  concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, fmtDay, parseDay, EXTRACT_WOBBLE,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
@@ -38,7 +38,7 @@ import { DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROUN
 import { sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, OperatingStep,
-  FileOrigin, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
+  FileOrigin, IpeCheck, IpeConclusion, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -201,6 +201,37 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
       </motion.div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * What stands in for steps 2–4 on an automated control.
+ *
+ * Says the thing rather than leaving a gap: which three steps are absent, why
+ * they are absent, and — the part that matters to a reviewer — what would bring
+ * them back. A short-form paper that does not name its own precondition reads as
+ * work someone skipped.
+ */
+function ShortFormNote({ control }: { control: Control }) {
+  return (
+    <div className="rounded-xl border border-canvas-border bg-paper-50/50 px-5 py-4 my-1.5">
+      <div className="flex items-start gap-2.5">
+        <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center shrink-0"><Cpu size={14} /></span>
+        <div className="min-w-0">
+          <h4 className="text-[0.8125rem] font-bold text-ink-900">Population, sample and TOE don't apply</h4>
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-[42rem]">
+            {control.description.split('.')[0]} runs automatically, so it does the same thing to every
+            transaction — testing fifty proves nothing that testing one did not. The design test is the
+            whole test, and this control concludes on it alone.
+          </p>
+          <p className="text-[0.71875rem] text-ink-400 mt-2 leading-relaxed max-w-[42rem]">
+            That holds while the IT general controls behind the system do. If change management or access
+            fails, nobody can say the logic that ran in March is the logic that ran in October — these three
+            steps come back and the control is tested like a manual one.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -567,8 +598,8 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
           {canEdit && (
             <input value={attendee} onChange={e => setAttendee(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && attendee.trim()) { setWalkthroughMeta(control.id, { attendees: [...w.attendees, attendee.trim()] }); setAttendee(''); } }}
-              placeholder={w.attendees.length ? 'Add another…' : 'Name, then Enter'} aria-label="Add an attendee"
-              className="h-[22px] px-2 w-[150px] rounded border border-canvas-border bg-canvas-elevated text-[0.65625rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              placeholder={w.attendees.length ? 'Add another…' : 'Name · role, then Enter'} aria-label="Add an attendee"
+              className="h-[22px] px-2 w-[170px] rounded border border-canvas-border bg-canvas-elevated text-[0.65625rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           )}
           {!canEdit && w.attendees.length === 0 && <span className="text-[0.65625rem] text-ink-400">Not recorded</span>}
         </div>
@@ -1052,8 +1083,276 @@ function sampleRowFacts(i: number): { date: string; amountL: number } {
   return { date: `${day} ${MONTHS[(i * 5) % 12]} FY26`, amountL };
 }
 
-// ── IPE gate 1 (inside step ①) — the entity-produced report is itself under test ──
+// ── IPE (inside step ②) — the entity-produced report is itself under test ────────
+/** Rebuilt Aug 2026 (Step-2 action item 17).
+ *
+ *  A report the CLIENT produced is not trustworthy because it arrived. Before a
+ *  single item is sampled out of it, the report itself is the thing under test:
+ *  was it run from the live system with the parameters this test assumes, does
+ *  it hold every record it should, and is what it says about each record true?
+ *
+ *  It sits INSIDE step ②, under the population it proves and above the lock,
+ *  rather than taking a number of its own — the model has said since it was
+ *  first written that IPE is "worked alongside the population it proves", and a
+ *  sixth step would have renumbered every step after it.
+ *
+ *  Not reliable holds the lock shut, and the sample, the TOE and the sign-off
+ *  all sit behind that lock. The cascade is the point: a population drawn from
+ *  an unproven report is not a weaker population, it is the wrong one. One fix
+ *  upstream opens all four. See populationReady. */
+const IPE_TONE: Record<IpeConclusion, string> = {
+  'Reliable': 'text-compliant-700',
+  'Not reliable': 'text-risk-700',
+  'Not tested': 'text-ink-400',
+};
 
+/** One dimension, worked. The assertion and the procedure are seeded — the
+ *  auditor tests, never authors, so the standard cannot quietly shrink to
+ *  whatever somebody had time for. What they add is the finding and the proof. */
+function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Control; check: IpeCheck; canWrite: boolean; reportCount: number }) {
+  const { me, setIpeCheck } = useIcfr();
+  const [draft, setDraft] = useState(check.note ?? '');
+  const [counted, setCounted] = useState('');
+  const answered = check.result !== 'Not tested';
+
+  // The call's own example, made operable: the auditor queries the system
+  // themselves, and the difference between what they counted and what the
+  // report claims IS the finding. Typed once, written out in words.
+  const n = Number(counted);
+  const variance = counted.trim() !== '' && Number.isFinite(n) && n >= 0 ? n - reportCount : null;
+  const pct = variance != null && reportCount > 0 ? Math.abs(Math.round((variance / reportCount) * 1000) / 10) : 0;
+  const countedNote = variance == null ? ''
+    : variance === 0
+      ? `Counted independently in the source system over the same window — ${n.toLocaleString()} records, agreeing to the report's ${reportCount.toLocaleString()} exactly.`
+      : `Counted independently in the source system over the same window — ${n.toLocaleString()} records against the report's ${reportCount.toLocaleString()}. ${Math.abs(variance).toLocaleString()} ${variance > 0 ? 'record(s) the report does not show' : 'record(s) the report shows that the system does not hold'} — ${pct}%.`;
+
+  const save = (result?: TestResult) => {
+    const note = draft.trim();
+    setIpeCheck(control.id, check.id, { ...(result ? { result } : {}), note: note || undefined });
+  };
+  const attach = () => {
+    const file = { id: `ev-${check.id}-${(check.evidence?.length ?? 0) + 1}`, name: `IPE_${check.dimension.replace(/[^A-Za-z0-9]+/g, '_')}_${control.id}.pdf`, kind: 'PDF' as const, uploadedBy: me, uploadedAt: 'just now' };
+    setIpeCheck(control.id, check.id, { evidence: [...(check.evidence ?? []), file] });
+  };
+
+  return (
+    <div className="subcard px-3.5 py-3">
+      <div className="flex items-start gap-3">
+        <Tickmark result={check.result} size={18} />
+        <div className="min-w-0 flex-1">
+          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">{check.dimension}</span>
+          <p className="text-[0.78125rem] text-ink-800 leading-relaxed mt-0.5">{check.description}</p>
+          <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1 flex items-start gap-1.5"><FlaskConical size={11} className="mt-0.5 shrink-0" /> {check.method}</p>
+
+          {/* the auditor's own count, only where counting is the procedure */}
+          {check.dimension === 'Completeness' && canWrite && !answered && (
+            <div className="mt-2.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Count it yourself</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input type="number" min={0} value={counted} onChange={e => setCounted(e.target.value)} placeholder="records in the system"
+                  className="w-44 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                <span className="text-[0.6875rem] text-ink-400">the report claims <span className="tabular-nums font-semibold text-ink-700">{reportCount.toLocaleString()}</span></span>
+                {variance != null && (
+                  <span className={cn('text-[0.6875rem] font-bold', variance === 0 ? 'text-compliant-700' : 'text-risk-700')}>
+                    {variance === 0 ? 'Ties' : `Off by ${Math.abs(variance).toLocaleString()} · ${pct}%`}
+                  </span>
+                )}
+                {variance != null && (
+                  <button onClick={() => setDraft(countedNote)}
+                    className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Write it up</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* the finding — required to fail, because a failure nobody wrote down is not one */}
+          {canWrite && !answered ? (
+            <div className="mt-2.5">
+              <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2}
+                placeholder={check.dimension === 'Completeness' ? 'What the tie-out showed — the numbers, and the variance if there is one' : check.dimension === 'Accuracy' ? 'Which records were vouched, to what, and what was found' : 'What the parameter screen showed, and how it agrees to the test scope'}
+                className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <button onClick={() => save('Pass')} disabled={!draft.trim()} title={draft.trim() ? undefined : 'Record what was found first.'}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-compliant-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                <button onClick={() => save('Fail')} disabled={!draft.trim()} title={draft.trim() ? undefined : 'Record what was found first.'}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-300 text-risk-700 text-[0.71875rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={12} /> Fail</button>
+                <button onClick={attach} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 transition-colors cursor-pointer"><Paperclip size={12} /> Attach proof</button>
+                <span className="text-[0.625rem] text-ink-400">This prints on the working paper.</span>
+              </div>
+            </div>
+          ) : check.note ? (
+            <p className="mt-2 text-[0.6875rem] text-ink-600 leading-relaxed">
+              <span className="text-ink-400">Found</span> · {check.note}
+              {canWrite && answered && <button onClick={() => { setDraft(check.note ?? ''); setIpeCheck(control.id, check.id, { result: 'Not tested' }); }} className="ml-2 text-brand-600 font-semibold hover:underline cursor-pointer">Re-test</button>}
+            </p>
+          ) : null}
+
+          {check.evidence && check.evidence.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {check.evidence.map(f => (
+                <span key={f.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.65625rem] text-ink-600"><Paperclip size={10} /> {f.name}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWrite: boolean; isAuditor: boolean }) {
+  const { me, registerIpe, concludeIpe, clearIpe } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const files = useAuditFiles();
+  const pop = control.operating.population;
+  const sourceFile = files.find(f => f.name === pop?.sourceFile);
+  const ipe = control.operating.ipe;
+  const reliable = ipe?.conclusion === 'Reliable';
+  // Settled work folds away; unsettled work does not get to hide.
+  const [open, setOpen] = useState(!reliable);
+
+  // Everything the audit already knows is filled in. The auditor is asked only
+  // for what the platform cannot know — the report's identifier in the source
+  // system, who at the client ran it, and what it totals to.
+  const [name, setName] = useState(sourceFile?.name ?? '');
+  const [system, setSystem] = useState(sourceFile?.system ?? '');
+  const [ref, setRef] = useState('');
+  const [params, setParams] = useState(pop?.criteria ?? '');
+  const [by, setBy] = useState(sourceFile?.systemFetched ? `${me} — pulled by the audit team` : '');
+  // NOT prefilled from the file record. When the file reached the audit and when
+  // the client ran the report are different dates, and "run on: at scoping" is a
+  // claim about the client that nobody made.
+  const [at, setAt] = useState('');
+  const [count, setCount] = useState(String(pop?.sourceCount ?? sourceFile?.rows ?? ''));
+  const [total, setTotal] = useState('');
+
+  if (!pop) return null;
+  const suggestion = ipe ? ipeSuggestion(ipe) : 'Not tested';
+  const allAnswered = !!ipe && ipe.checks.every(k => k.result !== 'Not tested');
+  const canRegister = !!name.trim() && !!system.trim() && !!ref.trim() && !!by.trim() && Number(count) > 0;
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string, type: 'text' | 'number' = 'text') => (
+    <label className="min-w-0">
+      <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">{label}</span>
+      <input type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
+        className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+    </label>
+  );
+
+  return (
+    <div className={cn('rounded-xl border', reliable ? 'border-compliant-200 bg-compliant-50/30' : ipe?.conclusion === 'Not reliable' ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-paper-50/50')}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer">
+        {open ? <ChevronDown size={14} className="text-ink-400 shrink-0" /> : <ChevronRight size={14} className="text-ink-400 shrink-0" />}
+        <span className="text-[0.78125rem] font-bold text-ink-900">IPE test</span>
+        <span className="text-[0.6875rem] text-ink-400 min-w-0 truncate">— the report this population came out of, proven before anything is built on it</span>
+        <span className={cn('ml-auto shrink-0 text-[0.71875rem] font-bold', IPE_TONE[ipe?.conclusion ?? 'Not tested'])}>
+          {ipe ? ipe.conclusion : 'Not tested'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3.5 pb-3.5">
+          {!ipe ? (
+            canWrite && isAuditor ? (
+              <>
+                <p className="text-[0.71875rem] text-ink-500 leading-relaxed mb-3">
+                  {sourceFile?.systemFetched
+                    ? <>This source was pulled from <span className="font-semibold text-ink-700">{sourceFile.system}</span> by the audit team, so how it was run is already known. What it holds and what it says still have to be proven.</>
+                    : <>A report the client generated is not reliable because it arrived. Register it, and the three checks every entity-produced report answers are seeded for you to work.</>}
+                </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  {field('Report name', name, setName, 'e.g. New vendor master listing')}
+                  {field('Source system', system, setSystem, 'e.g. SAP S/4HANA — Production')}
+                  {field('Report / transaction code', ref, setRef, 'e.g. S_ALR_87012086')}
+                  {field('Run by (at the client)', by, setBy, 'who generated it')}
+                  {field('Run on', at, setAt, 'e.g. 4 Apr 2026')}
+                  {field('Records in the report', count, setCount, 'row count', 'number')}
+                </div>
+                <div className="mt-2.5">
+                  <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Parameters it was run with</span>
+                  <textarea value={params} onChange={e => setParams(e.target.value)} rows={2} placeholder="Company code, date range, document types — exactly how it was run"
+                    className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                </div>
+                <div className="mt-2.5">
+                  {field('Control total, and what it was agreed to', total, setTotal, 'e.g. ₹41.2 Cr, agreed to GL 200100')}
+                </div>
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  <button disabled={!canRegister} title={canRegister ? undefined : 'Name, system, report code, who ran it and the record count are all needed.'}
+                    onClick={() => {
+                      registerIpe(control.id, { reportName: name.trim(), system: system.trim(), reportRef: ref.trim(), parameters: params.trim(), generatedBy: by.trim(), generatedAt: at.trim(), recordCount: Number(count), controlTotal: total.trim() });
+                      logEvent({ action: 'Create', description: `Registered "${name.trim()}" as information produced by the entity on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+                    }}
+                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><FileCheck2 size={14} /> Register the report</button>
+                  <span className="text-[0.65625rem] text-ink-400">The population cannot lock until this report is proven reliable.</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-[0.71875rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
+            )
+          ) : (
+            <>
+              {/* what was registered — the facts anyone needs to re-run it */}
+              <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="block text-[0.78125rem] font-bold text-ink-900 truncate">{ipe.reportName}</span>
+                    <span className="block text-[0.6875rem] text-ink-500 mt-0.5 truncate">{ipe.system} · <span className="font-mono">{ipe.reportRef}</span> · {ipe.recordCount.toLocaleString()} records</span>
+                  </div>
+                  {canWrite && isAuditor && (
+                    <button onClick={() => { clearIpe(control.id); logEvent({ action: 'Delete', description: `Withdrew the registered report on ${control.id} — IPE testing restarted`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+                      className="shrink-0 h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border text-[0.6875rem] font-semibold text-ink-500 hover:border-risk-300 hover:text-risk-600 transition-colors cursor-pointer"><RotateCcw size={11} /> Withdraw</button>
+                  )}
+                </div>
+                <div className="mt-2 pt-2 border-t border-canvas-border grid grid-cols-2 gap-x-4 gap-y-1 text-[0.6875rem] text-ink-500">
+                  {ipe.parameters && <span className="min-w-0 col-span-2"><span className="text-ink-400">Run with</span> · {ipe.parameters}</span>}
+                  {ipe.generatedBy && <span className="min-w-0 truncate"><span className="text-ink-400">Run by</span> · {ipe.generatedBy}{ipe.generatedAt ? `, ${ipe.generatedAt}` : ''}</span>}
+                  {ipe.controlTotal && <span className="min-w-0 truncate"><span className="text-ink-400">Totals to</span> · {ipe.controlTotal}</span>}
+                </div>
+              </div>
+
+              <div className="mt-2.5 space-y-1.5">
+                {ipe.checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={ipe.recordCount} />)}
+              </div>
+
+              {/* the verdict — a single failure sinks it, so the suggestion is stated and the auditor signs it */}
+              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                  {ipe.conclusion !== 'Not tested'
+                    ? <>Concluded <span className={cn('font-bold', IPE_TONE[ipe.conclusion])}>{ipe.conclusion.toLowerCase()}</span> by {ipe.testedBy}{ipe.testedAt ? `, ${ipe.testedAt}` : ''}.</>
+                    : allAnswered
+                      ? <>All three worked. The checks read <span className="font-semibold text-ink-600">{suggestion.toLowerCase()}</span> — a single failure sinks the report.</>
+                      : 'Work all three checks before concluding.'}
+                </p>
+                {canWrite && isAuditor && ipe.conclusion === 'Not tested' && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? 'Work all three checks first.' : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
+                      onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false); addToast({ type: 'success', title: 'Report reliable', message: `${ipe.reportName} — the population can be locked.` }); }}
+                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
+                    <button disabled={!allAnswered}
+                      onClick={() => { concludeIpe(control.id, 'Not reliable'); addToast({ type: 'error', title: 'Report not reliable', message: 'The population cannot be locked off this report.' }); }}
+                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={14} /> Not reliable</button>
+                  </div>
+                )}
+                {canWrite && isAuditor && ipe.conclusion !== 'Not tested' && (
+                  <button onClick={() => concludeIpe(control.id, 'Not tested')}
+                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /> Reopen</button>
+                )}
+              </div>
+
+              {ipe.conclusion === 'Not reliable' && (
+                <p className="mt-2 text-[0.6875rem] text-risk-700 leading-relaxed flex items-start gap-1.5">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                  <span>The population cannot be locked off this report, so the sample, the TOE and the sign-off stay shut. Get a corrected report and register it, or re-test the check that failed.</span>
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** One thing the application checked for itself.
  *
@@ -1547,12 +1846,19 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   const ready = populationReady(control, winFrom, winTo);
   // Named in the order the step is worked, so the message always points at the
   // next thing to do rather than the last thing outstanding.
+  const ipe = control.operating.ipe;
   const missing = needsExpected ? 'Record how many instances were expected before locking.'
     : cv?.blocks && !pop?.countNote?.trim()
       ? (cv.level === 'fail' ? 'The extract is short — refilter, or record why the shortfall stands, before locking.' : 'Refilter, or accept the count difference with a reason, before locking.')
       : gv?.blocks && !pop?.coverageNote?.trim() ? 'Settle the period gap, or record why it stands, before locking.'
         : !pop?.countConfirmed ? 'Agree the count reads right before locking.'
-          : 'A check that did not hold needs resolving before locking.';
+          // Named as its own reason rather than folded into the catch-all: the
+          // auditor who cannot lock needs to be told the block is upstream of
+          // the population entirely, not in the filter they were just editing.
+          : !ipe ? 'Register the report this population came out of, and prove it, before locking.'
+            : ipe.conclusion === 'Not reliable' ? 'The report behind this population is not reliable — nothing can be locked off it.'
+              : ipe.conclusion === 'Not tested' ? 'Finish the IPE test on the report before locking.'
+                : 'A check that did not hold needs resolving before locking.';
 
   return (
     <div className="p-5">
@@ -1783,6 +2089,14 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               disagree with — so they are put on the screen, and the agreement
               is asked for afterwards rather than instead. */}
           <CountContext control={control} canWrite={canWrite && !locked} locked={locked} />
+
+          {/* ── the report itself, under test ───────────────────────────────
+              Last thing before the lock, because it is the last thing that has
+              to be true: the count and the period check what the FILTER did,
+              this checks whether the thing filtered was worth filtering. */}
+          <div className="mt-4">
+            <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
+          </div>
 
           {/* Where the data came from is NOT asked here. It was answered when
               the file entered the audit, it is shown read-only on the source
@@ -2505,7 +2819,11 @@ export default function ControlDossier() {
   // Both personas can now execute TOD and TOE; the shared trail records who did what.
   const canEdit = role === 'auditor' || role === 'risk-owner';
   const headOwners = ownersOf(control);
-  const concl = controlConclusion(control);
+  // Automated + ITGCs holding = the design test IS the test. Everything on this
+  // page that asked "have both tracks concluded?" now asks the narrower question.
+  const opApplies = operatingApplies(eng, control);
+  const concl = controlConclusion(control, opApplies);
+  const controlLocked = isControlLocked(control, opApplies);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
   const toeLocked = designResult !== 'Effective';
@@ -2649,6 +2967,14 @@ export default function ControlDossier() {
           <VStep n={1} title="TOD" subtitle="Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective." status={designResult}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
+          {/* An automated control stops here while its ITGCs hold — see
+              operatingApplies. The steps are not rendered locked, they are not
+              rendered at all: a greyed-out Population would say "you still owe
+              this", and the whole point is that nobody does. */}
+          {!opApplies ? (
+            <ShortFormNote control={control} />
+          ) : (
+          <>
           <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked ? 'Effective' : 'Not tested'}
             right={popLocked
@@ -2673,15 +2999,17 @@ export default function ControlDossier() {
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after TOD</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
+          </>
+          )}
           <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
-            status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!isControlLocked(control)}
+            status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!controlLocked}
             right={control.wpSignoff?.reviewer
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>
               : control.wpSignoff?.preparer
                 ? <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting countersign</span>
-                : isControlLocked(control)
+                : controlLocked
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400">Ready to sign</span>
-                  : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once both tracks conclude</span>}>
+                  : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once {opApplies ? 'both tracks conclude' : 'the design concludes'}</span>}>
             <SignOffSection control={control} />
           </VStep>
           {concl === 'Ineffective' && (

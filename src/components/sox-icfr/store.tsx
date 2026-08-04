@@ -178,6 +178,8 @@ interface IcfrCtx {
    *  risk rating. Key/non-key and the rating are agreed with management, never
    *  read off an SOP, so they have to be editable rather than displayed. */
   updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating' | 'owner' | 'processOwner'>) => void;
+  /** Key / non-key, set while an audit is being SCOPED — see `setControlKey`. */
+  setControlKey: (controlId: string, isKey: boolean) => void;
   /** The design judgements the paper states — 5W+1H coverage, compensating
    *  control, is the frequency right, is the type right. */
   setDesignJudgements: (controlId: string, patch: Partial<DesignJudgements>) => void;
@@ -235,7 +237,7 @@ interface IcfrCtx {
   // IPE — the entity-produced report is registered, its three checks are worked,
   // then it is concluded. Until it concludes Reliable there is nothing to sample.
   registerIpe: (controlId: string, meta: Omit<IpeTest, 'checks' | 'conclusion' | 'testedBy' | 'testedAt'>) => void;
-  setIpeCheck: (controlId: string, checkId: string, patch: { result?: TestResult; note?: string }) => void;
+  setIpeCheck: (controlId: string, checkId: string, patch: { result?: TestResult; note?: string; evidence?: EvidenceFile[] }) => void;
   concludeIpe: (controlId: string, conclusion: IpeConclusion) => void;
   /** Unregister the report — the wrong extract was tested, so the work goes with it. */
   clearIpe: (controlId: string) => void;
@@ -379,7 +381,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [meOwner, setMeOwner] = useState(() => {
     const live = eng.deficiencies.find(d => d.status !== 'Closed');
     const owner = live && eng.controls.find(c => c.id === live.controlId)?.owner;
-    return owner ?? eng.controls[0]?.owner ?? 'M. Nair · Accounts Payable';
+    return owner ?? eng.controls[0]?.owner ?? 'M. Nair';
   });
 
   // Person-based identity: each hat acts as the engagement's named person, not a
@@ -595,6 +597,28 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, ...patch }));
   }, [patchControl, role]);
+
+  /**
+   * Key / non-key, set while an audit is being scoped.
+   *
+   * Deliberately NOT routed through `patchControl`, whose concluded-control
+   * guard exists to stop a signed working paper being rewritten. Scoping runs
+   * before any of that: a new audit is created with nothing tested, and a
+   * roll-forward carries the RACM and its controls but starts testing from zero
+   * — so a control cannot be concluded at the moment this is asked. The guard
+   * would only ever bite on a seeded demo engagement that already has a cycle
+   * in flight, where it would silently swallow the click.
+   *
+   * The control page's own key switch keeps `updateControlMeta`, and with it
+   * the guard: there, the control genuinely can be concluded already.
+   */
+  const setControlKey = useCallback<IcfrCtx['setControlKey']>((controlId, isKey) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      return { ...prev, controls: prev.controls.map(c => (c.id === controlId ? { ...c, isKey } : c)) };
+    });
+  }, [role]);
 
   // The design judgements the paper states. Stamped with who recorded them, so a
   // reader can see the questions were actually considered rather than defaulted.
@@ -939,6 +963,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       pushExec(prev => {
         const k = prev.controls.find(c => c.id === controlId)?.operating.ipe?.checks.find(x => x.id === checkId);
         return k ? { controlId, track: 'operating', kind: 'ipe', verb: `tested the report's ${k.dimension.toLowerCase()}`, target: k.dimension, result: k.result } : null;
+      });
+    }
+    // The proof itself is a fact on the paper, not a detail of the result — an
+    // auditor who says the count ties and an auditor who shows the screen they
+    // counted it on have not done the same thing.
+    if (patch.evidence) {
+      pushExec(prev => {
+        const k = prev.controls.find(c => c.id === controlId)?.operating.ipe?.checks.find(x => x.id === checkId);
+        const last = patch.evidence?.[patch.evidence.length - 1];
+        return k && last ? { controlId, track: 'operating', kind: 'ipe', verb: `attached proof of the report's ${k.dimension.toLowerCase()}`, target: last.name } : null;
       });
     }
   }, [patchControl, pushExec, role]);
@@ -2175,7 +2209,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
     setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
@@ -2188,7 +2222,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

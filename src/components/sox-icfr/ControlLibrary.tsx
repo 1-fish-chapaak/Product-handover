@@ -11,7 +11,7 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
-  controlCode, controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
+  conclusionOf, controlCode, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
 } from './helpers';
 import { NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -381,12 +381,12 @@ export default function ControlLibrary() {
       case 'design-done': return c.design.conclusion !== 'Not tested';
       case 'operating': return c.operating.conclusion === 'Not tested';
       case 'operating-done': return c.operating.conclusion !== 'Not tested';
-      case 'effective': return controlConclusion(c) === 'Effective';
-      case 'exceptions': return controlConclusion(c) === 'Ineffective';
+      case 'effective': return conclusionOf(eng, c) === 'Effective';
+      case 'exceptions': return conclusionOf(eng, c) === 'Ineffective';
       case 'review': return isAwaitingReview(c);
       case 'owner': return courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner';
-      case 'open': return controlConclusion(c) === 'In progress';
-      case 'papers': return controlConclusion(c) !== 'In progress' && !isControlFinal(c);
+      case 'open': return conclusionOf(eng, c) === 'In progress';
+      case 'papers': return conclusionOf(eng, c) !== 'In progress' && !isControlFinal(c);
       case 'key': return c.isKey;
       default: return true;
     }
@@ -532,7 +532,7 @@ export default function ControlLibrary() {
                   <HeaderFilter label="Control type" value={ctype} options={ctypes} allLabel="All types" onChange={setCtype} ariaLabel="Filter by control type" />
                 </Th>
                 <Th {...th('frequency')}><HeaderFilter label="Frequency" value={frequency} options={frequencies} allLabel="All frequencies" onChange={setFrequency} ariaLabel="Filter by frequency" /></Th>
-                <Th {...th('owner')}><HeaderFilter label="Owner" value={owner} options={owners} allLabel="All owners" onChange={setOwner} ariaLabel="Filter by owner" /></Th>
+                <Th {...th('owner')}><HeaderFilter label="Control Owner" value={owner} options={owners} allLabel="All control owners" onChange={setOwner} ariaLabel="Filter by control owner" /></Th>
                 <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
                 <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
                 <Th {...th('attributes')} title="Test attributes this control is proven against">Attributes</Th>

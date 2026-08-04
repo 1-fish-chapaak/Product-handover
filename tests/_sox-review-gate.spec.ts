@@ -58,7 +58,7 @@ test('risk owner keeps the evidence lanes but loses the testing pen', async ({ p
   await page.waitForTimeout(600);
   // person-lane: P2P-C-02 belongs to S. Iyer — wear that persona first
   await page.getByRole('button', { name: 'Owner persona' }).click();
-  await page.getByRole('menuitemradio', { name: 'S. Iyer · Procurement' }).click();
+  await page.getByRole('menuitemradio', { name: 'S. Iyer' }).click();
   await page.waitForTimeout(400);
   // open a specific in-progress control (P2P-C-02: design effective, TOE open)
   await page.locator('.sox-book-ui').getByRole('button', { name: 'Control Library', exact: true }).click();

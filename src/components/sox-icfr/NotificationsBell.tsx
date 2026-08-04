@@ -4,7 +4,7 @@ import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { conclusionOf, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -71,7 +71,7 @@ export default function NotificationsBell() {
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
         if (c.owner !== meOwner) continue;
-        if (controlConclusion(c) !== 'Ineffective') continue;
+        if (conclusionOf(eng, c) !== 'Ineffective') continue;
         const track = trackResult(c.design) === 'Ineffective' ? 'design' : 'operating';
         const who = (track === 'design' ? c.design.testedBy : c.operating.testedBy) ?? 'Auditor';
         out.push({

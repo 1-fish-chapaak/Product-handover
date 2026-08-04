@@ -203,12 +203,12 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
           </div>
           {owner === NEW_OWNER && (
             <Field label="New control owner name" required>
-              <input value={newOwner} onChange={e => setNewOwner(e.target.value)} aria-required="true" placeholder="e.g. Financial Controller" className={inputCls} />
+              <input value={newOwner} onChange={e => setNewOwner(e.target.value)} aria-required="true" placeholder="e.g. D. Rao" className={inputCls} />
             </Field>
           )}
           {processOwner === NEW_PROC_OWNER && (
             <Field label="New process owner name" required>
-              <input value={newProcOwner} onChange={e => setNewProcOwner(e.target.value)} aria-required="true" placeholder="e.g. Procurement Head" className={inputCls} />
+              <input value={newProcOwner} onChange={e => setNewProcOwner(e.target.value)} aria-required="true" placeholder="e.g. S. Iyer" className={inputCls} />
             </Field>
           )}
 
