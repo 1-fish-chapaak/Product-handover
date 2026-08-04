@@ -881,6 +881,20 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               </button>
             )}
 
+            {/* The star on each row is an 11px glyph that both STATES the key
+                judgement and SETS it. Unlabelled it is decoration, so it is
+                named once here rather than left to be discovered by hovering
+                the right pixel. Sits directly above the list it explains. */}
+            {scopeKind === 'racm' && (
+              <p className="mb-2 px-1 flex items-center gap-1.5 text-[11px] text-ink-500">
+                <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />
+                Key control
+                <span className="text-ink-300">·</span>
+                <Star size={11} className="text-ink-300 shrink-0" />
+                Non-key — click a star to change it
+              </p>
+            )}
+
             {/* ── Entity side: derived, not picked ────────────────────────────
                 The trial balance already says which companies carry enough to
                 matter, so the wizard works it out and the auditor overrules it
@@ -1180,7 +1194,21 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                                   ) : c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                                   <span className="text-[12px] text-ink-800 truncate">{c.description}</span>
                                 </span>
-                                <span className="block text-[10.5px] text-ink-400 font-mono mt-0.5">{c.id} · {c.subProcess}</span>
+                                {/* The company, not just the id's @suffix. A
+                                    control runs at several of them and the rows
+                                    are otherwise word-for-word identical — five
+                                    controls across two companies read as five
+                                    duplicated pairs without this. */}
+                                <span className="flex items-center gap-1.5 mt-0.5 min-w-0 text-[10.5px] text-ink-400">
+                                  <span className="font-mono shrink-0">{c.id} · {c.subProcess}</span>
+                                  {c.entity && (
+                                    <span className="inline-flex items-center gap-1 min-w-0" title={c.entity}>
+                                      <span className="text-ink-300">·</span>
+                                      <Building2 size={10} className="shrink-0 text-ink-300" />
+                                      <span className="truncate">{c.entity}</span>
+                                    </span>
+                                  )}
+                                </span>
                               </span>
                             </div>
                           );
