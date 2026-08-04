@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  // PARKED (Aug 2026) — FileSpreadsheet went with the icon-only export button.
-  //   FileSpreadsheet,
+  FileSpreadsheet,
   Search, Plus, Building2, Rows3, MessageSquare,
   Star, FileText, X, Send, LayoutGrid, List, StickyNote,
 } from 'lucide-react';
@@ -154,8 +153,7 @@ export default function ControlRegister() {
   );
   // preview-before-download for the consolidated working paper, and for the audit
   // report — the deliverable the paper isn't. Same modal, same block format.
-  // PARKED (Aug 2026) — with the icon-only export button that set it.
-  //   const [wpPreview, setWpPreview] = useState(false);
+  const [wpPreview, setWpPreview] = useState(false);
   const [reportPreview, setReportPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
   const [savedView, setSavedView] = useState<SavedView>('all');
@@ -306,12 +304,15 @@ export default function ControlRegister() {
         </div>
         {/* the register's actions — view controls to their left, primary CTA last */}
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
-          {/* PARKED (Aug 2026) — the icon-only working-paper export. The user asked
-              for it off the toolbar; the modal it opened is unchanged and still
-              reachable from Audit report, so this is one line away from coming
-              back. Its state (`wpPreview`) and modal are parked with it below.
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
-          */}
+          {/* The working paper, back on the toolbar (Aug 2026). It was parked as
+              clutter, but parking it took the ENGAGEMENT paper's only door with
+              it: buildIcfrPaper still assembles Index, Control Summary, TOE and
+              Scope, and nothing opened them. Audit report is a different
+              document — what management reads, not the evidence file — so it was
+              never a substitute. Labelled rather than icon-only this time, so it
+              reads as its own deliverable beside the report.
+              Absent for the risk owner: see the note on the control page. */}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="The audit's evidence file — every control the filters leave visible" aria-label="Export working paper" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
@@ -479,9 +480,7 @@ export default function ControlRegister() {
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {/* the paper follows the filters — only the visible controls' data goes in */}
-      {/* PARKED (Aug 2026) — the working-paper preview, with its trigger.
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
-      */}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
 
     </div>
