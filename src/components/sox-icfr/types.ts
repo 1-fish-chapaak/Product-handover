@@ -226,6 +226,12 @@ export interface DesignTrack {
    *  conclusion, because a half-walked transaction proves nothing. */
   walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
+  /** Why the track concluded the way it did — recorded on EVERY conclusion, not
+   *  only on an override. A working paper whose conclusion carries no words is a
+   *  hole; see `concludeRationale`, which drafts it from the evidence so agreeing
+   *  stays one click. `override.rationale` is the narrower thing: why the auditor
+   *  went against what the evidence pointed at. */
+  rationale?: string;
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
@@ -385,6 +391,10 @@ export interface AuditFileRecord {
   /** The platform pulled this data itself: provenance is known from the fetch,
    *  so the question is never put. */
   systemFetched?: boolean;
+  /** The system of record it was pulled from — 'SAP S/4HANA — Production'. Set
+   *  only alongside `systemFetched`; it is what makes the fetch answerable on
+   *  the working paper without anybody typing it. */
+  system?: string;
   /** Who answered, and when. Re-stamped when the answer is changed on the file
    *  record — the only place it can be changed. */
   originBy?: string;
@@ -536,6 +546,8 @@ export interface OperatingTrack {
   /** IPE gate 3 — the reports standing behind the evidence. */
   evidenceReports?: EvidenceReport[];
   conclusion: TrackConclusion;
+  /** Why the track concluded the way it did — see DesignTrack.rationale. */
+  rationale?: string;
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
@@ -612,7 +624,19 @@ export interface Control {
   // at which the reviewer investigates, checked against performance materiality.
   isMrc?: boolean;
   mrcThreshold?: number;
+  /** THE CONTROL OWNER — accountable that the control operates. The name the
+   *  register shows and the one a failure lands on. */
   owner: string;
+  /** THE PROCESS OWNER — runs the area day to day, and is therefore who an
+   *  evidence request actually reaches; the control owner is only copied.
+   *
+   *  Two people, not one, because they are usually not the same person: the CFO
+   *  owns the control, the finance manager is the one who can produce the file.
+   *  A request addressed to the accountable name alone is a request addressed to
+   *  someone who has to forward it. Recorded per RACM in the scoping wizard's
+   *  People step; absent on controls created before that step existed, which is
+   *  why it is optional and every read falls back to `owner`. */
+  processOwner?: string;
   riskId: string;
   riskDescription: string;
   /** WHY the risk exists — the condition underneath it. The source RACM carries

@@ -9,6 +9,7 @@ import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import type { SoxTabLike } from './types';
 import { AUDIT_TABS, defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
+import { ownersOf } from './auditScope';
 import SoxClassicInner from './SoxClassicApp';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -123,7 +124,12 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
         { id: 'deficiencies' as const, label: W.mine },
       ]
     : levelTabs;
-  const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
+  // Every first-line name on the engagement, both capacities — a process owner
+  // has controls to answer for too, so they need to be someone you can be.
+  const owners = Array.from(new Set(eng.controls.flatMap(c => {
+    const o = ownersOf(c);
+    return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner];
+  }))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
   // then avatar-initials tile + name + status/type pills, with code · Configuration

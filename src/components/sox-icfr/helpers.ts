@@ -1125,6 +1125,69 @@ export function operatingProgress(c: Control) {
   };
 }
 
+/** The rationale the conclusion box opens with.
+ *
+ *  Every conclusion has to reach the working paper with words against it, but
+ *  making the auditor type the same sentence on a control that passed cleanly
+ *  buys nothing except two hundred variations of "as per testing". So the box
+ *  arrives already written FROM THE EVIDENCE — what was tested, against what,
+ *  and what it showed — and the auditor edits it or leaves it.
+ *
+ *  Written from the evidence, not from the target conclusion: the auditor has
+ *  not pressed a button yet when this is generated, and a sentence that assumed
+ *  which one they would press would be putting words in their mouth. Disagreeing
+ *  with it is exactly the case where they should be writing their own. */
+export function concludeRationale(c: Control, which: 'design' | 'operating'): string {
+  if (which === 'design') {
+    const { pointsPass, pointsTotal } = designProgress(c);
+    const evidenced = c.design.documents
+      .filter(d => d.status === 'Received')
+      .map(d => d.kind === 'Custom' ? d.name : d.kind.toLowerCase());
+    const against = evidenced.length
+      ? ` against the ${listPhrase(evidenced)} on file`
+      : '';
+    if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
+    const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
+    if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(failed.map(p => p.text))}.`;
+  }
+  const { passed, failed, total } = operatingProgress(c);
+  const n = c.operating.sampling?.size;
+  const across = n ? ` across ${n} sampled item${n === 1 ? '' : 's'}` : '';
+  if (!total) return `No attributes were recorded for this control${across}.`;
+  if (!failed) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  return `${passed} of ${total} attributes passed${across}. ${failed} failed.`;
+}
+
+/**
+ * The extraction criteria the population step opens with.
+ *
+ * Two free-text boxes used to ask for a transaction type and an account, which
+ * only ever worked when the source was a spreadsheet somebody had already
+ * shaped. Against a system of record the criteria ARE the query, and there is
+ * no fixed set of them — every table needs a different one. So the statement is
+ * drafted from what is actually known about this control and its window, and
+ * the auditor edits it into the thing they mean.
+ *
+ * Deliberately plain English rather than SQL: it is read by a reviewer, not run.
+ * What runs against the system is a separate concern, and writing it as a query
+ * here would put a language in the working paper that the paper's readers do
+ * not have to know.
+ */
+export function extractionCriteria(c: Control, from: string, to: string, source?: { system?: string; name: string }): string {
+  const what = c.subProcess && c.subProcess !== 'General' ? c.subProcess.toLowerCase() : c.process.toLowerCase();
+  const window = from && to ? ` between ${fmtDay(from, '')} and ${fmtDay(to, '')}` : '';
+  const where = source?.system ? ` from ${source.system}` : source ? ` in ${source.name}` : '';
+  const entity = c.entity ? `, ${c.entity}` : '';
+  return `All ${what} records${where}${window}${entity}, excluding reversals and test postings.`;
+}
+
+/** "a, b and c" — the Oxford-less join the rest of the copy uses. */
+function listPhrase(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 // ─── Baton — whose court ─────────────────────────────────────────────────────────
 
 export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] = []): Court {

@@ -18,6 +18,10 @@ const FREQUENCIES: Frequency[] = ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'D
 const NEW_RISK = '__new-risk__';
 const NEW_PROCESS = '__new-process__';
 const NEW_OWNER = '__new-owner__';
+const NEW_PROC_OWNER = '__new-process-owner__';
+/** Process owner left unset — the store falls back to the process's recorded
+ *  owner, and only then to the control owner. */
+const SAME_OWNER = '__same-owner__';
 
 const inputCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] text-ink-800 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
 
@@ -50,6 +54,8 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const [nature, setNature] = useState<Nature>('Manual');
   const [frequency, setFrequency] = useState<Frequency>('Monthly');
   const [owner, setOwner] = useState(owners[0] ?? 'Risk Owner');
+  const [processOwner, setProcessOwner] = useState(SAME_OWNER);
+  const [newProcOwner, setNewProcOwner] = useState('');
   const [isKey, setIsKey] = useState(true);
   const [assertions, setAssertions] = useState<Assertion[]>(['Accuracy']);
   const [newProcess, setNewProcess] = useState('');
@@ -83,14 +89,16 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const canCreate = description.trim().length > 0
     && (riskChoice !== NEW_RISK || newRiskDesc.trim().length > 0)
     && (process !== NEW_PROCESS || newProcess.trim().length > 0)
-    && (owner !== NEW_OWNER || newOwner.trim().length > 0);
+    && (owner !== NEW_OWNER || newOwner.trim().length > 0)
+    && (processOwner !== NEW_PROC_OWNER || newProcOwner.trim().length > 0);
 
   // The single most-specific blocker, surfaced on the disabled button so it's never trial-and-error.
   const missingHint =
     !description.trim() ? 'Description required'
     : riskChoice === NEW_RISK && !newRiskDesc.trim() ? 'New-risk description required'
     : process === NEW_PROCESS && !newProcess.trim() ? 'New process name required'
-    : owner === NEW_OWNER && !newOwner.trim() ? 'New owner name required'
+    : owner === NEW_OWNER && !newOwner.trim() ? 'New control owner name required'
+    : processOwner === NEW_PROC_OWNER && !newProcOwner.trim() ? 'New process owner name required'
     : null;
 
   const create = () => {
@@ -103,6 +111,11 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       controlActivity: controlActivity.trim(),
       process: process === NEW_PROCESS ? newProcess.trim() : process, subProcess,
       nature, frequency, owner: owner === NEW_OWNER ? newOwner.trim() : owner,
+      // undefined, not the control owner's name — the store then falls back to
+      // whoever the scoping wizard recorded for this process, and only reaches
+      // the control owner if that comes up empty too.
+      processOwner: processOwner === SAME_OWNER ? undefined
+        : processOwner === NEW_PROC_OWNER ? newProcOwner.trim() : processOwner,
       isKey, assertions, ...risk,
     });
     addToast({ type: 'success', title: 'Control created', message: `Linked to ${risk.riskId} — now in the library and the RACM.` });
@@ -170,9 +183,15 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             <Field label="Frequency">
               <FormSelect value={frequency} onChange={v => setFrequency(v as Frequency)} className={inputCls} ariaLabel="Frequency" options={FREQUENCIES} />
             </Field>
-            <Field label="Owner">
-              <FormSelect value={owner} onChange={setOwner} className={inputCls} ariaLabel="Owner"
+            <Field label="Control owner">
+              <FormSelect value={owner} onChange={setOwner} className={inputCls} ariaLabel="Control owner"
                 options={[...owners, { value: NEW_OWNER, label: '＋ Add new owner…' }]} />
+            </Field>
+            {/* Who actually runs it — the name an evidence request goes to. Left
+                on "same as control owner" when one person does both. */}
+            <Field label="Process owner">
+              <FormSelect value={processOwner} onChange={setProcessOwner} className={inputCls} ariaLabel="Process owner"
+                options={[{ value: SAME_OWNER, label: 'Same as control owner' }, ...owners, { value: NEW_PROC_OWNER, label: '＋ Add new owner…' }]} />
             </Field>
             <Field label="Key control">
               <button onClick={() => setIsKey(k => !k)} type="button"
@@ -183,8 +202,13 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             </Field>
           </div>
           {owner === NEW_OWNER && (
-            <Field label="New owner name" required>
+            <Field label="New control owner name" required>
               <input value={newOwner} onChange={e => setNewOwner(e.target.value)} aria-required="true" placeholder="e.g. Financial Controller" className={inputCls} />
+            </Field>
+          )}
+          {processOwner === NEW_PROC_OWNER && (
+            <Field label="New process owner name" required>
+              <input value={newProcOwner} onChange={e => setNewProcOwner(e.target.value)} aria-required="true" placeholder="e.g. Procurement Head" className={inputCls} />
             </Field>
           )}
 

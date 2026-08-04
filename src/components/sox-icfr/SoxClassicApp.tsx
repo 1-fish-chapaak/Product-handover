@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { useIcfr, type SoxTab } from './store';
 import { AUDIT_TABS } from './flow';
+import { ownersOf } from './auditScope';
 import type { SoxTabLike } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -90,7 +91,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const tabs = role === 'risk-owner'
     ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
     : levelTabs;
-  const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
+  // Both capacities — see the same list in SoxIcfrApp.
+  const owners = Array.from(new Set(eng.controls.flatMap(c => {
+    const o = ownersOf(c);
+    return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner];
+  }))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
   // then avatar-initials tile + name + status/type pills, with code · Configuration
