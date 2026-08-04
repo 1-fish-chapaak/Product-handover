@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, combinedSample, conclusionOf, controlConclusion, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -199,11 +199,24 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     kind: 'table', title: 'TOD',
     note: [
       `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
-      `basis: ${c.design.walkthrough ? `one transaction traced (${c.design.walkthrough.sampleRef})` : 'documents on file only'}`,
+      // Derived from the auditor's own proof across the checks, not asserted —
+      // see designBasis. A reader can now check the claim against the two
+      // columns below it rather than taking the sentence on trust.
+      `basis: ${designBasis(c)} (${auditorProvenChecks(c)}/${c.design.points.length} checks carry the auditor's own proof)`,
     ].join(' · '),
-    headers: ['', 'Design consideration', 'Tick'],
-    rows: c.design.points.map((p, i) => [String(i + 1), p.text, tick(p.override?.result ?? p.result)]),
-    tickFrom: 2,
+    // What backs each check, split by who produced it. A check evidenced only by
+    // the client's documents and one the auditor reperformed both tick the same
+    // box, and a paper that prints only the tick invites the reader to assume
+    // the stronger of the two.
+    headers: ['', 'Design consideration', 'Evidenced by (client)', "Auditor's own proof", 'Tick'],
+    rows: c.design.points.map((p, i) => [
+      String(i + 1),
+      p.text,
+      c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind)).join('; ') || '—',
+      p.auditorProof ? `${p.auditorProof.kind} — ${p.auditorProof.file.name}` : '—',
+      tick(p.override?.result ?? p.result),
+    ]),
+    tickFrom: 4,
   });
 
   // Every design element with what backs it — and, where nothing does, the reason

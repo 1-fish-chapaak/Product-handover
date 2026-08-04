@@ -50,7 +50,7 @@ test('the RACM columns are all on the row', async ({ page }) => {
   // Objective is the only plain header left; the rest are their own column filter,
   // and a header cell with interactive content has no name of its own to match on.
   await expect(page.getByRole('columnheader', { name: /^Objective$/ })).toBeVisible();
-  for (const f of ['process', 'entity', 'control type', 'frequency', 'owner', 'nature']) {
+  for (const f of ['process', 'entity', 'control type', 'frequency', 'control owner', 'nature']) {
     await expect(page.getByRole('button', { name: `Filter by ${f}` })).toBeVisible();
   }
   // The checkbox column is gone — no select-all, no per-row box.
@@ -169,7 +169,7 @@ test('the engagement library carries the same columns and behaviour', async ({ p
     await expect(page.getByRole('columnheader', { name: new RegExp(`^${col}$`) })).toBeVisible();
   }
   // ...alongside the RACM columns and their filters.
-  for (const f of ['process', 'entity', 'control type', 'frequency', 'owner']) {
+  for (const f of ['process', 'entity', 'control type', 'frequency', 'control owner']) {
     await expect(page.getByRole('button', { name: `Filter by ${f}` })).toBeVisible();
   }
   // Table first, no checkbox column, and the entity split is visible here too.

@@ -2,10 +2,10 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, needsRatingConfirmation, parseLooseDate, previewRegrades, sampleSizeGuide, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
-  Assertion, Attestation, AuditArchive, AuditFileRecord, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
+  Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
-  Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest,
+  Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -88,7 +88,18 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
+import { isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
+
+// ─── You cannot audit what you own ──────────────────────────────────────────────
+// The one prohibition that cannot be expressed as a role: the person who runs a
+// control is not independent of it, whichever hat they put on. So it is checked by
+// NAME against that control's own owners — putting on a different hat must not
+// change the answer. Holding two roles across DIFFERENT controls stays legal,
+// which is exactly why this is asked per control and not per engagement.
+function ownsIt(state: IcfrEngagement, controlId: string, person: string): boolean {
+  const c = state.controls.find(x => x.id === controlId);
+  return !!c && isOwnerOf(c, person);
+}
 
 // The five primary tabs — mirrors how other engagements are laid out.
 // 'deficiencies' is a TAB now, not a drill-in: deficiency management is a place
@@ -192,6 +203,10 @@ interface IcfrCtx {
   removeDesignPoint: (controlId: string, pointId: string) => void;
   validateDesignPoint: (controlId: string, pointId: string) => void;
   overrideDesignPoint: (controlId: string, pointId: string, override: Override | null) => void;
+  /** Point a design check at the elements that evidence it — ids only, never a copy. */
+  linkDesignPointEvidence: (controlId: string, pointId: string, docIds: string[]) => void;
+  /** The auditor's own proof on a check. One slot; null clears it. */
+  setDesignPointProof: (controlId: string, pointId: string, proof: AuditorProof | null) => void;
   requestDataByEmail: (controlId: string, docIds: string[], emails: string[]) => void;
   // operating track
   setPopulation: (controlId: string, population: Population) => void;
@@ -329,6 +344,13 @@ interface IcfrCtx {
   reopenException: (id: string, reason: string) => void;
   updateRemediation: (id: string, patch: Partial<Deficiency['remediation']>) => void;
   addRemediationEvidence: (id: string, fileName: string) => void;
+  /** The owner disagrees with a severity input, on the record. It routes to the
+   *  auditor and changes nothing by itself — see SeverityChallenge. */
+  raiseChallenge: (id: string, input: ChallengedInput, reasoning: string, fileName?: string) => void;
+  /** The auditor answers it. A reason is required whichever way it goes; accepting
+   *  does not move the number — the auditor still edits the input themselves, and
+   *  the engine re-grades off that edit like any other. */
+  respondToChallenge: (id: string, challengeId: string, decision: 'Accepted' | 'Declined', reason: string) => void;
   /** Blocked testing — a status on the control, not an exception. See UnableToTest. */
   markUnableToTest: (controlId: string, track: 'design' | 'operating', reason: string, needed: string) => void;
   resolveUnableToTest: (controlId: string) => void;
@@ -387,6 +409,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Person-based identity: each hat acts as the engagement's named person, not a
   // role label — so self-review guards compare people, and the trail reads real names.
   const me = role === 'auditor' ? eng.preparer : role === 'reviewer' ? eng.reviewer : meOwner;
+
 
   // Every control mutation flows through here — a concluded control (or a
   // countersigned engagement) is frozen; reopenControl below is the only way back in.
@@ -692,6 +715,32 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, override: override ?? undefined } : p) } }));
   }, [patchControl, role]);
+
+  // ── what evidences a check ────────────────────────────────────────────────────
+  // A LINK to elements already on this control, never a second upload. The client
+  // file lives on the element; the check points at it.
+  const linkDesignPointEvidence = useCallback<IcfrCtx['linkDesignPointEvidence']>((controlId, pointId, docIds) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, evidencedBy: docIds.length ? docIds : undefined } : p) } }));
+    pushExec(prev => {
+      const ctrl = prev.controls.find(c => c.id === controlId);
+      const p = ctrl?.design.points.find(pt => pt.id === pointId);
+      if (!p) return null;
+      const labels = ctrl!.design.documents.filter(d => docIds.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind));
+      return { controlId, track: 'design', kind: 'validate', verb: labels.length ? `linked ${labels.join(', ')} as the evidence for a design check` : 'cleared the evidence links on a design check', target: short(p.text) };
+    });
+  }, [patchControl, pushExec, role]);
+
+  // The auditor's own proof. One slot — replacing it replaces it.
+  const setDesignPointProof = useCallback<IcfrCtx['setDesignPointProof']>((controlId, pointId, proof) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, auditorProof: proof ?? undefined } : p) } }));
+    pushExec(prev => {
+      const p = prev.controls.find(c => c.id === controlId)?.design.points.find(pt => pt.id === pointId);
+      if (!p) return null;
+      return { controlId, track: 'design', kind: 'validate', verb: proof ? `attached their own ${proof.kind.toLowerCase()} to a design check` : 'removed their proof from a design check', target: short(p.text) };
+    });
+  }, [patchControl, pushExec, role]);
   const requestDataByEmail = useCallback<IcfrCtx['requestDataByEmail']>((controlId, docIds, emails) => {
     if (role !== 'auditor') return;
     setEng(prev => {
@@ -1529,6 +1578,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const before = prev.deficiencies.find(d => d.id === id);
       if (!before) return prev;
+      if (ownsIt(prev, before.controlId, me)) return prev;
       const after = { ...before, ...patch };
       const next = { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? after : d)) };
       const g0 = gradeException(before, prev).grade;
@@ -1558,6 +1608,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Identified') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       if (!target.rootCause.trim()) return prev;               // step 1 is not done
       const grade = gradeException(target, prev).grade;
       const next: ExceptionStatus = needsRatingConfirmation(grade) && !target.ratingConfirm ? 'Rating review' : 'Planning';
@@ -1583,6 +1634,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Rating review') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const grade = gradeException(target, prev).grade;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -1603,6 +1655,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Rating review') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: `sent ${id} back to the auditor`, from: 'Rating review', to: 'Identified',
@@ -1650,6 +1703,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Plan review') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const to: ExceptionStatus = decision === 'Accepted' ? 'Remediation' : 'Planning';
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -1764,6 +1818,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Retest' || target.retestDraft) return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const c = prev.controls.find(x => x.id === target.controlId);
       if (!c) return prev;
       // The same attributes, carried over verbatim — a retest that invents its own
@@ -1821,6 +1876,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Retest' || !target.retestDraft) return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const draft = target.retestDraft;
       const marks = draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
       if (marks.some(m => m === 'Not tested')) return prev;             // finish the grid first
@@ -1875,6 +1931,75 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...d, remediation: { ...d.remediation, evidence: [...(d.remediation.evidence ?? []), file] } };
     }) }));
   }, [me, role]);
+
+  // ─── The owner argues with the grading, on the record ─────────────────────────
+  // Scoped to their OWN controls, not merely to the risk-owner hat: the point of a
+  // challenge is that the person carrying the fix gets a say, and someone else's
+  // exception is not theirs to contest.
+  const raiseChallenge = useCallback<IcfrCtx['raiseChallenge']>((id, input, reasoning, fileName) => {
+    if (role !== 'risk-owner') return;
+    if (!reasoning.trim()) return;                       // a challenge with no argument is a complaint
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status === 'Closed') return prev;
+      const c = prev.controls.find(x => x.id === target.controlId);
+      if (!c || !isOwnerOf(c, meOwner)) return prev;
+      // One live argument at a time. Several open at once is a queue rather than
+      // a conversation, and it makes "what is being disputed here" unanswerable
+      // for the reviewer reading it later.
+      if (target.challenges?.some(ch => !ch.response)) return prev;
+      const evidence: EvidenceFile[] | undefined = fileName
+        ? [{ id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: meOwner, uploadedAt: 'just now' }]
+        : undefined;
+      const challenge: SeverityChallenge = {
+        id: uid('ch'), input, reasoning: reasoning.trim(), evidence,
+        by: meOwner, at: 'just now', gradeAtRaise: gradeException(target, prev).grade,
+      };
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'challenge',
+        verb: `challenged the ${input} on ${id}`, target: input,
+        rationale: challenge.reasoning, by: meOwner, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, challenges: [...(d.challenges ?? []), challenge] } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [meOwner, role]);
+
+  // The auditor answers. Accepting does NOT move the number — it records that the
+  // argument landed; the auditor then edits the input themselves through
+  // `updateDeficiency`, and the engine re-grades off that edit with its own trail
+  // entry. Keeping the two apart is what stops a challenge from being a second,
+  // undocumented way to change a grade.
+  const respondToChallenge = useCallback<IcfrCtx['respondToChallenge']>((id, challengeId, decision, reason) => {
+    if (role !== 'auditor') return;
+    if (!reason.trim()) return;                          // required either way
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      const challenge = target?.challenges?.find(ch => ch.id === challengeId);
+      if (!target || !challenge || challenge.response) return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'challenge',
+        verb: `${decision === 'Accepted' ? 'accepted' : 'declined'} ${challenge.by}'s challenge to the ${challenge.input} on ${id}`,
+        target: challenge.input, rationale: reason.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? {
+          ...d,
+          challenges: (d.challenges ?? []).map(ch => ch.id === challengeId
+            ? { ...ch, response: { decision, reason: reason.trim(), by: me, at: 'just now' } }
+            : ch),
+        } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
   // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
     if (role !== 'reviewer') return;
@@ -1882,6 +2007,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Awaiting reviewer' || (target.retest && target.retest.by === me)) return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: `closed ${id} — reviewer sign-off`, by: me, role, at: 'just now',
@@ -2209,7 +2335,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
     setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
@@ -2219,10 +2345,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

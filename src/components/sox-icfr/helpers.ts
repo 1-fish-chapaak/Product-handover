@@ -1,6 +1,6 @@
 import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
-  Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
 } from './types';
 
@@ -1237,6 +1237,148 @@ export function extractionCriteria(c: Control, from: string, to: string, source?
 function listPhrase(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** What the design conclusion actually rests on — DERIVED from the checks, never
+ *  typed by anyone.
+ *
+ *  A basis is a claim about how hard the auditor looked, and a free-text field
+ *  invites the claim to run ahead of the work. So it is read off the auditor's
+ *  own proof instead: a control where no check carries any is a control taken on
+ *  the client's documents, whatever anybody would like to write. The clauses
+ *  combine, because a walkthrough on one check and a reperformance on another
+ *  are both true of the same conclusion. (Step-2 action items 11 + 12.) */
+export function designBasis(c: Control): string {
+  const kinds = new Set(c.design.points.map(p => p.auditorProof?.kind).filter(Boolean) as AuditorProofKind[]);
+  if (kinds.size === 0) return 'documentation, inquiry and observation only';
+  const parts: string[] = [];
+  if (kinds.has('Walkthrough note')) parts.push('walkthrough performed');
+  if (kinds.has('Reperformance result')) parts.push('reperformance included');
+  if (kinds.has('Configuration extract')) parts.push('system configuration inspected');
+  return listPhrase(parts);
+}
+
+/** How many checks the auditor did their own work on — the count behind the
+ *  basis, so the sentence can be questioned rather than just believed. */
+export function auditorProvenChecks(c: Control): number {
+  return c.design.points.filter(p => p.auditorProof).length;
+}
+
+// ─── What the check list is missing (Step-2 action item 13) ──────────────────────
+// A blank "add a consideration" box gets the checks somebody remembered on the
+// day, and the ones nobody remembered never get written — which is the failure
+// mode a design test cannot recover from, because an untested consideration
+// leaves no trace of its absence.
+//
+// So the standard set is held here and offered against the control's own facts.
+// Deterministic, like every other "AI" result in this module: same control, same
+// suggestions, every time. Nothing is inserted — each one is added or dismissed
+// by hand, because a check the auditor did not choose is a check they will not
+// defend.
+const CHECK_LIBRARY: { text: string; when: (c: Control) => boolean }[] = [
+  { text: 'The person performing the control is independent of the person who prepares what it checks.', when: c => c.type === 'Detective' || /review|approv|verif|reconcil/i.test(c.description) },
+  { text: 'The threshold or tolerance the control operates at is documented and approved.', when: c => /threshold|toleran|limit|exceed|above|below|match/i.test(`${c.description} ${c.precision ?? ''}`) },
+  { text: 'Exceptions the control raises are followed through to resolution, not just noted.', when: c => c.type === 'Detective' },
+  { text: 'The control leaves evidence that it operated — a reviewer can tell it ran on a given date.', when: () => true },
+  { text: 'The person performing the control has the authority and competence to do so.', when: c => c.nature === 'Manual' },
+  { text: 'The control operates over a complete population — nothing routes around it.', when: c => c.assertions?.includes('Completeness') ?? false },
+  { text: 'Transactions are captured in the correct period.', when: c => c.assertions?.includes('Cut-off') ?? false },
+  { text: 'The inputs to the calculation are independently verified before it runs.', when: c => c.assertions?.includes('Valuation') ?? false },
+  { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' },
+  { text: 'The report the control is performed against is itself reliable.', when: c => c.nature === 'IT-dependent' },
+  { text: 'The control runs often enough to catch a misstatement before it reaches the accounts.', when: c => c.frequency === 'Quarterly' || c.frequency === 'Annual' },
+];
+
+/** Significant words, so "reviewer is independent of the preparer" and "the
+ *  person performing the control is independent of the person who prepares"
+ *  are recognised as the same consideration rather than offered twice. */
+const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'of', 'to', 'and', 'or', 'it', 'that', 'this', 'on', 'in', 'at', 'by', 'for', 'with', 'not', 'has', 'have', 'been', 'was', 'were', 'be', 'who', 'which', 'they', 'them', 'its', 'control', 'person']);
+function keyWords(s: string): Set<string> {
+  return new Set(s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w)));
+}
+function alreadyCovered(existing: Set<string>[], candidate: string): boolean {
+  const cand = keyWords(candidate);
+  if (cand.size === 0) return false;
+  return existing.some(have => {
+    let hits = 0;
+    cand.forEach(w => { if (have.has(w)) hits++; });
+    return hits / cand.size >= 0.5;
+  });
+}
+
+// ─── Which file is this control's population? (Step-2 action item 20) ───────────
+/** A ranked guess, with the sentence that justifies it.
+ *
+ *  Stated, never applied. The picker still opens with nothing chosen — the
+ *  suggestion sits above the list saying which row it would take and why, in the
+ *  same voice as "Evidence suggests" on the conclude footer. An auditor who
+ *  disagrees changes nothing but their mind; an auditor who agrees clicks the
+ *  row they were going to click anyway, having read the reason.
+ *
+ *  The reason matters more than the ranking. "Most of this process draws off it"
+ *  is checkable; a confidence percentage is not. */
+export function suggestPopulationFile(
+  eng: IcfrEngagement,
+  c: Control,
+  files: { name: string; kind: string; rows: number; systemFetched?: boolean; origin?: FileOrigin; system?: string }[],
+  requiredNames: string[] = [],
+): { name: string; reason: string } | null {
+  // A file nobody has said where it came from cannot be picked at all, so it
+  // must not be suggested either — a recommendation into a disabled row.
+  const usable = files.filter(f => !!f.systemFetched || !!f.origin);
+  if (usable.length === 0) return null;
+
+  const scored = usable.map(f => {
+    let score = 0;
+    const why: string[] = [];
+
+    // 1. What this same control drew off before. The strongest signal there is,
+    //    and it was sitting unused: a control's population comes out of the same
+    //    place round after round unless something changed.
+    const mine = eng.controls.find(x => x.id === c.id)?.operating.population?.sourceFile;
+    if (mine === f.name) { score += 60; why.push('this control drew off it last round'); }
+
+    // 2. What the rest of the process uses. Controls in one process read the
+    //    same ledgers; a file 30 of them share is not a coincidence.
+    const mates = controlsUsingFile(eng, f.name).filter(x => x.process === c.process && x.id !== c.id).length;
+    if (mates >= 3) { score += 30; why.push(`${mates} other ${c.process} controls draw off it`); }
+    else if (mates > 0) { score += 12; why.push(`${mates} other ${c.process} control${mates === 1 ? '' : 's'} draws off it`); }
+
+    // 3. The dataset this control was always going to need, by name.
+    const wanted = requiredNames.find(n => {
+      const stem = n.toLowerCase().replace(/\s*\(.*\)\s*/g, '').trim().split(/\s+/)[0] ?? '';
+      return stem.length > 3 && f.name.toLowerCase().includes(stem);
+    });
+    if (wanted) { score += 25; why.push(`it is the ${wanted.toLowerCase()} this control tests against`); }
+
+    // 4. A trial balance holds account totals, not the instances of a control.
+    //    Cheap to state and it stops the most common wrong answer.
+    if (f.kind === 'Trial balance') { score -= 25; }
+    if (f.kind === 'General ledger' || f.kind === 'System extract' || f.kind === 'Source file') score += 8;
+
+    // 5. It has to be able to hold the instances. A file smaller than the number
+    //    of times the control ran cannot be the population it ran over.
+    const runs = derivedRunCount(c, undefined, undefined);
+    if (runs != null && f.rows < runs) { score -= 30; why.push('too few rows to hold every run'); }
+
+    return { f, score, why };
+  }).sort((a, b) => b.score - a.score);
+
+  const top = scored[0];
+  // No positive evidence is not a weak recommendation, it is no recommendation.
+  // Nor is a tie: two files with the same claim means the machine has nothing to
+  // add, and saying so is better than picking one and sounding certain.
+  if (!top || top.score <= 0 || top.why.length === 0) return null;
+  if (scored[1] && scored[1].score === top.score) return null;
+  return { name: top.f.name, reason: listPhrase(top.why) };
+}
+
+export function suggestedDesignChecks(c: Control): string[] {
+  const existing = c.design.points.map(p => keyWords(p.text));
+  return CHECK_LIBRARY
+    .filter(x => x.when(c))
+    .map(x => x.text)
+    .filter(t => !alreadyCovered(existing, t));
 }
 
 // ─── Baton — whose court ─────────────────────────────────────────────────────────

@@ -134,6 +134,19 @@ export const DESIGN_BASES: { id: DesignBasis; hint: string }[] = [
   { id: 'Reperformance included', hint: 'The control was performed again independently and the outcome agreed.' },
 ];
 
+/** What the auditor did on a check with their own hands.
+ *
+ *  The three kinds are not decoration — they are what the design conclusion's
+ *  stated basis is derived from, so nobody types a basis they did not earn. */
+export type AuditorProofKind = 'Walkthrough note' | 'Configuration extract' | 'Reperformance result';
+export const AUDITOR_PROOF_KINDS: AuditorProofKind[] = ['Walkthrough note', 'Configuration extract', 'Reperformance result'];
+export interface AuditorProof {
+  kind: AuditorProofKind;
+  file: EvidenceFile;
+  /** What it showed — the finding, not the filename. */
+  note?: string;
+}
+
 /** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
@@ -144,6 +157,21 @@ export interface DesignPoint {
   validation?: ValidationResult;
   /** How this consideration was proven. Inquiry alone earns a warning. */
   evidenceType?: EvidenceType;
+  /** Which design ELEMENTS on this control evidence this check — DesignDoc ids.
+   *
+   *  A reference, never a copy. The client's file is uploaded once against the
+   *  element it belongs to and pointed at from here; the same document must not
+   *  enter the audit twice for one control, and certainly not once per check.
+   *  So there is deliberately NO client-evidence slot on a check. */
+  evidencedBy?: string[];
+  /** The auditor's OWN proof — a walkthrough note, a configuration extract they
+   *  pulled themselves, a reperformance result.
+   *
+   *  One slot, because this is the only thing with no home at element level:
+   *  elements are what the client supplied. A check carrying nothing here was
+   *  taken on the documents; a check carrying something is one the auditor did
+   *  work on, and that difference is what designBasis reads. */
+  auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
 }
@@ -895,6 +923,58 @@ export interface Deficiency {
    *  exception at period end — the working paper has to say why it was never
    *  evidenced, not just that it failed. */
   unableToTestReason?: string;
+  /** The owner's disagreements with the grading, and what the auditor did with
+   *  them. Oldest first — a contested rating keeps its argument. */
+  challenges?: SeverityChallenge[];
+}
+
+// ─── The owner's challenge — disagreement with a record instead of a phone call ──
+//
+// SOX 404(a) is MANAGEMENT'S assessment of its own controls, and the process owner
+// is management. They are not an opposing party to be kept from the file: they
+// need the exposure to argue for budget, and the likelihood to rank this against
+// everything else open on their desk.
+//
+// The real hazard was never that the owner reads the numbers. It is that they
+// argue them down informally — a corridor conversation with the auditor, a grade
+// that moves, and nothing on the paper saying why. So the numbers are shown, and
+// the disagreement is given somewhere to go: a form, a routed item, an answer that
+// must carry a reason, and a trail. A challenge changes NOTHING on its own. The
+// auditor either adjusts an input — after which the engine re-grades, as it does
+// for any other edit — or declines and says why.
+/** What the grade MEANS for the person who has to act on it — who hears about it,
+ *  and whether it has to be fixed and proven before the books close. The owner
+ *  sees the label, the exposure and the likelihood; this is the sentence that
+ *  turns those into a priority. Shared by the screen and the owner's brief so the
+ *  two can never say different things about the same grade. */
+export const SEVERITY_URGENCY: Record<string, string> = {
+  'Clearly Trivial': 'Logged for the record. No fix is being asked for.',
+  'Deficiency': 'A fix is expected, by the date agreed below.',
+  'Significant Deficiency': 'Serious enough that senior finance and the audit committee are told about it — the date below is a commitment, not an estimate.',
+  'Material Weakness': 'The most serious grade. It is reported outside the company, and it has to be fixed and proven to work before the books close.',
+};
+
+export type ChallengedInput = 'exposure' | 'likelihood' | 'compensating control';
+export const CHALLENGED_INPUT_LABEL: Record<ChallengedInput, string> = {
+  exposure: 'Exposure — what could have slipped through',
+  likelihood: 'Likelihood — how probable it was',
+  'compensating control': 'Compensating control — something else already catches this',
+};
+export interface SeverityChallenge {
+  id: string;
+  /** Which of the three inputs is disputed. Not the grade itself: the grade is
+   *  computed, so arguing with it means arguing with one of its inputs. */
+  input: ChallengedInput;
+  reasoning: string;
+  evidence?: EvidenceFile[];
+  by: string;
+  at: string;
+  /** The grade standing when the challenge was raised, so the history reads as an
+   *  argument about a specific number rather than about the current one. */
+  gradeAtRaise: string;
+  /** Absent while it is still with the auditor. A reason is required either way —
+   *  "declined" with no words is the informal lobbying this exists to replace. */
+  response?: { decision: 'Accepted' | 'Declined'; reason: string; by: string; at: string };
 }
 
 // The six steps, as eight states — two of the steps have a handoff inside them.
@@ -971,7 +1051,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
