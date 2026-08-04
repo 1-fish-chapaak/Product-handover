@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { useIcfr, type SoxTab } from './store';
 import { AUDIT_TABS } from './flow';
+import { ownersOf } from './auditScope';
 import type { SoxTabLike } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -57,7 +58,7 @@ const SOX_TABS: TabDef[] = [
      them. Nothing navigates into the tab, so no link is left dangling. */
   // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'SOX audit' },
+  { id: 'runs', label: 'SOX testing' },
   /* Configuration — PARKED from the engagement tabs (user ask). Same shape as
      the park on the reworked flow, where engagement-level Configuration gave
      way to Audit logs. The `tab === 'config' ? <ConfigurationView />` branch
@@ -90,7 +91,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const tabs = role === 'risk-owner'
     ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
     : levelTabs;
-  const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
+  // Both capacities — see the same list in SoxIcfrApp.
+  const owners = Array.from(new Set(eng.controls.flatMap(c => {
+    const o = ownersOf(c);
+    return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner];
+  }))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
   // then avatar-initials tile + name + status/type pills, with code · Configuration
@@ -251,7 +256,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
-            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX testing', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

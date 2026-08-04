@@ -155,13 +155,19 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                 {process} <span className="text-ink-400 tabular-nums font-medium">· {group.length}</span>
               </h3>
               <div className="rounded-lg border border-canvas-border overflow-hidden">
-                <div className="grid grid-cols-[88px_1fr_92px_92px_104px] gap-3 px-4 py-2 bg-canvas border-b border-canvas-border text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
-                  <span>W/P</span><span>Control</span><span>Design</span><span>Operating</span><span>Conclusion</span>
+                {/* The W/P column went with the sweep — a working-paper reference is
+                    an audit output, not a fact about the control. The control's own
+                    code carries the identity instead, so a concluded row is still
+                    citable; the reference itself lives in the exported paper. */}
+                <div className="grid grid-cols-[1fr_92px_92px_104px] gap-3 px-4 py-2 bg-canvas border-b border-canvas-border text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
+                  <span>Control</span><span>TOD</span><span>TOE</span><span>Conclusion</span>
                 </div>
                 {group.map(r => (
-                  <div key={r.controlId} className="grid grid-cols-[88px_1fr_92px_92px_104px] gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0 items-center text-[0.75rem]">
-                    <span className="font-mono font-semibold text-ink-700">{r.wpRef}</span>
-                    <span className="text-ink-800 min-w-0 line-clamp-2">{r.description}</span>
+                  <div key={r.controlId} className="grid grid-cols-[1fr_92px_92px_104px] gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0 items-center text-[0.75rem]">
+                    <span className="min-w-0">
+                      <span className="font-mono text-[0.6875rem] font-semibold text-ink-500">{r.controlId}</span>
+                      <span className="block text-ink-800 line-clamp-2">{r.description}</span>
+                    </span>
                     <span className={r.design === 'Effective' ? 'text-compliant-700 font-medium' : r.design === 'Ineffective' ? 'text-risk-700 font-medium' : 'text-ink-400'}>{r.design}</span>
                     <span className={r.operating === 'Effective' ? 'text-compliant-700 font-medium' : r.operating === 'Ineffective' ? 'text-risk-700 font-medium' : 'text-ink-400'}>{r.operating}</span>
                     <span>

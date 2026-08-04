@@ -35,7 +35,7 @@ test('owner mode is a scoped to-do list, not the workspace', async ({ page }) =>
   await expect(page.locator('.ac-card')).toHaveCount(0);
   // ...until the picker wears the S. Iyer persona
   await page.getByRole('button', { name: 'Owner persona' }).click();
-  await page.getByRole('menuitemradio', { name: 'S. Iyer · Procurement' }).click();
+  await page.getByRole('menuitemradio', { name: 'S. Iyer' }).click();
   await page.waitForTimeout(500);
   await expect(page.locator('.ac-card')).toHaveCount(1);
 });

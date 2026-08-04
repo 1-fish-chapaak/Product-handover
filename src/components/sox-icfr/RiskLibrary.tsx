@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { CalendarRange, ChevronDown, ChevronRight, MousePointerClick, MoveRight, Search, ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useIcfr } from './store';
-import { controlConclusion } from './helpers';
+import { conclusionOf, controlConclusion } from './helpers';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { FilterSelect, POP_ANIM, triggerCls } from '../shared/FilterSelect';
 import DatePicker from '../shared/DatePicker';
 import { Tickmark } from './parts';
 import { cn } from '../../lib/cn';
-import type { Control } from './types';
+import type { Control, IcfrEngagement } from './types';
 
 /**
  * Risk Register — the engagement's risks with inherent / residual
@@ -69,7 +69,7 @@ interface RiskRow {
 
 function hash(s: string): number { let h = 0; for (let k = 0; k < s.length; k++) h = (h * 31 + s.charCodeAt(k)) >>> 0; return h; }
 
-function buildRisks(controls: Control[], period: PeriodBounds | null): RiskRow[] {
+function buildRisks(eng: IcfrEngagement, controls: Control[], period: PeriodBounds | null): RiskRow[] {
   const map = new Map<string, Control[]>();
   for (const c of controls) { if (!map.has(c.riskId)) map.set(c.riskId, []); map.get(c.riskId)!.push(c); }
   return Array.from(map, ([id, cs]) => {
@@ -84,7 +84,7 @@ function buildRisks(controls: Control[], period: PeriodBounds | null): RiskRow[]
     const l = 1 + (h % 5);                     // 1–5
     let i = 1 + ((h >>> 4) % 5);               // 1–5
     if (cs.some(c => c.isKey)) i = Math.max(i, 3);
-    const concl = cs.map(controlConclusion);
+    const concl = cs.map(c => conclusionOf(eng, c));
     const exception = concl.includes('Ineffective');
     const allEffective = cs.length > 0 && concl.every(x => x === 'Effective');
     const anyTested = concl.some(x => x !== 'Not started');
@@ -252,7 +252,7 @@ export default function RiskLibrary() {
   const dateActive = !!bounds && (from !== bounds.from || to !== bounds.to);
   const resetDates = () => { setFrom(bounds?.from ?? ''); setTo(bounds?.to ?? ''); };
 
-  const risks = useMemo(() => buildRisks(eng.controls, bounds), [eng.controls, bounds]);
+  const risks = useMemo(() => buildRisks(eng, eng.controls, bounds), [eng, bounds]);
   const processes = useMemo(() => ['All', ...Array.from(new Set(risks.map(r => r.process)))], [risks]);
 
   // global filters — scope the heatmaps AND the register

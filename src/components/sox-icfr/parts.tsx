@@ -332,3 +332,17 @@ export function OriginPicker({ value, onPick, disabled }: { value?: FileOrigin; 
 }
 
 export { Bot };
+
+/** A header cell with a resize grip on its right edge. Module-level on purpose:
+ *  declared inside a register it would remount on every keystroke and slam the
+ *  open column-filter menu shut. */
+export function Th({ width, onResize, title, children }: {
+  width: number; onResize: (e: React.MouseEvent) => void; title?: string; children: React.ReactNode;
+}) {
+  return (
+    <th style={{ width }} title={title} className="relative">
+      {children}
+      <span onMouseDown={onResize} onClick={e => e.stopPropagation()} className="reg-grip" aria-hidden />
+    </th>
+  );
+}

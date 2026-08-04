@@ -1,4 +1,4 @@
-import { isInquiryOnly, GRADE_RANK } from './types';
+import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
   Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
@@ -407,6 +407,10 @@ export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effectiv
 // IT-dependent control in the other processes on notice: one instance no longer
 // proves the rule, and benchmarking is off the table.
 export function failedItgcs(eng: IcfrEngagement): Control[] {
+  // DELIBERATELY the plain two-track read, never conclusionOf: operatingApplies
+  // asks itgcHolds, which asks this. Routing it through the engagement-aware
+  // version would close the loop and hang. ITGCs are their own process and never
+  // take the short form anyway, so the plain read is also the correct one here.
   return eng.controls.filter(c => c.process === 'IT General Controls' && controlConclusion(c) === 'Ineffective');
 }
 export function isItgcDependent(c: Control): boolean {
@@ -808,6 +812,12 @@ export function populationReady(c: Control, windowFrom?: string, windowTo?: stri
   const gv = coverageVerdict(c, windowFrom, windowTo);
   if (cv?.blocks && !pop.countNote?.trim()) return false;
   if (gv?.blocks && !pop.coverageNote?.trim()) return false;
+  // The report the population came out of is itself under test, and it has to
+  // pass before anything is built on it. A population drawn from an unproven
+  // report is not a slightly weaker population — it is the wrong one, so it
+  // never locks, and the sample, the TOE and the sign-off sitting behind that
+  // lock never open either. One fix upstream releases all four.
+  if (!ipeReliable(c.operating)) return false;
   // Provenance is deliberately NOT a condition here. It belongs to the source
   // file, was answered when that file entered the audit, and a file with no
   // answer cannot be picked as a source in the first place — so by the time
@@ -947,6 +957,13 @@ export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: numb
   return { suggested, range: band.range, note: rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note };
 }
 
+// ─── Identity ────────────────────────────────────────────────────────────────────
+
+/** THE NUMBER TO PRINT. When the same control is tested at several companies its
+ *  rows need unique ids, but the number people quote in a meeting is the same
+ *  one for all of them — so `id` stays the key and this is what gets shown. */
+export const controlCode = (c: Pick<Control, 'id' | 'code'>): string => c.code ?? c.id;
+
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
 
 export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {
@@ -961,17 +978,58 @@ export function operatingStarted(c: Control): boolean {
   return !!c.operating.override || c.operating.conclusion !== 'Not tested'
     || !!c.operating.population || c.operating.steps.some(s => s.result !== 'Not tested');
 }
-export function controlConclusion(c: Control): Conclusion {
+/**
+ * Does the operating track apply to this control at all?
+ *
+ * An AUTOMATED control does the same thing to every transaction, so testing
+ * fifty of them proves nothing that testing one did not — the design test is the
+ * whole test, and population, sample and operating do not apply.
+ *
+ * That argument is a claim about the SYSTEM, not about the control: it holds
+ * only while the IT general controls behind it do. If change management or
+ * access has failed, nobody can say the logic that ran in March is the logic
+ * that ran in October, and the control has to be tested like a manual one. So a
+ * failed ITGC puts the full flow back — the same condition `sampleSizeGuide`
+ * already uses to invalidate the test of one, applied to the whole track.
+ *
+ * Manual and IT-dependent controls always operate; only pure automation earns
+ * the short form.
+ */
+export function operatingApplies(eng: IcfrEngagement, c: Control): boolean {
+  if (c.nature !== 'Automated') return true;
+  return !itgcHolds(eng, c);
+}
+
+/**
+ * `opApplies = false` concludes the control on its design alone — see
+ * operatingApplies. Defaults to true so every caller that has no engagement in
+ * hand keeps the two-track behaviour, which is right for every manual control.
+ *
+ * An operating track that was concluded BEFORE the control went short-form still
+ * counts when it found something: silently dropping a recorded Ineffective would
+ * erase a finding on a technicality.
+ */
+export function controlConclusion(c: Control, opApplies = true): Conclusion {
   const d = trackResult(c.design); const o = trackResult(c.operating);
   if (d === 'Ineffective' || o === 'Ineffective') return 'Ineffective';
+  if (!opApplies) return d === 'Effective' ? 'Effective' : designStarted(c) ? 'In progress' : 'Not started';
   if (d === 'Effective' && o === 'Effective') return 'Effective';
   return designStarted(c) || operatingStarted(c) ? 'In progress' : 'Not started';
 }
 
+/** The engagement-aware read — what every surface showing a control's state
+ *  should use, so a short-form control reads the same everywhere. */
+export function conclusionOf(eng: IcfrEngagement, c: Control): Conclusion {
+  return controlConclusion(c, operatingApplies(eng, c));
+}
+
 // ─── Locks — a concluded control is frozen until reopened with a reason ──────────
-export function isControlLocked(c: Control): boolean {
-  const concl = controlConclusion(c);
+export function isControlLocked(c: Control, opApplies = true): boolean {
+  const concl = controlConclusion(c, opApplies);
   return concl === 'Effective' || concl === 'Ineffective';
+}
+export function isControlLockedIn(eng: IcfrEngagement, c: Control): boolean {
+  return isControlLocked(c, operatingApplies(eng, c));
 }
 // A countersigned engagement is locked for good — no edits, no reopen.
 export function isEngagementLocked(eng: IcfrEngagement): boolean {
@@ -1118,6 +1176,69 @@ export function operatingProgress(c: Control) {
   };
 }
 
+/** The rationale the conclusion box opens with.
+ *
+ *  Every conclusion has to reach the working paper with words against it, but
+ *  making the auditor type the same sentence on a control that passed cleanly
+ *  buys nothing except two hundred variations of "as per testing". So the box
+ *  arrives already written FROM THE EVIDENCE — what was tested, against what,
+ *  and what it showed — and the auditor edits it or leaves it.
+ *
+ *  Written from the evidence, not from the target conclusion: the auditor has
+ *  not pressed a button yet when this is generated, and a sentence that assumed
+ *  which one they would press would be putting words in their mouth. Disagreeing
+ *  with it is exactly the case where they should be writing their own. */
+export function concludeRationale(c: Control, which: 'design' | 'operating'): string {
+  if (which === 'design') {
+    const { pointsPass, pointsTotal } = designProgress(c);
+    const evidenced = c.design.documents
+      .filter(d => d.status === 'Received')
+      .map(d => d.kind === 'Custom' ? d.name : d.kind.toLowerCase());
+    const against = evidenced.length
+      ? ` against the ${listPhrase(evidenced)} on file`
+      : '';
+    if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
+    const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
+    if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(failed.map(p => p.text))}.`;
+  }
+  const { passed, failed, total } = operatingProgress(c);
+  const n = c.operating.sampling?.size;
+  const across = n ? ` across ${n} sampled item${n === 1 ? '' : 's'}` : '';
+  if (!total) return `No attributes were recorded for this control${across}.`;
+  if (!failed) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  return `${passed} of ${total} attributes passed${across}. ${failed} failed.`;
+}
+
+/**
+ * The extraction criteria the population step opens with.
+ *
+ * Two free-text boxes used to ask for a transaction type and an account, which
+ * only ever worked when the source was a spreadsheet somebody had already
+ * shaped. Against a system of record the criteria ARE the query, and there is
+ * no fixed set of them — every table needs a different one. So the statement is
+ * drafted from what is actually known about this control and its window, and
+ * the auditor edits it into the thing they mean.
+ *
+ * Deliberately plain English rather than SQL: it is read by a reviewer, not run.
+ * What runs against the system is a separate concern, and writing it as a query
+ * here would put a language in the working paper that the paper's readers do
+ * not have to know.
+ */
+export function extractionCriteria(c: Control, from: string, to: string, source?: { system?: string; name: string }): string {
+  const what = c.subProcess && c.subProcess !== 'General' ? c.subProcess.toLowerCase() : c.process.toLowerCase();
+  const window = from && to ? ` between ${fmtDay(from, '')} and ${fmtDay(to, '')}` : '';
+  const where = source?.system ? ` from ${source.system}` : source ? ` in ${source.name}` : '';
+  const entity = c.entity ? `, ${c.entity}` : '';
+  return `All ${what} records${where}${window}${entity}, excluding reversals and test postings.`;
+}
+
+/** "a, b and c" — the Oxford-less join the rest of the copy uses. */
+function listPhrase(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 // ─── Baton — whose court ─────────────────────────────────────────────────────────
 
 export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] = []): Court {
@@ -1146,8 +1267,8 @@ const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30
 
 /** A concluded control (Effective or Ineffective) is off the due schedule —
  *  effective ones wait for the next cycle, ineffective ones for remediation. */
-export function isConcluded(c: Control): boolean {
-  const x = controlConclusion(c);
+export function isConcluded(c: Control, opApplies = true): boolean {
+  const x = controlConclusion(c, opApplies);
   return x === 'Effective' || x === 'Ineffective';
 }
 
@@ -1168,8 +1289,8 @@ export function testDueLabel(d: number): string {
 }
 
 /** Row display — concluded controls read as scheduled/parked, never as due. */
-export function testDueDisplay(c: Control): { label: string; cls: string } {
-  const concl = controlConclusion(c);
+export function testDueDisplay(c: Control, opApplies = true): { label: string; cls: string } {
+  const concl = controlConclusion(c, opApplies);
   if (concl === 'Ineffective') return { label: 'Retest after remediation', cls: 'text-risk-700' };
   const d = testDueInDays(c);
   if (concl === 'Effective') return { label: `Next test in ${d}d`, cls: '' };
@@ -1192,7 +1313,7 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
   // Omitted, it counts the whole engagement, which is what every other caller
   // wants.
   const cs = controls ?? eng.controls;
-  const concl = cs.map(controlConclusion);
+  const concl = cs.map(c => conclusionOf(eng, c));
   return {
     total: cs.length,
     designDone: cs.filter(c => trackResult(c.design) !== 'Not tested').length,

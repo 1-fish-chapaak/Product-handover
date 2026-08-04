@@ -2,7 +2,7 @@ import {
   PROGRAMMES, SEED_CAPTIONS, SEED_ENTITIES,
   type GroupEntity, type SoxProgramme, type TbCaption, entityShort,
 } from '../audit/sox-testing/soxTestingData';
-import { CAPTIONS as V2C_CAPTIONS, V2C_PROGRAMMES } from '../audit/sox-testing/v2/v2ClassicStore';
+import { CAPTIONS as V2C_CAPTIONS, V2C_PEOPLE, V2C_PROGRAMMES, type V2cPerson } from '../audit/sox-testing/v2/v2ClassicStore';
 import type { AuditRecord, Control } from './types';
 
 /**
@@ -64,13 +64,33 @@ export interface ScopeEntityRow {
   type: GroupEntity['type'];
   inRegister: boolean;
   inData: boolean;
+  /** Who holds this company, when it is not held by the top company directly.
+   *  Carried through from the engagement's register so the scope list can show
+   *  the group's shape: taking a parent in while leaving its subsidiary out is
+   *  a real scoping decision, and a flat list hides that it was even made. */
+  parentId?: string;
+}
+
+/** How deep a company sits in the ownership chain — 0 for the top company.
+ *  Tolerates a parent that is not in the list (dropped from this audit, or
+ *  never registered) by stopping where the chain breaks. */
+export function chainDepth(row: { id: string; parentId?: string }, all: { id: string; parentId?: string }[]): number {
+  let depth = 0;
+  let cur: { id: string; parentId?: string } | undefined = row;
+  while (cur?.parentId && depth < 8) {
+    const parent: { id: string; parentId?: string } | undefined = all.find(x => x.id === cur!.parentId);
+    if (!parent) break;
+    cur = parent;
+    depth++;
+  }
+  return depth;
 }
 
 /** Merge the engagement's entity register with what the files carry, by name —
  *  names are what a trial balance actually gives you; ids are ours. */
 export function mergeScopeEntities(registered: GroupEntity[], inFiles: GroupEntity[]): ScopeEntityRow[] {
   const rows = new Map<string, ScopeEntityRow>();
-  registered.forEach(e => rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: true, inData: false }));
+  registered.forEach(e => rows.set(e.name, { id: e.id, name: e.name, type: e.type, inRegister: true, inData: false, parentId: e.parentId }));
   inFiles.forEach(e => {
     const hit = rows.get(e.name);
     if (hit) hit.inData = true;
@@ -244,6 +264,74 @@ const PROCESS_ALIAS: Record<string, string> = {
   'Record to Report (R2R)': 'Record to Report',
 };
 export const normaliseProcess = (p: string): string => PROCESS_ALIAS[p] ?? p;
+
+/** The reverse trip: a control's process name back to the key the scoping
+ *  wizard files its people under. Only the pairs PROCESS_ALIAS doesn't already
+ *  cover in the other direction, plus the two the register spells differently
+ *  ("IT General Controls" is "ITGC" upstream; close and consolidation sit under
+ *  the group workstreams rather than a process of their own). */
+const PEOPLE_KEY: Record<string, string> = {
+  Payroll: 'Payroll (Hire to Retire)',
+  'IT General Controls': 'ITGC',
+  'Record to Report': 'FSCP',
+};
+
+/**
+ * The two people behind a control, as the scoping wizard recorded them.
+ *
+ * A control is answered for by two different people and always was: the control
+ * owner carries the accountability, the process owner runs the thing day to day
+ * and is who the evidence request actually reaches. The wizard has been
+ * collecting both, with emails, since the People step existed — this is the
+ * lookup that finally spends them.
+ *
+ * Keyed by process because that is how the wizard asks the question: one pair of
+ * names per RACM, and a RACM is a process.
+ */
+export function peopleForProcess(process: string): V2cPerson | undefined {
+  const p = normaliseProcess(process);
+  return V2C_PEOPLE[PEOPLE_KEY[p] ?? p];
+}
+
+export interface ControlOwners {
+  controlOwner: string;
+  controlOwnerEmail?: string;
+  processOwner: string;
+  processOwnerEmail?: string;
+  /** The two names are the same person — either the control was created before
+   *  the People step existed and has nothing to fall back to, or the process
+   *  genuinely runs under one name. Surfaces show one line rather than two
+   *  identical ones. */
+  single: boolean;
+}
+
+/**
+ * Both names for one control, however it was created.
+ *
+ * Three sources, in falling order of authority: what the control itself records,
+ * what the scoping wizard recorded for its process, and — when neither has an
+ * answer — the control owner standing in for both. The fallback is what lets
+ * this land on seeds written before the field existed without rewriting them.
+ */
+export function ownersOf(c: Control): ControlOwners {
+  const people = peopleForProcess(c.process);
+  const controlOwner = c.owner;
+  const processOwner = c.processOwner ?? people?.processOwner ?? c.owner;
+  return {
+    controlOwner,
+    controlOwnerEmail: people?.controlOwner === controlOwner ? people.coEmail : undefined,
+    processOwner,
+    processOwnerEmail: people?.processOwner === processOwner ? people.poEmail : undefined,
+    single: processOwner === controlOwner,
+  };
+}
+
+/** Is this person on this control in either capacity? The risk-owner lane asks
+ *  it: someone who will be chased for a control needs to be able to see it. */
+export function isOwnerOf(c: Control, who: string): boolean {
+  const o = ownersOf(c);
+  return o.controlOwner === who || o.processOwner === who;
+}
 
 /**
  * The processes an audit covers.

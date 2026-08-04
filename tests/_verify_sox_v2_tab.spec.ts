@@ -114,8 +114,8 @@ test('SOX Testing V2 tab mirrors the Programmes experience on its own store', as
   await page.getByRole('button', { name: 'Continue' }).click();
   // #8 — the People step: every RACM prefilled with process + control owner
   await expect(page.getByText('People — who owns the process, who owns the controls')).toBeVisible();
-  await expect(page.getByLabel('Process owner for Treasury')).toHaveValue('Nikhil Rao — Treasury Manager');
-  await expect(page.getByLabel('Process owner for Procure to Pay')).toHaveValue('Rohit Bansal — Procurement Head');
+  await expect(page.getByLabel('Process owner for Treasury')).toHaveValue('Nikhil Rao');
+  await expect(page.getByLabel('Process owner for Procure to Pay')).toHaveValue('Rohit Bansal');
   await page.screenshot({ path: `${SHOT_DIR}/05-v2-people-step.png`, fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Review — scoping decides the programme')).toBeVisible();

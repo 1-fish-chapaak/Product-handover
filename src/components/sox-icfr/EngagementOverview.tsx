@@ -396,10 +396,11 @@ export default function EngagementOverview() {
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
-  /* The MW watchlist opens expanded — an entity-level finding is not something
-     the page gets to hide on first read. Folding it away is the user's call, and
-     it stays folded only for the visit. */
-  const [mwOpen, setMwOpen] = useState(true);
+  /* The MW watchlist arrives collapsed (user ask) — the headline and the count
+     still say an entity-level finding is open, so nothing is hidden, and the
+     overview opens on the whole engagement rather than on one card's list.
+     Unfolding is the user's call, and it stays unfolded only for the visit. */
+  const [mwOpen, setMwOpen] = useState(false);
   const still = useReducedMotion();
 
   const canCreate = role !== 'risk-owner';

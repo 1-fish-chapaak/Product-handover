@@ -88,7 +88,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { normaliseProcess, processesForAudit } from './auditScope';
+import { normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
 
 // The five primary tabs — mirrors how other engagements are laid out.
 // 'deficiencies' is a TAB now, not a drill-in: deficiency management is a place
@@ -116,7 +116,11 @@ export interface NewControlDraft {
   riskDescription: string;
   nature: Nature;
   frequency: Frequency;
+  /** Accountable for the control. */
   owner: string;
+  /** Runs the process, and is who evidence requests reach. Falls back to the
+   *  process's people from the scoping wizard, then to `owner`. */
+  processOwner?: string;
   isKey: boolean;
   assertions: Assertion[];
 }
@@ -157,7 +161,7 @@ interface IcfrCtx {
   // design track
   setDocStatus: (controlId: string, docId: string, status: DocStatus) => void;
   setDesignPoint: (controlId: string, pointId: string, result: TestResult) => void;
-  concludeDesign: (controlId: string, conclusion: TrackConclusion) => void;
+  concludeDesign: (controlId: string, conclusion: TrackConclusion, rationale?: string) => void;
   overrideDesign: (controlId: string, override: Override | null) => void;
   // design CRUD + validation
   // `custom` names an element the standard kinds don't cover — its title is the
@@ -173,7 +177,9 @@ interface IcfrCtx {
   /** Edit the control's own identity — objective, classification, key judgement,
    *  risk rating. Key/non-key and the rating are agreed with management, never
    *  read off an SOP, so they have to be editable rather than displayed. */
-  updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating'>) => void;
+  updateControlMeta: (controlId: string, patch: Pick<Partial<Control>, 'objective' | 'clazz' | 'isKey' | 'riskRating' | 'owner' | 'processOwner'>) => void;
+  /** Key / non-key, set while an audit is being SCOPED — see `setControlKey`. */
+  setControlKey: (controlId: string, isKey: boolean) => void;
   /** The design judgements the paper states — 5W+1H coverage, compensating
    *  control, is the frequency right, is the type right. */
   setDesignJudgements: (controlId: string, patch: Partial<DesignJudgements>) => void;
@@ -231,7 +237,7 @@ interface IcfrCtx {
   // IPE — the entity-produced report is registered, its three checks are worked,
   // then it is concluded. Until it concludes Reliable there is nothing to sample.
   registerIpe: (controlId: string, meta: Omit<IpeTest, 'checks' | 'conclusion' | 'testedBy' | 'testedAt'>) => void;
-  setIpeCheck: (controlId: string, checkId: string, patch: { result?: TestResult; note?: string }) => void;
+  setIpeCheck: (controlId: string, checkId: string, patch: { result?: TestResult; note?: string; evidence?: EvidenceFile[] }) => void;
   concludeIpe: (controlId: string, conclusion: IpeConclusion) => void;
   /** Unregister the report — the wrong extract was tested, so the work goes with it. */
   clearIpe: (controlId: string) => void;
@@ -247,7 +253,7 @@ interface IcfrCtx {
   attestStep: (controlId: string, stepId: string, note: string, result: 'Pass' | 'Fail') => void;
   addStepEvidence: (controlId: string, stepId: string, fileName: string) => void;
   setStepInputFile: (controlId: string, stepId: string, fileName: string) => void;
-  concludeOperating: (controlId: string, conclusion: TrackConclusion) => void;
+  concludeOperating: (controlId: string, conclusion: TrackConclusion, rationale?: string) => void;
   overrideOperating: (controlId: string, override: Override | null) => void;
   // operating CRUD + workflow mapping + attest toggle + test-all
   addAttribute: (controlId: string, description: string) => void;
@@ -284,7 +290,7 @@ interface IcfrCtx {
   addRacmDoc: (fileName: string, process?: string) => void;
   // a RACM here IS a process's set of controls, so creating one brings a new
   // process into scope and seeds its risks & controls from the template
-  createRacm: (process: string, sourceFileName?: string) => void;
+  createRacm: (process: string, sourceFileName?: string, entity?: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -375,7 +381,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [meOwner, setMeOwner] = useState(() => {
     const live = eng.deficiencies.find(d => d.status !== 'Closed');
     const owner = live && eng.controls.find(c => c.id === live.controlId)?.owner;
-    return owner ?? eng.controls[0]?.owner ?? 'M. Nair · Accounts Payable';
+    return owner ?? eng.controls[0]?.owner ?? 'M. Nair';
   });
 
   // Person-based identity: each hat acts as the engagement's named person, not a
@@ -497,8 +503,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         id: `DEF-${String(next).padStart(3, '0')}`,
         controlId, track,
         description: failed.length
-          ? `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
-          : `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef}.`,
+          ? `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
+          : `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef}.`,
         // Deliberately blank, not pre-filled with a plausible sentence: the whole
         // exception turns on this, and a default here would be a guess the auditor
         // never made. Step 1 is not complete until it is written.
@@ -513,6 +519,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // cannot go to the owner before it has a root cause and a grade — that is
         // the point of steps 1 and 2, and the owner has nothing to plan against
         // until they exist.
+        //
+        // Deliberately the CONTROL owner, not the process owner: evidence is
+        // asked of whoever runs the process, but a broken control is answered
+        // for by whoever is accountable for it. Only the first of those two
+        // moved when controls gained a second name.
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
       };
@@ -524,10 +535,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
-  const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion) => {
+  const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     // re-concluding clears a reviewer's return note — the rework happened
-    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, design: { ...c.design, conclusion, testedBy: me, testedAt: 'just now' } }));
+    // Clearing the conclusion clears its rationale too: words explaining a
+    // conclusion that no longer exists would outlive the thing they explain.
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, design: { ...c.design, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.design.rationale), testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: `concluded design ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
@@ -584,6 +597,28 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, ...patch }));
   }, [patchControl, role]);
+
+  /**
+   * Key / non-key, set while an audit is being scoped.
+   *
+   * Deliberately NOT routed through `patchControl`, whose concluded-control
+   * guard exists to stop a signed working paper being rewritten. Scoping runs
+   * before any of that: a new audit is created with nothing tested, and a
+   * roll-forward carries the RACM and its controls but starts testing from zero
+   * — so a control cannot be concluded at the moment this is asked. The guard
+   * would only ever bite on a seeded demo engagement that already has a cycle
+   * in flight, where it would silently swallow the click.
+   *
+   * The control page's own key switch keeps `updateControlMeta`, and with it
+   * the guard: there, the control genuinely can be concluded already.
+   */
+  const setControlKey = useCallback<IcfrCtx['setControlKey']>((controlId, isKey) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      return { ...prev, controls: prev.controls.map(c => (c.id === controlId ? { ...c, isKey } : c)) };
+    });
+  }, [role]);
 
   // The design judgements the paper states. Stamped with who recorded them, so a
   // reader can see the questions were actually considered rather than defaulted.
@@ -662,7 +697,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       const ctrl = prev.controls.find(c => c.id === controlId);
       const kinds = ctrl ? ctrl.design.documents.filter(d => docIds.includes(d.id)).map(d => d.kind) : [];
-      const task: HandoffTask = { id: uid('PBC'), type: 'pbc', controlId, title: `Provide design documents (${docIds.length})`, detail: `Requested from ${emails.join(', ')} — ${kinds.join(', ')}.`, assignee: emails[0] ?? 'Risk Owner', assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' };
+      // The task lands on the process owner by name — they are who the email was
+      // addressed to, and an address is not something you can look up a person by.
+      const assignee = ctrl ? ownersOf(ctrl).processOwner : (emails[0] ?? 'Risk Owner');
+      const task: HandoffTask = { id: uid('PBC'), type: 'pbc', controlId, title: `Provide design documents (${docIds.length})`, detail: `Requested from ${emails.join(', ')} — ${kinds.join(', ')}.`, assignee, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' };
       return { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, design: { ...c.design, documents: c.design.documents.map(d => docIds.includes(d.id) ? { ...d, status: 'Requested' as DocStatus } : d) } } : c), tasks: [...prev.tasks, task] };
     });
     pushExec(() => ({ controlId, track: 'design', kind: 'request-docs', verb: `requested ${docIds.length} design document${docIds.length === 1 ? '' : 's'}` }));
@@ -925,6 +963,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       pushExec(prev => {
         const k = prev.controls.find(c => c.id === controlId)?.operating.ipe?.checks.find(x => x.id === checkId);
         return k ? { controlId, track: 'operating', kind: 'ipe', verb: `tested the report's ${k.dimension.toLowerCase()}`, target: k.dimension, result: k.result } : null;
+      });
+    }
+    // The proof itself is a fact on the paper, not a detail of the result — an
+    // auditor who says the count ties and an auditor who shows the screen they
+    // counted it on have not done the same thing.
+    if (patch.evidence) {
+      pushExec(prev => {
+        const k = prev.controls.find(c => c.id === controlId)?.operating.ipe?.checks.find(x => x.id === checkId);
+        const last = patch.evidence?.[patch.evidence.length - 1];
+        return k && last ? { controlId, track: 'operating', kind: 'ipe', verb: `attached proof of the report's ${k.dimension.toLowerCase()}`, target: last.name } : null;
       });
     }
   }, [patchControl, pushExec, role]);
@@ -1280,10 +1328,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [patchControl, pushExec, pushRun, role]);
 
-  const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
+  const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     // re-concluding clears a reviewer's return note — the rework happened
-    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
@@ -1384,12 +1432,27 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // processes), and the workbook / SOP that produced it is pinned to the new
   // matrix as its source document. A process that already has a RACM is a
   // no-op — the landing lists one RACM per process.
-  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName) => {
+  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName, entity) => {
     if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       if (prev.controls.some(c => c.process === process)) return prev;
-      return { ...prev, controls: [...prev.controls, ...racmTemplateForProcesses([process], 'fresh')] };
+      // The company the matrix belongs to, stamped on every control it creates:
+      // a group audit tests the same process separately at each entity, and a
+      // row that cannot say which company it is for cannot be concluded.
+      //
+      // Its two owners come off the same shelf. The scoping wizard already asked
+      // who runs this process and who is accountable for it; a RACM uploaded
+      // afterwards used to land with neither, so every control it made arrived
+      // with a template name on it and nobody real to ask for evidence.
+      const people = peopleForProcess(process);
+      const rows = racmTemplateForProcesses([process], 'fresh')
+        .map(c => ({
+          ...c,
+          ...(entity ? { entity } : {}),
+          ...(people ? { owner: people.controlOwner, processOwner: people.processOwner } : {}),
+        }));
+      return { ...prev, controls: [...prev.controls, ...rows] };
     });
     if (sourceFileName) addRacmDoc(sourceFileName, process);
   }, [role, addRacmDoc]);
@@ -1445,7 +1508,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // holds it, or there is nothing to hold. Asking for it anyway is noise.
         const missing = c.design.documents.filter(d => d.status === 'Missing' && !d.waiver);
         if (missing.length) {
-          newTasks.push({ id: `PBC-${prev.tasks.length + newTasks.length + 1}`, type: 'pbc', controlId: c.id, title: `Provide design documents (${missing.length})`, detail: `Needed for TOD: ${missing.map(d => d.kind).join(', ')}.`, assignee: c.owner, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' });
+          // Evidence is asked of whoever runs the process, not whoever answers for it.
+          newTasks.push({ id: `PBC-${prev.tasks.length + newTasks.length + 1}`, type: 'pbc', controlId: c.id, title: `Provide design documents (${missing.length})`, detail: `Needed for TOD: ${missing.map(d => d.kind).join(', ')}.`, assignee: ownersOf(c).processOwner, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open' });
           newExecs.push({ id: uid('ex'), controlId: c.id, track: 'design', kind: 'request-docs', verb: `requested ${missing.length} design document${missing.length === 1 ? '' : 's'}`, by: me, role, at: 'just now' });
         }
         return { ...c, design: { ...c.design, documents: c.design.documents.map(d => d.status === 'Missing' && !d.waiver ? { ...d, status: 'Requested' as DocStatus } : d) } };
@@ -1619,7 +1683,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const have = new Set(prev.controls.map(c => c.process));
       const kept = prev.controls.filter(c => want.has(c.process));
       const missing = processes.filter(p => !have.has(p));
-      return { ...prev, controls: missing.length ? [...kept, ...racmTemplateForProcesses(missing, 'fresh')] : kept };
+      // Newly-scoped processes join the audit that scoped them, so their controls
+      // carry its company — same stamp createRacm applies. Read off the register
+      // rather than assumed, so a group audit doesn't get the wrong one.
+      const entity = kept[0]?.entity ?? prev.controls[0]?.entity ?? prev.entity;
+      const fresh = racmTemplateForProcesses(missing, 'fresh').map(c => (entity ? { ...c, entity } : c));
+      return { ...prev, controls: missing.length ? [...kept, ...fresh] : kept };
     });
   }, []);
   // The guarded path for changing the ground rules mid-engagement: applies the
@@ -1863,7 +1932,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const task: HandoffTask = {
         id: `UTT-${prev.tasks.length + 1}`, type: 'pbc', controlId,
         title: `Testing blocked on ${c.wpRef} — ${short(needed, 60)}`,
-        detail: reason.trim(), assignee: c.owner, assigneeRole: 'risk-owner',
+        // Blocked testing is waiting on evidence, so it waits on the process owner.
+        detail: reason.trim(), assignee: ownersOf(c).processOwner, assigneeRole: 'risk-owner',
         raisedBy: me, dueLabel: 'Due in 5d', overdue: false, status: 'open',
       };
       const event: ExecutionEvent = {
@@ -2086,6 +2156,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       subProcess: draft.subProcess.trim() || 'General',
       nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
       isKey: draft.isKey, precision: draft.description, owner: draft.owner,
+      // Falls through to the process's recorded process owner when the form
+      // didn't name one, so a control created by hand still knows who to ask.
+      processOwner: draft.processOwner?.trim() || peopleForProcess(draft.process)?.processOwner,
       riskId: draft.riskId, riskDescription: draft.riskDescription,
       assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
       design: {
@@ -2136,7 +2209,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
+    addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
     setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
@@ -2149,7 +2222,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

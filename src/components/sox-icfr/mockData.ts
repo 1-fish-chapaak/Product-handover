@@ -1,3 +1,5 @@
+import { entityShort } from '../audit/sox-testing/soxTestingData';
+import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
 import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
@@ -6,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -16,7 +18,7 @@ const OPTIONAL_KINDS: DesignDoc['kind'][] = ['Flowchart', 'Policy / SOP'];
 /** A required element accounted for without a file: the audit team prepared it,
  *  the client holds it, or there is nothing to hold. It stops gating the design
  *  conclusion, and the reason is what the working paper prints. */
-const waivedDoc = (kind: DesignDoc['kind'], reason: DesignWaiverReason, note: string, by = 'A. Mehta · Auditor'): DesignDoc =>
+const waivedDoc = (kind: DesignDoc['kind'], reason: DesignWaiverReason, note: string, by = 'A. Mehta'): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name: `${kind} — not provided`, status: 'Missing', required: true, waiver: { reason, note, by, at: '11 Apr' } });
 
 /** Classification is derivable from the cycle — the transaction cycles are
@@ -79,7 +81,7 @@ const attest = (note: string, by: string, files: string[]): Partial<OperatingSte
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
   ({
     documents, points, conclusion,
-    testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null,
+    testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta') : null,
     testedAt: conclusion !== 'Not tested' ? '14 Apr' : null,
   });
 
@@ -91,7 +93,7 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     basis: 'Transaction-based', instance: `One ${popSource.includes('journal') ? 'journal entry' : 'transaction'} recorded in the period`,
     expectedCount: popCount, includeRejected: false,
     rejectedNote: 'Rejections are held before the control sees them, so the control never operated on those items.',
-    by: 'A. Mehta · Auditor', at: '12 Apr',
+    by: 'A. Mehta', at: '12 Apr',
   } : undefined,
   population: popCount ? {
     source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
@@ -105,9 +107,9 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     // lands just inside tolerance, which is what a healthy extract looks like.
     expectedCount: Math.round(popCount / 50) * 50,
     // Where it came from. Not derivable from the file, so it was recorded.
-    provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair · IT', extractedOn: '2026-04-12' },
+    provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair', extractedOn: '2026-04-12' },
     checks: { countMatches: true, dateRangeFull: true, productionSource: true },
-    locked: { by: 'A. Mehta · Auditor', at: '13 Apr' }, version: 'POP-YE',
+    locked: { by: 'A. Mehta', at: '13 Apr' }, version: 'POP-YE',
     evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
   } : undefined,
   // A draw nobody can reperform is not a procedure — every seeded sample carries
@@ -115,7 +117,7 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
   sampling: sampling ? { ...sampling, seed: sampling.seed ?? 40817 } : undefined,
   steps,
   conclusion,
-  testedBy: conclusion !== 'Not tested' ? 'A. Mehta · Auditor' : null,
+  testedBy: conclusion !== 'Not tested' ? 'A. Mehta' : null,
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
 
@@ -155,7 +157,7 @@ const ipeTest = (meta: {
       note: meta.findings[i],
     })),
     conclusion: reliable ? 'Reliable' : 'Not reliable',
-    testedBy: 'A. Mehta · Auditor',
+    testedBy: 'A. Mehta',
     testedAt: '03 May',
   };
 };
@@ -265,7 +267,7 @@ export function requiredDatasetsFor(c: Control): RequiredDataset[] {
 }
 
 // ── RACM row review seeds — the audit manager's approval / remark per row ────────
-const REVIEWER = 'J. Fernandes · Audit Manager';
+const REVIEWER = 'J. Fernandes';
 const approved = (at = '15 Apr'): RacmReview => ({ status: 'Approved', by: REVIEWER, at });
 const remark = (text: string, at = '15 Apr'): RacmReview => ({ status: 'Remark', remark: text, by: REVIEWER, at });
 
@@ -276,7 +278,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Vendor master', nature: 'Automated', type: 'Preventive', frequency: 'Recurring', isKey: true,
     precision: 'Any change to a vendor bank account is blocked until a second authoriser approves in SAP.',
     controlActivity: 'R. Khanna (Master Data) raises every vendor addition and bank-detail change in SAP S/4HANA against the signed vendor request form and the bank confirmation letter. The record stays inactive until a second Master Data authoriser, independent of the raiser, approves the change in the workflow; the approval log is the evidence. Nothing pays out of an unapproved record.',
-    owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
+    owner: 'R. Khanna', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
     rootCause: 'Vendor bank details can be edited in the master record by the same team that raises the payment run, so a single person can redirect a genuine payable.',
     auditSteps: [
       'Obtain the SAP role matrix for the vendor-master transactions (XK01 / XK02) and identify every user holding create and approve.',
@@ -291,7 +293,7 @@ const DETAILED: Control[] = [
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
     // fully through the review gate — signed and countersigned, the paper is final
-    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '17 Apr' }, reviewer: { by: REVIEWER, at: '18 Apr' } },
+    wpSignoff: { preparer: { by: 'A. Mehta', at: '17 Apr' }, reviewer: { by: REVIEWER, at: '18 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
@@ -312,7 +314,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Purchasing', nature: 'Manual', type: 'Preventive', frequency: 'Daily', isKey: true,
     precision: 'POs above ₹5L route to the next authority tier; release is blocked without approval at the correct tier.',
     controlActivity: 'S. Iyer (Procurement) reviews each purchase requisition against the delegation-of-authority matrix before it is converted to a PO. SAP S/4HANA routes the order to the authority tier its value demands and blocks release until that tier approves; the approval trail on the PO is the evidence. Orders raised at the wrong tier are returned to the buyer, not overridden.',
-    owner: 'S. Iyer · Procurement', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
+    owner: 'S. Iyer', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
     rootCause: 'The delegation-of-authority matrix is maintained offline and was last refreshed before two reorganisations, so SAP still routes some orders to authority tiers that no longer exist.',
     auditSteps: [
       'Obtain the signed delegation-of-authority matrix in force for FY26 and agree the tiers to the current org structure.',
@@ -342,15 +344,15 @@ const DETAILED: Control[] = [
     ]),
     // the population came out of a client-run report, so the report is tested first
     operating: { ...manualTrack('Not tested', [
-      step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass', attest('Approval screenshots for all 25 sampled POs attached; each shows the correct tier per the DoA matrix.', 'S. Iyer · Procurement', ['PO_approval_screens_25_samples_Apr26.pdf', 'DoA_matrix_FY26_v2_signed.xlsx'])),
-      step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass', attest('Delegation register extract confirms authority held on each approval date.', 'S. Iyer · Procurement', ['Delegation_register_extract_01-30Apr26.pdf'])),
-      step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested', { ...wf('wf-po-release-timing', 'PO release-timing check', undefined), evidenceMode: 'ai', aiValidation: true, inputFile: file('ME2N_release_timing_extract_Apr26.csv', 'S. Iyer · Procurement', 'CSV') }),
+      step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass', attest('Approval screenshots for all 25 sampled POs attached; each shows the correct tier per the DoA matrix.', 'S. Iyer', ['PO_approval_screens_25_samples_Apr26.pdf', 'DoA_matrix_FY26_v2_signed.xlsx'])),
+      step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass', attest('Delegation register extract confirms authority held on each approval date.', 'S. Iyer', ['Delegation_register_extract_01-30Apr26.pdf'])),
+      step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested', { ...wf('wf-po-release-timing', 'PO release-timing check', undefined), evidenceMode: 'ai', aiValidation: true, inputFile: file('ME2N_release_timing_extract_Apr26.csv', 'S. Iyer', 'CSV') }),
     ], sampling(25, '25 POs — daily manual control, moderate reliance (handbook — no fixed minimum, judgment documented).', 'Random', 0, PO_SAMPLE_REFS), 2640, 'SAP ECC — ME2N PO release log, FY26 YTD (POs 4500012840–4500013008)', 'ME2N_PO_release_log_FY26_YTD.xlsx'),
       ipe: ipeTest({
         reportName: 'PO release log',
         reportRef: 'ME2N',
         parameters: 'Company code AG01 · document types NB, FO · release date 01 Apr 2026 – 31 Mar 2027 · all purchasing groups',
-        generatedBy: 'S. Iyer · Procurement',
+        generatedBy: 'S. Iyer',
         recordCount: 2640,
         controlTotal: '₹ 412.64 Cr — agreed to GL 21100 (Trade payables) movement',
         file: 'ME2N_PO_release_log_FY26_YTD.xlsx',
@@ -367,7 +369,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Invoice processing', nature: 'IT-dependent', type: 'Detective', frequency: 'Daily', isKey: true,
     precision: 'Quantity/price tolerance breaches are held and cannot pay until cleared by the buyer.',
     controlActivity: 'M. Nair (Accounts Payable) works the daily blocked-invoice report from SAP S/4HANA, which holds any invoice whose quantity or price falls outside tolerance on the three-way match against the PO and goods receipt. The buyer investigates each held line and clears or rejects it, evidencing the outcome on the report. A held invoice cannot be paid until it is cleared.',
-    owner: 'M. Nair · Accounts Payable', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
+    owner: 'M. Nair', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
     rootCause: 'Tolerance limits were set centrally years ago in absolute rupees and never indexed, so on high-value spares an out-of-tolerance price difference still falls inside the limit and passes the match.',
     auditSteps: [
       'Obtain the MM tolerance configuration export and agree the quantity and price limits to the approved policy.',
@@ -391,8 +393,8 @@ const DETAILED: Control[] = [
       point('Held items cannot be released to pay without buyer clearance.', 'Not tested'),
     ]),
     operating: manualTrack('Not tested', [
-      step('C1', 'Quantity and price agree to PO and GRN within tolerance.', 'Accuracy', 'Per invoice', ['Reperformance', 'Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('MIRO_invoice_register_01-30Apr26.csv', 'M. Nair · Accounts Payable', 'CSV') }),
-      step('C2', 'Tolerance breaches are held and cleared with evidence.', 'Existence / Occurrence', 'Per exception', ['Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('Tolerance_breach_hold_report_Apr26.xlsx', 'M. Nair · Accounts Payable', 'XLSX') }),
+      step('C1', 'Quantity and price agree to PO and GRN within tolerance.', 'Accuracy', 'Per invoice', ['Reperformance', 'Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('MIRO_invoice_register_01-30Apr26.csv', 'M. Nair', 'CSV') }),
+      step('C2', 'Tolerance breaches are held and cleared with evidence.', 'Existence / Occurrence', 'Per exception', ['Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('Tolerance_breach_hold_report_Apr26.xlsx', 'M. Nair', 'XLSX') }),
     ], undefined, 0),
   },
   {
@@ -400,7 +402,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Invoice processing', nature: 'Automated', type: 'Preventive', frequency: 'Recurring', isKey: true,
     precision: 'SAP blocks postings where vendor + invoice number + amount match an existing document.',
     controlActivity: 'The duplicate-invoice check is configured in SAP S/4HANA and runs on every invoice as it is posted, comparing vendor, invoice number and amount against documents already on the ledger. A match is blocked at posting; the block log is the evidence. M. Nair (Accounts Payable) reviews the log and releases only after confirming the second document is genuine.',
-    owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
+    owner: 'M. Nair', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
     rootCause: 'The duplicate check compares the invoice reference as typed, so any formatting difference — a leading zero, a trailing space — reads as a new document and clears the block.',
     auditSteps: [
       'Obtain the SAP duplicate-check configuration and confirm the match key includes vendor, reference and amount.',
@@ -415,7 +417,7 @@ const DETAILED: Control[] = [
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
     // concluded ineffective, paper signed — sitting in the reviewer's court
-    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '16 Apr' } },
+    wpSignoff: { preparer: { by: 'A. Mehta', at: '16 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
       doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
@@ -435,7 +437,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: true,
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     controlActivity: 'D. Rao (Controller) reviews every manual journal to the AP control account each month, before the ledger closes, against the supporting schedule and the originating document. The journal is posted only after review, and the sign-off on the journal package is the evidence. Journals raised without support are returned to the preparer.',
-    owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
+    owner: 'D. Rao', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
     rootCause: 'The review was designed around the month-end reporting pack rather than the posting itself, so it happens after the journal has already hit the ledger.',
     auditSteps: [
       'Obtain the manual-journal narrative and walk the review step with the Controller.',
@@ -459,7 +461,7 @@ const DETAILED: Control[] = [
       point('Review covers completeness of the journal population.', 'Fail'),
     ]),
     operating: manualTrack('Not tested', [
-      step('E1', 'Journal reviewed and signed before posting date.', 'Accuracy', 'Per journal', ['Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('FB50_manual_journal_register_Apr26.csv', 'D. Rao · Controller', 'CSV') }),
+      step('E1', 'Journal reviewed and signed before posting date.', 'Accuracy', 'Per journal', ['Inspection'], 'Not tested', { evidenceMode: 'ai', aiValidation: true, inputFile: file('FB50_manual_journal_register_Apr26.csv', 'D. Rao', 'CSV') }),
       step('E2', 'Population of manual journals is complete.', 'Completeness', 'Per period', ['Reperformance', 'Inspection']),
     ], undefined, 0),
   },
@@ -468,7 +470,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'Receipts in the last/first 5 days are checked to GRN dates for correct-period recording.',
     controlActivity: 'M. Nair (Accounts Payable) takes the goods-receipt listing for the last five days of the period and the first five of the next, and agrees each line to the GRN date and the carrier documentation. Receipts recorded in the wrong period are reclassified before close; the reviewed listing carries dated sign-off as evidence.',
-    owner: 'M. Nair · Accounts Payable', riskId: 'R-21', riskDescription: 'Goods/liabilities recorded in the wrong period (cut-off).',
+    owner: 'M. Nair', riskId: 'R-21', riskDescription: 'Goods/liabilities recorded in the wrong period (cut-off).',
     rootCause: 'Receiving sites post goods receipts from paper docket books the next working day, so the recorded date follows the data-entry date rather than the date the goods arrived.',
     auditSteps: [
       'Obtain the cut-off narrative and confirm the review window is defined and applied consistently.',
@@ -498,7 +500,7 @@ const DETAILED: Control[] = [
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
     controlActivity: 'M. Nair (Accounts Payable) reviews the aged GR/IR report from SAP S/4HANA each month and investigates every entry open beyond 60 days with the buyer and the receiving site. Each item is cleared, accrued or written back with a documented reason; the annotated report is retained as evidence and the closing balance is agreed to the ledger.',
-    owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
+    owner: 'M. Nair', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
     rootCause: 'Ageing the GR/IR account is a month-end housekeeping task with no owner named in the close calendar, so it slips whenever close is compressed.',
     objective: 'The GR/IR account holds only genuine in-transit items, and they are cleared within policy.', clazz: 'Operational' as const,
     riskRating: 'Low',
@@ -517,6 +519,9 @@ const DETAILED: Control[] = [
 // claims to have tested. Only rows whose design has actually been concluded carry
 // one — an untested row shows the "not started" state, which is the first thing a
 // new audit should see.
+// Attendees are the ONE place a name still carries what the person does. It is
+// the client's side of the room, and the paper has to say in what capacity they
+// answered — the auditor's own name needs no such tag, everyone knows who tested.
 const WALKED: Record<string, { attendees: string[]; notes: string; failCode?: string }> = {
   'P2P-C-01': { attendees: ['R. Khanna · Vendor Master Lead', 'P. Nair · IT Applications'], notes: 'Walked a live bank-detail change end to end. SAP held the change in a pending state until a second user with a distinct role released it, and the change log kept both user ids.' },
   'P2P-C-02': { attendees: ['S. Iyer · Procurement', 'M. Desai · Buyer'], notes: 'Walked a ₹42L purchase order. It routed to the tier the value demands and could not be released until that tier approved; the buyer had no override.' },
@@ -549,7 +554,7 @@ for (const c of DETAILED) {
       frequencyAppropriate: j.freq,
       typeAppropriate: j.type,
       note: j.note,
-      by: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+      by: c.performedBy === 'RS' ? 'R. Subramanian' : 'A. Mehta',
       at: '11 Apr',
     };
   }
@@ -558,11 +563,11 @@ for (const c of DETAILED) {
   c.design.walkthrough = {
     sampleRef: sampleRefs(c.process, 1)[0] ?? '#1000',
     date: '11 Apr',
-    tester: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+    tester: c.performedBy === 'RS' ? 'R. Subramanian' : 'A. Mehta',
     attendees: w.attendees,
     attributeResults: Object.fromEntries(c.operating.steps.map(s => [s.id, (w.failCode === s.code ? 'Fail' : 'Pass') as TestResult])),
     notes: w.notes,
-    startedBy: c.performedBy === 'RS' ? 'R. Subramanian · Auditor' : 'A. Mehta · Auditor',
+    startedBy: c.performedBy === 'RS' ? 'R. Subramanian' : 'A. Mehta',
     startedAt: '11 Apr',
   };
 }
@@ -575,7 +580,7 @@ for (const c of DETAILED) {
 type SpreadRisk = { id: string; text: string; covers: number[] };
 type Spread = { process: string; prefix: string; wp: string; subs: string[]; titles: string[]; owner: string; risks: SpreadRisk[] };
 const SPREADS: Spread[] = [
-  { process: 'Order to Cash', prefix: 'O2C', wp: 'O', owner: 'P. Sharma · Revenue', subs: ['Credit', 'Billing', 'Collections', 'Revenue recognition'], titles: [
+  { process: 'Order to Cash', prefix: 'O2C', wp: 'O', owner: 'P. Sharma', subs: ['Credit', 'Billing', 'Collections', 'Revenue recognition'], titles: [
     'Credit limits are approved before order release', 'Sales invoices priced from the approved price master', 'Revenue cut-off at period-end agrees to dispatch', 'Credit notes are approved before issue', 'Customer master changes are independently reviewed', 'AR ageing reviewed and provisioned monthly', 'Manual revenue journals are reviewed before posting', 'Cash receipts applied to correct customer accounts', 'Disputed receivables escalated per policy', 'Rebates accrued per contract terms' ],
     risks: [
       { id: 'R-40', text: 'Sales released to customers beyond approved credit limits.', covers: [0] },
@@ -585,7 +590,7 @@ const SPREADS: Spread[] = [
       { id: 'R-44', text: 'Receivables overstated — uncollectable or disputed balances not provisioned.', covers: [5, 8] },
       { id: 'R-45', text: 'Cash receipts misapplied or customer master data manipulated.', covers: [4, 7] },
     ] },
-  { process: 'Record to Report', prefix: 'R2R', wp: 'R', owner: 'D. Rao · Controller', subs: ['Journals', 'Reconciliations', 'Close', 'Consolidation'], titles: [
+  { process: 'Record to Report', prefix: 'R2R', wp: 'R', owner: 'D. Rao', subs: ['Journals', 'Reconciliations', 'Close', 'Consolidation'], titles: [
     'Balance-sheet reconciliations reviewed monthly', 'Manual journals approved before posting', 'Intercompany balances agreed and eliminated', 'FX revaluation reviewed at month-end', 'Close checklist completed and signed', 'Consolidation entries reviewed', 'Accruals supported and approved', 'Suspense accounts cleared within policy', 'Trial balance mapped to FS line items', 'Management review of flux analysis' ],
     risks: [
       { id: 'R-50', text: 'Unsupported or unauthorised journals and accruals misstate the ledger.', covers: [1, 6] },
@@ -595,34 +600,34 @@ const SPREADS: Spread[] = [
       { id: 'R-54', text: 'Foreign-currency balances revalued incorrectly.', covers: [3] },
       { id: 'R-55', text: 'Trial balance mis-mapped to financial-statement lines.', covers: [8] },
     ] },
-  { process: 'Inventory', prefix: 'INV', wp: 'I', owner: 'K. Bose · Supply Chain', subs: ['Costing', 'Counts', 'Provisions'], titles: [
+  { process: 'Inventory', prefix: 'INV', wp: 'I', owner: 'K. Bose', subs: ['Costing', 'Counts', 'Provisions'], titles: [
     'Standard costs reviewed and approved', 'Cycle counts performed and variances investigated', 'Slow-moving provision calculated and reviewed', 'Inventory movements restricted to authorised users', 'Net realisable value assessed at period-end', 'GRN matched to physical receipt' ],
     risks: [
       { id: 'R-60', text: 'Inventory valued incorrectly — cost, obsolescence or net realisable value.', covers: [0, 2, 4] },
       { id: 'R-61', text: 'Recorded inventory does not exist or receipts do not match physical stock.', covers: [1, 5] },
       { id: 'R-62', text: 'Unauthorised inventory movements misstate stock.', covers: [3] },
     ] },
-  { process: 'Treasury', prefix: 'TRY', wp: 'T', owner: 'A. Verma · Treasury', subs: ['Payments', 'Banking', 'Investments'], titles: [
+  { process: 'Treasury', prefix: 'TRY', wp: 'T', owner: 'A. Verma', subs: ['Payments', 'Banking', 'Investments'], titles: [
     'Payment runs approved by two authorisers', 'Bank reconciliations reviewed monthly', 'New payee setup independently verified', 'Borrowing within board-approved limits', 'FX deals confirmed independently of dealing' ],
     risks: [
       { id: 'R-70', text: 'Payments released without dual authorisation or to unverified payees.', covers: [0, 2] },
       { id: 'R-71', text: 'Bank balances misstated through unreconciled differences.', covers: [1] },
       { id: 'R-72', text: 'Treasury exposures taken outside board-approved limits.', covers: [3, 4] },
     ] },
-  { process: 'Payroll', prefix: 'PAY', wp: 'Y', owner: 'N. Pillai · HR', subs: ['Masterdata', 'Processing'], titles: [
+  { process: 'Payroll', prefix: 'PAY', wp: 'Y', owner: 'N. Pillai', subs: ['Masterdata', 'Processing'], titles: [
     'Joiner/leaver changes approved before payroll run', 'Payroll reconciled to GL each cycle', 'Overtime approved before payment', 'Statutory deductions reconciled and remitted' ],
     risks: [
       { id: 'R-75', text: 'Fictitious, departed or unapproved employees paid.', covers: [0] },
       { id: 'R-76', text: 'Payroll costs unapproved or unreconciled to the ledger.', covers: [1, 2] },
       { id: 'R-77', text: 'Statutory deductions under-remitted, exposing penalties.', covers: [3] },
     ] },
-  { process: 'Tax', prefix: 'TAX', wp: 'X', owner: 'S. Gupta · Tax', subs: ['Direct', 'Indirect'], titles: [
+  { process: 'Tax', prefix: 'TAX', wp: 'X', owner: 'S. Gupta', subs: ['Direct', 'Indirect'], titles: [
     'GST returns reviewed before filing', 'Tax provision reviewed by tax lead', 'TDS reconciled to GL and remitted' ],
     risks: [
       { id: 'R-80', text: 'Indirect-tax filings incorrect, late or unreconciled.', covers: [0, 2] },
       { id: 'R-81', text: 'Tax provision materially misstated.', covers: [1] },
     ] },
-  { process: 'IT General Controls', prefix: 'ITGC', wp: 'G', owner: 'V. Menon · IT', subs: ['Access', 'Change', 'Operations'], titles: [
+  { process: 'IT General Controls', prefix: 'ITGC', wp: 'G', owner: 'V. Menon', subs: ['Access', 'Change', 'Operations'], titles: [
     'Privileged access reviewed quarterly', 'User access granted via approved request', 'Terminated users disabled within 24h', 'Program changes tested and approved before deploy', 'Emergency changes reviewed post-implementation', 'Batch job failures monitored and resolved', 'Database backups completed and tested', 'Segregation-of-duties conflicts reviewed' ],
     risks: [
       { id: 'R-85', text: 'Unauthorised or excessive access to financial systems.', covers: [0, 1, 2, 7] },
@@ -632,6 +637,63 @@ const SPREADS: Spread[] = [
 ];
 const riskFor = (sp: Spread, titleIdx: number): SpreadRisk =>
   sp.risks.find(r => r.covers.includes(titleIdx)) ?? sp.risks[0]!;
+
+/**
+ * WHAT THE CONTROL IS FOR, one per risk.
+ *
+ * The objective is the outcome management is securing; the risk is what happens
+ * if it isn't secured. They are the same sentence from opposite ends, which is
+ * why this is keyed by risk id rather than written per control — every control
+ * answering one risk is aimed at one outcome. Written in the flagship's voice:
+ * plain, positive, and about the business rather than the paperwork.
+ */
+const OBJECTIVE_BY_RISK: Record<string, string> = {
+  'R-40': 'Customers can only take on what the business has agreed to let them owe.',
+  'R-41': 'What a customer is billed is what the approved price list says.',
+  'R-42': 'Revenue lands in the period the goods actually left.',
+  'R-43': 'Revenue is only given back where someone with the authority agreed to give it back.',
+  'R-44': 'The receivables balance reflects what will realistically be collected.',
+  'R-45': 'Money received is credited to the customer who sent it.',
+  'R-50': 'Nothing reaches the ledger that a second person has not agreed to.',
+  'R-51': 'Every balance is explained by something outside the ledger.',
+  'R-52': 'Group results carry no balance that is really the group owing itself.',
+  'R-53': 'The books are closed completely, in order, and by the date agreed.',
+  'R-54': 'Foreign-currency balances are stated at the rate that actually applies.',
+  'R-55': 'Each ledger balance lands on the financial-statement line it belongs to.',
+  'R-60': 'Stock is carried at what it is genuinely worth.',
+  'R-61': 'The stock on the books is the stock in the warehouse.',
+  'R-62': 'Stock only moves on an instruction someone was entitled to give.',
+  'R-70': 'Money leaves the group only to a payee two people agreed to pay.',
+  'R-71': 'The bank balance on the books is the balance at the bank.',
+  'R-72': 'Treasury exposure stays inside the limits the board set.',
+  'R-75': 'Only people who actually work here get paid.',
+  'R-76': 'Payroll cost in the ledger is the payroll that was approved and run.',
+  'R-77': 'What is deducted from pay reaches the authority it is owed to.',
+  'R-80': 'Indirect-tax filings are right, reconciled and on time.',
+  'R-81': 'The tax charge is what the position at the year end genuinely supports.',
+  'R-85': 'Only the people who need access to the financial systems have it.',
+  'R-86': 'Nothing reaches production that was not tested and approved first.',
+  'R-87': 'Financial data survives processing intact, and failures are noticed.',
+};
+
+/** Processes outside the catalogue get one generic risk, so they get one
+ *  generic objective — still a purpose rather than a restatement of the title. */
+const objectiveFor = (riskId: string, process: string): string =>
+  OBJECTIVE_BY_RISK[riskId]
+  ?? `${process} balances are complete, accurate, and recorded in the period they belong to.`;
+
+/**
+ * Preventive or detective, read off what the control actually does.
+ *
+ * A control that stops the thing happening is preventive; one that finds it
+ * afterwards is detective. Reconciliations, reviews, cut-off checks and
+ * escalations are all after the fact — which is the same line the flagship's
+ * hand-written controls draw (its three-way match and GR/IR review are both
+ * detective). Derived rather than stored because the title already says it, and
+ * a register where all 45 rows read "Preventive" tells a reader nothing.
+ */
+const DETECTIVE = /reconcil|review|monitor|escalat|ageing|cut-off|verification results|investigat|cleared|failures/i;
+const typeOf = (title: string): ControlType => (DETECTIVE.test(title) ? 'Detective' : 'Preventive');
 
 const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
 const STATIONS = ['BOM', 'DEL', 'COK', 'BLR'];
@@ -686,8 +748,8 @@ function generate(): Control[] {
         // pat-6 row is signed but still waits on the reviewer (feeds the queue)
         wpSignoff: design === 'Effective' && operating === 'Effective'
           ? (pat === 6 && idx % 2 === 0
-            ? { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' } }
-            : { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' }, reviewer: { by: REVIEWER, at: '19 Apr' } })
+            ? { preparer: { by: 'A. Mehta', at: '18 Apr' } }
+            : { preparer: { by: 'A. Mehta', at: '18 Apr' }, reviewer: { by: REVIEWER, at: '19 Apr' } })
           : undefined,
         design: designTrack(design, docs, points),
         operating: op,
@@ -701,24 +763,24 @@ function generate(): Control[] {
 // ── discussions, tasks, deficiencies, accounts ───────────────────────────────────
 const DISCUSSIONS: Discussion[] = [
   { id: 'disc-1', controlId: 'P2P-C-02', anchor: 'operating', resolved: false, comments: [
-    { id: 'c1', by: 'A. Mehta · Auditor', role: 'auditor', at: '2d', text: 'Two of the 25 sampled POs were approved a tier below the DoA. Can you confirm whether a delegation was in force on those dates?' },
-    { id: 'c2', by: 'S. Iyer · Procurement', role: 'risk-owner', at: '1d', text: 'There was a temporary delegation during the Director’s leave — letter attached in the PBC. The system tier wasn’t updated though.' },
-    { id: 'c3', by: 'J. Fernandes · Audit Manager', role: 'auditor', at: '4h', text: 'If the system tier wasn’t updated, treat as an operating exception and assess severity even with the delegation letter.' },
+    { id: 'c1', by: 'A. Mehta', role: 'auditor', at: '2d', text: 'Two of the 25 sampled POs were approved a tier below the DoA. Can you confirm whether a delegation was in force on those dates?' },
+    { id: 'c2', by: 'S. Iyer', role: 'risk-owner', at: '1d', text: 'There was a temporary delegation during the Director’s leave — letter attached in the PBC. The system tier wasn’t updated though.' },
+    { id: 'c3', by: 'J. Fernandes', role: 'auditor', at: '4h', text: 'If the system tier wasn’t updated, treat as an operating exception and assess severity even with the delegation letter.' },
   ] },
   { id: 'disc-2', controlId: 'P2P-C-04', anchor: 'operating', resolved: false, comments: [
-    { id: 'c4', by: 'A. Mehta · Auditor', role: 'auditor', at: '3d', text: 'The duplicate block misses reference variants (leading zeros). 4 duplicates posted. Raising as a deficiency — see DEF-001.' },
+    { id: 'c4', by: 'A. Mehta', role: 'auditor', at: '3d', text: 'The duplicate block misses reference variants (leading zeros). 4 duplicates posted. Raising as a deficiency — see DEF-001.' },
   ] },
   { id: 'disc-3', controlId: 'P2P-C-05', anchor: 'design', resolved: false, comments: [
-    { id: 'c5', by: 'A. Mehta · Auditor', role: 'auditor', at: '2d', text: 'Walkthrough shows the FC reviews after posting, not before. That’s a design gap — the control can’t prevent an erroneous posting.' },
-    { id: 'c6', by: 'D. Rao · Controller', role: 'risk-owner', at: '1d', text: 'Agreed. We’re moving review to a pre-posting hold from next cycle.' },
+    { id: 'c5', by: 'A. Mehta', role: 'auditor', at: '2d', text: 'Walkthrough shows the FC reviews after posting, not before. That’s a design gap — the control can’t prevent an erroneous posting.' },
+    { id: 'c6', by: 'D. Rao', role: 'risk-owner', at: '1d', text: 'Agreed. We’re moving review to a pre-posting hold from next cycle.' },
   ] },
 ];
 
 const TASKS: HandoffTask[] = [
-  { id: 'PBC-3', type: 'pbc', controlId: 'P2P-C-02', title: 'Provide PO release-timing extract (attribute B3)', detail: 'TOE evidence for B3 — no release before approval timestamp. Upload ME2N_release_timing_extract_Apr26.csv from SAP.', assignee: 'S. Iyer · Procurement', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta · Auditor', dueLabel: 'Due today', overdue: false, status: 'open' },
-  { id: 'PBC-1', type: 'pbc', controlId: 'P2P-C-06', title: 'Provide cut-off narrative & flowchart', detail: 'Design documents needed to start TOD on goods-receipt cut-off (Cutoff_narrative_FY26.pdf, GR_cutoff_flowchart.pdf).', assignee: 'M. Nair · Accounts Payable', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta · Auditor', dueLabel: 'Due today', overdue: false, status: 'open' },
-  { id: 'PBC-2', type: 'pbc', controlId: 'P2P-C-03', title: 'Provide tolerance configuration export', detail: 'Control-description evidence for three-way match tolerances.', assignee: 'M. Nair · Accounts Payable', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta · Auditor', dueLabel: 'Overdue 1d', overdue: true, status: 'open' },
-  { id: 'REM-1', type: 'remediation', controlId: 'P2P-C-04', title: 'Extend duplicate-match key to normalise references', detail: 'Strip leading zeros / whitespace before match. Re-test after deploy.', assignee: 'M. Nair · Accounts Payable', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta · Auditor', dueLabel: 'Due 30 Jun', overdue: false, status: 'open' },
+  { id: 'PBC-3', type: 'pbc', controlId: 'P2P-C-02', title: 'Provide PO release-timing extract (attribute B3)', detail: 'TOE evidence for B3 — no release before approval timestamp. Upload ME2N_release_timing_extract_Apr26.csv from SAP.', assignee: 'S. Iyer', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta', dueLabel: 'Due today', overdue: false, status: 'open' },
+  { id: 'PBC-1', type: 'pbc', controlId: 'P2P-C-06', title: 'Provide cut-off narrative & flowchart', detail: 'Design documents needed to start TOD on goods-receipt cut-off (Cutoff_narrative_FY26.pdf, GR_cutoff_flowchart.pdf).', assignee: 'M. Nair', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta', dueLabel: 'Due today', overdue: false, status: 'open' },
+  { id: 'PBC-2', type: 'pbc', controlId: 'P2P-C-03', title: 'Provide tolerance configuration export', detail: 'Control-description evidence for three-way match tolerances.', assignee: 'M. Nair', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta', dueLabel: 'Overdue 1d', overdue: true, status: 'open' },
+  { id: 'REM-1', type: 'remediation', controlId: 'P2P-C-04', title: 'Extend duplicate-match key to normalise references', detail: 'Strip leading zeros / whitespace before match. Re-test after deploy.', assignee: 'M. Nair', assigneeRole: 'risk-owner', raisedBy: 'A. Mehta', dueLabel: 'Due 30 Jun', overdue: false, status: 'open' },
 ];
 
 const DEFICIENCIES: Deficiency[] = [
@@ -731,7 +793,7 @@ const DEFICIENCIES: Deficiency[] = [
   //   gapType: 'TG',
   //   exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
   { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
-    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair · Accounts Payable', status: 'In progress' }, status: 'Remediation' },
+    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation' },
   // DEF-002 was found in the walkthrough, on a manual control — the review sits
   // after the posting it is meant to stop. Nothing has gone wrong yet; the number
   // is what could pass unchecked in a month of manual journals.
@@ -740,7 +802,7 @@ const DEFICIENCIES: Deficiency[] = [
   //   gapType: 'MDG',
   //   exposure: { recovery: 0, workingCapital: 0, leakage: 640_000, basis: 'No error identified in the period. Priced at the average monthly value of manual AP journals posted without prior review (₹6.4L) — the amount that could reach the ledger unchecked before the next review cycle catches it.' },
   { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', reportRef: '4.5',
-    remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
+    remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao', status: 'Open' }, status: 'Identified' },
 ];
 
 // ── review notes — one at each lifecycle stage, so every hat sees its move ───────
@@ -748,9 +810,9 @@ const REVIEW_NOTES: ReviewNote[] = [
   // open — blocks P2P-C-04's countersign until the auditor responds and the reviewer verifies
   { id: 'rn-1', controlId: 'P2P-C-04', text: 'The paper concludes on reference-variant duplicates but doesn’t evidence which variants were in the sample — attach the variant list behind D2.', raisedBy: REVIEWER, raisedAt: '2d', status: 'Open' },
   // resolved — waiting on the reviewer's verification (R2R-C-03 sits in the queue)
-  { id: 'rn-2', controlId: 'R2R-C-03', text: 'Elimination entries are agreed, but the paper doesn’t show the out-of-balance items over the ₹1L threshold were investigated.', raisedBy: REVIEWER, raisedAt: '3d', status: 'Resolved', resolution: { text: 'Added the intercompany break report — all 3 items over threshold traced to timing differences, cleared in Apr close.', by: 'A. Mehta · Auditor', at: '1d' } },
+  { id: 'rn-2', controlId: 'R2R-C-03', text: 'Elimination entries are agreed, but the paper doesn’t show the out-of-balance items over the ₹1L threshold were investigated.', raisedBy: REVIEWER, raisedAt: '3d', status: 'Resolved', resolution: { text: 'Added the intercompany break report — all 3 items over threshold traced to timing differences, cleared in Apr close.', by: 'A. Mehta', at: '1d' } },
   // closed — the full raise → resolve → verify history on the final P2P-C-01 paper
-  { id: 'rn-3', controlId: 'P2P-C-01', text: 'Confirm the approver-segregation check covers emergency changes routed outside SAP.', raisedBy: REVIEWER, raisedAt: '6d', status: 'Closed', resolution: { text: 'Emergency changes land in the same vendor-master change log — run #4821 covers them; noted in the walkthrough.', by: 'A. Mehta · Auditor', at: '5d' }, verified: { by: REVIEWER, at: '5d' } },
+  { id: 'rn-3', controlId: 'P2P-C-01', text: 'Confirm the approver-segregation check covers emergency changes routed outside SAP.', raisedBy: REVIEWER, raisedAt: '6d', status: 'Closed', resolution: { text: 'Emergency changes land in the same vendor-master change log — run #4821 covers them; noted in the walkthrough.', by: 'A. Mehta', at: '5d' }, verified: { by: REVIEWER, at: '5d' } },
 ];
 
 const ACCOUNTS: SignificantAccount[] = [
@@ -773,16 +835,16 @@ const ex = (controlId: string, track: 'design' | 'operating', kind: ExecKind, ve
 
 // Newest first — the store prepends, so the seed matches that order.
 const EXECUTIONS: ExecutionEvent[] = [
-  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer · Risk Owner', 'risk-owner', '2d', 'B1'),
-  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer · Risk Owner', 'risk-owner', '2d', 'B2'),
-  ex('P2P-C-04', 'operating', 'conclude', 'concluded operating ineffective', 'A. Mehta · Auditor', 'auditor', '3d', undefined, 'Ineffective'),
-  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta · Auditor', 'auditor', '3d', 'D2', 'Fail'),
-  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta · Auditor', 'auditor', '3d', 'D1', 'Pass'),
-  ex('P2P-C-01', 'operating', 'conclude', 'concluded operating effective', 'A. Mehta · Auditor', 'auditor', '4d', undefined, 'Effective'),
-  ex('P2P-C-01', 'operating', 'pull-run', 'pulled a workflow run', 'A. Mehta · Auditor', 'auditor', '4d', 'A1'),
-  ex('P2P-C-01', 'design', 'conclude', 'concluded design effective', 'A. Mehta · Auditor', 'auditor', '5d', undefined, 'Effective'),
-  ex('P2P-C-01', 'design', 'validate', 'validated 3 considerations', 'A. Mehta · Auditor', 'auditor', '5d'),
-  ex('P2P-C-01', 'design', 'receive-doc', 'provided', 'R. Khanna · Risk Owner', 'risk-owner', '6d', 'Walkthrough'),
+  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer', 'risk-owner', '2d', 'B1'),
+  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer', 'risk-owner', '2d', 'B2'),
+  ex('P2P-C-04', 'operating', 'conclude', 'concluded operating ineffective', 'A. Mehta', 'auditor', '3d', undefined, 'Ineffective'),
+  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta', 'auditor', '3d', 'D2', 'Fail'),
+  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta', 'auditor', '3d', 'D1', 'Pass'),
+  ex('P2P-C-01', 'operating', 'conclude', 'concluded operating effective', 'A. Mehta', 'auditor', '4d', undefined, 'Effective'),
+  ex('P2P-C-01', 'operating', 'pull-run', 'pulled a workflow run', 'A. Mehta', 'auditor', '4d', 'A1'),
+  ex('P2P-C-01', 'design', 'conclude', 'concluded design effective', 'A. Mehta', 'auditor', '5d', undefined, 'Effective'),
+  ex('P2P-C-01', 'design', 'validate', 'validated 3 considerations', 'A. Mehta', 'auditor', '5d'),
+  ex('P2P-C-01', 'design', 'receive-doc', 'provided', 'R. Khanna', 'risk-owner', '6d', 'Walkthrough'),
 ];
 
 // ── run history — the Runs tab's seed; outcomes/checks derive from the control seed ──
@@ -796,27 +858,27 @@ const RUNS: RunRecord[] = [
     id: 'run-s3', kind: 'control-test', label: 'Control test — all attributes',
     detail: 'Design considerations & operating attributes tested from the control page',
     controls: [runOutcome('P2P-C-04', 'Ineffective')],
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+    by: 'A. Mehta', role: 'auditor', at: '3d ago',
   },
   {
     id: 'run-s2', kind: 'workflow-run', label: 'Workflow run — Approver-segregation check',
     detail: 'run #4821 · 0 conflicts',
     controls: [runOutcome('P2P-C-01', 'Effective')],
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
+    by: 'A. Mehta', role: 'auditor', at: '4d ago',
   },
   {
     id: 'run-s1', kind: 'control-test', label: 'Control test — 2 controls',
     detail: 'Scoping run across PO approval and vendor master controls',
     controls: [runOutcome('P2P-C-01', 'Effective'), runOutcome('P2P-C-02', 'Effective')],
     datasets: ['PO release log (ME2N)', 'Vendor master snapshot'],
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '6d ago',
+    by: 'A. Mehta', role: 'auditor', at: '6d ago',
   },
 ];
 
 const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Airline P2P & O2C', entity: 'Airline Group Ltd', framework: 'COSO 2013 / SOX 404',
   periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026',
-  materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
+  materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta', reviewer: 'J. Fernandes',
   live: true, wentLiveAt: '01 Apr 2025',
   entityDetected: { name: 'Airline Group Ltd', companyCode: 'AG01', source: 'GL upload · Mar 2025' },
   materialityBasis: {
@@ -882,7 +944,7 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
       label: `Workflow run — ${p} attribute checks`,
       detail: `run #${4800 + pi} · ${auto.reduce((n, c) => n + mappedAttrs(c), 0)} attributes · 0 conflicts`,
       controls: outcomesFor(auto, 'Effective'),
-      by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
+      by: 'A. Mehta', role: 'auditor', at: '4d ago',
     });
   });
 
@@ -894,7 +956,7 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
     label: `AI validation — ${processes[0]} design evidence`,
     detail: `${aiTargets.length} controls · considerations read off the uploaded walkthroughs`,
     controls: outcomesFor(aiTargets, 'Effective'),
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '1w ago',
+    by: 'A. Mehta', role: 'auditor', at: '1w ago',
   });
 
   // ③ one control that failed first time round — a history of only passes reads
@@ -904,7 +966,7 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
     id: 'run-ct-1', kind: 'control-test', label: 'Control test — all attributes',
     detail: `${retested.wpRef} · failed on the first pass, retested after remediation`,
     controls: outcomesFor([retested], 'Ineffective'),
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '2w ago',
+    by: 'A. Mehta', role: 'auditor', at: '2w ago',
   });
 
   // ④ last cycle's control test — only the two processes CY 2025 covered
@@ -914,7 +976,7 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
     label: `Control test — ${prior.length} controls`,
     detail: 'CY 2025 cycle · carried forward for reference',
     controls: outcomesFor(prior, 'Effective'),
-    by: 'A. Mehta · Auditor', role: 'auditor', at: '52w ago',
+    by: 'A. Mehta', role: 'auditor', at: '52w ago',
   });
 
   return runs;
@@ -983,11 +1045,11 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       remediation: {
         action: i === 0 ? 'Enforce the second signature in the payment run configuration.' : 'Add the close deadline to the reconciliation checklist.',
         date: i === 0 ? '2025-11-30' : '2025-12-15',
-        owner: 'R. Iyer · Controller',
+        owner: 'R. Iyer',
         status: 'Done' as const,
       },
       status: (i === 0 ? 'Closed' : 'Retest') as ExceptionStatus,
-      retest: i === 0 ? { result: 'Pass' as const, at: '12 Dec 2025', by: 'A. Mehta · Auditor' } : undefined,
+      retest: i === 0 ? { result: 'Pass' as const, at: '12 Dec 2025', by: 'A. Mehta' } : undefined,
       severity: 'Significant Deficiency' as Severity,
     })),
     concludedAt: '12 Jan 2026',
@@ -1000,7 +1062,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       scopeKind: 'racm', scopeNames: processes, scopeIds: [],
       files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
       materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
-      by: 'A. Mehta · Auditor', role: 'auditor', at: '02 Jan 2026',
+      by: 'A. Mehta', role: 'auditor', at: '02 Jan 2026',
     },
     {
       id: 'audit-cy26-rf', period: 'CY 2026', yearBasis: 'cy', fiscalYear: 2026,
@@ -1010,7 +1072,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       // The consistency check on the engagement Overview is reading these two.
       files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
       rolledFromId: 'audit-cy26-interim',
-      by: 'A. Mehta · Auditor', role: 'auditor', at: '04 Jul 2026',
+      by: 'A. Mehta', role: 'auditor', at: '04 Jul 2026',
     },
     {
       id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', fiscalYear: 2025,
@@ -1018,9 +1080,9 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
       materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
-      signoff: { preparer: { by: 'A. Mehta · Auditor', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes · Audit Manager', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
+      signoff: { preparer: { by: 'A. Mehta', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
       archive,
-      by: 'A. Mehta · Auditor', role: 'auditor', at: '03 Jan 2025',
+      by: 'A. Mehta', role: 'auditor', at: '03 Jan 2025',
     },
   ];
 }
@@ -1132,7 +1194,7 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
         // and the auditor judges it against the root cause — neither of which
         // means anything if it arrives pre-worded.
         action: '',
-        date: null, owner: 'A. Verma · Treasury', status: 'Open',
+        date: null, owner: 'A. Verma', status: 'Open',
       },
       // Freshly raised and still being sized — step ②, in the auditor's hands.
       // The root cause is written, so the exception is past ①; the exposure,
@@ -1165,7 +1227,7 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
         // Blank on purpose — see DEF-A-01 above. Nothing has reached the owner
         // yet: the rating is still waiting on the reviewer.
         action: '',
-        date: null, owner: 'S. Iyer · Finance', status: 'Open',
+        date: null, owner: 'S. Iyer', status: 'Open',
       },
       // Parked at the rating gate. An indicator settles it as a Material Weakness
       // on its own — no cap to argue, no number to weigh — and a grade that heavy
@@ -1187,15 +1249,15 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       failedSamples: ['INV-26-44112', 'INV-26-44119', 'INV-26-44127', 'INV-26-44130', 'INV-26-44136', 'INV-26-44141'],
       likelihood: 'Reasonably possible', magnitude: 46_000_000, mwIndicators: [],
       aggregationGroup: 'Order to Cash',
-      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes · Audit Manager', at: '26 Jun 2026' },
+      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes', at: '26 Jun 2026' },
       remediation: {
         action: 'Reconcile invoices raised in the cut-off window to dispatch documents in both directions, rather than sampling one side.',
-        date: '15 Aug', owner: 'P. Sharma · Revenue', status: 'Open',
+        date: '15 Aug', owner: 'P. Sharma', status: 'Open',
       },
       // The owner has put the plan up and the auditor has not judged it yet, so
       // nothing is being built in the meantime. A plan aimed at the wrong mechanism
       // is far cheaper to send back now than to discover on the retest in October.
-      planSubmitted: { by: 'P. Sharma · Revenue', at: '03 Jul 2026' },
+      planSubmitted: { by: 'P. Sharma', at: '03 Jul 2026' },
       status: 'Plan review',
     });
   }
@@ -1223,18 +1285,18 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       // Individually a Deficiency. It shares a group with DEF-A-03, and the two
       // together clear the SD band — which is exactly what aggregation is for.
       aggregationGroup: 'Order to Cash',
-      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes · Audit Manager', at: '26 Jun 2026' },
-      planSubmitted: { by: 'P. Sharma · Revenue', at: '18 Jun 2026' },
+      ratingConfirm: { grade: 'Significant Deficiency', by: 'J. Fernandes', at: '26 Jun 2026' },
+      planSubmitted: { by: 'P. Sharma', at: '18 Jun 2026' },
       // The auditor's whole say in the fix: does it address the mechanism? A
       // rolling total measured per customer sees the thing the old threshold
       // could not, so it was accepted and the owner went and built it.
-      planReview: { decision: 'Accepted', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta · Auditor', at: '20 Jun 2026' },
+      planReview: { decision: 'Accepted', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
       remediation: {
         action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
-        date: '30 Jun', owner: 'P. Sharma · Revenue', status: 'Done',
+        date: '30 Jun', owner: 'P. Sharma', status: 'Done',
         evidence: [
-          { id: 'cn-ev-1', name: 'Credit note approval rule — rolling monthly total.pdf', kind: 'PDF', uploadedBy: 'P. Sharma · Revenue', uploadedAt: '30 Jun 2026' },
-          { id: 'cn-ev-2', name: 'Change ticket CHG-4471.pdf', kind: 'PDF', uploadedBy: 'P. Sharma · Revenue', uploadedAt: '30 Jun 2026' },
+          { id: 'cn-ev-1', name: 'Credit note approval rule — rolling monthly total.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
+          { id: 'cn-ev-2', name: 'Change ticket CHG-4471.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
         ],
       },
       // One round run and failed, which is the loop this counter exists to show.
@@ -1248,10 +1310,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
         results: roundResults(cnSamples, cnAttrs, { 'cn-rt1-3': cnAttrs[0]?.code ?? '' }),
         result: 'Fail',
         rationale: 'CN-26-0928 was approved by nobody. The customer had been set up under a second code that month, so the rolling total read ₹1.7 L against each code instead of ₹3.4 L against the customer. The rule works — the key it groups on does not.',
-        by: 'A. Mehta · Auditor', at: '05 Aug 2026',
+        by: 'A. Mehta', at: '05 Aug 2026',
       }],
       // The latest round's verdict, mirrored for readers that only want the answer.
-      retest: { result: 'Fail', at: '05 Aug 2026', by: 'A. Mehta · Auditor' },
+      retest: { result: 'Fail', at: '05 Aug 2026', by: 'A. Mehta' },
       // The control is monthly, so a second round needs a full month off the
       // corrected grouping key — end of September at the earliest.
       expectedRetestReady: '30 Sep 2026',
@@ -1279,11 +1341,11 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       // so it grades clearly trivial and never reached the reviewer's rating gate.
       remediation: {
         action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
-        date: '30 Jun', owner: 'S. Iyer · Finance', status: 'Done',
-        evidence: [{ id: 'fa-ev-1', name: 'Disposal workflow — routing change.pdf', kind: 'PDF', uploadedBy: 'S. Iyer · Finance', uploadedAt: '30 Jun 2026' }],
+        date: '30 Jun', owner: 'S. Iyer', status: 'Done',
+        evidence: [{ id: 'fa-ev-1', name: 'Disposal workflow — routing change.pdf', kind: 'PDF', uploadedBy: 'S. Iyer', uploadedAt: '30 Jun 2026' }],
       },
-      planSubmitted: { by: 'S. Iyer · Finance', at: '10 Jun 2026' },
-      planReview: { decision: 'Accepted', reason: 'Routing on approval removes the wait for the monthly run, which is the thing that made the disposals late. Accepted.', by: 'A. Mehta · Auditor', at: '12 Jun 2026' },
+      planSubmitted: { by: 'S. Iyer', at: '10 Jun 2026' },
+      planReview: { decision: 'Accepted', reason: 'Routing on approval removes the wait for the monthly run, which is the thing that made the disposals late. Accepted.', by: 'A. Mehta', at: '12 Jun 2026' },
       // Retested clean and closed by the reviewer — the terminal four-eyes act, so
       // the tab has one row showing the end of the lifecycle rather than only its start.
       retests: [{
@@ -1293,12 +1355,12 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
         samples: dpSamples,
         results: roundResults(dpSamples, dpAttrs, {}),
         result: 'Pass',
-        by: 'A. Mehta · Auditor', at: '18 Jul 2026',
+        by: 'A. Mehta', at: '18 Jul 2026',
       }],
       // The same verdict, mirrored — a reader who only wants the answer never has
       // to open the round to find it.
-      retest: { result: 'Pass', at: '18 Jul 2026', by: 'A. Mehta · Auditor' },
-      signoff: { by: 'J. Fernandes · Audit Manager', at: '19 Jul 2026' },
+      retest: { result: 'Pass', at: '18 Jul 2026', by: 'A. Mehta' },
+      signoff: { by: 'J. Fernandes', at: '19 Jul 2026' },
       status: 'Closed',
     });
   }
@@ -1327,7 +1389,7 @@ function alturaUnableToTest(controls: Control[]): void {
     track: 'operating',
     reason: 'The dealing system holds the deal ticket but not the counterparty confirmation, and the confirmations for the period sit in the dealer’s own mailbox rather than the treasury shared folder. Nothing can be traced from a deal to a confirmation raised independently of the dealer, so the attribute cannot be tested at all — not passed, not failed.',
     needed: 'Counterparty confirmations for every FX deal struck between 1 January and 30 June 2026, exported to the treasury shared folder by someone outside dealing, each carrying its deal ticket reference.',
-    raisedBy: 'A. Mehta · Auditor',
+    raisedBy: 'A. Mehta',
     raisedAt: '24 Jul 2026',
   };
 }
@@ -1360,7 +1422,7 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5 },
     overall: 12,
-    by: meta.owner ? `${meta.owner} · Auditor` : 'A. Mehta · Auditor',
+    by: meta.owner ?? 'A. Mehta',
     role: 'auditor',
     at: `01 Apr ${year - 1}`,
   }];
@@ -1388,7 +1450,10 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // portfolio now, so leaving it with none would strand 32 tested controls
     // behind an audit that doesn't exist — and show an empty state on the
     // engagement with the most data in it.
-    base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer.split(' · ')[0] }, base.controls);
+    // The flagship was never scoped from trial balances, so it is one company —
+    // its own. Named on every row rather than left blank.
+    base.controls = withEntityInstances(base.controls, base.id, base.entity);
+    base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
   }
@@ -1403,9 +1468,15 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // history and the audits those cycles ran under. Every other engagement is
   // seeded exactly as before. See `rich` on racmTemplateForProcesses.
   const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
-  const controls = meta.processes
+  const built = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
+  // Every control gets the company it is tested at, and a process the scoping
+  // spread across several companies gets a row each — see withEntityInstances.
+  // Only Altura's scoping actually spans companies today, so every other
+  // engagement keeps the exact one-row-per-control register it had, now with its
+  // own company named on every row.
+  const controls = withEntityInstances(built, meta.id, base.entity);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -1420,7 +1491,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
         label: `Control test — ${tested.length} control${tested.length === 1 ? '' : 's'}`,
         detail: `${checks} checks · ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
         controls: tested.map(c => ({ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: 'Effective' as const, checks: c.design.points.length + c.operating.steps.length })),
-        datasets, by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+        datasets, by: 'A. Mehta', role: 'auditor', at: '3d ago',
       });
     }
   }
@@ -1448,7 +1519,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     name: meta.name ?? base.name,
     periodStart: meta.periodStart ?? base.periodStart,
     periodEnd: meta.periodEnd ?? base.periodEnd,
-    preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
+    preparer: meta.owner ?? base.preparer,
     controls,
     deficiencies,
     tasks: [],
@@ -1496,6 +1567,99 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
     pop.version = `POP-${ROUND_TAG[audit.round]}`;
     pop.criteria = `${pop.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}`;
   }
+}
+
+// ── The same control, at every company in its scope ─────────────────────────────
+//
+// A group audit does not test a control once. It tests it separately at each
+// entity the scoping brought in: same control number, same wording, four
+// separate lives. Altura's Treasury RACM covers Holdings, Solar, Wind and Smart
+// Metering, so TRY-01 is four rows — and one being concluded effective says
+// nothing at all about the other three.
+//
+// Which companies each control runs at is NOT invented here. It is read straight
+// off the programme's own RACM derivation — the same mapping the scoping wizard
+// wrote when it decided which trial-balance captions were in scope — so the
+// register can never disagree with the Configuration tab.
+
+/** Where the row's testing has got to. The whole point of separate rows is that
+ *  entities are at different points, so the clones spread across these. */
+type EntityStage = 'fresh' | 'design' | 'part' | 'done';
+
+/** One entity's copy of a control: same number, its own working paper, its own
+ *  design and operating tracks reset to `stage`. */
+function instanceAt(base: Control, entity: string, short: string, stage: EntityStage): Control {
+  const designDone = stage !== 'fresh';
+  const opDone = stage === 'done';
+  return {
+    ...base,
+    // `id` is the key everything else in the workspace hangs off (findings,
+    // tasks, run records), so it has to be unique. `code` is what people read.
+    id: `${base.id}@${short.toLowerCase()}`,
+    code: base.code ?? base.id,
+    // A working paper index has to be unique too — the entity suffix is exactly
+    // how a group file references the same control at a different company.
+    wpRef: `${base.wpRef}/${short.slice(0, 3).toUpperCase()}`,
+    entity,
+    design: {
+      ...base.design,
+      documents: base.design.documents.map(d => ({ ...d, status: (designDone ? 'Received' : 'Requested') as DocStatus })),
+      points: base.design.points.map(p => ({ ...p, result: (designDone ? 'Pass' : 'Not tested') as TestResult })),
+      conclusion: (designDone ? 'Effective' : 'Not tested') as TrackConclusion,
+      testedBy: designDone ? base.design.testedBy : null,
+      testedAt: designDone ? base.design.testedAt : null,
+    },
+    operating: {
+      ...base.operating,
+      // Nothing is sampled until design is signed off, so a row that hasn't got
+      // there carries no population and no sample — the control page opens at ①.
+      population: designDone ? base.operating.population : undefined,
+      sampling: opDone ? base.operating.sampling : undefined,
+      steps: base.operating.steps.map((s, i) => ({
+        ...s,
+        result: (opDone ? 'Pass' : stage === 'part' && i === 0 ? 'Pass' : 'Not tested') as TestResult,
+      })),
+      conclusion: (opDone ? 'Effective' : 'Not tested') as TrackConclusion,
+      testedBy: opDone ? base.operating.testedBy : null,
+      testedAt: opDone ? base.operating.testedAt : null,
+    },
+  };
+}
+
+/**
+ * Give every control its entity, and add a row for each further company its
+ * process covers.
+ *
+ * The originals keep their ids and their place at the front of the array —
+ * everything that picks a control by position (the seeded findings, the run
+ * history) goes on meaning what it meant before. The copies are appended.
+ */
+function withEntityInstances(controls: Control[], engagementId: string, fallback: string): Control[] {
+  const prog = programmeFor(engagementId);
+  // The single company the whole engagement is against. Every audit has one, even
+  // the ones that were never scoped from trial balances — it is who is being
+  // audited — so a control always has an entity to name, and the register never
+  // shows a column of dashes.
+  const wholeAudit = prog?.groupName ?? fallback;
+  const fullName = new Map((prog?.entities ?? []).map(e => [entityShort(e.id, prog!.entities), e.name]));
+  const scopeOf = new Map<string, string[]>();
+  prog?.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
+
+  const STAGES: EntityStage[] = ['done', 'part', 'design', 'fresh'];
+  const copies: Control[] = [];
+  controls.forEach((c, i) => {
+    // A process the scoping mapped to several companies splits into a row each —
+    // same control number, separate lives. A process mapped to one, or an
+    // engagement whose RACM was uploaded rather than derived, is the audit's own
+    // company and stays one row.
+    const shorts = scopeOf.get(normaliseProcess(c.process)) ?? [];
+    if (!shorts.length) { c.entity = wholeAudit; return; }
+    c.entity = fullName.get(shorts[0]!) ?? shorts[0]!;
+    shorts.slice(1).forEach((short, k) => {
+      copies.push(instanceAt(c, fullName.get(short) ?? short, short, STAGES[(i + k) % STAGES.length]!));
+    });
+  });
+  return copies.length ? [...controls, ...copies] : controls;
 }
 
 /** The attributes a seeded control is tested against, in the order an auditor
@@ -1554,10 +1718,11 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           `${name} exceptions are escalated and resolved per policy`,
         ]).map((title, i) => ({
           id: `${prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
-          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
-          isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer · Finance', 'General', 'Monthly', 'Manual'),
+          process: name, subProcess: 'General', nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
+          isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer', 'General', 'Monthly', 'Manual'),
           riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
-          owner: 'S. Iyer · Finance', riskId: `R-${prefix}-1`,
+          objective: objectiveFor(`R-${prefix}-1`, name),
+          owner: 'S. Iyer', riskId: `R-${prefix}-1`,
           riskDescription: `${name} misstated — additions, movements or reconciliations not controlled.`,
           assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
           design: designTrack('Not tested', [], []),
@@ -1567,7 +1732,13 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
       const last = i === shells.length - 1;
       const designDone = mode === 'carried' || (mode === 'live' && !last);
       const opDone = mode === 'live' && !last;
-      const nature: Nature = i % 3 === 1 ? 'Automated' : 'Manual';
+      // `&& !last` is load-bearing. Every process carries 5 shells, so the one
+      // untested control is always i=4 — and 4 % 3 === 1 made it Automated in
+      // every process without anyone choosing that. An automated control whose
+      // ITGCs hold short-forms to TOD (see operatingApplies), so the single
+      // control a demo or a spec can actually walk into was the one control with
+      // no Population step, no IPE test and no Sample. The fresh one is Manual.
+      const nature: Nature = i % 3 === 1 && !last ? 'Automated' : 'Manual';
       const title = c.description.replace(/\.$/, '');
       const docs: DesignDoc[] = [
         doc('Process narrative', `${name} narrative.pdf`, 'Received'),
@@ -1623,9 +1794,10 @@ export function racmTemplate(process: string): Control[] {
   const sp = SPREADS.find(s => s.process === process) ?? SPREADS[0];
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
-    process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
+    process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
     isKey: i % 4 !== 3, clazz: classOf(sp.process), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
     riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
+    objective: objectiveFor(riskFor(sp, i).id, sp.process),
     owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
     design: designTrack('Not tested', [], []),
