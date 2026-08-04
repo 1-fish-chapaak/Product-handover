@@ -224,11 +224,20 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       <section className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
           <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><GitMerge size={14} className="text-brand-600" /> Aggregation</div><p className="text-[0.75rem] text-ink-500 mt-1">Combine individually-minor deficiencies by commonality and evaluate them together.</p></div>
-          <Toggle on={r.aggregate} onChange={v => setRules('aggregation', { aggregate: v })} label="Aggregation" />
+          {/* Absent, not disabled — the rule the deficiency screens already
+              follow. The store has always refused these writes from anyone but
+              the auditor, so a reviewer clicking a live switch got silence: the
+              same no-op the risk owner's Conclude buttons used to give. What a
+              hat cannot do, it is not shown. */}
+          {canEditRules
+            ? <Toggle on={r.aggregate} onChange={v => setRules('aggregation', { aggregate: v })} label="Aggregation" />
+            : <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>}
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
           <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[0.75rem] text-ink-500 mt-1">Route an exception to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
-          <Toggle on={r.autoRoute} onChange={v => setRules('auto-routing', { autoRoute: v })} label="Auto-routing" />
+          {canEditRules
+            ? <Toggle on={r.autoRoute} onChange={v => setRules('auto-routing', { autoRoute: v })} label="Auto-routing" />
+            : <Pill tone={r.autoRoute ? 'compliant' : 'draft'}>{r.autoRoute ? 'On' : 'Off'}</Pill>}
         </div>
       </section>
 
@@ -237,13 +246,24 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
         <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Material-weakness indicators</h2>
         <p className="text-[0.75rem] text-ink-500 mb-3">If any in-force indicator is present on an exception, it is a material weakness regardless of magnitude.</p>
         <div className="space-y-1.5">
+          {/* Same rule as the toggles above: only the auditor gets a control.
+              Everyone else reads which indicators are in force, because that is
+              a fact of the engagement they are entitled to — it is the ability
+              to change it that is not theirs. */}
           {MW_INDICATOR_CATALOGUE.map(ind => {
             const on = r.mwIndicators.includes(ind);
-            return (
-              <button key={ind} onClick={() => setRules('the material-weakness indicators', { mwIndicators: on ? r.mwIndicators.filter(x => x !== ind) : [...r.mwIndicators, ind] })} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border hover:border-ink-300')}>
+            const body = (
+              <>
                 <span className={cn('w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={12} />}</span>
                 <span className="text-[0.78125rem] text-ink-800">{ind}</span>
-              </button>
+              </>
+            );
+            const shell = cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border');
+            return canEditRules ? (
+              <button key={ind} onClick={() => setRules('the material-weakness indicators', { mwIndicators: on ? r.mwIndicators.filter(x => x !== ind) : [...r.mwIndicators, ind] })}
+                className={cn(shell, 'transition-colors cursor-pointer', !on && 'hover:border-ink-300')}>{body}</button>
+            ) : (
+              <div key={ind} className={shell}>{body}</div>
             );
           })}
         </div>

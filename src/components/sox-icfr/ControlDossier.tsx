@@ -2587,8 +2587,28 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
  *  until it closes. Both rules live in the store too; this only shows why the
  *  button isn't there.
  */
+/** The reason a paper goes back. Its own component so the textarea keeps its
+ *  draft while the parent re-renders around it. */
+function ReturnForm({ onCancel, onReturn }: { onCancel: () => void; onReturn: (reason: string) => void }) {
+  const [reason, setReason] = useState('');
+  return (
+    <>
+      <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} autoFocus
+        placeholder="What needs rework — the auditor sees this, and it goes on the trail"
+        className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'Say what needs rework — a paper returned without a reason costs the work twice.'}
+          onClick={() => onReturn(reason.trim())}
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-risk-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CornerDownRight size={12} /> Return</button>
+        <button onClick={onCancel} className="h-8 px-3 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+        <span className="text-[0.625rem] text-ink-400">Both conclusions clear, and the paper reopens for the auditor.</span>
+      </div>
+    </>
+  );
+}
+
 function SignOffSection({ control }: { control: Control }) {
-  const { eng, role, me, signOffControlWp } = useIcfr();
+  const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
   const logEvent = useAuditLog();
   const so = control.wpSignoff;
   const concluded = isControlLocked(control);
@@ -2596,6 +2616,17 @@ function SignOffSection({ control }: { control: Control }) {
   const canSign = role === 'auditor' && concluded && !so?.preparer;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
   const done = !!so?.preparer && !!so?.reviewer;
+  // ── the reviewer's OTHER answer ─────────────────────────────────────────────
+  // Restored Aug 2026. returnControl has done the whole job since 9402d19 —
+  // clears both conclusions, wipes the signature, stamps who returned it and
+  // why, writes the trail entry — and lost its button in the merges that
+  // followed. The reviewer queue never stopped advertising the choice: its rows
+  // still read "countersign or return". A gate with only one way through is not
+  // a gate, so the two answers sit together.
+  //
+  // The reason is required. Sending a paper back without saying what is wrong
+  // costs the auditor the work twice and tells them nothing the second time.
+  const [returning, setReturning] = useState(false);
 
   const Row = ({ label, entry, waiting }: { label: string; entry?: { by: string; at: string }; waiting: string }) => (
     <div className="flex items-center gap-2.5 py-2">
@@ -2635,10 +2666,25 @@ function SignOffSection({ control }: { control: Control }) {
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
             )}
             {canCounter && (
-              <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+              <span className="shrink-0 flex items-center gap-2">
+                <button onClick={() => setReturning(r => !r)}
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
+                <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+              </span>
             )}
           </div>
+
+          {returning && canCounter && (
+            <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
+              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework?</span>
+              <ReturnForm onCancel={() => setReturning(false)} onReturn={reason => {
+                returnControl(control.id, reason);
+                setReturning(false);
+                logEvent({ action: 'Update', description: `Returned ${control.id} to the auditor — ${reason}`, module: 'SOX ICFR', entity: 'Control' });
+              }} />
+            </div>
+          )}
 
           {done && (
             <div className="mt-3 rounded-xl border border-compliant-200 bg-compliant-50/40 px-3.5 py-3 flex items-start gap-2">
@@ -3167,6 +3213,25 @@ export default function ControlDossier() {
             </div>
           )}
         </motion.div>
+      )}
+
+      {/* ── sent back ───────────────────────────────────────────────────────────
+          Above the steps, because it is the reason they are open again. A return
+          clears both conclusions and the signature; without this the auditor
+          finds their work undone with nothing saying who did it or why, which is
+          the one thing guaranteed to get the same paper sent back twice. Hidden
+          from the owner — reviewer correspondence is not theirs. */}
+      {control.reviewReturn && !isOwner && !controlLocked && (
+        <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 mb-4 flex items-start gap-3">
+          <CornerDownRight size={16} className="text-mitigated-700 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <h3 className="text-[0.8125rem] font-bold text-mitigated-800">Returned by the reviewer</h3>
+            <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{control.reviewReturn.reason}</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+              {control.reviewReturn.by} · {control.reviewReturn.at} — both conclusions were cleared, and the paper is open for testing again.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Blocked testing sits above the steps, because it is the reason none of
