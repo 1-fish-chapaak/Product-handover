@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
-  Search, Plus, Layers, Rows3, Star, FileText, X, Send, LayoutGrid, Table2,
-  FlaskConical, ListChecks, Sparkles, Workflow, History, ScrollText, ArrowRight, Clock,
+  Search, Plus, Building2, Rows3, Star, FileText, X, Send, LayoutGrid, List,
+  FlaskConical, ListChecks, Sparkles, Workflow, History, ArrowRight, Clock,
 } from 'lucide-react';
-import { HeaderFilter } from '../shared/FilterSelect';
+import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import Drawer from '../shared/Drawer';
+import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
 import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
-import { auditCovers, normaliseProcess, processesForAudit } from './auditScope';
+import { auditCovers } from './auditScope';
 import {
   controlCode, controlConclusion, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
 } from './helpers';
-import { NatureChip, Tickmark } from './parts';
+import { NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -82,6 +83,27 @@ export const auditsForControl = (eng: IcfrEngagement, c: Control): AuditRecord[]
 // ── filters ─────────────────────────────────────────────────────────────────────
 
 type Coverage = 'All' | 'full' | 'partial' | 'none' | 'run' | 'never';
+// ── Columns ─────────────────────────────────────────────────────────────────────
+//
+// The library's own lens (attributes, workflow coverage, where it has been used)
+// with the RACM columns the audit register grew. Widths and drag behaviour come
+// from the shared hook, so the two registers can never diverge on how they feel.
+const LIB_COLS = [
+  { key: 'process', w: 130 },
+  { key: 'control', w: 330 },
+  { key: 'entity', w: 160 },
+  { key: 'type', w: 124 },
+  { key: 'frequency', w: 116 },
+  { key: 'owner', w: 144 },
+  { key: 'objective', w: 250 },
+  { key: 'nature', w: 108 },
+  { key: 'attributes', w: 92 },
+  { key: 'workflows', w: 150 },
+  { key: 'runs', w: 120 },
+  { key: 'last', w: 180 },
+] as const;
+const COLW_KEY = 'sox-library-colw';
+
 const COVERAGE_OPTIONS: { value: Coverage; label: string }[] = [
   { value: 'All', label: 'All controls' },
   { value: 'full', label: 'Every attribute mapped' },
@@ -158,6 +180,14 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
       <div className="ac-meta">{controlCode(c)} · {c.nature} · {c.frequency}</div>
+      {/* The company this row is tested at, on its own line — same as the audit
+          register: at another company it is a different control with its own life. */}
+      {c.entity && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+          <Building2 size={11} className="text-ink-300 shrink-0" />
+          <span className="truncate font-medium">{c.entity}</span>
+        </div>
+      )}
       <div className="ac-div" />
 
       {/* three stats, equal weight, side by side — was three ragged label/value
@@ -273,9 +303,16 @@ export default function ControlLibrary() {
   const [process, setProcess] = useState('All');
   const [nature, setNature] = useState('All');
   const [coverage, setCoverage] = useState<Coverage>('All');
-  const [grouped, setGrouped] = useState(true);
+  // Parity with the audit register: stacked by process or by company, opening on
+  // the table because the library is a working list, not a browse surface.
+  const [groupBy, setGroupBy] = useState<GroupBy>('process');
   const [dense, setDense] = useState(false);
-  const [layout, setLayout] = useState<'cards' | 'table'>('cards');
+  const [layout, setLayout] = useState<'cards' | 'table'>('table');
+  const [entity, setEntity] = useState('All');
+  const [ctype, setCtype] = useState('All');
+  const [frequency, setFrequency] = useState('All');
+  const [owner, setOwner] = useState('All');
+  const { widthOf, totalWidth, th } = useColumnWidths(COLW_KEY, LIB_COLS);
   const [sel, setSel] = useState<Set<string>>(new Set());
   // An Overview count arrives with intent. The lens honours it once as a chip
   // rather than a dropdown — see PRESET_LABEL.
@@ -294,7 +331,13 @@ export default function ControlLibrary() {
     () => (role === 'risk-owner' ? auditScoped.filter(c => c.owner === meOwner) : auditScoped),
     [auditScoped, role, meOwner],
   );
+  // Column-filter option lists — built from what is actually in front of you, so a
+  // filter can never offer a value that returns nothing.
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
+  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
+  const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
+  const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.owner))).sort()], [scoped]);
+  const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
 
   // run history per control, computed once for the whole list
   const runsBy = useMemo(() => {
@@ -350,28 +393,34 @@ export default function ControlLibrary() {
     return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
+      if (entity !== 'All' && c.entity !== entity) return false;
+      if (ctype !== 'All' && c.type !== ctype) return false;
+      if (frequency !== 'All' && c.frequency !== frequency) return false;
+      if (owner !== 'All' && c.owner !== owner) return false;
       if (!matchesCoverage(c)) return false;
       if (preset && !matchesPreset(c)) return false;
-      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${controlCode(c)} ${c.wpRef} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [scoped, q, process, nature, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
+  }, [scoped, q, process, nature, entity, ctype, frequency, owner, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
 
   const groups = useMemo(() => {
-    if (!grouped) return [{ key: '', rows: filtered }];
+    if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
-    for (const c of filtered) { const k = c.process; if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
+    for (const c of filtered) { const k = groupKeyOf(c, groupBy); if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
-  }, [filtered, grouped]);
+  }, [filtered, groupBy]);
 
-  const allVisible = filtered.map(c => c.id);
-  const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
-  const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
+  // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
+  // the card view still selects, and that is what feeds the bulk bar.
+  //   const allVisible = filtered.map(c => c.id);
+  //   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
+  //   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setCoverage('All'); setPreset(null); };
+  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setCoverage('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setPreset(null); };
 
   const historyControl = historyFor ? scoped.find(c => c.id === historyFor) : undefined;
-  const colSpan = 8;
+  const colSpan = LIB_COLS.length;
 
   return (
     <div>
@@ -384,13 +433,22 @@ export default function ControlLibrary() {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
-        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
-        <div className="flex items-center gap-0.5 p-1 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
-          <button onClick={() => setLayout('cards')} title="Card view" aria-label="Card view" aria-pressed={layout === 'cards'}
-            className={cn('p-1.5 rounded-[0.4375rem] cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={15} /></button>
-          <button onClick={() => setLayout('table')} title="Table view" aria-label="Table view" aria-pressed={layout === 'table'}
-            className={cn('p-1.5 rounded-[0.4375rem] cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><Table2 size={15} /></button>
+        {/* Same three controls as the audit register, in the same shapes: no "GROUP"
+            prefix (the value says it), Dense wearing the dropdown's 36px trigger
+            rather than the 28px `.filter-pill`, and the platform's own view toggle
+            with list on the left. */}
+        <FilterSelect value={groupBy} options={GROUP_OPTIONS} engaged={groupBy !== 'none'}
+          onChange={v => setGroupBy(v as GroupBy)} ariaLabel="Group the library by" align="right" />
+        {layout === 'table' && (
+          <button onClick={() => setDense(d => !d)} className={triggerCls(dense, false)} aria-pressed={dense}>
+            <Rows3 size={13} className={dense ? 'text-brand-600' : 'text-ink-400'} /> Dense
+          </button>
+        )}
+        <div className="flex items-center gap-0.5 p-0.5 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('table')} title="List view" aria-label="List view" aria-pressed={layout === 'table'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><List size={16} /></button>
+          <button onClick={() => setLayout('cards')} title="Grid view" aria-label="Grid view" aria-pressed={layout === 'cards'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={16} /></button>
         </div>
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
         {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
@@ -457,20 +515,29 @@ export default function ControlLibrary() {
         </div>
       ) : (
         <div className={cn('reg-wrap', dense && 'reg-dense')}>
-          <table className="w-full border-collapse">
+          {/* Fixed layout + a colgroup means the widths are the ones on record, not
+              whatever the longest cell argued for — which is what lets a drag hold. */}
+          <table className="border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
+            <colgroup>{LIB_COLS.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
             <thead className="reg-head">
               <tr>
-                <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all" /></th>
-                <th style={{ width: 64 }}>W/P</th>
-                <th><HeaderFilter label="Control" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></th>
-                <th style={{ width: 96 }}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></th>
-                <th style={{ width: 84 }} title="Test attributes this control is proven against">Attributes</th>
-                <th style={{ width: 150 }}>
+                <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>
+                <Th {...th('control')}>Control</Th>
+                <Th {...th('entity')}><HeaderFilter label="Entity" value={entity} options={entities} allLabel="All entities" onChange={setEntity} ariaLabel="Filter by entity" /></Th>
+                <Th {...th('type')} title="Preventive controls stop it happening; detective controls find it after it has">
+                  <HeaderFilter label="Control type" value={ctype} options={ctypes} allLabel="All types" onChange={setCtype} ariaLabel="Filter by control type" />
+                </Th>
+                <Th {...th('frequency')}><HeaderFilter label="Frequency" value={frequency} options={frequencies} allLabel="All frequencies" onChange={setFrequency} ariaLabel="Filter by frequency" /></Th>
+                <Th {...th('owner')}><HeaderFilter label="Owner" value={owner} options={owners} allLabel="All owners" onChange={setOwner} ariaLabel="Filter by owner" /></Th>
+                <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
+                <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
+                <Th {...th('attributes')} title="Test attributes this control is proven against">Attributes</Th>
+                <Th {...th('workflows')}>
                   <HeaderFilter label="Workflows" value={coverage} engaged={coverage !== 'All'}
                     options={COVERAGE_OPTIONS} onChange={v => setCoverage(v as Coverage)} ariaLabel="Filter by workflow coverage" />
-                </th>
-                <th style={{ width: 116 }} title="Audit cycles whose scope covers this control">Audit runs</th>
-                <th style={{ width: 176 }}>Last run</th>
+                </Th>
+                <Th {...th('runs')} title="Audit cycles whose scope covers this control">Audit runs</Th>
+                <Th {...th('last')}>Last run</Th>
               </tr>
             </thead>
             <tbody>
@@ -494,14 +561,31 @@ export default function ControlLibrary() {
                     const lastOutcome = last ? outcomeIn(last, c.id) : undefined;
                     return (
                       <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
+                        {/* PARKED (Aug 2026) — the select-all / per-row checkbox column.
+                            Selection still runs on the CARD view, which is what feeds the
+                            bulk bar, so nothing downstream is dead.
                         <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
-                        <td><span className="wp-ref">{c.wpRef}</span></td>
+                        */}
+                        <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>
                         <td className="tight">
                           <div className="flex items-center gap-1.5">
                             {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                            <span className="font-semibold text-ink-900 text-[0.78125rem] truncate max-w-[26.25rem]">{c.description}</span>
+                            <span className="font-semibold text-ink-900 text-[0.78125rem] truncate min-w-0">{c.description}</span>
                           </div>
-                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess} · {c.owner}</div>
+                          {/* process and owner have their own columns now — saying them
+                              twice on the same row is noise. */}
+                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess}</div>
+                        </td>
+                        <td className="text-[0.71875rem] text-ink-700">
+                          {c.entity
+                            ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                            : <span className="text-ink-300">—</span>}
+                        </td>
+                        <td className="text-[0.71875rem] text-ink-600">{c.type}</td>
+                        <td className="text-[0.71875rem] text-ink-600">{c.frequency}</td>
+                        <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
+                        <td className="text-[0.71875rem] text-ink-500">
+                          <span className="reg-clamp" title={c.objective ?? undefined}>{c.objective ?? '—'}</span>
                         </td>
                         <td><NatureChip nature={c.nature} small /></td>
                         <td className="tabular-nums font-semibold text-ink-800">{attrs}</td>

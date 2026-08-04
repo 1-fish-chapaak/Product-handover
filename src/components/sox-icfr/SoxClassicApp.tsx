@@ -57,7 +57,7 @@ const SOX_TABS: TabDef[] = [
      them. Nothing navigates into the tab, so no link is left dangling. */
   // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'SOX audit' },
+  { id: 'runs', label: 'SOX testing' },
   /* Configuration — PARKED from the engagement tabs (user ask). Same shape as
      the park on the reworked flow, where engagement-level Configuration gave
      way to Audit logs. The `tab === 'config' ? <ConfigurationView />` branch
@@ -251,7 +251,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
-            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX testing', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

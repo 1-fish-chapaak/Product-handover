@@ -151,6 +151,71 @@ test('no grouping flattens it', async ({ page }) => {
   await expect(page.locator('tr.reg-group-row')).toHaveCount(0);
 });
 
+/** The engagement-level Control Library — the tab BEFORE you open an audit. A
+ *  different lens (attributes, workflow coverage, where the control has been
+ *  used), now carrying the same RACM columns and the same table behaviour. */
+async function openLibrary(page: Page) {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/');
+  await openFromLibrary(page, ENGAGEMENT);
+  await page.getByRole('button', { name: 'Control Library' }).last().click();
+  await page.waitForTimeout(1000);
+}
+
+test('the engagement library carries the same columns and behaviour', async ({ page }) => {
+  await openLibrary(page);
+  // Its own lens is intact...
+  for (const col of ['Attributes', 'Objective']) {
+    await expect(page.getByRole('columnheader', { name: new RegExp(`^${col}$`) })).toBeVisible();
+  }
+  // ...alongside the RACM columns and their filters.
+  for (const f of ['process', 'entity', 'control type', 'frequency', 'owner']) {
+    await expect(page.getByRole('button', { name: `Filter by ${f}` })).toBeVisible();
+  }
+  // Table first, no checkbox column, and the entity split is visible here too.
+  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  await expect(page.locator('tr.reg-row', { hasText: 'TRY-01' })).toHaveCount(4);
+});
+
+test('the engagement library groups by entity and resizes', async ({ page }) => {
+  await openLibrary(page);
+  await page.getByRole('button', { name: 'Group the library by' }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole('option', { name: 'Entity' }).click();
+  await page.waitForTimeout(600);
+  await expect(page.locator('tr.reg-group-row', { hasText: 'Altura Solar Pvt Ltd' })).toBeVisible();
+
+  const header = page.locator('th').filter({ hasText: 'Objective' }).first();
+  const before = (await header.boundingBox())!.width;
+  const box = (await header.locator('.reg-grip').boundingBox())!;
+  await page.mouse.move(box.x + 3, box.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 100, box.y + 12, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  expect((await header.boundingBox())!.width).toBeLessThan(before - 60);
+});
+
+test('an engagement with one company still names it on every row', async ({ page }) => {
+  // Not every engagement was scoped from trial balances — most are one company,
+  // and that company is still the entity. A column of dashes would be a bug, not
+  // an honest blank.
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/');
+  await openFromLibrary(page, 'O2C — SOX / ICFR');
+  await page.getByRole('button', { name: 'Control Library' }).last().click();
+  await page.waitForTimeout(1000);
+
+  const rows = page.locator('tr.reg-row');
+  expect(await rows.count()).toBeGreaterThan(0);
+  for (const cell of await rows.locator('td').nth(2).allInnerTexts()) {
+    expect(cell.trim()).not.toBe('—');
+  }
+  // One company means one row per control — no entity split here.
+  await expect(page.locator('tr.reg-row', { hasText: 'O2C-01' })).toHaveCount(1);
+});
+
 test('the entity is on the card too, and on the control page', async ({ page }) => {
   await openRegister(page);
   await page.getByRole('button', { name: 'Grid view' }).click();

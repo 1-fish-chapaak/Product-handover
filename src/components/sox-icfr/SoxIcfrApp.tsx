@@ -68,7 +68,7 @@ const SOX_TABS: TabDef[] = [
      audit's four (AUDIT_TABS below). Reached from the engagement level it is
      still a DRILL-IN under a breadcrumb: every route in calls
      setView('deficiencies'), which works at either level. */
-  { id: 'runs', label: 'SOX audit' },
+  { id: 'runs', label: 'SOX testing' },
   /* Configuration is not an ENGAGEMENT tab — it belongs to an audit, and lives
      in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
      cycle, so there is nothing engagement-wide left to configure here; the
@@ -304,7 +304,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Deficiency management',
-            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX testing', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

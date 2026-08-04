@@ -1447,6 +1447,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // portfolio now, so leaving it with none would strand 32 tested controls
     // behind an audit that doesn't exist — and show an empty state on the
     // engagement with the most data in it.
+    // The flagship was never scoped from trial balances, so it is one company —
+    // its own. Named on every row rather than left blank.
+    base.controls = withEntityInstances(base.controls, base.id, base.entity);
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer.split(' · ')[0] }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
@@ -1465,10 +1468,12 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const built = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
-  // One row per control PER COMPANY it is tested at — see withEntityInstances.
-  // Altura only, like the findings below: every other engagement keeps the exact
-  // one-row-per-control register it had.
-  const controls = rich ? withEntityInstances(built, meta.id) : built;
+  // Every control gets the company it is tested at, and a process the scoping
+  // spread across several companies gets a row each — see withEntityInstances.
+  // Only Altura's scoping actually spans companies today, so every other
+  // engagement keeps the exact one-row-per-control register it had, now with its
+  // own company named on every row.
+  const controls = withEntityInstances(built, meta.id, base.entity);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -1626,25 +1631,32 @@ function instanceAt(base: Control, entity: string, short: string, stage: EntityS
  * everything that picks a control by position (the seeded findings, the run
  * history) goes on meaning what it meant before. The copies are appended.
  */
-function withEntityInstances(controls: Control[], engagementId: string): Control[] {
+function withEntityInstances(controls: Control[], engagementId: string, fallback: string): Control[] {
   const prog = programmeFor(engagementId);
-  if (!prog) return controls;
-  const fullName = new Map(prog.entities.map(e => [entityShort(e.id, prog.entities), e.name]));
+  // The single company the whole engagement is against. Every audit has one, even
+  // the ones that were never scoped from trial balances — it is who is being
+  // audited — so a control always has an entity to name, and the register never
+  // shows a column of dashes.
+  const wholeAudit = prog?.groupName ?? fallback;
+  const fullName = new Map((prog?.entities ?? []).map(e => [entityShort(e.id, prog!.entities), e.name]));
   const scopeOf = new Map<string, string[]>();
-  prog.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
-  if (!scopeOf.size) return controls;
+  prog?.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
 
   const STAGES: EntityStage[] = ['done', 'part', 'design', 'fresh'];
   const copies: Control[] = [];
   controls.forEach((c, i) => {
+    // A process the scoping mapped to several companies splits into a row each —
+    // same control number, separate lives. A process mapped to one, or an
+    // engagement whose RACM was uploaded rather than derived, is the audit's own
+    // company and stays one row.
     const shorts = scopeOf.get(normaliseProcess(c.process)) ?? [];
-    if (!shorts.length) return;
+    if (!shorts.length) { c.entity = wholeAudit; return; }
     c.entity = fullName.get(shorts[0]!) ?? shorts[0]!;
     shorts.slice(1).forEach((short, k) => {
       copies.push(instanceAt(c, fullName.get(short) ?? short, short, STAGES[(i + k) % STAGES.length]!));
     });
   });
-  return [...controls, ...copies];
+  return copies.length ? [...controls, ...copies] : controls;
 }
 
 /** The attributes a seeded control is tested against, in the order an auditor

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   // PARKED (Aug 2026) — FileSpreadsheet went with the icon-only export button.
   //   FileSpreadsheet,
@@ -13,11 +13,12 @@ import {
   controlCode, controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
+import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
 import type { Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
@@ -43,13 +44,6 @@ const VIEWS: { id: SavedView; label: string }[] = [
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
 
-type GroupBy = 'none' | 'process' | 'entity';
-const GROUP_OPTIONS = [
-  { value: 'process', label: 'Process' },
-  { value: 'entity', label: 'Entity' },
-  { value: 'none', label: 'No grouping' },
-];
-
 // ── Columns ─────────────────────────────────────────────────────────────────────
 //
 // Order and starting width, in one place, because three things read it: the
@@ -70,26 +64,8 @@ const REG_COLS = [
   { key: 'conclusion', w: 126 },
   { key: 'court', w: 122 },
 ] as const;
-type ColKey = typeof REG_COLS[number]['key'];
-const COL_DEFAULT = Object.fromEntries(REG_COLS.map(c => [c.key, c.w])) as Record<ColKey, number>;
 /** Widths are the reader's, not ours — they survive the session. */
 const COLW_KEY = 'sox-register-colw';
-/** Narrow enough to be a deliberate choice, wide enough to still show something. */
-const COL_MIN = 64;
-
-/** A header cell with a resize grip on its right edge. Module-level on purpose:
- *  declared inside the register it would remount on every keystroke and slam the
- *  open column-filter menu shut. */
-function Th({ width, onResize, title, children }: {
-  width: number; onResize: (e: React.MouseEvent) => void; title?: string; children: React.ReactNode;
-}) {
-  return (
-    <th style={{ width }} title={title} className="relative">
-      {children}
-      <span onMouseDown={onResize} onClick={e => e.stopPropagation()} className="reg-grip" aria-hidden />
-    </th>
-  );
-}
 
 function CardTrack({ label, res, started }: { label: string; res: ReturnType<typeof trackResult>; started: boolean }) {
   const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
@@ -197,41 +173,7 @@ export default function ControlRegister() {
   const [frequency, setFrequency] = useState('All');
   const [owner, setOwner] = useState('All');
 
-  // ── Column widths — dragged by the reader, remembered for them ───────────────
-  const [colw, setColw] = useState<Partial<Record<ColKey, number>>>(() => {
-    try { return JSON.parse(localStorage.getItem(COLW_KEY) || '{}'); } catch { return {}; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(COLW_KEY, JSON.stringify(colw)); } catch { /* private mode — the widths just don't persist */ }
-  }, [colw]);
-  const widthOf = (k: ColKey) => colw[k] ?? COL_DEFAULT[k];
-  const tableWidth = REG_COLS.reduce((sum, c) => sum + widthOf(c.key), 0);
-  // Cleanup for a drag still in flight, so an unmount mid-drag can't leave
-  // listeners on the window and the body stuck in a col-resize cursor.
-  const dragCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => dragCleanup.current?.(), []);
-  const startResize = (e: React.MouseEvent, key: ColKey) => {
-    e.preventDefault();
-    e.stopPropagation();                       // never let the grip trip the header's filter
-    const startX = e.clientX;
-    const startW = widthOf(key);
-    const onMove = (ev: MouseEvent) =>
-      setColw(prev => ({ ...prev, [key]: Math.max(COL_MIN, Math.round(startW + (ev.clientX - startX))) }));
-    const done = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', done);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      dragCleanup.current = null;
-    };
-    dragCleanup.current = done;
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', done);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
-  /** Width + grip wiring for one column, so the header reads as a list of columns. */
-  const th = (key: ColKey) => ({ width: widthOf(key), onResize: (e: React.MouseEvent) => startResize(e, key) });
+  const { widthOf, totalWidth, th } = useColumnWidths(COLW_KEY, REG_COLS);
   // What the register is stacked by. Process is how an audit is planned; entity is
   // how a group audit is reported ("is Solar done?"), and the register carries one
   // row per control per company, so both are real ways to read the same list.
@@ -300,16 +242,18 @@ export default function ControlRegister() {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
     for (const c of filtered) {
-      const k = groupBy === 'entity' ? (c.entity ?? 'No entity recorded') : c.process;
+      const k = groupKeyOf(c, groupBy);
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(c);
     }
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
   }, [filtered, groupBy]);
 
-  const allVisible = filtered.map(c => c.id);
-  const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
-  const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
+  // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
+  // the card view still selects, and that is what feeds the bulk bar.
+  //   const allVisible = filtered.map(c => c.id);
+  //   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
+  //   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const colSpan = REG_COLS.length;
@@ -419,7 +363,7 @@ export default function ControlRegister() {
             screen — the wrapper scrolls sideways rather than crushing the text.
             Fixed layout + a colgroup means the widths are the ones on record, not
             whatever the longest cell argued for, which is what makes a drag hold. */}
-        <table className="border-collapse" style={{ tableLayout: 'fixed', width: tableWidth }}>
+        <table className="border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
           <colgroup>{REG_COLS.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
           <thead className="reg-head">
             <tr>
