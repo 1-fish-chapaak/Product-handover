@@ -44,7 +44,7 @@ import { cn } from '../../lib/cn';
  * controls, the same equivalence Racm.tsx and createRacm() work from.
  */
 
-const STEPS = ['Period', 'Materiality & files', 'Scope', 'Review'] as const;
+const STEPS = ['Audit period', 'Materiality & files', 'Scope', 'Review'] as const;
 const REVIEW = STEPS.length - 1;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -1144,7 +1144,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
         )}
 
         {step === REVIEW && (
-          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's SOX audit tab.">
+          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's SOX testing tab.">
             <div className="rounded-xl border border-canvas-border bg-white p-4">
               {/* Same order the steps ran in — Period, then materiality and its
                   files, then what they scoped. */}

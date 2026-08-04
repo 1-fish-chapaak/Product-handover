@@ -1,5 +1,9 @@
 import { test, expect } from './_helpers';
-import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
+
+// NOTE: a parallel session is renaming this tab ("SOX audit" → "SOX testing").
+// Matched loosely until that lands so the suite is not red on someone else's
+// half-finished rename; tighten to the winning label once it settles.
+import { openFromLibrary } from './_sox_helpers';
 
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/e4611527-b2d2-4848-8aa2-dda858a9a11e/scratchpad/sox-config-shots';
 
@@ -31,13 +35,16 @@ test('SOX Configuration is absent at engagement level and lives on the audit', a
   test.setTimeout(150_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
-  await createSoxEngagement(page, 'FY27 ICFR — Airline Group');
-  await openFromLibrary(page, 'FY27 ICFR — Airline Group');
+  // Altura, not a freshly created engagement. Creation no longer seeds anything
+  // (user ask — nothing is asked for, so nothing is invented), which means a new
+  // engagement has no audit to open and the second half of this test had nothing
+  // to click. The audit-level Configuration tab is about an audit that exists.
+  await openFromLibrary(page, 'FY26 ICFR — Altura Infra Group');
   await page.waitForTimeout(600);
 
   // The engagement is four tabs, and Configuration is not one of them
   const main = page.getByRole('main');
-  for (const label of ['Overview', 'RACM', 'Control Library', 'SOX audit']) {
+  for (const label of ['Overview', 'RACM', 'Control Library']) {
     await expect(main.getByRole('button', { name: label, exact: true }).first()).toBeVisible();
   }
   await expect(main.getByRole('button', { name: 'Configuration', exact: true })).toHaveCount(0);
@@ -51,7 +58,13 @@ test('SOX Configuration is absent at engagement level and lives on the audit', a
 
   // Opening the audit swaps in AUDIT_TABS behind a breadcrumb — Configuration
   // is the fourth of those, and it configures the CYCLE, not the engagement.
-  await main.getByRole('button').filter({ hasText: 'Year-end' }).first().click();
+  // The audit register is the SOX tab, not Overview — Overview is a read-out
+  // across audits, so the cards you can open live one tab over.
+  await main.getByRole('button', { name: /^SOX (audit|testing)$/ }).first().click();
+  await page.waitForTimeout(800);
+  // Any audit will do — the point is the tabs an audit swaps in, not which
+  // round it is. Matched on the period, which every card prints.
+  await main.getByRole('button').filter({ hasText: /^(CY|FY) ?20\d\d/ }).first().click();
   await page.waitForTimeout(900);
   for (const label of ['Dashboard', 'Control Library', 'Deficiency management', 'Configuration']) {
     await expect(main.getByRole('button', { name: label, exact: true }).first()).toBeVisible();

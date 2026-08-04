@@ -76,7 +76,7 @@ test('the org chart fills the entity table with the group structure intact', asy
   await page.screenshot({ path: `${SHOT_DIR}/02-empty-table.png` });
 
   // Upload the real sample PDF through the hidden input behind the button.
-  await expect(sheet.getByText('Upload org chart')).toBeVisible();
+  await expect(sheet.getByText('Org Chart', { exact: true })).toBeVisible();
   await sheet.locator('input[aria-label="Upload org chart"]').setInputFiles(CHART_PDF);
   await expect(sheet.getByText('Reading the chart…')).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/03-parsing.png` });
@@ -127,9 +127,9 @@ test('the org chart fills the entity table with the group structure intact', asy
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${SHOT_DIR}/04b-lower-rows.png` });
 
-  // The holding's own row can add a company beneath it, and the new row lands
-  // at the end of the family rather than at the end of the table.
-  await sheet.getByRole('button', { name: /Add entity under Meridian Global Holdings/ }).click();
+  // Adding is the header's job (the per-row "+" was removed): the row appends
+  // and takes the cursor, because on a twelve-row list it lands below the fold.
+  await sheet.getByRole('button', { name: 'Add entity', exact: true }).click();
   await page.waitForTimeout(300);
   await expect(sheet.locator('input[aria-label^="Entity"]')).toHaveCount(13);
   const order = await page.evaluate(() => Array.from(document.querySelectorAll('input[aria-label^="Entity"]'))

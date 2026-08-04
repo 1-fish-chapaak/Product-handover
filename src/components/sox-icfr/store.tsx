@@ -284,7 +284,7 @@ interface IcfrCtx {
   addRacmDoc: (fileName: string, process?: string) => void;
   // a RACM here IS a process's set of controls, so creating one brings a new
   // process into scope and seeds its risks & controls from the template
-  createRacm: (process: string, sourceFileName?: string) => void;
+  createRacm: (process: string, sourceFileName?: string, entity?: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -1384,12 +1384,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // processes), and the workbook / SOP that produced it is pinned to the new
   // matrix as its source document. A process that already has a RACM is a
   // no-op — the landing lists one RACM per process.
-  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName) => {
+  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName, entity) => {
     if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       if (prev.controls.some(c => c.process === process)) return prev;
-      return { ...prev, controls: [...prev.controls, ...racmTemplateForProcesses([process], 'fresh')] };
+      // The company the matrix belongs to, stamped on every control it creates:
+      // a group audit tests the same process separately at each entity, and a
+      // row that cannot say which company it is for cannot be concluded.
+      const rows = racmTemplateForProcesses([process], 'fresh')
+        .map(c => (entity ? { ...c, entity } : c));
+      return { ...prev, controls: [...prev.controls, ...rows] };
     });
     if (sourceFileName) addRacmDoc(sourceFileName, process);
   }, [role, addRacmDoc]);
@@ -1619,7 +1624,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const have = new Set(prev.controls.map(c => c.process));
       const kept = prev.controls.filter(c => want.has(c.process));
       const missing = processes.filter(p => !have.has(p));
-      return { ...prev, controls: missing.length ? [...kept, ...racmTemplateForProcesses(missing, 'fresh')] : kept };
+      // Newly-scoped processes join the audit that scoped them, so their controls
+      // carry its company — same stamp createRacm applies. Read off the register
+      // rather than assumed, so a group audit doesn't get the wrong one.
+      const entity = kept[0]?.entity ?? prev.controls[0]?.entity ?? prev.entity;
+      const fresh = racmTemplateForProcesses(missing, 'fresh').map(c => (entity ? { ...c, entity } : c));
+      return { ...prev, controls: missing.length ? [...kept, ...fresh] : kept };
     });
   }, []);
   // The guarded path for changing the ground rules mid-engagement: applies the

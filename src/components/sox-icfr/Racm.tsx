@@ -4,6 +4,7 @@ import {
   Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
+import { entitiesFor } from './auditScope';
 import { defWord } from './flow';
 import { useIcfr } from './store';
 import { controlConclusion, trackResult } from './helpers';
@@ -73,17 +74,22 @@ function matrixStatusOf(controls: Control[], engagementId: string): { label: str
  * thing SOX has to ask that the Process Hub doesn't is WHICH process: the Hub
  * runs inside a single business process, this landing spans all of them.
  */
-function NewRacmModal({ available, inScope, onClose, onPick }: {
+function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
   /** canonical processes with no RACM yet — the picker's options */
   available: string[];
   /** every process already carrying a RACM — guards a hand-typed duplicate */
   inScope: string[];
+  /** the companies named when the engagement was created — a matrix belongs to
+   *  one of them, because a group audit tests the same process separately at
+   *  each. Empty on an engagement that was never scoped by entity. */
+  entities: string[];
   onClose: () => void;
-  onPick: (process: string, source: 'racm' | 'sop') => void;
+  onPick: (process: string, source: 'racm' | 'sop', entity: string) => void;
 }) {
   // every process may already be in scope — then naming one is the only way in
   const [choice, setChoice] = useState(available[0] ?? NEW_PROCESS);
   const [custom, setCustom] = useState('');
+  const [entity, setEntity] = useState(entities[0] ?? '');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -108,6 +114,22 @@ function NewRacmModal({ available, inScope, onClose, onPick }: {
           </div>
         </div>
         <div className="p-5">
+          {/* Which company the matrix is for. First, because it scopes the
+              question underneath it — "Record to Report" means nothing until
+              you know whose. Hidden when the engagement named no companies, so
+              a single-entity audit is not asked a question with one answer. */}
+          {entities.length > 0 && (
+            <>
+              <label htmlFor="new-racm-entity" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Entity</label>
+              <select id="new-racm-entity" value={entity} onChange={e => setEntity(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                {entities.map(en => <option key={en} value={en}>{en}</option>)}
+              </select>
+              <p className="text-[11.5px] text-ink-400 mt-1.5 mb-4">
+                The companies in scope of this engagement — the same process is tested separately at each.
+              </p>
+            </>
+          )}
           <label htmlFor="new-racm-process" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Business process</label>
           <select id="new-racm-process" value={choice} onChange={e => setChoice(e.target.value)}
             className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
@@ -127,12 +149,12 @@ function NewRacmModal({ available, inScope, onClose, onPick }: {
           {taken && <p className="text-[11.5px] text-risk-700 mt-1.5">{process} already has a RACM — open it from the list instead.</p>}
 
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <button onClick={() => onPick(process, 'racm')} disabled={!ready} className={cardCls}>
+            <button onClick={() => onPick(process, 'racm', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
               <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload a RACM</span>
               <span className="block text-[11.5px] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
             </button>
-            <button onClick={() => onPick(process, 'sop')} disabled={!ready} className={cardCls}>
+            <button onClick={() => onPick(process, 'sop', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Sparkles size={15} className="text-brand-600" /></span>
               <span className="block text-[13px] font-semibold text-ink-900 mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-ink-400">→</span> extract</span>
               <span className="block text-[11.5px] text-ink-500 leading-relaxed">IRA reads a procedure (.pdf / .docx) and drafts the RACM.</span>
@@ -209,6 +231,8 @@ export function RacmLanding() {
   const racmFileRef = useRef<HTMLInputElement>(null);
   const sopFileRef = useRef<HTMLInputElement>(null);
   const pendingProcess = useRef<string>('');
+  /** The company chosen in the chooser, held across the file picker. */
+  const pendingEntity = useRef<string>('');
   const extractTimer = useRef<number | null>(null);
   useEffect(() => () => { if (extractTimer.current != null) window.clearTimeout(extractTimer.current); }, []);
 
@@ -218,10 +242,13 @@ export function RacmLanding() {
     const have = new Set(inScope);
     return SOX_PROCESSES.filter(p => !have.has(p));
   }, [inScope]);
+  /** The companies the engagement was created with — the Entity picker's list. */
+  const racmEntities = useMemo(() => entitiesFor(eng.id).map(e => e.name), [eng.id]);
 
   // the chooser hands back the process + which door; the file picker follows
-  const onPick = (process: string, source: 'racm' | 'sop') => {
+  const onPick = (process: string, source: 'racm' | 'sop', entity: string) => {
     pendingProcess.current = process;
+    pendingEntity.current = entity;
     setCreating(false);
     (source === 'racm' ? racmFileRef : sopFileRef).current?.click();
   };
@@ -232,7 +259,7 @@ export function RacmLanding() {
     const process = pendingProcess.current;
     e.target.value = '';
     if (!file || !process) return;
-    createRacm(process, file.name);
+    createRacm(process, file.name, pendingEntity.current);
     addToast({ type: 'success', title: 'RACM created', message: `Imported "${file.name}" — the ${process} RACM is now in the list.` });
   };
 
@@ -246,7 +273,7 @@ export function RacmLanding() {
     extractTimer.current = window.setTimeout(() => {
       extractTimer.current = null;
       setExtracting(null);
-      createRacm(process, file.name);
+      createRacm(process, file.name, pendingEntity.current);
       const label = racmNameFromFilename(file.name);
       addToast({ type: 'success', title: 'RACM extracted', message: `Drafted the ${process} RACM from "${label || file.name}" — review its rows before testing.` });
     }, 1600);
@@ -275,7 +302,7 @@ export function RacmLanding() {
     )}
     <input ref={racmFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onRacmFile} aria-label="Upload a RACM workbook" />
     <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} aria-label="Upload an SOP to extract a RACM from" />
-    {creating && <NewRacmModal available={available} inScope={inScope} onClose={() => setCreating(false)} onPick={onPick} />}
+    {creating && <NewRacmModal available={available} inScope={inScope} entities={racmEntities} onClose={() => setCreating(false)} onPick={onPick} />}
     {extracting && <RacmExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}
     <div className="reg-wrap">
       <table className="w-full border-collapse">

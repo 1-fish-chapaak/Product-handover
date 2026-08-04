@@ -694,7 +694,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       id,
       code: code.trim().toUpperCase(),
       name: name.trim(),
-      description: description.trim() || `SOX 404 / ICFR programme — scoped from ${entities.length} trial balances; ${derived.length} in-scope processes, each a RACM.`,
+      description: description.trim() || `SOX 404 / ICFR programme — ${entities.length} ${entities.length === 1 ? 'company' : 'companies'} in scope; RACMs added from the RACM tab.`,
       type: 'SOX / ICFR',
       soxConfig: {
         overallMateriality: Math.round(overallCr * CR),
@@ -704,9 +704,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         aggregate: true,
         keyOnly: true,
       },
-      // The workspace seeds one RACM per scoping-derived process, so the RACM
-      // tab mirrors the scoping summary exactly.
-      soxProcesses: derived.map(r => r.process),
+      // NO seeded RACM (user ask). Creation never asks for one — no matrix is
+      // uploaded, no process is picked — so seeding two off the trial-balance
+      // captions put work in the engagement the user never authored and could
+      // not account for. The RACM tab opens empty and Create RACM fills it.
+      soxProcesses: [],
       soxSeedMode: 'fresh',
       // No process was asked for — the anchor is the biggest scoping-derived
       // process (falls back to P2P).
@@ -727,7 +729,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     logEvent({
       action: 'Create',
-      description: `Created SOX ICFR engagement "${name.trim()}" via scoping — ${derived.length} in-scope processes → ${derived.length} RACMs, materiality ${fmtCr(overallCr)}`,
+      description: `Created SOX ICFR engagement "${name.trim()}" — ${entities.length} companies in scope, no RACM yet, materiality ${fmtCr(overallCr)}`,
       module: 'SOX ICFR',
       entity: 'Engagement',
     });
@@ -760,7 +762,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       totalCaptions: captions.length,
       quantCount: quantScope.length,
       qualCount: qualScope.length,
-      racms: derived,
+      // Empty for the same reason as soxProcesses above — the programme must not
+      // claim matrices the workspace does not have, or "By RACM" scoping on the
+      // New audit wizard would offer rows that lead nowhere.
+      racms: [],
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
       // The workspace banner nags for a missing RACM, so flag only when one
       // was genuinely never attached — the group TB / GL are asked for on
@@ -1024,7 +1029,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         title="PDF, image, Visio — the structure is read off the chart"
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
                       >
-                        <Upload size={11} /> Upload org chart
+                        <Upload size={11} /> Org Chart
                         <input
                           type="file"
                           className="hidden"
@@ -1111,7 +1116,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       <span className="text-[11px] text-text-muted">%</span>
                     </div>
                 */}
-                <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+                {/* overflow-VISIBLE, deliberately: the Type dropdown's menu is
+                    absolutely positioned inside its row, so `overflow-hidden`
+                    here sliced it off at the row below. The header band takes
+                    the top corners itself (11px = the 12px outer radius less
+                    the 1px border) so nothing squares off without the clip. */}
+                <div className="border border-border-light rounded-xl bg-white">
                   {/* PARKED (user ask): the "Processes — extracted" column.
                       Grid was [2.6fr_0.95fr_1.05fr_34px] with a
                       <div>Processes — extracted</div> header cell here and the
@@ -1122,7 +1132,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
                       Its width goes to the entity name, which is the row's
                       identity and was clipping the longest ones. */}
-                  <div className="grid grid-cols-[2.8fr_0.95fr_56px] gap-2.5 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                  <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                     <div>Entity</div><div>Type</div>{/* <div>Processes — extracted</div> */}<div />
                   </div>
                   {entities.length === 0 && (
@@ -1160,7 +1170,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div key={ent.id} className="border-b border-border-light last:border-b-0">
                       {/* py, not pt: the RACM line under each row used to supply
                           the bottom padding and is parked. */}
-                      <div className="grid grid-cols-[2.8fr_0.95fr_56px] gap-2.5 px-4 py-2.5 items-center">
+                      <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2.5 items-center">
                       {/* Indented by its depth in the chain, so the table keeps
                           the shape the chart had instead of flattening twelve
                           companies into twelve peers. */}
@@ -1239,26 +1249,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         );
                       })()}
                       */}
-                      {/* Row actions. Delete stays hard right on every row so
-                          the column reads as one line; the add sits beside it
-                          and appears only where a company can hold others. */}
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* The TOP row, not "whichever row says Holding" (user
-                            ask). Type is a dropdown the user can change, and
-                            gating on it meant retyping the first row to
-                            Subsidiary removed every add-a-child button in the
-                            table with no way to get one back. Position cannot
-                            be edited away. */}
-                        {!soloEntity && i === 0 && (
-                          <button
-                            onClick={() => addChildEntity(ent.id)}
-                            aria-label={`Add entity under ${ent.name.trim() || 'this company'}`}
-                            title={`Add entity under ${ent.name.trim() || 'this company'}`}
-                            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                          >
-                            <Plus size={13} />
-                          </button>
-                        )}
+                      {/* Row actions — delete only (user ask; the per-row add
+                          button is gone, adding is the header's job). Kept as a
+                          flex cell so the icon sits hard right on every row and
+                          the column reads as one straight line. */}
+                      <div className="flex items-center justify-end">
                         <button
                           onClick={() => (heldBeneath > 0 ? setConfirmRemoveId(ent.id) : removeEntity(ent.id))}
                           disabled={soloEntity || entities.length === 1}
@@ -1812,7 +1807,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
             <div className="border border-border-light rounded-xl bg-white p-4">
               <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
-                RACMs to be generated — one per in-scope process
+                RACMs — added from the RACM tab once the engagement exists
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {derived.map(r => (
