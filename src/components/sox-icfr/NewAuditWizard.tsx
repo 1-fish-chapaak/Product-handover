@@ -18,6 +18,7 @@ import {
   entitiesFor, entitiesInFiles, entityTotals, mergeScopeEntities, racmsForEntities,
 } from './auditScope';
 import { useIcfr } from './store';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
 import { cn } from '../../lib/cn';
@@ -74,7 +75,8 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
-  const { eng, createAudit, registerFile, addControl, addDesignPoint, me } = useIcfr();
+  const { eng, role, createAudit, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
+  const logEvent = useAuditLog();
   const { addToast } = useToast();
   const [step, setStep] = useState(0);
 
@@ -198,6 +200,34 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     },
     [racms, keyOnly],
   );
+
+  /**
+   * Key / non-key, set from the row being scoped.
+   *
+   * Scoping is where the question actually comes up — you are looking at the
+   * matrix deciding what this round covers, and "that one is key too" is the
+   * thought you have there, not on a control's own page three clicks away.
+   *
+   * It is the SAME judgement the control page sets, on the same field, so it
+   * lands on the engagement's control and shows up wherever that control is
+   * read: the RACM, both registers, the working paper and the audit report.
+   *
+   * No concluded-control guard, unlike the control page: scoping runs before
+   * any testing exists. A new audit is created with nothing tested, and a
+   * roll-forward carries the RACM and its controls but starts testing from
+   * zero, so the question is always asked of an untested control.
+   */
+  const toggleKey = (c: Control) => {
+    setControlKey(c.id, !c.isKey);
+    logEvent({
+      action: 'Update', module: 'SOX ICFR', entity: 'Control',
+      description: `${c.isKey ? 'Unmarked' : 'Marked'} ${c.id} as a key control while scoping a new audit`,
+    });
+    // A row that stops being key would vanish out from under the cursor while
+    // the key-only switch is on, so the switch gives way — same as it does when
+    // a non-key control is added to a RACM.
+    if (keyOnly && c.isKey) setKeyOnly(false);
+  };
 
   // Turning "key controls only" ON picks every key control across every RACM
   // (user ask) — the switch does the picking, which is what its copy always
@@ -1106,10 +1136,24 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                           </p>
                         ) : rows.map(c => {
                           const ticked = pickedControls.includes(c.id);
+                          const settable = role === 'auditor';
                           return (
-                            <button
+                            // A div, not a button: the star inside it is one, and a
+                            // button inside a button is invalid. Same
+                            // role/tabIndex/onKeyDown pattern the registers use.
+                            <div
                               key={c.id}
+                              role="button"
+                              tabIndex={0}
+                              aria-pressed={ticked}
+                              // Named explicitly. Without it the row's name is
+                              // computed from its contents — which now starts
+                              // with the star button's own label, so the row
+                              // and the star announced as near-identical
+                              // controls and matched the same query.
+                              aria-label={`${c.id} — ${c.description}`}
                               onClick={() => toggleControl(o.id, c.id)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleControl(o.id, c.id); } }}
                               className="w-full flex items-start gap-3 pl-9 pr-4 py-2 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
                             >
                               <span className={cn(
@@ -1120,12 +1164,25 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex items-center gap-1.5">
-                                  {c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
+                                  {/* The star states the judgement AND sets it. It
+                                      shows on every row now, hollow when non-key —
+                                      an empty space is not something you can click,
+                                      and marking a control key is the whole point. */}
+                                  {settable ? (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); toggleKey(c); }}
+                                      title={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'} — click to mark it ${c.isKey ? 'non-key' : 'key'}`}
+                                      aria-label={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'}. Mark it ${c.isKey ? 'non-key' : 'key'}`}
+                                      className="shrink-0 w-[18px] h-[18px] -ml-[3px] inline-flex items-center justify-center rounded cursor-pointer transition-colors hover:bg-mitigated-100"
+                                    >
+                                      <Star size={11} className={c.isKey ? 'text-mitigated-600 fill-mitigated-200' : 'text-ink-300'} />
+                                    </button>
+                                  ) : c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                                   <span className="text-[12px] text-ink-800 truncate">{c.description}</span>
                                 </span>
                                 <span className="block text-[10.5px] text-ink-400 font-mono mt-0.5">{c.id} · {c.subProcess}</span>
                               </span>
-                            </button>
+                            </div>
                           );
                         })}
                       </div>
