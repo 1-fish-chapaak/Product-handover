@@ -1,9 +1,5 @@
 import { test, expect } from './_helpers';
 
-// NOTE: a parallel session is renaming this tab ("SOX audit" → "SOX testing").
-// Matched loosely until that lands so the suite is not red on someone else's
-// half-finished rename; tighten to the winning label once it settles.
-
 /**
  * The group's shape survives into the New audit → Scope step.
  *
@@ -52,7 +48,7 @@ test('the Scope step keeps the group hierarchy, with the toggles in one column',
   await page.waitForTimeout(700);
   await page.getByText(/ICFR — Meridian Global Holdings/).first().click();
   await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /^SOX (audit|testing)$/ }).first().click();
+  await page.getByRole('button', { name: 'SOX testing', exact: true }).first().click();
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: /New audit/ }).first().click();
   await page.waitForTimeout(700);
@@ -122,7 +118,7 @@ test('the live Altura group carries its chain into the Scope step', async ({ pag
   await page.waitForTimeout(700);
   await page.getByText('FY26 ICFR — Altura Infra Group').first().click();
   await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /^SOX (audit|testing)$/ }).first().click();
+  await page.getByRole('button', { name: 'SOX testing', exact: true }).first().click();
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: /New audit/ }).first().click();
   await page.waitForTimeout(700);

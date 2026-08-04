@@ -1,8 +1,5 @@
 import { test, expect } from './_helpers';
 
-// NOTE: a parallel session is renaming this tab ("SOX audit" → "SOX testing").
-// Matched loosely until that lands so the suite is not red on someone else's
-// half-finished rename; tighten to the winning label once it settles.
 import { openFromLibrary } from './_sox_helpers';
 
 const SHOT_DIR = '/private/tmp/claude-501/-Users-aasthajain-Desktop-Product-Irame-Product-handover/e4611527-b2d2-4848-8aa2-dda858a9a11e/scratchpad/sox-config-shots';
@@ -44,7 +41,7 @@ test('SOX Configuration is absent at engagement level and lives on the audit', a
 
   // The engagement is four tabs, and Configuration is not one of them
   const main = page.getByRole('main');
-  for (const label of ['Overview', 'RACM', 'Control Library']) {
+  for (const label of ['Overview', 'RACM', 'Control Library', 'SOX testing']) {
     await expect(main.getByRole('button', { name: label, exact: true }).first()).toBeVisible();
   }
   await expect(main.getByRole('button', { name: 'Configuration', exact: true })).toHaveCount(0);
@@ -60,7 +57,7 @@ test('SOX Configuration is absent at engagement level and lives on the audit', a
   // is the fourth of those, and it configures the CYCLE, not the engagement.
   // The audit register is the SOX tab, not Overview — Overview is a read-out
   // across audits, so the cards you can open live one tab over.
-  await main.getByRole('button', { name: /^SOX (audit|testing)$/ }).first().click();
+  await main.getByRole('button', { name: 'SOX testing', exact: true }).first().click();
   await page.waitForTimeout(800);
   // Any audit will do — the point is the tabs an audit swaps in, not which
   // round it is. Matched on the period, which every card prints.
