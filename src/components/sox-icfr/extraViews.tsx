@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp, Circle, History, Info, Lightbulb, Lock, MessageSquare, Paperclip, Sparkles, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, Upload, X, XCircle, FileWarning, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { aggregationKeys, computeSeverity, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, needsRatingConfirmation, retestReadiness, type ExceptionGradeResult, type RetestReadiness } from './helpers';
+import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, needsRatingConfirmation, retestReadiness, type ExceptionGradeResult, type RetestReadiness } from './helpers';
 import { CourtBadge, SeverityPill, Toggle } from './parts';
-import { FormSelect } from '../shared/FilterSelect';
+import { FormSelect, HeaderFilter } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { Pill, type Tone } from '../shared/StatusBadge';
@@ -14,7 +14,7 @@ import { cn } from '../../lib/cn';
 // PARKED (Aug 2026): EXPOSURE_LABEL, exposureTotal, GAP_HINT, GAP_LABEL and the
 // Exposure / GapType types — priced impact and the gap taxonomy are off the card.
 // `gapNature` replaces the latter, derived read-only from the track and the nature.
-import { EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
+import { EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, type Assertion, type Court, type Deficiency, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -755,111 +755,152 @@ function currentStep(d: Deficiency): number {
 }
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
+/** The register's columns. Widths are fixed on everything except the finding,
+ *  which takes whatever is left — it is the only cell holding a sentence, and
+ *  the rest are pills and one number that never need more room than they ask
+ *  for. `DEF_COLS` is the colSpan an opened row's body sits across. */
+const DEF_COL_W = { id: 152, track: 104, exposure: 116, severity: 176, status: 136, court: 158 };
+const DEF_COLS = 7;
+
+/** Filter menus read in the order the thing itself runs in — severity worst
+ *  first (it is a ladder), stage in lifecycle order, court in the order the
+ *  baton passes — never alphabetically, which would scatter both. */
+const SEVERITY_ORDER = ['Material Weakness', 'Significant Deficiency', 'Deficiency', 'Clearly Trivial'] as const;
+const STAGE_ORDER = ['Identified', 'Rating review', 'Planning', 'Plan review', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'] as const;
+const COURT_ORDER = ['auditor', 'risk-owner', 'reviewer', 'none'] as const;
+const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': 'Risk owner', reviewer: 'Reviewer', none: 'Closed' };
+
 export function DeficienciesView() {
   const { eng, role, meOwner, focusDefId } = useIcfr();
   // Classic engagements still call these exceptions; the rework renamed them.
   const W = defWord(eng.id);
-  const M = eng.materiality; const rules = eng.rules;
   const isOwner = role === 'risk-owner';
   // a countersigned engagement is a sealed record — the store already drops
   // every write, so the page must say so and put its pens away
   const locked = isEngagementLocked(eng);
   // person-lane: the owner sees only exceptions riding their own controls
-  const defs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
+  const all = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
+
+  // ── Column filters ────────────────────────────────────────────────────────────
+  // In the headers, like the control register's — the column IS the trigger, so a
+  // filter is set where its effect is read rather than off a toolbar above.
+  const [track, setTrack] = useState('All');
+  const [severity, setSeverity] = useState('All');
+  const [stage, setStage] = useState('All');
+  const [court, setCourt] = useState('All');
+  const clearFilters = () => { setTrack('All'); setSeverity('All'); setStage('All'); setCourt('All'); };
+  const engaged = track !== 'All' || severity !== 'All' || stage !== 'All' || court !== 'All';
+
+  // Severity is computed, not stored — the same grade the row shows, so the
+  // filter can never disagree with the pill it filtered on.
+  const graded = useMemo(() => all.map(d => ({
+    d, grade: gradeException(d, eng).grade, court: courtForException(d),
+  })), [all, eng]);
+
+  // Only the values actually present are offered: a menu naming a stage no
+  // finding is standing on is a filter that can only empty the table.
+  const opts = <T extends string>(values: readonly T[], order: readonly T[]) =>
+    ['All', ...order.filter(v => values.includes(v))];
+  const trackOpts = opts(Array.from(new Set(all.map(d => d.track))), ['design', 'operating'] as const)
+    .map(v => (v === 'All' ? v : { value: v, label: v === 'design' ? 'TOD' : 'TOE' }));
+  const severityOpts = opts(Array.from(new Set(graded.map(g => g.grade))), SEVERITY_ORDER);
+  const stageOpts = opts(Array.from(new Set(all.map(d => d.status))), STAGE_ORDER);
+  const courtOpts = opts(Array.from(new Set(graded.map(g => g.court))), COURT_ORDER)
+    .map(v => (v === 'All' ? v : { value: v, label: COURT_LABEL[v as Court] }));
+
+  const rows = graded.filter(g =>
+    (track === 'All' || g.d.track === track)
+    && (severity === 'All' || g.grade === severity)
+    && (stage === 'All' || g.d.status === stage)
+    && (court === 'All' || g.court === court));
 
   return (
-    <div className="space-y-4">
-      {/* getting back up is the breadcrumb's job (rendered by the shell):
-          Engagements / engagement / Exceptions */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? W.mine : W.page}</h1>
-            {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 bg-paper-100 border border-canvas-border rounded-full px-2 h-[20px]">
-              <Lock size={11} className="text-ink-400" /> Engagement concluded · read-only
-            </span>}
-          </div>
-          <p className="text-[13px] text-ink-500 mt-0.5">
-            {locked
-              ? 'The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.'
-              : isOwner
-              ? `${W.Many} on your controls — commit the plan, execute the fix, and submit for retest. The auditor evaluates severity; the reviewer closes.`
-              : <>Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</>}
-          </p>
-        </div>
-      </div>
+    <div className="space-y-3">
+      {/* No page title or standfirst — the breadcrumb and the tab above already
+          name this page (user ask, Aug 2026), and the aggregation strip that used
+          to sit here went with them. What survives is the one thing neither of
+          those says: that the record is sealed. */}
+      {locked && (
+        <p className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500 bg-paper-100 border border-canvas-border rounded-lg px-2.5 py-1.5">
+          <Lock size={12} className="text-ink-400 shrink-0" />
+          The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.
+        </p>
+      )}
 
-      {/* Aggregation — engagement-wide, audit-side only. The groups are the ones
-          the engine itself uses at rule 6: a shared process or assertion, both read
-          off the control and the attributes that failed, plus whatever the auditor
-          linked by root cause. Clearly-trivial items never join a group — rule 3
-          stopped them before aggregation was reached. */}
-      {rules.aggregate && !isOwner && (() => {
-        const LRANK: Record<string, number> = { Remote: 0, 'Reasonably possible': 1, Probable: 2 };
-        const LBYR = ['Remote', 'Reasonably possible', 'Probable'] as const;
-        const groups = new Map<string, { kind: string; label: string; ds: typeof eng.deficiencies }>();
-        let trivial = 0;
-        eng.deficiencies.forEach(d => {
-          if (d.status === 'Closed') return;
-          if (isClearlyTrivial(d.magnitude, rules)) { trivial += 1; return; }
-          aggregationKeys(d, eng).forEach(k => {
-            const hit = groups.get(k.key) ?? { kind: k.kind, label: k.key.split(':').slice(1).join(':'), ds: [] };
-            groups.set(k.key, { ...hit, ds: [...hit.ds, d] });
-          });
-        });
-        const agg = Array.from(groups.entries()).filter(([, g]) => g.ds.length > 1);
-        if (!agg.length) return null;
-        return (
-          <div className="space-y-2">
-            <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide">Aggregation — individually-minor deficiencies combine by commonality</h2>
-            {agg.map(([key, g]) => {
-              const sum = g.ds.reduce((n, d) => n + d.magnitude, 0);
-              const lk = LBYR[Math.max(...g.ds.map(d => LRANK[d.likelihood] ?? 0))]!;
-              const mw = Array.from(new Set(g.ds.flatMap(d => d.mwIndicators)));
-              return (
-                <div key={key} className="rounded-xl border border-mitigated-200 bg-mitigated-50/30 px-4 py-3 flex items-center justify-between gap-3">
-                  <div className="text-[12.5px] text-ink-700">
-                    <span className="text-ink-400">{g.kind}</span> <span className="font-semibold">{g.label}</span> · {g.ds.length} exceptions ({g.ds.map(d => d.id).join(', ')}) · combined {fmt(sum)} (vs {fmt(M)})
-                  </div>
-                  <SeverityPill s={computeSeverity(lk, sum, M, mw, rules.sdBandPct / 100)} />
-                </div>
-              );
-            })}
-            {trivial > 0 && <p className="text-[0.71875rem] text-ink-400">{trivial} clearly-trivial logged, never aggregated — the ladder stops at rule 3.</p>}
-          </div>
-        );
-      })()}
-
-      {defs.length === 0 ? (
+      {all.length === 0 ? (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? `No ${W.many} on your controls.` : `No ${W.many} — all tested controls effective.`}</div>
       ) : (
-        <div className="space-y-3">
-          {defs.map(d => <DeficiencyCard key={d.id} d={d} defaultOpen={d.id === focusDefId} />)}
+        // The register. One row per finding, opening in place — the columns are
+        // what makes a page of these triageable: severity, stage and whose court
+        // it is in line up down the page instead of being re-found in each card.
+        <div className="reg-wrap def-reg">
+          <table className="border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: 1080 }}>
+            <colgroup>
+              <col style={{ width: DEF_COL_W.id }} />
+              <col />
+              <col style={{ width: DEF_COL_W.track }} />
+              <col style={{ width: DEF_COL_W.exposure }} />
+              <col style={{ width: DEF_COL_W.severity }} />
+              <col style={{ width: DEF_COL_W.status }} />
+              <col style={{ width: DEF_COL_W.court }} />
+            </colgroup>
+            <thead className="reg-head">
+              <tr>
+                <th>{W.one[0]!.toUpperCase() + W.one.slice(1)}</th>
+                <th>Finding</th>
+                <th title="A TOD gap is in how the control is built; a TOE gap is in how it ran">
+                  <HeaderFilter label="Track" value={track} options={trackOpts} allLabel="All tracks" onChange={setTrack} ariaLabel="Filter by track" />
+                </th>
+                <th className="num" title="What could have slipped through while the control was broken — not the error actually found">Exposure</th>
+                <th><HeaderFilter label="Severity" value={severity} options={severityOpts} allLabel="All severities" onChange={setSeverity} ariaLabel="Filter by severity" /></th>
+                <th><HeaderFilter label="Stage" value={stage} options={stageOpts} allLabel="All stages" onChange={setStage} ariaLabel="Filter by stage" /></th>
+                <th title="Whose move it is — the owner remediates, the auditor evaluates and retests, the reviewer closes">
+                  <HeaderFilter label="Court" value={court} options={courtOpts} allLabel="Any court" onChange={setCourt} ariaLabel="Filter by court" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ d }) => <DeficiencyCard key={d.id} d={d} layout="row" defaultOpen={d.id === focusDefId} />)}
+              {rows.length === 0 && (
+                <tr><td colSpan={DEF_COLS} className="text-center py-16 text-ink-400 text-[13px]">
+                  No {W.many} match these filters. <button onClick={clearFilters} className="text-brand-700 font-semibold hover:underline cursor-pointer">Clear filters</button>
+                </td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
+      )}
+      {/* Only once a filter is on: with nothing set the table IS the count, and
+          saying it twice is noise. */}
+      {engaged && all.length > 0 && (
+        <p className="text-[0.71875rem] text-ink-400">Showing {rows.length} of {all.length} {W.many}. <button onClick={clearFilters} className="text-brand-700 font-semibold hover:underline cursor-pointer">Clear filters</button></p>
       )}
     </div>
   );
 }
 
-/** ONE deficiency, as a card that opens in place.
+/** ONE deficiency, opening in place — as a REGISTER ROW on the management page,
+ *  or as a card on a control's own paper.
  *
  *  Lives here rather than inside DeficienciesView because the control's own paper
  *  shows it too: a control that concluded ineffective raises a deficiency, and the
  *  auditor standing on that paper should be able to grade it and plan the fix
- *  without leaving for another tab and finding their place again. Same card, same
+ *  without leaving for another tab and finding their place again. Same body, same
  *  writes, same four-eyes rules, wherever it is opened from.
  *
- *  In a LIST it starts collapsed (user ask). Expanded, one of these is most of a
- *  screen — severity inputs, priced impact, MW indicators, the remediation plan
- *  and the lifecycle actions — so a stack of them buried the one you came to find.
- *  Collapsed, the header still carries everything needed to triage: which finding,
- *  on which control, how bad, and where it has got to. Opened from a control's own
- *  paper there is only ever one, and you asked for it, so it comes up open.
+ *  The two layouts differ only in the collapsed summary. On the management page a
+ *  register is the right shape — the columns line up, so severity, stage and whose
+ *  court it is in can be COMPARED down the page instead of re-read per card. On a
+ *  control's paper there is only ever one of these and no column to line it up
+ *  with, so it stays a card, and comes up open because you asked for it.
  *
- *  Each card owns its open state and both confirm modals — deliberately not an
- *  accordion, because comparing two findings side by side is a real thing an
- *  auditor does, and snapping one shut to open another would take that away. */
-export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean }) {
+ *  Expanded, one of these is most of a screen — severity inputs, MW indicators,
+ *  the remediation plan and the lifecycle actions — so it opens under its own row
+ *  rather than replacing it, and each row owns its open state and both confirm
+ *  modals. Deliberately not an accordion: comparing two findings side by side is
+ *  a real thing an auditor does, and snapping one shut to open another would take
+ *  that away. */
+export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true, layout = 'card' }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean; layout?: 'card' | 'row' }) {
   const {
     eng, role, me, openControl, updateDeficiency, setExceptionStatus, completeSizing, confirmRating, returnRating,
     submitPlan, reviewPlan, signOffException, reopenException, updateRemediation, addRemediationEvidence,
@@ -869,13 +910,14 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
   const W = defWord(eng.id);
   const M = eng.materiality;
   const [open, setOpen] = useState(defaultOpen);
-  // Asked-for cards bring themselves into view. The focus is consumed on arrival:
+  // Asked-for rows bring themselves into view. The focus is consumed on arrival:
   // it answers one click, and coming back to this page later should open nothing.
   const cardRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
   useEffect(() => {
     if (!defaultOpen || focusDefId !== d.id) return;
     const t = window.setTimeout(() => {
-      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (cardRef.current ?? rowRef.current)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       clearFocusDef();
     }, 160);
     return () => window.clearTimeout(t);
@@ -923,59 +965,28 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
   const r = d.remediation;
   const planReady = !!r.action.trim() && !!r.owner.trim() && !!r.date;
 
-  return (
-    <>
-      <div ref={cardRef} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-        {/* The whole header strip is the toggle — a card this tall needs a
-            target bigger than a chevron. A div rather than a button because
-            the control link inside it is itself a button, and a button
-            inside a button is invalid; same role/tabIndex/onKeyDown pattern
-            the audit register rows use. */}
-        <div
-          role="button"
-          tabIndex={0}
-          aria-expanded={open}
-          aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
-          onClick={() => setOpen(o => !o)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } }}
-          className="cursor-pointer"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
-              {/* Down to open, up to close. Deliberately NOT a rotating
-                  right-chevron: '›' is the app's drill-in mark (the handoff
-                  rows above use it to leave the page), and this opens in
-                  place. The pair also states which way the card is about to
-                  move, which one rotating glyph only implies. */}
-              {open
-                ? <ChevronUp size={15} className="shrink-0 text-brand-700" />
-                : <ChevronDown size={15} className="shrink-0 text-ink-400" />}
-              <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
-              {/* stopPropagation: opening the control is a different journey
-                  from opening the card, and the two must not fire together */}
-              {/* …and on the control's own paper that journey is a circle, so the
-                  id stays as a label there rather than a link back to here */}
-              {showControlLink
-                ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-                : <span className="font-mono text-[12px] text-ink-500">{d.controlId}</span>}
-              <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
-              {/* PARKED (Aug 2026) — the Gap type pill and the priced-impact teaser.
-                  Manual vs IT is already settled by the control's nature, design vs
-                  operating by the track pill beside this, and priced impact is an
-                  internal-audit number that was never ICFR magnitude. */}
-              {/* A fix that has missed twice is not a remediation problem any more,
-                  so the count rides the collapsed row where triage happens. */}
-              {failures >= 2 && <Pill tone="risk">{failures} failed retests</Pill>}
-            </div>
-            <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={grade} /></div>
-          </div>
-          {/* The finding itself stays on the collapsed row — clamped to one
-              line. Without it the row reads as an id and some pills, and you
-              would have to open every card to find the one you wanted. */}
-          <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
-        </div>
+  // Down to open, up to close. Deliberately NOT a rotating right-chevron: '›' is
+  // the app's drill-in mark (the handoff rows use it to leave the page), and this
+  // opens in place. The pair also states which way the row is about to move,
+  // which one rotating glyph only implies.
+  const chevron = open
+    ? <ChevronUp size={15} className="shrink-0 text-brand-700" />
+    : <ChevronDown size={15} className="shrink-0 text-ink-400" />;
+  // stopPropagation: opening the control is a different journey from opening the
+  // row, and the two must not fire together. On the control's own paper that
+  // journey is a circle, so the id stays a label there rather than a link back.
+  const controlLink = showControlLink
+    ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
+    : <span className="font-mono text-[12px] text-ink-500">{d.controlId}</span>;
+  // The whole summary is the toggle — a body this tall needs a target bigger than
+  // a chevron. Never a <button>, because the control link inside it is one and a
+  // button inside a button is invalid; same role/tabIndex/onKeyDown pattern the
+  // audit register rows use.
+  const onToggleKey = (e: ReactKeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } };
 
-        {open && (<>
+  // The expanded body — identical in both layouts, so it is built once and
+  // dropped either into the card or into a full-width row beneath this one.
+  const detail = open ? (<>
         {/* ① The mechanism — what has to change for the fix to be a fix. It sits at
             the top of the card because everything below is judged against it: the
             plan at ③, and the auditor's one question at plan review. */}
@@ -1262,13 +1273,15 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
               className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
           )}
         </div>
-        </>)}
-      </div>
+  </>) : null;
 
+  // Both confirms, portalled and layout-agnostic.
+  const modals = (<>
       {/* Attest confirm — closing is the terminal four-eyes act, so it never
-          commits on a bare click. Portalled: this card also renders inside the
+          commits on a bare click. Portalled: this body also renders inside the
           control's paper, under animated ancestors that would otherwise become
-          the containing block for a fixed backdrop. */}
+          the containing block for a fixed backdrop — and inside a table row,
+          where a backdrop could not live at all. */}
       {closing && createPortal(
         <div className="modal-backdrop" onClick={() => setClosing(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -1316,6 +1329,72 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true 
         </div>,
         document.body,
       )}
+  </>);
+
+  // ── Register row — the management page ────────────────────────────────────────
+  // The body opens in a row of its own underneath rather than inside a cell, so
+  // it gets the full width of the table and the summary above it stays a row you
+  // can still read across.
+  if (layout === 'row') return (
+    <>
+      <tr ref={rowRef} className={cn('reg-row', open && 'open')}
+        role="button" tabIndex={0} aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
+        onClick={() => setOpen(o => !o)} onKeyDown={onToggleKey}>
+        <td className="tight">
+          <span className="inline-flex items-center gap-1.5">{chevron}<span className="font-mono text-[12px] font-semibold text-ink-800">{d.id}</span></span>
+          <div className="ml-[21px]">{controlLink}</div>
+        </td>
+        <td className="tight">
+          <span className="reg-clamp text-[12.5px] text-ink-800" title={d.description}>{d.description}</span>
+          {/* A fix that has missed twice is not a remediation problem any more,
+              so the count rides the collapsed row where triage happens. */}
+          {failures >= 2 && <div className="mt-1"><Pill tone="risk">{failures} failed retests</Pill></div>}
+        </td>
+        <td><Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'TOD' : 'TOE'}</Pill></td>
+        {/* What could have slipped through — the number severity is graded on.
+            The owner is never shown the engagement's thresholds, so the
+            over-materiality mark is audit-side only. */}
+        <td className={cn('text-right tabular-nums text-[12.5px]', !isOwner && material ? 'text-risk-700 font-semibold' : 'text-ink-700')}
+          title={ct ? 'Clearly trivial' : !isOwner && material ? `At or over materiality ${fmt(M)}` : undefined}>
+          {fmt(d.magnitude)}
+        </td>
+        <td><SeverityPill s={grade} /></td>
+        <td><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill></td>
+        <td><CourtBadge court={courtForException(d)} fromRole={role} /></td>
+      </tr>
+      {open && <tr className="def-detail"><td colSpan={DEF_COLS}>{detail}</td></tr>}
+      {modals}
+    </>
+  );
+
+  // ── Card — on a control's own paper, where there is only ever one ─────────────
+  return (
+    <>
+      <div ref={cardRef} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+        <div role="button" tabIndex={0} aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
+          onClick={() => setOpen(o => !o)} onKeyDown={onToggleKey} className="cursor-pointer">
+          <div className="flex items-start justify-between gap-3">
+            <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
+              {chevron}
+              <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
+              {controlLink}
+              <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'TOD' : 'TOE'}</Pill>
+              {/* PARKED (Aug 2026) — the Gap type pill and the priced-impact teaser.
+                  Manual vs IT is already settled by the control's nature, design vs
+                  operating by the track pill beside this, and priced impact is an
+                  internal-audit number that was never ICFR magnitude. */}
+              {failures >= 2 && <Pill tone="risk">{failures} failed retests</Pill>}
+            </div>
+            <div className="inline-flex items-center gap-2 shrink-0"><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill><SeverityPill s={grade} /></div>
+          </div>
+          {/* The finding itself stays on the collapsed header — clamped to one
+              line. Without it it reads as an id and some pills, and you would
+              have to open it to find out what it was. */}
+          <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
+        </div>
+        {detail}
+      </div>
+      {modals}
     </>
   );
 }

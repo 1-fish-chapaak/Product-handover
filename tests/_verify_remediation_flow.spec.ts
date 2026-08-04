@@ -42,8 +42,15 @@ async function openExceptions(page: Page, hat?: 'Auditor' | 'Reviewer' | 'Risk O
     // engagement's exposure.
     await page.getByRole('button', { name: /My deficienc|My exception/ }).first().click();
   } else {
+    // The MW watchlist arrives COLLAPSED (user ask) — the headline and a count
+    // stand in for the rows, so they have to be opened before one can be clicked.
+    const disclosure = page.getByRole('button', { name: /Material weakness open/ }).first();
+    if ((await disclosure.getAttribute('aria-expanded')) === 'false') {
+      await disclosure.click();
+      await page.waitForTimeout(500);
+    }
     // A watchlist row names one finding and now opens that finding: the audit,
-    // the tab inside it, and the card expanded. No second click needed.
+    // the tab inside it, and the row expanded. No second click needed.
     await page.getByRole('button', { name: WATCHLIST_ROW }).first().click();
   }
   await page.waitForTimeout(1800);
@@ -55,12 +62,17 @@ async function setHat(page: Page, hat: 'Auditor' | 'Reviewer' | 'Risk Owner') {
   await page.waitForTimeout(600);
 }
 
-/** Get ONE exception by id, expanded, scoped to its own card.
+/** Get ONE exception by id, expanded, scoped to its own body.
  *
- *  By id rather than by status text: every expanded card renders the six step
+ *  By id rather than by status text: every expanded body renders the six step
  *  titles, so "Retest" and "Close" appear on all of them and a status filter
- *  lands on whichever card happens to be open. The card may already be open —
- *  a row that names one finding now opens that finding.
+ *  lands on whichever one happens to be open. It may already be open — a row
+ *  that names one finding now opens that finding.
+ *
+ *  Deficiency management is a register, so the body sits in a row of its own
+ *  (`tr.def-detail`) directly after the summary row that toggles it — which is
+ *  what this scopes to. On a control's own paper the same body is a card
+ *  instead, so that shape is the fallback.
  *
  *  DEF-A-01 Identified · A-02 Rating review · A-03 Plan review · A-04 Retest
  *  · A-05 Closed. Seeded that way in mockData so every state has a demo. */
@@ -71,6 +83,8 @@ async function openCard(page: Page, id: string) {
     await toggle.click();
     await page.waitForTimeout(600);
   }
+  const detail = page.locator(`tr.reg-row[aria-label="Collapse ${id}"] + tr.def-detail`).first();
+  if (await detail.count() > 0) return detail;
   return page.locator('div.rounded-2xl').filter({ has: page.getByRole('button', { name: `Collapse ${id}` }) }).first();
 }
 

@@ -61,6 +61,10 @@
      arguing with the width the reader dragged it to */
   overflow: hidden; text-overflow: ellipsis;
 }
+/* A column of figures reads right-aligned, header included — and `.reg-head th`
+   is specific enough to beat a utility class, so the pairing lives here. */
+.reg-head th.num { text-align: right; }
+
 /* Drag-to-resize grip — invisible until you go for it, then it says so. Sits on
    the column's own right edge, above the sticky header. */
 .reg-grip {
@@ -90,6 +94,23 @@
    the full text on the title attribute. Dense mode drops it to one. */
 .reg-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
 .reg-dense .reg-clamp { -webkit-line-clamp: 1; }
+
+/* ── Deficiency register — rows that open in place ──────────────────────────────── */
+/* The summary row keeps register manners; the body it opens sits in a row of its
+   own beneath, across the full table, so it gets the width a card had. */
+.reg-row.open { background: color-mix(in srgb, var(--color-brand-50) 55%, transparent); border-bottom-color: transparent; }
+.def-detail > td {
+  padding: 2px 14px 16px; overflow: visible; vertical-align: top;
+  background: color-mix(in srgb, var(--color-brand-50) 22%, transparent);
+  border-bottom: 1px solid var(--paper-rule-strong);
+}
+/* A row that is a record, not a door. */
+.reg-row.reg-static { cursor: default; }
+.reg-row.reg-static:hover { background: transparent; }
+/* A filterable column heading must read like the ones beside it — the UA reset
+   drops `text-transform` on <button>, so a header that carries a filter would
+   otherwise be the only title-case one in the row. */
+.def-reg .reg-head th button { text-transform: uppercase; }
 
 /* tiny track meter in a register cell */
 .cell-track { display: inline-flex; align-items: center; gap: 7px; }
