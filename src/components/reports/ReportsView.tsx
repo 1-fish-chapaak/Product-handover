@@ -30,7 +30,7 @@ import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
-  templateKind, reportKind, startReportDownload,
+  reportKind, startReportDownload,
   type EditableTemplate, type GeneratedReport,
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
@@ -39,8 +39,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { BulkAuditVariantView } from './BulkAuditVariants';
-import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
-import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type PickableQuery } from './templateQueryPool';
+import { defForKey, type GeneratedQueryDef } from './templateQueryPool';
 import ReportView from './ReportView';
 
 // Observation attachment type + helpers live in AddObservationModal.
@@ -778,109 +777,6 @@ export default function ReportsView({
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, signoffs } : prev));
   };
 
-  // Generate-from-template wizard — non-ATR templates pick queries here.
-  const [wizardTemplate, setWizardTemplate] = useState<EditableTemplate | null>(null);
-  // The wizard's entire pickable pool, derived from the user's live reports
-  // (newest first). Reports carry their own query content via generatedQueries
-  // / workflowResults; seeded demo reports without baked content are backfilled
-  // from DEMO_REPORT_QUERY_KEYS. ATR reports have no pickable queries.
-  const wizardSources = useMemo<PickableQuery[]>(() => {
-    return generatedReports.flatMap<PickableQuery>(r => {
-      if (r.atrData) return [];
-      const rows: PickableQuery[] = [];
-      const queryDef = (q: GeneratedQueryDef) => rows.push({
-        uid: `${r.id}:q:${q.id}`,
-        // Dedupe key = the query's own identity (not report-scoped), so the SAME
-        // underlying query appearing in two reports is recognised as one unit.
-        // That's what powers the picker's "Selected in <report> — click to swap"
-        // affordance: pick the query once, then move the selection between the
-        // reports it lives in. Genuinely different queries have different ids, so
-        // they stay independently selectable.
-        key: q.id,
-        label: q.title,
-        source: 'report',
-        sourceLabel: r.name,
-        risk: q.risk,
-        severity: (q.severity as 'High' | 'Medium' | 'Low'),
-        kind: 'query',
-        def: q,
-      });
-      if (r.generatedQueries?.length) {
-        r.generatedQueries.forEach(queryDef);
-      } else {
-        // Seeded demo report — backfill from its curated rich-content keys.
-        (DEMO_REPORT_QUERY_KEYS[r.id] ?? []).forEach(key => {
-          const def = defForKey(key);
-          if (def) queryDef(def);
-        });
-      }
-      // Failed/skipped runs produce no result block, so they aren't offerable.
-      (r.workflowResults ?? []).filter(w => w.runStatus !== 'failed').forEach(w => {
-        const n = w.outputTable?.rows.length ?? 0;
-        rows.push({
-          uid: `${r.id}:wf:${w.workflowId}`,
-          key: `wf:${w.workflowId}`,
-          label: w.name,
-          source: 'report',
-          sourceLabel: r.name,
-          risk: w.businessProcess ?? 'Workflow',
-          severity: w.severity,
-          kind: 'workflow',
-          workflow: w,
-          wfMeta: `${w.workflowId} · ${w.businessProcess ?? '—'} · ${n} flagged ${n === 1 ? 'record' : 'records'}`,
-        });
-      });
-      return rows;
-    });
-  }, [generatedReports]);
-  const createReportFromWizard = (rt: EditableTemplate, payload: WizardCreatePayload) => {
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const blockCount = payload.queries.length + payload.workflows.length;
-    const newReport: GeneratedReport = {
-      id: `gr-gen-${Date.now()}`,
-      templateId: rt.id,
-      kind: templateKind(rt),
-      name: uniqueReportName(payload.reportName?.trim() || `${payload.reportPeriod} ${rt.name}`),
-      tag: 'Internal Audit',
-      generatedBy: 'You',
-      generatedAt: today,
-      pages: blockCount + 2,
-      queries: payload.queries.length,
-      generatedQueries: payload.queries,
-      workflowResults: payload.workflows.length ? payload.workflows : undefined,
-      execSummary: payload.execSummary,
-      reportPeriod: payload.reportPeriod,
-      templateSections: rt.sections,
-      // Carry the template's Customize branding onto the report chrome.
-      brand: rt.brand,
-      theme: rt.theme,
-      brandColor: (rt as EditableTemplate).brandColor,
-      headerText: rt.headerText,
-      footerText: rt.footerText,
-      pageNumbers: (rt as EditableTemplate).pageNumbers,
-      signoffEnabled: (rt as EditableTemplate).signoffEnabled,
-      signatories: (rt as EditableTemplate).signatories,
-      closingEnabled: (rt as EditableTemplate).closingEnabled,
-      closingText: (rt as EditableTemplate).closingText,
-      logoDataUrl: (rt as EditableTemplate).logoDataUrl,
-      findingScale: (rt as EditableTemplate).findingScale,
-      opinionScale: (rt as EditableTemplate).opinionScale,
-      // Their word for each of ours, settled at import. Carried onto the report
-      // so every rating it prints comes out in the client's own language.
-      scaleMap: (rt as EditableTemplate).scaleMap,
-    };
-    setGeneratedReports(prev => [newReport, ...prev]);
-    setWizardTemplate(null);
-    setViewingReport(newReport);
-    const parts = [
-      payload.queries.length ? `${payload.queries.length} ${payload.queries.length === 1 ? 'query' : 'queries'}` : '',
-      payload.workflows.length ? `${payload.workflows.length} ${payload.workflows.length === 1 ? 'workflow' : 'workflows'}` : '',
-    ].filter(Boolean);
-    addToast({
-      type: 'success',
-      message: `Report generated from ${parts.join(' and ')}.`,
-    });
-  };
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
     // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
@@ -1015,9 +911,7 @@ export default function ReportsView({
     );
   }
 
-  // Template preview — the template as the page it produces. Picking a template
-  // and making the report are one action, not two, so the page that answers
-  // "what report is this?" is also where you say yes to it.
+  // Template preview — the template as the page it produces.
   if (previewTemplate) {
     const isCustom = customTemplates.some(t => t.id === previewTemplate.id);
     return (
@@ -1030,10 +924,6 @@ export default function ReportsView({
           // The confirm dialog lives on the list page, so return there first.
           setPreviewTemplate(null);
           setTemplateToDelete({ id: previewTemplate.id, name: previewTemplate.name });
-        }}
-        onGenerate={() => {
-          setPreviewTemplate(null);
-          setWizardTemplate(previewTemplate as EditableTemplate);
         }}
       />
     );
@@ -1774,18 +1664,6 @@ export default function ReportsView({
               <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); setAtrMinimized(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} onMinimizedChange={setAtrMinimized} />
             </motion.div>
           </>
-        )}
-      </AnimatePresence>
-
-      {/* Generate-from-template wizard */}
-      <AnimatePresence>
-        {wizardTemplate && (
-          <GenerateReportWizard
-            template={wizardTemplate}
-            sources={wizardSources}
-            onClose={() => setWizardTemplate(null)}
-            onCreate={(payload) => createReportFromWizard(wizardTemplate, payload)}
-          />
         )}
       </AnimatePresence>
 
