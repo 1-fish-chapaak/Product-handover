@@ -1249,7 +1249,12 @@ const IPE_TONE: Record<IpeConclusion, string> = {
  *  auditor tests, never authors, so the standard cannot quietly shrink to
  *  whatever somebody had time for. What they add is the finding and the proof. */
 function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Control; check: IpeCheck; canWrite: boolean; reportCount: number }) {
-  const { me, setIpeCheck } = useIcfr();
+  const { eng, openAuditId, me, setIpeCheck } = useIcfr();
+  // Only read for the Period coverage check — the same two helpers the parked
+  // "Period covered" row used, so the auditor sees exactly what it showed.
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const cover = check.dimension === 'Period coverage' ? coverageVerdict(control, audit?.windowFrom, audit?.windowTo) : null;
+  const emptyMonths = check.dimension === 'Period coverage' ? monthlyBreakdown(control).filter(m => m.n === 0).map(m => m.label) : [];
   const [draft, setDraft] = useState(check.note ?? '');
   const [counted, setCounted] = useState('');
   const answered = check.result !== 'Not tested';
@@ -1283,6 +1288,25 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
           <p className="text-[0.78125rem] text-ink-800 leading-relaxed mt-0.5">{check.description}</p>
           <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1 flex items-start gap-1.5"><FlaskConical size={11} className="mt-0.5 shrink-0" /> {check.method}</p>
 
+          {/* What the parked "Period covered" row put on screen: the audit's own
+              window, the span the extract actually holds, and any month inside
+              the period with nothing in it. Stated as context, not as a verdict
+              — the auditor is the one concluding now, and they cannot conclude
+              on dates they have to go and look up. */}
+          {check.dimension === 'Period coverage' && canWrite && !answered && cover && (
+            <div className="mt-2.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What the extract holds</span>
+              <p className="text-[0.6875rem] text-ink-600 leading-relaxed">
+                <span className="font-semibold text-ink-900">{cover.headline}</span> — {cover.detail}
+              </p>
+              {emptyMonths.length > 0 && (
+                <p className="text-[0.6875rem] text-mitigated-800 leading-relaxed mt-1">
+                  No instances at all in {emptyMonths.join(', ')} — either the control did not run, or those months are not in the extract.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* the auditor's own count, only where counting is the procedure */}
           {check.dimension === 'Completeness' && canWrite && !answered && (
             <div className="mt-2.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
@@ -1308,7 +1332,7 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
           {canWrite && !answered ? (
             <div className="mt-2.5">
               <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2}
-                placeholder={check.dimension === 'Completeness' ? 'What the tie-out showed — the numbers, and the variance if there is one' : check.dimension === 'Accuracy' ? 'Which records were vouched, to what, and what was found' : 'What the parameter screen showed, and how it agrees to the test scope'}
+                placeholder={check.dimension === 'Completeness' ? 'What the tie-out showed — the numbers, and the variance if there is one' : check.dimension === 'Accuracy' ? 'Which records were vouched, to what, and what was found' : check.dimension === 'Period coverage' ? 'The span the extract holds, and what accounts for any empty month inside the period' : 'What the parameter screen showed, and how it agrees to the test scope'}
                 className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
               <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                 <button onClick={() => save('Pass')} disabled={!draft.trim()} title={draft.trim() ? undefined : 'Record what was found first.'}
@@ -1340,7 +1364,8 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
 }
 
 function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWrite: boolean; isAuditor: boolean }) {
-  const { me, registerIpe, concludeIpe, clearIpe } = useIcfr();
+  // `me` went with the parked form — it only ever stamped the Run by field.
+  const { registerIpe, concludeIpe, clearIpe } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const files = useAuditFiles();
@@ -1351,33 +1376,51 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
   // Settled work folds away; unsettled work does not get to hide.
   const [open, setOpen] = useState(!reliable);
 
-  // Everything the audit already knows is filled in. The auditor is asked only
-  // for what the platform cannot know — the report's identifier in the source
-  // system, who at the client ran it, and what it totals to.
-  const [name, setName] = useState(sourceFile?.name ?? '');
-  const [system, setSystem] = useState(sourceFile?.system ?? '');
-  const [ref, setRef] = useState('');
-  const [params, setParams] = useState(pop?.criteria ?? '');
-  const [by, setBy] = useState(sourceFile?.systemFetched ? `${me} — pulled by the audit team` : '');
-  // NOT prefilled from the file record. When the file reached the audit and when
-  // the client ran the report are different dates, and "run on: at scoping" is a
-  // claim about the client that nobody made.
-  const [at, setAt] = useState('');
-  const [count, setCount] = useState(String(pop?.sourceCount ?? sourceFile?.rows ?? ''));
-  const [total, setTotal] = useState('');
+  // ── PARKED (Aug 2026) — the registration form ─────────────────────────────
+  // Eight fields, and the audit already held five of them: the report's name was
+  // the source file's name, its record count was the file's row count, the
+  // system came off the file record and the parameters were prefilled from this
+  // control's extraction criteria — which is OUR filter wearing the label of the
+  // CLIENT's statement about how they ran their report. Two different facts, one
+  // name. Asking all of it again per control is what made this step read as the
+  // same questions over and over, and what got it typed through with "qw".
+  //
+  // The checks below are seeded from the file instead (see the effect under
+  // this), so the work survives and only the asking goes. Restoring the form is
+  // uncommenting this block, the state above it and the register button.
+  //
+  // const [name, setName] = useState(sourceFile?.name ?? '');
+  // const [system, setSystem] = useState(sourceFile?.system ?? '');
+  // const [ref, setRef] = useState('');
+  // const [params, setParams] = useState(pop?.criteria ?? '');
+  // const [by, setBy] = useState(sourceFile?.systemFetched ? `${me} — pulled by the audit team` : '');
+  // const [at, setAt] = useState('');
+  // const [count, setCount] = useState(String(pop?.sourceCount ?? sourceFile?.rows ?? ''));
+  // const [total, setTotal] = useState('');
+
+  // The report IS the source file, and everything the seeding needs is already
+  // on it. So the record is created the moment there is a population to test,
+  // and the auditor arrives at the three checks rather than at a form.
+  const needsIpe = !!pop && !control.operating.ipe && canWrite && isAuditor;
+  useEffect(() => {
+    if (!needsIpe || !pop) return;
+    registerIpe(control.id, {
+      reportName: sourceFile?.name ?? pop.sourceFile ?? 'the source report',
+      system: sourceFile?.system ?? '',
+      reportRef: '',
+      parameters: '',
+      generatedBy: '',
+      generatedAt: '',
+      recordCount: pop.sourceCount ?? sourceFile?.rows ?? 0,
+      controlTotal: '',
+    });
+  }, [needsIpe, control.id, pop, sourceFile, registerIpe]);
 
   if (!pop) return null;
   const suggestion = ipe ? ipeSuggestion(ipe) : 'Not tested';
   const allAnswered = !!ipe && ipe.checks.every(k => k.result !== 'Not tested');
-  const canRegister = !!name.trim() && !!system.trim() && !!ref.trim() && !!by.trim() && Number(count) > 0;
-
-  const field = (label: string, value: string, set: (v: string) => void, placeholder: string, type: 'text' | 'number' = 'text') => (
-    <label className="min-w-0">
-      <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">{label}</span>
-      <input type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
-        className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-    </label>
-  );
+  // canRegister and the `field` helper went with the form they gated and built.
+  // Both are in the parked block's history if it ever comes back.
 
   return (
     <div className={cn('rounded-xl border', reliable ? 'border-compliant-200 bg-compliant-50/30' : ipe?.conclusion === 'Not reliable' ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-paper-50/50')}>
@@ -1393,50 +1436,24 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
       {open && (
         <div className="px-3.5 pb-3.5">
           {!ipe ? (
-            canWrite && isAuditor ? (
-              <>
-                <p className="text-[0.71875rem] text-ink-500 leading-relaxed mb-3">
-                  {sourceFile?.systemFetched
-                    ? <>This source was pulled from <span className="font-semibold text-ink-700">{sourceFile.system}</span> by the audit team, so how it was run is already known. What it holds and what it says still have to be proven.</>
-                    : <>A report the client generated is not reliable because it arrived. Register it, and the three checks every entity-produced report answers are seeded for you to work.</>}
-                </p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-                  {field('Report name', name, setName, 'e.g. New vendor master listing')}
-                  {field('Source system', system, setSystem, 'e.g. SAP S/4HANA — Production')}
-                  {field('Report / transaction code', ref, setRef, 'e.g. S_ALR_87012086')}
-                  {field('Run by (at the client)', by, setBy, 'who generated it')}
-                  {field('Run on', at, setAt, 'e.g. 4 Apr 2026')}
-                  {field('Records in the report', count, setCount, 'row count', 'number')}
-                </div>
-                <div className="mt-2.5">
-                  <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Parameters it was run with</span>
-                  <textarea value={params} onChange={e => setParams(e.target.value)} rows={2} placeholder="Company code, date range, document types — exactly how it was run"
-                    className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                </div>
-                <div className="mt-2.5">
-                  {field('Control total, and what it was agreed to', total, setTotal, 'e.g. ₹41.2 Cr, agreed to GL 200100')}
-                </div>
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  <button disabled={!canRegister} title={canRegister ? undefined : 'Name, system, report code, who ran it and the record count are all needed.'}
-                    onClick={() => {
-                      registerIpe(control.id, { reportName: name.trim(), system: system.trim(), reportRef: ref.trim(), parameters: params.trim(), generatedBy: by.trim(), generatedAt: at.trim(), recordCount: Number(count), controlTotal: total.trim() });
-                      logEvent({ action: 'Create', description: `Registered "${name.trim()}" as information produced by the entity on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-                    }}
-                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><FileCheck2 size={14} /> Register the report</button>
-                  <span className="text-[0.65625rem] text-ink-400">The population cannot lock until this report is proven reliable.</span>
-                </div>
-              </>
-            ) : (
-              <p className="text-[0.71875rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
-            )
+            /* The eight-field form stood here and is parked — see the note at the
+               top of this component. What is left is the one honest case: a hat
+               that cannot seed the record, told why rather than shown a form it
+               is not allowed to submit. */
+            <p className="text-[0.71875rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
           ) : (
             <>
-              {/* what was registered — the facts anyone needs to re-run it */}
+              {/* What the audit holds about this report. Every part is optional
+                  except the count, because nothing is typed in any more — the
+                  record is seeded off the source file, so a separator is only
+                  printed when there is something on both sides of it. */}
               <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <span className="block text-[0.78125rem] font-bold text-ink-900 truncate">{ipe.reportName}</span>
-                    <span className="block text-[0.6875rem] text-ink-500 mt-0.5 truncate">{ipe.system} · <span className="font-mono">{ipe.reportRef}</span> · {ipe.recordCount.toLocaleString()} records</span>
+                    <span className="block text-[0.6875rem] text-ink-500 mt-0.5 truncate">
+                      {[ipe.system, ipe.reportRef, `${ipe.recordCount.toLocaleString()} records`].filter(Boolean).join(' · ')}
+                    </span>
                   </div>
                   {canWrite && isAuditor && (
                     <button onClick={() => { clearIpe(control.id); logEvent({ action: 'Delete', description: `Withdrew the registered report on ${control.id} — IPE testing restarted`, module: 'SOX ICFR', entity: 'Evidence' }); }}
@@ -1460,12 +1477,12 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                   {ipe.conclusion !== 'Not tested'
                     ? <>Concluded <span className={cn('font-bold', IPE_TONE[ipe.conclusion])}>{ipe.conclusion.toLowerCase()}</span> by {ipe.testedBy}{ipe.testedAt ? `, ${ipe.testedAt}` : ''}.</>
                     : allAnswered
-                      ? <>All three worked. The checks read <span className="font-semibold text-ink-600">{suggestion.toLowerCase()}</span> — a single failure sinks the report.</>
-                      : 'Work all three checks before concluding.'}
+                      ? <>All {ipe.checks.length} worked. The checks read <span className="font-semibold text-ink-600">{suggestion.toLowerCase()}</span> — a single failure sinks the report.</>
+                      : `Work all ${ipe.checks.length} checks before concluding.`}
                 </p>
                 {canWrite && isAuditor && ipe.conclusion === 'Not tested' && (
                   <div className="flex items-center gap-2 shrink-0">
-                    <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? 'Work all three checks first.' : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
+                    <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? `Work all ${ipe.checks.length} checks first.` : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
                       onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false); addToast({ type: 'success', title: 'Report reliable', message: `${ipe.reportName} — the population can be locked.` }); }}
                       className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
                     <button disabled={!allAnswered}
@@ -1984,23 +2001,29 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
   // The two sums the application does for itself, and what is still missing
   // before the population can be locked.
-  const cv = countVerdict(control);
-  const gv = coverageVerdict(control, winFrom, winTo);
-  const needsExpected = pop?.expectedCount == null && derivedRunCount(control, pop?.filterFrom, pop?.filterTo) == null;
-  const [expectedDraft, setExpectedDraft] = useState('');
+  // countVerdict is no longer read on this screen — its row is parked. It still
+  // runs inside the working paper, which prints the extracted-vs-expected
+  // comparison for a reviewer reperforming the extract.
+  // const cv = countVerdict(control);
+  // coverageVerdict went the same way — the Period covered row is parked, and
+  // the check that replaced it reads the verdict for itself inside the IPE test.
+  // const gv = coverageVerdict(control, winFrom, winTo);
+  // Both went with the Count row: needsExpected only ever decided whether to
+  // show the expected-count recorder, and expectedDraft was that input's state.
+  // const needsExpected = pop?.expectedCount == null && derivedRunCount(control, pop?.filterFrom, pop?.filterTo) == null;
+  // const [expectedDraft, setExpectedDraft] = useState('');
   const ready = populationReady(control, winFrom, winTo);
   // Named in the order the step is worked, so the message always points at the
   // next thing to do rather than the last thing outstanding.
   const ipe = control.operating.ipe;
-  const missing = needsExpected ? 'Record how many instances were expected before locking.'
-    : cv?.blocks && !pop?.countNote?.trim()
-      ? (cv.level === 'fail' ? 'The extract is short — refilter, or record why the shortfall stands, before locking.' : 'Refilter, or accept the count difference with a reason, before locking.')
-      : gv?.blocks && !pop?.coverageNote?.trim() ? 'Settle the period gap, or record why it stands, before locking.'
-        : !pop?.countConfirmed ? 'Agree the count reads right before locking.'
+  // Everything else on this step is parked, so the only thing that can hold the
+  // lock is the report — and its four checks now carry the period coverage and
+  // the completeness those parked rows used to compute.
+  const missing =
           // Named as its own reason rather than folded into the catch-all: the
           // auditor who cannot lock needs to be told the block is upstream of
           // the population entirely, not in the filter they were just editing.
-          : !ipe ? 'Register the report this population came out of, and prove it, before locking.'
+          !ipe ? 'Register the report this population came out of, and prove it, before locking.'
             : ipe.conclusion === 'Not reliable' ? 'The report behind this population is not reliable — nothing can be locked off it.'
               : ipe.conclusion === 'Not tested' ? 'Finish the IPE test on the report before locking.'
                 : 'A check that did not hold needs resolving before locking.';
@@ -2208,46 +2231,94 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
           <div className="ac-div my-4" />
 
-          {/* ── what the application worked out for itself ──────────────────
-              Nobody is asked to agree with arithmetic. The period and the count
-              are both things it already holds the numbers for, so it does the
-              sum and states the answer. A failed sum is argued with in writing,
-              not ticked past.
+          {/* ── PARKED (Aug 2026) — "Checked automatically" ────────────────
+              The Count row went first; Period covered is the last of the two,
+              and the heading goes with it because there is nothing left under
+              it. Both were arithmetic the application had already done, stated
+              back as checks that went green on their own — which read as the
+              IPE checks asked a second time.
 
-              Period first, then the count — so the count's arithmetic and the
-              count's context sit next to each other rather than either side of
-              a check about something else. */}
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Checked automatically</span>
-          <div className="space-y-1.5">
-            <VerdictRow label="Period covered" v={gv} note={pop.coverageNote} canWrite={canWrite && !locked}
-              placeholder="e.g. the system was cut over on 1 Mar — pre-cutover instances are in the legacy extract, tested separately"
-              onNote={t => setPopulationFacts(control.id, { coverageNote: t })}
-              onRefilter={isAuditor ? refilter : undefined} />
-            <VerdictRow label="Count" v={cv} note={pop.countNote} canWrite={canWrite && !locked}
-              placeholder="e.g. the expected figure was last year's estimate — volumes rose after the new vendor onboarding"
-              onNote={t => setPopulationFacts(control.id, { countNote: t })}
-              onRefilter={isAuditor ? refilter : undefined}>
-              {cv && cv.blocks && needsExpected && (
-                <div className="mt-2 flex items-center gap-2">
-                  <input type="number" min={1} value={expectedDraft} onChange={e => setExpectedDraft(e.target.value)} placeholder="expected"
-                    disabled={!canWrite || locked}
-                    className="w-28 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
-                  <button disabled={!canWrite || locked || !Number(expectedDraft)}
-                    onClick={() => setPopulationFacts(control.id, { expectedCount: Number(expectedDraft) })}
-                    className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 enabled:hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Record</button>
-                  <span className="text-[0.65625rem] text-ink-400">then the comparison is ours to make</span>
-                </div>
-              )}
-            </VerdictRow>
-          </div>
+              Period coverage is NOT lost: it is the fourth manual check in the
+              IPE test now, with the same window and empty-month facts shown as
+              context beside it. That is the honest version of the question —
+              the sum never knew whether an empty March is a hole in the extract
+              or a month the control did not run in, and it went green either
+              way.
 
-          {/* ── the count, with what it takes to judge it ───────────────────
-              Nobody can say whether 1,418 is the right number by looking at
-              1,418. The months it falls across and the same control's figure
-              last round are what turn it into something a person can agree or
-              disagree with — so they are put on the screen, and the agreement
-              is asked for afterwards rather than instead. */}
-          <CountContext control={control} canWrite={canWrite && !locked} locked={locked} />
+              coverageVerdict and monthlyBreakdown still run: the check reads
+              them for that context, and the working paper still prints the
+              comparison.
+
+          // {/* ── what the application worked out for itself ──────────────────
+          // Nobody is asked to agree with arithmetic. The period and the count
+          // are both things it already holds the numbers for, so it does the
+          // sum and states the answer. A failed sum is argued with in writing,
+          // not ticked past.
+          //
+          // Period first, then the count — so the count's arithmetic and the
+          // count's context sit next to each other rather than either side of
+          // a check about something else. *⁄}
+          // <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Checked automatically</span>
+          // <div className="space-y-1.5">
+          // <VerdictRow label="Period covered" v={gv} note={pop.coverageNote} canWrite={canWrite && !locked}
+          // placeholder="e.g. the system was cut over on 1 Mar — pre-cutover instances are in the legacy extract, tested separately"
+          // onNote={t => setPopulationFacts(control.id, { coverageNote: t })}
+          // onRefilter={isAuditor ? refilter : undefined} />
+          // {/* ── PARKED (Aug 2026) — the Count row ──────────────────────
+          // "1,223 extracted against 1,200 expected — 23 over, 2%, inside
+          // the 5% band." Arithmetic the application had already done,
+          // stated back as a check that goes green on its own, and the same
+          // ground the IPE Completeness check covers by asking whether the
+          // report was whole in the first place.
+          //
+          // Its expected-count recorder went with it — that input only ever
+          // existed to feed this comparison. Period covered stays; it is the
+          // one of the two that says something the filter cannot.
+          //
+          // The lock no longer waits on a countNote either (see
+          // populationReady): this row was the only place to write one.
+          //
+          // // <VerdictRow label="Count" v={cv} note={pop.countNote} canWrite={canWrite && !locked}
+          // // placeholder="e.g. the expected figure was last year's estimate — volumes rose after the new vendor onboarding"
+          // // onNote={t => setPopulationFacts(control.id, { countNote: t })}
+          // // onRefilter={isAuditor ? refilter : undefined}>
+          // // {cv && cv.blocks && needsExpected && (
+          // // <div className="mt-2 flex items-center gap-2">
+          // // <input type="number" min={1} value={expectedDraft} onChange={e => setExpectedDraft(e.target.value)} placeholder="expected"
+          // // disabled={!canWrite || locked}
+          // // className="w-28 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+          // // <button disabled={!canWrite || locked || !Number(expectedDraft)}
+          // // onClick={() => setPopulationFacts(control.id, { expectedCount: Number(expectedDraft) })}
+          // // className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 enabled:hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Record</button>
+          // // <span className="text-[0.65625rem] text-ink-400">then the comparison is ours to make</span>
+          // // </div>
+          // // )}
+          // // </VerdictRow>
+          // *⁄}
+          // </div>
+          */}
+
+          {/* ── PARKED (Aug 2026) — "Does the count read right?" ───────────
+              The month bars, the prior round's figure and the agreement button
+              that set countConfirmed. CountContext is still defined below, so
+              restoring the step's judgement layer is uncommenting one line.
+
+              Its copy had also gone stale: "The arithmetic is settled above"
+              pointed at the two computed rows parked earlier the same day, so
+              by then it named something no longer on the screen.
+
+              The count agreement no longer gates the lock either — see
+              populationReady. What the lock waits on now is the report, and its
+              four checks are the ones a person actually performs.
+
+          // {/* ── the count, with what it takes to judge it ───────────────────
+          // Nobody can say whether 1,418 is the right number by looking at
+          // 1,418. The months it falls across and the same control's figure
+          // last round are what turn it into something a person can agree or
+          // disagree with — so they are put on the screen, and the agreement
+          // is asked for afterwards rather than instead. *⁄}
+          // <CountContext control={control} canWrite={canWrite && !locked} locked={locked} />
+          */}
 
           {/* ── the report itself, under test ───────────────────────────────
               Last thing before the lock, because it is the last thing that has

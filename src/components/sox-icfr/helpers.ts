@@ -808,10 +808,23 @@ export function coverageVerdict(c: Control, windowFrom?: string, windowTo?: stri
 export function populationReady(c: Control, windowFrom?: string, windowTo?: string): boolean {
   const pop = c.operating.population;
   if (!pop) return false;
-  const cv = countVerdict(c);
-  const gv = coverageVerdict(c, windowFrom, windowTo);
-  if (cv?.blocks && !pop.countNote?.trim()) return false;
-  if (gv?.blocks && !pop.coverageNote?.trim()) return false;
+  // The COUNT verdict no longer gates the lock (Aug 2026). Its row was parked,
+  // and that row was the only place a countNote could be written — so leaving
+  // the gate would deadlock every population whose extract missed its estimate,
+  // with no field anywhere to release it. countVerdict still runs for the
+  // working paper, which prints the comparison either way.
+  //
+  // Period coverage still gates, because its row is still on the screen: a
+  // period the extract does not cover is a hole in the population, and there is
+  // somewhere to say why it stands.
+  // Period coverage no longer gates the lock from here either (Aug 2026). Its
+  // row was parked and that row was the only place a coverageNote could be
+  // written — so the gate would have deadlocked every population whose extract
+  // stops short, with no field anywhere to release it.
+  //
+  // Nothing is waved through: period coverage is now the fourth check inside the
+  // IPE test below, and the report has to conclude Reliable before anything
+  // locks. The gate did not disappear, it moved to where the auditor answers it.
   // The report the population came out of is itself under test, and it has to
   // pass before anything is built on it. A population drawn from an unproven
   // report is not a slightly weaker population — it is the wrong one, so it
@@ -822,7 +835,14 @@ export function populationReady(c: Control, windowFrom?: string, windowTo?: stri
   // file, was answered when that file entered the audit, and a file with no
   // answer cannot be picked as a source in the first place — so by the time
   // there is a population to lock, the question is already settled.
-  return !!pop.countConfirmed;
+  // Nor the count agreement, since Aug 2026: "Does the count read right?" was
+  // parked and it was the only thing that set countConfirmed. A gate on a flag
+  // nothing can raise is not a standard, it is a locked door with no key.
+  //
+  // What the lock waits on is the report itself, above — four checks, each one
+  // a procedure a person performs and signs. That is a higher bar than the
+  // three computed rows this function used to stack in front of it.
+  return true;
 }
 
 // ─── The file registry — provenance, once per file ───────────────────────────────

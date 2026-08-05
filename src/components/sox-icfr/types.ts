@@ -515,8 +515,8 @@ export interface EvidenceReport {
 // under test: was it run with the right parameters, does it hold every record it
 // should, and is what it says true? Reliance without that is reliance on nothing —
 // so a report that isn't concluded Reliable locks the sample step behind it.
-export type IpeDimension = 'Source & parameters' | 'Completeness' | 'Accuracy';
-export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Completeness', 'Accuracy'];
+export type IpeDimension = 'Source & parameters' | 'Period coverage' | 'Completeness' | 'Accuracy';
+export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Period coverage', 'Completeness', 'Accuracy'];
 /** One dimension's proof — what is claimed, how it was proven, what was found. */
 export interface IpeCheck {
   id: string;
@@ -1280,13 +1280,26 @@ export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchar
 // export const defaultGapType = (track: 'design' | 'operating', nature: Nature): GapType =>
 //   (track === 'operating' ? 'TG' : nature === 'Manual' ? 'MDG' : 'ITDG');
 
-/** The three checks every entity-produced report answers before it is relied on.
+/** The checks every entity-produced report answers before it is relied on.
+ *  Period coverage joined the original three in Aug 2026, off the parked
+ *  "Checked automatically" row — same question, answered by a person now.
  *  Seeded when the report is registered so the auditor tests, never authors. */
 export const ipeChecklist = (reportLabel: string): Omit<IpeCheck, 'id'>[] => [
   {
     dimension: 'Source & parameters',
     description: `${reportLabel} was run from the live system over the audit period, with the scoping filters the test assumes.`,
     method: 'Inspect the parameter screen capture — system, company code, date range and document types — and agree each to the test scope.',
+    result: 'Not tested',
+  },
+  {
+    // Was the "Period covered" row under "Checked automatically", where the
+    // application measured the extract's span against the audit window and went
+    // green on its own. It is a person's check now: the arithmetic never knew
+    // whether a month with no instances is a hole in the extract or a month the
+    // control genuinely did not run in, and that is the whole question.
+    dimension: 'Period coverage',
+    description: 'The extract spans the whole audit period — and where a month inside it is empty, that is the control not running, not the extract stopping short.',
+    method: 'Agree the earliest and latest instance to the audit period, and account for any month inside it with no instances.',
     result: 'Not tested',
   },
   {
@@ -1303,7 +1316,7 @@ export const ipeChecklist = (reportLabel: string): Omit<IpeCheck, 'id'>[] => [
   },
 ];
 
-/** What the three checks add up to. A single failure sinks the report — an
+/** What the checks add up to. A single failure sinks the report — an
  *  incomplete population is the wrong population, not a slightly worse one. */
 export const ipeSuggestion = (t: IpeTest): IpeConclusion =>
   t.checks.some(c => c.result === 'Fail') ? 'Not reliable'
