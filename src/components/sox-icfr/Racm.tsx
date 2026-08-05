@@ -213,7 +213,7 @@ export function RacmLanding() {
   // openRacmMatrix is deliberately not read here any more — the row opens the
   // spreadsheet editor. The action stays on the store (parked, house
   // convention), and with it the drilled matrix page it used to reach.
-  const { eng, role, createRacm } = useIcfr();
+  const { eng, role, createRacm, racmCreateOpen, clearRacmCreate } = useIcfr();
   const { addToast } = useToast();
 
   // The matrix shows what the OPEN audit covers — its entities' processes.
@@ -237,6 +237,16 @@ export function RacmLanding() {
   useEffect(() => () => { if (extractTimer.current != null) window.clearTimeout(extractTimer.current); }, []);
 
   const canCreate = role === 'auditor' && !isEngagementLocked(eng);
+
+  // Arriving from the Overview's "Upload RACM": open the chooser on landing,
+  // then consume the flag so a later visit to this tab is not ambushed by it.
+  // Gated on canCreate for the same reason the button is — a hat that cannot
+  // create should not be handed the modal by a navigation.
+  useEffect(() => {
+    if (!racmCreateOpen) return;
+    if (canCreate) setCreating(true);
+    clearRacmCreate();
+  }, [racmCreateOpen, canCreate, clearRacmCreate]);
   const inScope = useMemo(() => processes.map(p => p.name), [processes]);
   const available = useMemo(() => {
     const have = new Set(inScope);
