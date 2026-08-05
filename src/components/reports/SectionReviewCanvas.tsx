@@ -293,7 +293,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           value={section.name}
           onChange={e => onRename(e.target.value)}
           placeholder="Name this section"
-          title="Click to rename this section"
+          title={section.name ? `${section.name}. Click to rename.` : 'Click to rename this section'}
           className="min-w-[18ch] flex-1 -ml-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
         />
         <Pencil size={12} className="shrink-0 text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
