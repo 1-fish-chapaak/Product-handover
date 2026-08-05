@@ -1664,7 +1664,7 @@ export default function ReportsView({
             initialName={editingTemplate.id === 'ct-blank' && (editingTemplate.sections?.length ?? 0) === 0 ? '' : undefined}
             // Save dismisses everything (terminal); Cancel just closes the
             // editor so the still-mounted wizard reappears with its selections.
-            onClose={() => { setEditingTemplate(null); setWizardTemplate(null); }}
+            onClose={() => { setEditingTemplate(null); }}
             onCancel={() => { setEditingTemplate(null); }}
             onSaveNew={(created) => addCustomTemplate(created)}
             onSaveEdit={(updated) => updateCustomTemplate(updated)}
