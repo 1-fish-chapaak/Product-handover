@@ -127,16 +127,19 @@ const autoTrack = (conclusion: TrackConclusion, steps: OperatingStep[]): Operati
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
 
-/** A tested entity-produced report. The three checks come from the standard
+/** A tested entity-produced report. The checks come from the standard
  *  checklist so a seeded paper reads exactly like one the auditor worked; the
  *  findings are what a real paper carries — the tie-out numbers, not "OK". */
 let _ipe = 0;
 const ipeTest = (meta: {
   reportName: string; system?: string; reportRef: string; parameters: string;
   generatedBy: string; recordCount: number; controlTotal: string; file: string;
-  findings: [string, string, string];
+  /** One finding per dimension, in checklist order. Period coverage joined the
+   *  list in Aug 2026 and every seed pre-dates it, so a missing entry falls back
+   *  rather than printing a blank finding on a check that passed. */
+  findings: string[];
   /** Which dimension failed, if any — its check goes Fail and the report sinks. */
-  failed?: 0 | 1 | 2;
+  failed?: number;
 }): IpeTest => {
   const n = ++_ipe;
   const reliable = meta.failed === undefined;
@@ -154,7 +157,13 @@ const ipeTest = (meta: {
       ...k,
       id: `ipe-${n}-${i}`,
       result: meta.failed === i ? 'Fail' : 'Pass',
-      note: meta.findings[i],
+      // The seeds carry findings for the three original dimensions in order, so
+      // Period coverage — added later, and second in the list — has none of its
+      // own. It gets a finding written from the same facts its check shows on
+      // screen rather than an empty cell on the paper.
+      note: k.dimension === 'Period coverage'
+        ? `Earliest and latest instance agreed to the audit period; every month inside it carries instances.`
+        : meta.findings[i > 1 ? i - 1 : i],
     })),
     conclusion: reliable ? 'Reliable' : 'Not reliable',
     testedBy: 'A. Mehta',

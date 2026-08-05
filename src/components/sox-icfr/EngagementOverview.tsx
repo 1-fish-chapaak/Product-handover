@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AlertTriangle, ArrowRight, Building2, CalendarClock, CalendarRange, Check, CheckCircle2, ChevronDown, Circle,
-  Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
+  Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, UploadCloud, Users,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
@@ -392,7 +392,7 @@ function MasterRow({ icon: Icon, title, body, count, onClick }: {
 // ── The page ─────────────────────────────────────────────────────────────────
 
 export default function EngagementOverview() {
-  const { eng, role, openAudit, openDeficiency, setTab, setView } = useIcfr();
+  const { eng, role, openAudit, openDeficiency, setTab, setView, openRacmCreate } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
@@ -518,6 +518,28 @@ export default function EngagementOverview() {
 
   // Nothing to show a portfolio of yet.
   if (eng.audits.length === 0) {
+    // Here — and only here — the RACM leads. An audit scopes itself from the
+    // matrix, so on a blank engagement "New audit" is the second move, not the
+    // first: it would open a wizard whose Scope step has nothing to offer.
+    // Both stay live; the ranking is the advice, not a gate. Once there are
+    // audits, New audit is the toolbar's one create action again.
+    const firstActions = canCreate ? (
+      <div className="flex items-center justify-center gap-2 flex-wrap">
+        <button
+          onClick={openRacmCreate}
+          title="Import a matrix, or extract one from an SOP — the audit scopes itself from it"
+          className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
+        >
+          <UploadCloud size={15} /> Upload RACM
+        </button>
+        <button
+          onClick={() => setCreating(true)}
+          className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+        >
+          <Plus size={15} /> New audit
+        </button>
+      </div>
+    ) : null;
     const steps = [
       { done: processes.length > 0, label: 'RACM master scoped', detail: `${processes.length} process${processes.length === 1 ? '' : 'es'}` },
       { done: eng.controls.length > 0, label: 'Control library populated', detail: `${eng.controls.length} controls` },
@@ -529,7 +551,7 @@ export default function EngagementOverview() {
           icon={ScrollText}
           title="No audits yet"
           body="An audit sets the period it covers, the round it is, what it tests and the materiality it is measured against. Everything on this page is a read-out across audits, so it starts with the first one."
-          action={newAuditBtn ?? undefined}
+          action={firstActions ?? undefined}
         />
         <div className={cn(cardCls, 'mt-5 max-w-[480px] mx-auto')}>
           <span className={cn(eyebrow, 'text-brand-600')}>Setup</span>
