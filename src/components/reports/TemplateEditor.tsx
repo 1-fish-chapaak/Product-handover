@@ -42,13 +42,15 @@ import { useAuditLog } from '../../context/AdminDataContext';
 // turns amber and a hint warns about truncation, but saving is never blocked.
 
 /** The check screen, in the order a client actually approves a format: what it
- *  looks like, what is in it, and the pages that close it. One long screen made
- *  three different jobs compete; these are the three. */
-type ReviewStep = 'theme' | 'content' | 'signoff';
+ *  looks like (and closes with), then what is in it. Three steps used to split
+ *  this — look, content, sign-off — but look and sign-off are both a glance and
+ *  a few toggles, not work, so they read as one job. Content is the only one
+ *  that takes real attention, and it now gets a step to itself instead of
+ *  sharing top billing with two quick confirmations. */
+type ReviewStep = 'look' | 'content';
 const REVIEW_STEPS: { key: ReviewStep; label: string }[] = [
-  { key: 'theme', label: 'Theme' },
+  { key: 'look', label: 'Look' },
   { key: 'content', label: 'Content' },
-  { key: 'signoff', label: 'Sign-off & watermark' },
 ];
 // Hard cap on the template name — mirrors the letterhead 60-char counter, but
 // enforced (a name this long overflows the cover and the picker rows).
@@ -649,11 +651,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // seeing sits behind a chevron. The chevron stays, for tidying away.
   const [showPageSetup, setShowPageSetup] = useState(true);
   const [showCoverLook, setShowCoverLook] = useState(true);
-  // The check screen runs in two steps: what the report LOOKS like (brand,
-  // letterhead, colours, rating words) and then what is IN it (the sections).
-  // Confirming a cover and confirming an outline are two different jobs, and
-  // one screen carrying both read as a wall.
-  const [reviewStep, setReviewStep] = useState<ReviewStep>('theme');
+  // The check screen runs in two steps: what the report LOOKS like and closes
+  // with (brand, letterhead, colours, rating words, sign-off, watermark) and
+  // then what is IN it (the sections). Confirming a look and confirming an
+  // outline are two different jobs, and one screen carrying both read as a wall.
+  const [reviewStep, setReviewStep] = useState<ReviewStep>('look');
   // A new template opens on the question that actually matters first: do you
   // already have a report that looks the way you want, or are you building one?
   // Uploading one is the shorter road by a mile, so it leads. Editing an
@@ -962,7 +964,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // until it is confirmed beside the pages of the real document.
     setReviewSections(detected);
     setReviewBaseline(detected);
-    setReviewStep('theme');
+    setReviewStep('look');
     setPendingImport({ fileName: file.name, kind, result });
 
     // Headings with nothing beneath them aren't turned into sections, but they
@@ -2453,12 +2455,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           so the job here is verify, not decide. */}
                       <>
                         <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-500">
-                          {reviewStep === 'theme'
-                            ? <>The cover, the letterhead and the words your report grades in, read off your own document.</>
-                            : reviewStep === 'content'
-                            ? <>We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
-                                {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}</>
-                            : <>The pages that close every report: who signs it, how it ends, what is stamped across it.</>}
+                          {reviewStep === 'look'
+                            ? <>The cover, the letterhead and the words your report grades in, plus how every report signs off and closes.</>
+                            : <>We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
+                                {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}</>}
                         </p>
                         {/* Its own line, under the sentence. Spliced into it, the
                             whole thing read as one run-on paragraph in three
@@ -2518,11 +2518,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     hand-roll two columns and put our reading of their report
                     on the left instead of their report. */}
                 <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
-                  {reviewStep === 'theme' ? (
-                    /* Step one — how the report LOOKS. Their own first page on
-                       the left, the cover we would print on the right, and under
-                       it every setting the read captured, each with the value it
-                       took. Nothing to type: the job is to look and agree. */
+                  {reviewStep === 'look' ? (
+                    /* Step one — how the report LOOKS and how it closes. Their
+                       own first page on the left; on the right, the cover we'd
+                       print, every setting the read captured, and — since
+                       agreeing a cover and flipping four closing switches are
+                       both a glance, not work — the sign-off/watermark toggles
+                       stacked underneath rather than gated behind their own
+                       step. Nothing to type up top: the job there is to look
+                       and agree. The toggles are the only real decisions here. */
                     <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-0">
                       <section className="flex min-h-0 flex-col border-r border-canvas-border pr-6">
                         <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
@@ -2597,13 +2601,85 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                                 {/* Their grading words against ours: a property of
                                     the format, so it is settled with the look. */}
                                 {ratingWordsPanel}
+
+                                {/* How every report signs off and closes — four
+                                    switches, each still read against what the
+                                    upload actually had, folded in here rather
+                                    than gated behind a step of their own. */}
+                                <div className="mt-4 border-t border-canvas-border pt-4">
+                                  <GroupEyebrow hint="shown on every report">How it closes</GroupEyebrow>
+                                  <div className="border-t border-canvas-border">
+                                    {([
+                                      {
+                                        label: 'Page numbers',
+                                        hint: pendingImport.result?.furniture?.pageNumberPattern
+                                          ? `Your ${partWord}s are numbered, so ours are too`
+                                          : `We found no numbers on your ${partWord}s`,
+                                        on: pageNumbers,
+                                        set: setPageNumbers,
+                                      },
+                                      {
+                                        label: 'Signature block',
+                                        hint: signatories.length
+                                          ? `${signatories.length} ${signatories.length === 1 ? 'role' : 'roles'} read from your sign-off page`
+                                          : 'Job titles, signature lines and a date on every report',
+                                        on: signoffEnabled,
+                                        set: toggleSignoff,
+                                      },
+                                      {
+                                        label: 'Closing page',
+                                        hint: closingText.length
+                                          ? 'The last page of your report, printed word for word'
+                                          : 'A last page, printed exactly as written',
+                                        on: closingEnabled,
+                                        set: toggleClosing,
+                                      },
+                                      {
+                                        label: 'Watermark',
+                                        hint: 'A diagonal mark across every page',
+                                        on: watermark.enabled,
+                                        set: (v: boolean) => setWm({ enabled: v }),
+                                      },
+                                    ]).map(row => (
+                                      <div key={row.label} className="flex items-center justify-between gap-4 border-b border-canvas-border py-3">
+                                        <span className="min-w-0">
+                                          <span className="block text-[0.8125rem] font-medium text-ink-900">{row.label}</span>
+                                          <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">{row.hint}</span>
+                                        </span>
+                                        <Toggle checked={row.on} onChange={row.set} label={row.label} />
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {signoffEnabled && signatories.length > 0 && (
+                                    <div className="mt-4">
+                                      <GroupEyebrow hint="read from your report">Who signs</GroupEyebrow>
+                                      <ul className="flex flex-wrap gap-1.5">
+                                        {signatories.map(sig => (
+                                          <li key={sig.id} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2.5 py-1 text-[0.75rem] text-ink-700">{sig.role}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {closingEnabled && closingText.length > 0 && (
+                                    <div className="mt-4">
+                                      <GroupEyebrow hint="printed word for word">How it ends</GroupEyebrow>
+                                      <div className="rounded-lg border border-canvas-border bg-canvas px-4 py-3">
+                                        {closingText.map((line, li) => (
+                                          <p key={li} className="text-[0.75rem] leading-relaxed text-ink-700">{line}</p>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </>
                             );
                           })()}
                         </div>
                       </section>
                     </div>
-                  ) : reviewStep === 'content' ? (
+                  ) : (
                   <SectionReviewCanvas
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
@@ -2628,101 +2704,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       logo: logoDataUrl,
                     })}
                   />
-                  ) : (
-                    /* Step three — the pages that close a report. Their own last
-                       page beside the settings the read turned on, each still a
-                       switch: this is where a signature page or a watermark is
-                       agreed, not somewhere in a panel afterwards. */
-                    <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-0">
-                      <section className="flex min-h-0 flex-col border-r border-canvas-border pr-6">
-                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
-                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
-                          <span className="text-[0.6875rem] text-ink-400">the last {partWord} of the {partWord === 'slide' ? 'deck' : 'report'} you uploaded</span>
-                        </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-                          {(() => {
-                            const shots = pendingImport.result?.pages ?? [];
-                            const last = shots[shots.length - 1];
-                            return last
-                              ? <img src={last} alt={`${pendingImport.fileName}, last ${partWord}`} className="w-full rounded-lg border border-canvas-border" />
-                              : <p className="text-[0.75rem] text-ink-400">No page image for this file.</p>;
-                          })()}
-                        </div>
-                      </section>
-
-                      <section className="flex min-h-0 flex-col pl-6">
-                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
-                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-brand-700">To-be state</span>
-                          <span className="text-[0.6875rem] text-ink-400">what closes every report you generate</span>
-                        </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-                          <div className="border-t border-canvas-border">
-                            {([
-                              {
-                                label: 'Page numbers',
-                                hint: pendingImport.result?.furniture?.pageNumberPattern
-                                  ? `Your ${partWord}s are numbered, so ours are too`
-                                  : `We found no numbers on your ${partWord}s`,
-                                on: pageNumbers,
-                                set: setPageNumbers,
-                              },
-                              {
-                                label: 'Signature block',
-                                hint: signatories.length
-                                  ? `${signatories.length} ${signatories.length === 1 ? 'role' : 'roles'} read from your sign-off page`
-                                  : 'Job titles, signature lines and a date on every report',
-                                on: signoffEnabled,
-                                set: toggleSignoff,
-                              },
-                              {
-                                label: 'Closing page',
-                                hint: closingText.length
-                                  ? 'The last page of your report, printed word for word'
-                                  : 'A last page, printed exactly as written',
-                                on: closingEnabled,
-                                set: toggleClosing,
-                              },
-                              {
-                                label: 'Watermark',
-                                hint: 'A diagonal mark across every page',
-                                on: watermark.enabled,
-                                set: (v: boolean) => setWm({ enabled: v }),
-                              },
-                            ]).map(row => (
-                              <div key={row.label} className="flex items-center justify-between gap-4 border-b border-canvas-border py-3">
-                                <span className="min-w-0">
-                                  <span className="block text-[0.8125rem] font-medium text-ink-900">{row.label}</span>
-                                  <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">{row.hint}</span>
-                                </span>
-                                <Toggle checked={row.on} onChange={row.set} label={row.label} />
-                              </div>
-                            ))}
-                          </div>
-
-                          {signoffEnabled && signatories.length > 0 && (
-                            <div className="mt-4">
-                              <GroupEyebrow hint="read from your report">Who signs</GroupEyebrow>
-                              <ul className="flex flex-wrap gap-1.5">
-                                {signatories.map(sig => (
-                                  <li key={sig.id} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2.5 py-1 text-[0.75rem] text-ink-700">{sig.role}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {closingEnabled && closingText.length > 0 && (
-                            <div className="mt-4">
-                              <GroupEyebrow hint="printed word for word">How it ends</GroupEyebrow>
-                              <div className="rounded-lg border border-canvas-border bg-canvas px-4 py-3">
-                                {closingText.map((line, li) => (
-                                  <p key={li} className="text-[0.75rem] leading-relaxed text-ink-700">{line}</p>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    </div>
                   )}
                 </div>
 
@@ -2779,9 +2760,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       }}
                       className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
                     >
-                      {reviewStep !== 'theme' ? 'Back' : importBanner ? 'Cancel' : 'Discard'}
+                      {reviewStep !== 'look' ? 'Back' : importBanner ? 'Cancel' : 'Discard'}
                     </motion.button>
-                    {reviewStep !== 'signoff' ? (
+                    {reviewStep !== 'content' ? (
                       <motion.button
                         whileTap={{ scale: 0.97 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
