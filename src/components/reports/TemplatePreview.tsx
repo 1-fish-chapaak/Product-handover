@@ -8,7 +8,7 @@
 // previewed is what generates.
 
 import { motion } from 'motion/react';
-import { ArrowLeft, Edit3, Trash2, FileText, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, Trash2, FileText } from 'lucide-react';
 import TemplateSheet from './TemplateSheet';
 import {
   ICON_MAP, CATEGORY_COLORS,
@@ -21,7 +21,6 @@ export default function TemplatePreview({
   onBack,
   onEdit,
   onDelete,
-  onGenerate,
 }: {
   template: EditableTemplate;
   /** Custom templates carry Edit + Delete; system templates are read-only. */
@@ -29,9 +28,6 @@ export default function TemplatePreview({
   onBack: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  /** Picking a template and making the report are ONE action, not two: the
-   *  page that answers "what report is this?" is where you say yes to it. */
-  onGenerate?: () => void;
 }) {
   const sections = template.sections ?? [];
   const Icon = ICON_MAP[template.icon] || FileText;
@@ -57,14 +53,6 @@ export default function TemplatePreview({
               className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             >
               <Edit3 size={14} /> Edit template
-            </button>
-          )}
-          {onGenerate && (
-            <button
-              onClick={onGenerate}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-            >
-              <Sparkles size={14} /> Generate a report
             </button>
           )}
           {isCustom && onDelete && (
