@@ -1967,7 +1967,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     type="button"
                     onClick={() => importInputRef.current?.click()}
                     disabled={isSaving}
-                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-4 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-500 cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-4 text-[0.875rem] font-semibold text-white shadow-sm shadow-brand-900/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:shadow-none disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     <UploadCloud size={15} /> Upload a report
                   </button>
@@ -2019,7 +2019,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             title={nameTaken ? 'A template with this name already exists — choose a different name' : undefined}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150 cursor-pointer disabled:opacity-70 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
