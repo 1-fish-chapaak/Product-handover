@@ -8,7 +8,7 @@ import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
+  X, BookOpen, Trash2, Plus, Search, Layers, Check,
   WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import TemplatePreview from './TemplatePreview';
@@ -1382,9 +1382,13 @@ export default function ReportsView({
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
                 className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
                 onClick={() => {
-                  // Whole card = open the template as the report it produces.
-                  // Generating happens from that page, once they can see it.
-                  setPreviewTemplate(rt);
+                  // One click, not two. A custom template opens in the editor,
+                  // which prints the same sheet live beside its settings, so the
+                  // read-only preview page was a detour on the way to Edit. A
+                  // standard template cannot be edited, so it still opens as the
+                  // report it produces.
+                  if (isCustom) editCustomTemplate(rt);
+                  else setPreviewTemplate(rt);
                 }}
               >
                 <div className="flex items-start justify-between gap-3 mb-3.5">
@@ -1437,19 +1441,8 @@ export default function ReportsView({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    {isCustom && (
-                      // Single Edit action — renames inline in the editor (or double-
-                      // click the title). Do NOT add a separate Rename pencil back.
-                      <ActionTooltip label="Edit">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
-                          aria-label={`Edit template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                      </ActionTooltip>
-                    )}
+                    {/* No Edit pencil: the whole card opens the editor. Delete is
+                        the only action that needs its own target. */}
                     {isCustom && (
                       <ActionTooltip label="Delete template">
                         <button
@@ -1479,7 +1472,7 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
                 className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
-                onClick={() => setPreviewTemplate(rt)}
+                onClick={() => { if (isCustom) editCustomTemplate(rt); else setPreviewTemplate(rt); }}
               >
                 <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md ${tintBg}`}>
                   <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
@@ -1511,19 +1504,7 @@ export default function ReportsView({
                 <div className="shrink-0 flex items-center gap-3">
                   <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
                   <div className="flex items-center gap-0.5 pl-1">
-                    {isCustom && (
-                      // Single Edit action — renames inline in the editor (or double-
-                      // click the title). Do NOT add a separate Rename pencil back.
-                      <ActionTooltip label="Edit">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
-                          aria-label={`Edit template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                      </ActionTooltip>
-                    )}
+                    {/* No Edit pencil: the whole row opens the editor. */}
                     {isCustom && (
                       <ActionTooltip label="Delete template">
                         <button

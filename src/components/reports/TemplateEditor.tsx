@@ -24,6 +24,7 @@ import {
   ICON_MAP, CATEGORY_COLORS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
   sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
   collectBlockLibrary, DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText,
+  LETTERHEAD_SOFT_MAX, letterheadLine, templateCoverFields,
   proposeScaleMap, unusedScaleWords, OUR_SCALE,
   type EditableTemplate, type WatermarkConfig, type ScaleMap,
   type TemplateSection, type SignatorySlot, type TemplateBlock,
@@ -39,7 +40,16 @@ import { useAuditLog } from '../../context/AdminDataContext';
 
 // Soft length guide for letterhead header/footer text — past this the counter
 // turns amber and a hint warns about truncation, but saving is never blocked.
-const LETTERHEAD_SOFT_MAX = 60;
+
+/** The check screen, in the order a client actually approves a format: what it
+ *  looks like, what is in it, and the pages that close it. One long screen made
+ *  three different jobs compete; these are the three. */
+type ReviewStep = 'theme' | 'content' | 'signoff';
+const REVIEW_STEPS: { key: ReviewStep; label: string }[] = [
+  { key: 'theme', label: 'Theme' },
+  { key: 'content', label: 'Content' },
+  { key: 'signoff', label: 'Sign-off & watermark' },
+];
 // Hard cap on the template name — mirrors the letterhead 60-char counter, but
 // enforced (a name this long overflows the cover and the picker rows).
 const TEMPLATE_NAME_MAX = 60;
@@ -69,6 +79,34 @@ function FieldLabel({ children, right, required }: { children: ReactNode; right?
 }
 
 // Small uppercase group heading that structures the Details panel into sections.
+/** A folded settings group. Everything a template is set up with once lives in
+ *  one of these, so the column an edit visit opens on is four fields and two
+ *  lines rather than a page of controls. The summary carries the current answer,
+ *  so the fold does not have to be opened to read it. */
+function SettingsFold({ title, summary, open, onToggle, children }: {
+  title: string;
+  summary: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-b border-canvas-border last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="group flex w-full cursor-pointer items-center gap-3 py-3 text-left"
+      >
+        <span className="shrink-0 text-[0.8125rem] font-medium text-ink-800 transition-colors group-hover:text-brand-700">{title}</span>
+        <span className="ml-auto min-w-0 truncate text-right text-[0.75rem] text-ink-400">{summary}</span>
+        <ChevronRight size={14} className={`shrink-0 text-ink-300 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && <div className="pb-4">{children}</div>}
+    </div>
+  );
+}
+
 function GroupEyebrow({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
     <div className="flex items-baseline gap-2 mb-3">
@@ -607,7 +645,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [sections, setSections] = useState(seededSections);
   // Left settings column is split into two segmented groups so the form reads as
   // a structured panel instead of a flat six-field stack.
-  const [panel, setPanel] = useState<'identity' | 'branding'>('identity');
+  // Both groups open on arrival: the column has the room, so nothing worth
+  // seeing sits behind a chevron. The chevron stays, for tidying away.
+  const [showPageSetup, setShowPageSetup] = useState(true);
+  const [showCoverLook, setShowCoverLook] = useState(true);
+  // The check screen runs in two steps: what the report LOOKS like (brand,
+  // letterhead, colours, rating words) and then what is IN it (the sections).
+  // Confirming a cover and confirming an outline are two different jobs, and
+  // one screen carrying both read as a wall.
+  const [reviewStep, setReviewStep] = useState<ReviewStep>('theme');
   // A new template opens on the question that actually matters first: do you
   // already have a report that looks the way you want, or are you building one?
   // Uploading one is the shorter road by a mile, so it leads. Editing an
@@ -690,6 +736,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   >(null);
   // The state as it was just before the import applied, so Undo is exact.
   const preImportRef = useRef<ImportSnapshot | null>(null);
+  // The name as it was just before a read named the template for the review
+  // preview (below). Discarding an unapplied read restores it, so a thrown-away
+  // import can't leave a stray title behind on an otherwise-blank template.
+  const preReadNameRef = useRef<string | null>(null);
 
   // Apply a section list + captured letterhead to the editor. Shared by the
   // initial optimistic import and the on-demand Review confirm. Empty-named rows
@@ -713,11 +763,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // Pass 2's furniture lands as pre-filled template settings — the user
     // verifies them here instead of typing them in.
     const hf = result?.furniture;
-    if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
+    if (hf?.confidentiality || hf?.header.length) setHeaderText(letterheadLine(hf.confidentiality ? [hf.confidentiality] : hf.header));
     // Apply the PDF's own footer when it has one, and mark it customised so the
     // "footer follows brand" effect doesn't immediately overwrite it back to
     // "Generated by <brand>".
-    if (hf?.footer.length) { setFooterText(hf.footer.join('  ·  ')); setFooterCustom(true); }
+    if (hf?.footer.length) {
+      const line = letterheadLine(hf.footer);
+      if (line) { setFooterText(line); setFooterCustom(true); }
+    }
     if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
     // Brand kit: the dominant colour sampled from the uploaded cover drives the
     // template's cover gradient + accent (clearable in Branding).
@@ -803,6 +856,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       addToast({ type: 'error', message: 'Upload one past report as a PowerPoint (.pptx) or a PDF. Those are the two we can read.' });
       return;
     }
+
+    // Snapshot the name before the read can rename it for the review preview
+    // (below) — Discard restores this rather than leaving the read's title
+    // stranded on a template with nothing else in it.
+    if (!importBanner) preReadNameRef.current = copyName;
 
     // Read the file for real. One engine for both shapes: a deck goes to the
     // PowerPoint reader, a PDF to the PDF one, and the template that comes out
@@ -904,6 +962,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // until it is confirmed beside the pages of the real document.
     setReviewSections(detected);
     setReviewBaseline(detected);
+    setReviewStep('theme');
     setPendingImport({ fileName: file.name, kind, result });
 
     // Headings with nothing beneath them aren't turned into sections, but they
@@ -951,7 +1010,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // the read altogether, so it says so; afterwards it just closes the canvas.
   const cancelImport = () => {
     setPendingImport(null);
-    if (!importBanner) setReviewSections([]);
+    if (!importBanner) {
+      setReviewSections([]);
+      if (preReadNameRef.current !== null) { setCopyName(preReadNameRef.current); preReadNameRef.current = null; }
+    }
+  };
+  // The button and the header X both route here first. A read that hasn't
+  // been applied yet and kept at least one section is real, checked work —
+  // same weight as the editor's own unsaved-changes confirm — so it asks
+  // before throwing it away instead of discarding on the first tap.
+  const attemptCancelImport = () => {
+    const kept = reviewSections.filter(s => s.name.trim() && !s.wrapper).length;
+    if (!importBanner && kept > 0) setConfirmDiscardRead(true);
+    else cancelImport();
   };
   // Confirm the review: the curated sections become the outline, the captured
   // settings become template settings, and the banner takes over with Undo.
@@ -1036,6 +1107,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // The X on the post-import banner is the single "remove the uploaded file"
   // action — it reverts the whole import, guarded by a confirmation (destructive).
   const [confirmRemoveImport, setConfirmRemoveImport] = useState(false);
+  // Discarding the review screen before it's applied throws away a real read —
+  // pages scanned, sections curated — same weight as the unsaved-changes
+  // confirm on the editor itself, so it gets the same guard instead of none.
+  const [confirmDiscardRead, setConfirmDiscardRead] = useState(false);
   // Near-duplicate structure warning (§9) — the section overlap with the closest
   // existing template, surfaced at save to kill "Copy of…" sprawl.
   const [dupConfirm, setDupConfirm] = useState<{ name: string; shared: number; total: number } | null>(null);
@@ -1071,16 +1146,21 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     brandColor: template.brandColor ?? '',
     findingScale: template.findingScale,
     opinionScale: template.opinionScale,
-    scaleMap: template.scaleMap ?? {},
+    // These three reuse the state values (not a freshly recomputed `?? []`/`?? {}`)
+    // because an independently-evaluated empty literal is a different object from
+    // the one the matching useState() call already settled on — comparing the two
+    // by reference in isDirty made every fresh template "dirty" on mount, with
+    // nothing typed.
+    scaleMap,
     headerText: template.headerText ?? '',
     footerText: template.footerText ?? defaultFooterText(template.brand),
     sections: seededSections,
     watermark: template.watermark ?? DEFAULT_WATERMARK,
     pageNumbers: template.pageNumbers ?? true,
     signoffEnabled: template.signoffEnabled ?? false,
-    signatories: template.signatories ?? [],
+    signatories,
     closingEnabled: template.closingEnabled ?? false,
-    closingText: template.closingText ?? [],
+    closingText,
     logoDataUrl: template.logoDataUrl ?? '',
   }));
   /* THE MATCHING SCREEN, on the check screen beside the to-be template. Their
@@ -1242,7 +1322,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       const firstField = next[0].field;
       // copyName / brand live in the Identity group — surface it before focusing
       // so the input is mounted (sections sit in the always-visible preview pane).
-      if (firstField === 'copyName' || firstField === 'brand') setPanel('identity');
       requestAnimationFrame(() => {
         const first = fieldRefs[firstField]?.current;
         first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
@@ -1389,7 +1468,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         // The one size change in this dialog is the check screen arriving, so it
         // eases rather than snaps.
         className={`relative flex max-h-full max-w-full flex-col overflow-hidden border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
-          isNew ? `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[720px] w-[1180px]'}` : 'h-full w-full rounded-none border-none'
+          isNew ? `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[660px] w-[1180px]'}` : 'h-full w-full rounded-none border-none'
         }`}
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
@@ -1440,7 +1519,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         <div className="flex-1 min-h-0 flex">
           {/* Left pane — settings split into Identity / Branding groups so the
               column reads as a structured panel, not a flat six-field stack. */}
-          <div className="w-[360px] shrink-0 border-r border-canvas-border flex flex-col min-h-0">
+          <div className="w-[330px] shrink-0 border-r border-canvas-border flex flex-col min-h-0">
             {/* Sticky top — validation + the tab switch stay put while the
                 panel below scrolls. */}
             <div className="px-6 pt-5 pb-4 shrink-0 space-y-4">
@@ -1464,7 +1543,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                             key={err.field}
                             type="button"
                             onClick={() => {
-                              if (err.field === 'copyName' || err.field === 'brand') setPanel('identity');
                               requestAnimationFrame(() => {
                                 const el = fieldRefs[err.field]?.current;
                                 el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
@@ -1482,311 +1560,294 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 )}
               </AnimatePresence>
 
-              {/* Segmented group switcher — Details (what the template is + its
-                  outline) vs Branding (how it looks). Full ARIA tab pattern with
-                  ←/→ navigation (#9). */}
-              <div role="tablist" aria-label="Template settings" className="relative flex p-1 bg-canvas rounded-lg gap-1">
-                {([['identity', 'Details'], ['branding', 'Branding']] as const).map(([key, label], i, arr) => {
-                  const active = panel === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => setPanel(key)}
-                      onKeyDown={e => {
-                        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                          e.preventDefault();
-                          setPanel(arr[(i + (e.key === 'ArrowRight' ? 1 : arr.length - 1)) % arr.length][0]);
-                        }
-                      }}
-                      className={`relative flex-1 h-8 rounded-sm text-[0.75rem] font-semibold cursor-pointer transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'text-brand-700' : 'text-ink-600 hover:text-ink-900'}`}
-                    >
-                      {active && (
-                        <motion.span
-                          layoutId="template-panel-pill"
-                          transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
-                          className="absolute inset-0 rounded-sm bg-white border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.08)]"
-                        />
-                      )}
-                      <span className="relative z-10">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
-            {panel === 'identity' ? (
-              <motion.div key="panel-identity" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
-                {/* Details holds only the template's properties — name, brand and
-                    letterhead. Section-building lives in the roomy right pane
-                    (next to its preview), so this column stays short and calm. */}
-                <div className="space-y-4">
+            {/* One column, not two tabs. A template is edited for its name, its
+                organisation, its letterhead and the look of its cover, so those
+                are the panel. Page numbers, the signature block, the closing
+                page and the watermark are set once and rarely touched, so they
+                fold. Nothing is gone, only ordered by how often it is used. */}
+            {/* One required field, then a settings list. Everything else is a
+                row carrying its own current answer, so the column reads at a
+                glance and opens in place instead of scrolling. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+              <div className="pb-1">
+                <FieldLabel
+                  required
+                  right={<span className={`text-[0.6875rem] tabular-nums ${copyName.length >= TEMPLATE_NAME_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{copyName.length}/{TEMPLATE_NAME_MAX}</span>}
+                >Template name</FieldLabel>
+                <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value.slice(0, TEMPLATE_NAME_MAX))} maxLength={TEMPLATE_NAME_MAX} aria-invalid={nameTaken}
+                  placeholder="e.g. Internal Audit Report"
+                  className={`w-full h-10 px-3 rounded-lg border text-[0.8125rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-high/60 focus:border-high focus:ring-high/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
+                {nameTaken && <p className="mt-1 text-[0.6875rem] text-high-700 font-medium">A template named “{copyName.trim()}” already exists — choose a different name to save.</p>}
+              </div>
+
+              {/* Name, organisation and the letterhead line are the three a
+                  template is actually typed, so they stay open. Only what is
+                  set once and then read folds below them. */}
+              <div className="mt-4 border-t border-canvas-border pt-4">
+                <FieldLabel>Organisation name</FieldLabel>
+                <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                <p className="mt-1.5 text-[0.6875rem] text-ink-400">Shows as “Generated by” on the report.</p>
+              </div>
+
+              {/* Letterhead — footer only. There is NO header-text field and NO
+                  platform header line, by request (the field was removed three
+                  times, once after a19bcde re-added it). The header prints only
+                  the confidentiality line a read of the client's own report
+                  captured; a hand-built template has none. Do not put the field
+                  or a default back. */}
+              <div className="mt-4 border-t border-canvas-border pt-4">
+                <FieldLabel
+                  right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
+                >Footer text</FieldLabel>
+                <input value={footerText} onChange={e => { setFooterCustom(true); setFooterText(e.target.value.slice(0, LETTERHEAD_SOFT_MAX)); }} maxLength={LETTERHEAD_SOFT_MAX} placeholder={defaultFooterText(brand)} className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                <p className="mt-1.5 text-[0.6875rem] text-ink-400">Printed at the foot of every page.</p>
+              </div>
+
+              <div className="mt-4 border-t border-canvas-border">
+              {/* The cover's look: set when the template is made, then left. The
+                  summary names the theme in force, so it reads without opening. */}
+              <SettingsFold
+                title="Cover look"
+                summary={[theme, brandColor ? 'brand colour from your report' : null, logoDataUrl ? 'logo' : null].filter(Boolean).join(' · ')}
+                open={showCoverLook}
+                onToggle={() => setShowCoverLook(v => !v)}
+              >
                   <div>
-                    <FieldLabel
-                      required
-                      right={<span className={`text-[0.6875rem] tabular-nums ${copyName.length >= TEMPLATE_NAME_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{copyName.length}/{TEMPLATE_NAME_MAX}</span>}
-                    >Template name</FieldLabel>
-                    <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value.slice(0, TEMPLATE_NAME_MAX))} maxLength={TEMPLATE_NAME_MAX} aria-invalid={nameTaken}
-                      placeholder="e.g. Internal Audit Report"
-                      className={`w-full h-10 px-3 rounded-lg border text-[0.8125rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-high/60 focus:border-high focus:ring-high/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
-                    {nameTaken && <p className="mt-1 text-[0.6875rem] text-high-700 font-medium">A template named “{copyName.trim()}” already exists — choose a different name to save.</p>}
-                  </div>
-                  <div>
-                    <FieldLabel>Organisation name</FieldLabel>
-                    <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
-                    <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
-                  </div>
-                </div>
-
-                {/* Letterhead — footer only. There is NO header-text field and
-                    NO platform header line, by request (the field was removed
-                    three times, once after a19bcde re-added it). The header
-                    prints only the confidentiality line a read of the client's
-                    own report captured; a hand-built template has none. Do not
-                    put the field or a default back. */}
-                <div className="mt-5 pt-4 border-t border-canvas-border">
-                  <GroupEyebrow hint="shown on every page">Letterhead</GroupEyebrow>
-                  <div className="space-y-4">
-                    <div>
-                      <FieldLabel
-                        right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
-                      >Footer text</FieldLabel>
-                      <input value={footerText} onChange={e => { setFooterCustom(true); setFooterText(e.target.value); }} placeholder={defaultFooterText(brand)} className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
-                      {footerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long footer text may be truncated in the letterhead.</p>}
+                    {/* One eyebrow heads the group — no separate "Color Theme" label
+                        stacked under an "Appearance" eyebrow. */}
+                    <GroupEyebrow hint="applied to the report cover">Color Theme</GroupEyebrow>
+                    {/* One row of swatches, not ten labelled rows. The pair of
+                        dots IS the theme, the name rides the tooltip and the
+                        label under the row, and the panel gets ~200px shorter
+                        without losing a single theme. */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.keys(TEMPLATE_THEME_SWATCH).map(name => {
+                        const active = theme === name;
+                        const [a, b] = TEMPLATE_THEME_SWATCH[name];
+                        return (
+                          <motion.button
+                            key={name}
+                            type="button"
+                            onClick={() => setTheme(name)}
+                            aria-pressed={active}
+                            aria-label={name}
+                            title={name}
+                            whileTap={{ scale: 0.94 }}
+                            className={`no-focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors cursor-pointer ${
+                              active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-300'
+                            }`}
+                          >
+                            <span className="flex items-center">
+                              <span className="h-4 w-4 rounded-full" style={{ background: a, boxShadow: '0 0 0 1.5px #fff' }} />
+                              <span className="-ml-1.5 h-4 w-4 rounded-full" style={{ background: b, boxShadow: '0 0 0 1.5px #fff' }} />
+                            </span>
+                          </motion.button>
+                        );
+                      })}
                     </div>
-                  </div>
-                </div>
-
-              </motion.div>
-            ) : (
-              <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-6">
-                <div>
-                  {/* One eyebrow heads the group — no separate "Color Theme" label
-                      stacked under an "Appearance" eyebrow. */}
-                  <GroupEyebrow hint="applied to the report cover">Color Theme</GroupEyebrow>
-                  {/* Theme rows — the combination shown as its two named colours
-                      (purple + white, navy + gold…) as a pair of floating dots.
-                      Compact so all combinations fit with little scrolling. */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {Object.keys(TEMPLATE_THEME_SWATCH).map((name, ti) => {
-                      const active = theme === name;
-                      const [a, b] = TEMPLATE_THEME_SWATCH[name];
-                      const dotShadow = '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)';
-                      return (
-                        <motion.button
-                          key={name}
-                          type="button"
-                          onClick={() => setTheme(name)}
-                          aria-pressed={active}
-                          initial={{ opacity: 0, y: 5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ti * 0.03 }}
-                          whileTap={{ scale: 0.98 }}
-                          className={`no-focus-ring flex items-center gap-2 rounded-lg border pl-2 pr-2.5 py-2 text-left transition-all cursor-pointer ${active ? 'border-brand-600 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-canvas/40'}`}
-                        >
-                          {/* The two named colours, overlapping with a white gap. */}
-                          <span className="shrink-0 flex items-center">
-                            <span className="w-5 h-5 rounded-full" style={{ background: a, boxShadow: dotShadow }} />
-                            <span className="w-5 h-5 rounded-full -ml-1.5" style={{ background: b, boxShadow: dotShadow }} />
-                          </span>
-                          <span className={`flex-1 min-w-0 text-[0.75rem] font-medium truncate ${active ? 'text-brand-700' : 'text-ink-700'}`}>{name}</span>
-                          {active && (
-                            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }} className="shrink-0 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
-                              <Check size={10} strokeWidth={3} />
-                            </motion.span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                  {/* Brand colour sampled from the uploaded report's cover — it
-                      overrides the named theme until cleared. */}
-                  {brandColor && (
-                    <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-canvas-border bg-white px-3 py-2">
-                      <span className="w-5 h-5 rounded-full shrink-0" style={{ background: brandColor, boxShadow: '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)' }} />
-                      <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-700 truncate">Brand colour from your report’s cover</span>
-                      <button type="button" onClick={() => setBrandColor('')} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Clear</button>
-                    </div>
-                  )}
-                </div>
-
-
-                {/* Logo — their mark on the cover, read off an uploaded deck
-                    when there was one. A brand asset, so it lives beside the
-                    colour it sits on rather than in the text settings. */}
-                <div className="mt-4 pt-3.5 border-t border-canvas-border">
-                  <span className="block mb-2.5 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Logo <span className="font-normal normal-case tracking-normal text-ink-400">· on the report cover</span></span>
-                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, setLogoDataUrl); if (logoInputRef.current) logoInputRef.current.value = ''; }} />
-                  {logoDataUrl ? (
-                    <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
-                      <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
-                        <img src={logoDataUrl} alt="Logo" className="max-h-9 max-w-[56px] object-contain" />
+                    <p className="mt-1.5 text-[0.6875rem] text-ink-400">{theme}</p>
+                    {/* Brand colour sampled from the uploaded report's cover — it
+                        overrides the named theme until cleared. */}
+                    {brandColor && (
+                      <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-canvas-border bg-white px-3 py-2">
+                        <span className="w-5 h-5 rounded-full shrink-0" style={{ background: brandColor, boxShadow: '0 0 0 2px #fff, 0 1px 4px rgba(15,8,30,0.22)' }} />
+                        <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-700 truncate">Brand colour from your report’s cover</span>
+                        <button type="button" onClick={() => setBrandColor('')} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Clear</button>
                       </div>
-                      <button type="button" onClick={() => logoInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
-                      <button type="button" onClick={() => setLogoDataUrl('')} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => logoInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
-                      <Upload size={15} /> Upload a logo
-                    </button>
-                  )}
-                </div>
-
-                {/* Page numbers — shown on every page of the exported report. */}
-                <div className="mt-4 pt-3.5 border-t border-canvas-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Page numbers <span className="font-normal normal-case tracking-normal text-ink-400">· numbered footer on every page</span></span>
-                    <Toggle checked={pageNumbers} onChange={setPageNumbers} label="Show page numbers" />
+                    )}
                   </div>
-                </div>
 
-                {/* Sign-off block — an Approvals & Sign-Off section on the report;
-                    each signatory gets a manual Sign / Sign-off in the reader. */}
-                <div className="mt-4 pt-3.5 border-t border-canvas-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· job titles, signature lines and a date on every report</span></span>
-                    <Toggle checked={signoffEnabled} onChange={toggleSignoff} label="Enable signature block" />
-                  </div>
-                  {signoffEnabled && (
-                    <div className="mt-3 space-y-2">
-                      {signatories.length === 0 && (
-                        <p className="text-[0.6875rem] text-ink-400">Add the roles that sign this report (e.g. Prepared by, Approved by).</p>
-                      )}
-                      {/* Say exactly what this does, or it reads as e-signing. */}
-                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
-                        Prints the page and nothing more. Names are optional and are kept for next time. No sending, no notifying, no signing online.
-                      </p>
-                      {signatories.map(s => (
-                        <div key={s.id} className="flex items-center gap-2">
-                          <input
-                            value={s.role}
-                            onChange={e => updateSignatory(s.id, { role: e.target.value })}
-                            placeholder="Role — e.g. Approved by"
-                            aria-label="Signatory role"
-                            className="w-[42%] h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                          />
-                          <input
-                            value={s.name ?? ''}
-                            onChange={e => updateSignatory(s.id, { name: e.target.value })}
-                            placeholder="Name (optional)"
-                            aria-label="Signatory name"
-                            className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                          />
-                          <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+
+                  {/* Logo — their mark on the cover, read off an uploaded deck
+                      when there was one. A brand asset, so it lives beside the
+                      colour it sits on rather than in the text settings. */}
+                  <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                    <span className="block mb-2.5 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Logo <span className="font-normal normal-case tracking-normal text-ink-400">· on the report cover</span></span>
+                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, setLogoDataUrl); if (logoInputRef.current) logoInputRef.current.value = ''; }} />
+                    {logoDataUrl ? (
+                      <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
+                        <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
+                          <img src={logoDataUrl} alt="Logo" className="max-h-9 max-w-[56px] object-contain" />
                         </div>
-                      ))}
-                      <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Closing page — the last slide a committee deck ends on. Same
-                    kind of setting as the signature block: the shape is the
-                    whole feature, so nothing about it is generated. */}
-                <div className="mt-4 pt-3.5 border-t border-canvas-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Closing page <span className="font-normal normal-case tracking-normal text-ink-400">· the last page, printed exactly as written</span></span>
-                    <Toggle checked={closingEnabled} onChange={toggleClosing} label="Enable closing page" />
+                        <button type="button" onClick={() => logoInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
+                        <button type="button" onClick={() => setLogoDataUrl('')} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => logoInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
+                        <Upload size={15} /> Upload a logo
+                      </button>
+                    )}
                   </div>
-                  {closingEnabled && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
-                        Whatever you write here prints at the end of every report, word for word. Nothing in it is filled in from audit results.
-                      </p>
-                      {closingText.map((line, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <input
-                            value={line}
-                            onChange={e => setClosingText(prev => prev.map((l, li) => (li === i ? e.target.value : l)))}
-                            placeholder={i === 0 ? 'Thank you' : 'Another line (optional)'}
-                            aria-label={`Closing page line ${i + 1}`}
-                            className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                          />
-                          <button type="button" onClick={() => setClosingText(prev => prev.filter((_, li) => li !== i))} aria-label={`Remove closing line ${i + 1}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setClosingText(prev => [...prev, ''])} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add line</button>
-                    </div>
-                  )}
-                </div>
+              </SettingsFold>
 
-                {/* Watermark — a diagonal text or image mark across every page. */}
-                <div className="mt-4 pt-3.5 border-t border-canvas-border">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Watermark <span className="font-normal normal-case tracking-normal text-ink-400">· diagonal mark on every page</span></span>
-                    <Toggle checked={watermark.enabled} onChange={v => setWm({ enabled: v })} label="Enable watermark" />
+              {/* Set up once, then left alone: a second visit is here to change a
+                  name or a section, not a watermark angle. */}
+              <SettingsFold
+                title="Page setup"
+                summary={[
+                  pageNumbers ? 'Page numbers' : null,
+                  signoffEnabled ? 'Signature block' : null,
+                  closingEnabled ? 'Closing page' : null,
+                  watermark.enabled ? 'Watermark' : null,
+                ].filter(Boolean).join(' · ') || 'Nothing on'}
+                open={showPageSetup}
+                onToggle={() => setShowPageSetup(v => !v)}
+              >
+                  {/* Page numbers — shown on every page of the exported report. */}
+                  <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Page numbers <span className="font-normal normal-case tracking-normal text-ink-400">· numbered footer on every page</span></span>
+                      <Toggle checked={pageNumbers} onChange={setPageNumbers} label="Show page numbers" />
+                    </div>
                   </div>
-                  {watermark.enabled && (
-                    <div className="space-y-3.5">
-                      {/* content mode — text or an uploaded image */}
-                      <div className="inline-flex p-0.5 bg-canvas rounded-md gap-0.5">
-                        {(['text', 'image'] as const).map(m => (
-                          <button key={m} type="button" onClick={() => setWm({ mode: m })}
-                            className={`h-7 px-3 rounded-sm text-[0.75rem] font-semibold capitalize transition-colors cursor-pointer ${watermark.mode === m ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
-                            {m}
-                          </button>
+
+                  {/* Sign-off block — an Approvals & Sign-Off section on the report;
+                      each signatory gets a manual Sign / Sign-off in the reader. */}
+                  <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· job titles, signature lines and a date on every report</span></span>
+                      <Toggle checked={signoffEnabled} onChange={toggleSignoff} label="Enable signature block" />
+                    </div>
+                    {signoffEnabled && (
+                      <div className="mt-3 space-y-2">
+                        {signatories.length === 0 && (
+                          <p className="text-[0.6875rem] text-ink-400">Add the roles that sign this report (e.g. Prepared by, Approved by).</p>
+                        )}
+                        {/* Say exactly what this does, or it reads as e-signing. */}
+                        <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+                          Prints the page and nothing more. Names are optional and are kept for next time. No sending, no notifying, no signing online.
+                        </p>
+                        {signatories.map(s => (
+                          <div key={s.id} className="flex items-center gap-2">
+                            <input
+                              value={s.role}
+                              onChange={e => updateSignatory(s.id, { role: e.target.value })}
+                              placeholder="Role — e.g. Approved by"
+                              aria-label="Signatory role"
+                              className="w-[42%] h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                            />
+                            <input
+                              value={s.name ?? ''}
+                              onChange={e => updateSignatory(s.id, { name: e.target.value })}
+                              placeholder="Name (optional)"
+                              aria-label="Signatory name"
+                              className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                            />
+                            <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                          </div>
                         ))}
+                        <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
                       </div>
+                    )}
+                  </div>
 
-                      {watermark.mode === 'text' ? (
-                        <input value={watermark.text} onChange={e => setWm({ text: e.target.value })} placeholder="CONFIDENTIAL"
-                          className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.875rem] uppercase tracking-wide transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
-                      ) : (
-                        <>
-                          <input ref={watermarkImgInputRef} type="file" accept="image/*" className="hidden"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, url => setWm({ imageDataUrl: url })); if (watermarkImgInputRef.current) watermarkImgInputRef.current.value = ''; }} />
-                          {watermark.imageDataUrl ? (
-                            <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
-                              <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
-                                <img src={watermark.imageDataUrl} alt="Watermark" className="max-h-9 max-w-[56px] object-contain" />
-                              </div>
-                              <button type="button" onClick={() => watermarkImgInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
-                              <button type="button" onClick={() => setWm({ imageDataUrl: undefined })} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
-                            </div>
-                          ) : (
-                            <button type="button" onClick={() => watermarkImgInputRef.current?.click()}
-                              className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
-                              <Upload size={15} /> Upload a watermark image
+                  {/* Closing page — the last slide a committee deck ends on. Same
+                      kind of setting as the signature block: the shape is the
+                      whole feature, so nothing about it is generated. */}
+                  <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Closing page <span className="font-normal normal-case tracking-normal text-ink-400">· the last page, printed exactly as written</span></span>
+                      <Toggle checked={closingEnabled} onChange={toggleClosing} label="Enable closing page" />
+                    </div>
+                    {closingEnabled && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
+                          Whatever you write here prints at the end of every report, word for word. Nothing in it is filled in from audit results.
+                        </p>
+                        {closingText.map((line, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input
+                              value={line}
+                              onChange={e => setClosingText(prev => prev.map((l, li) => (li === i ? e.target.value : l)))}
+                              placeholder={i === 0 ? 'Thank you' : 'Another line (optional)'}
+                              aria-label={`Closing page line ${i + 1}`}
+                              className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                            />
+                            <button type="button" onClick={() => setClosingText(prev => prev.filter((_, li) => li !== i))} aria-label={`Remove closing line ${i + 1}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => setClosingText(prev => [...prev, ''])} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add line</button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Watermark — a diagonal text or image mark across every page. */}
+                  <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <span className="min-w-0 text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Watermark <span className="font-normal normal-case tracking-normal text-ink-400">· diagonal mark on every page</span></span>
+                      <Toggle checked={watermark.enabled} onChange={v => setWm({ enabled: v })} label="Enable watermark" />
+                    </div>
+                    {watermark.enabled && (
+                      <div className="space-y-3.5">
+                        {/* content mode — text or an uploaded image */}
+                        <div className="inline-flex p-0.5 bg-canvas rounded-md gap-0.5">
+                          {(['text', 'image'] as const).map(m => (
+                            <button key={m} type="button" onClick={() => setWm({ mode: m })}
+                              className={`h-7 px-3 rounded-sm text-[0.75rem] font-semibold capitalize transition-colors cursor-pointer ${watermark.mode === m ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
+                              {m}
                             </button>
-                          )}
-                        </>
-                      )}
+                          ))}
+                        </div>
 
-                      <Slider label="Opacity" min={2} max={40} value={Math.round(watermark.opacity * 100)} suffix="%" onChange={v => setWm({ opacity: v / 100 })} />
-                      <Slider label="Rotation" min={-90} max={90} value={watermark.rotation} suffix="°" onChange={v => setWm({ rotation: v })} />
-                      <Slider label="Size" min={20} max={100} value={watermark.size} suffix="%" onChange={v => setWm({ size: v })} />
-
-                      {/* Placement — pin the mark to the centre (default) or a side of
-                          the page. Live-previews on the sheet beside this panel. */}
-                      <div>
-                        <span className="block text-[0.75rem] font-medium text-ink-600 mb-1.5">Placement</span>
-                        <div className="grid grid-cols-5 gap-1">
-                          {(['center', 'top', 'bottom', 'left', 'right'] as const).map(p => {
-                            const active = (watermark.position ?? 'center') === p;
-                            return (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => setWm({ position: p })}
-                                aria-pressed={active}
-                                className={`h-7 rounded-sm text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
-                              >
-                                {p}
+                        {watermark.mode === 'text' ? (
+                          <input value={watermark.text} onChange={e => setWm({ text: e.target.value })} placeholder="CONFIDENTIAL"
+                            className="w-full px-3 py-2 rounded-md border border-canvas-border text-[0.875rem] uppercase tracking-wide transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                        ) : (
+                          <>
+                            <input ref={watermarkImgInputRef} type="file" accept="image/*" className="hidden"
+                              onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, url => setWm({ imageDataUrl: url })); if (watermarkImgInputRef.current) watermarkImgInputRef.current.value = ''; }} />
+                            {watermark.imageDataUrl ? (
+                              <div className="flex items-center gap-3 rounded-lg border border-canvas-border bg-canvas p-2.5">
+                                <div className="h-11 w-16 rounded-sm bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
+                                  <img src={watermark.imageDataUrl} alt="Watermark" className="max-h-9 max-w-[56px] object-contain" />
+                                </div>
+                                <button type="button" onClick={() => watermarkImgInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
+                                <button type="button" onClick={() => setWm({ imageDataUrl: undefined })} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => watermarkImgInputRef.current?.click()}
+                                className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
+                                <Upload size={15} /> Upload a watermark image
                               </button>
-                            );
-                          })}
+                            )}
+                          </>
+                        )}
+
+                        <Slider label="Opacity" min={2} max={40} value={Math.round(watermark.opacity * 100)} suffix="%" onChange={v => setWm({ opacity: v / 100 })} />
+                        <Slider label="Rotation" min={-90} max={90} value={watermark.rotation} suffix="°" onChange={v => setWm({ rotation: v })} />
+                        <Slider label="Size" min={20} max={100} value={watermark.size} suffix="%" onChange={v => setWm({ size: v })} />
+
+                        {/* Placement — pin the mark to the centre (default) or a side of
+                            the page. Live-previews on the sheet beside this panel. */}
+                        <div>
+                          <span className="block text-[0.75rem] font-medium text-ink-600 mb-1.5">Placement</span>
+                          <div className="grid grid-cols-5 gap-1">
+                            {(['center', 'top', 'bottom', 'left', 'right'] as const).map(p => {
+                              const active = (watermark.position ?? 'center') === p;
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setWm({ position: p })}
+                                  aria-pressed={active}
+                                  className={`h-7 rounded-sm text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
+                    )}
+                  </div>
+              </SettingsFold>
+              </div>
+            </div>
           </div>
 
           {/* Right pane — a working preview of the report on a desk. A thin
@@ -1812,6 +1873,37 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+              {/* The other way to build this: a highlighted dropzone card above
+                  the page, seen first, since uploading is the fast, recommended
+                  path and typing sections by hand in the sheet below is the
+                  fallback. Goes the moment they start writing sections by hand
+                  or a file has been read, where the footer button takes over. */}
+              {showImportOffer && (
+                <div className="mx-auto mb-5 flex w-full max-w-3xl items-center gap-4 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 px-6 py-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+                    <UploadCloud size={17} />
+                  </div>
+                  {/* The memo's promise, said once, in the memo's own words: we
+                      copy how it looks, not what it says. The footer's import
+                      door says the same thing in fewer words, so the two doors
+                      into this journey read as one offer, not two. */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[0.875rem] font-semibold text-ink-900">Build this template from one of your reports</p>
+                    <p className="mt-0.5 text-[0.8125rem] text-ink-500">
+                      Upload a past report and the template copies how it looks: its sections, its tables, its
+                      letterhead. Nothing the report says is kept, and the file goes when you save.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={isSaving}
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-brand-600 px-5 text-[0.875rem] font-semibold text-white shadow-sm shadow-brand-900/15 transition-[background-color,box-shadow,transform] duration-150 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/20 active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:shadow-none disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    <UploadCloud size={15} /> Upload a report
+                  </button>
+                </div>
+              )}
               <div className="relative mx-auto w-full max-w-3xl rounded-lg border border-canvas-border" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
@@ -1831,10 +1923,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                        template — only ATR documents carry one — so no box
                        promises one. */
                     <div className="grid grid-cols-2 gap-6">
-                      {[
-                        { label: 'Prepared by', value: brand || DEFAULT_TEMPLATE_BRAND },
-                        { label: 'Period', value: 'Fills from the report' },
-                      ].map(f => (
+                      {templateCoverFields(brand).map(f => (
                         <div key={f.label} className="min-w-0">
                           <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50">{f.label}</div>
                           <div className="text-[0.875rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
@@ -1945,34 +2034,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 )}
               </div>
-
-              {/* The other way to build this: one card under the report, off the
-                  page, with the primary action on it. It sits after the sheet
-                  because the page is the thing being built and this is the
-                  shortcut past it, and it goes the moment they start writing
-                  sections by hand or a file has been read, where the footer
-                  button takes over. */}
-              {showImportOffer && (
-                <div className="mx-auto mt-5 w-full max-w-3xl rounded-lg border border-canvas-border bg-white px-6 py-5">
-                  {/* The memo's promise, said once, in the memo's own words: we
-                      copy how it looks, not what it says. The footer's import
-                      door says the same thing in fewer words, so the two doors
-                      into this journey read as one offer, not two. */}
-                  <p className="text-[0.875rem] font-semibold text-ink-900">Build this template from one of your reports</p>
-                  <p className="mt-1 text-[0.875rem] text-ink-500">
-                    Upload a past report and the template copies how it looks: its sections, its tables, its
-                    letterhead. Nothing the report says is kept, and the file goes when you save.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => importInputRef.current?.click()}
-                    disabled={isSaving}
-                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-4 text-[0.875rem] font-semibold text-white shadow-sm shadow-brand-900/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:shadow-none disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-                  >
-                    <UploadCloud size={15} /> Upload a report
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -2012,14 +2073,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</motion.button>
           {/* New templates create a fresh entry; existing custom templates save
-              in place (overwrite). */}
+              in place (overwrite). While the upload offer is showing, nothing
+              has been built yet, so this button steps back to secondary —
+              Upload is the one primary action on screen. It returns to
+              primary the moment sections exist, by hand or by import. */}
           <motion.button
             onClick={() => handleSave()}
             disabled={isSaving || nameTaken || !copyName.trim()}
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             title={nameTaken ? 'A template with this name already exists — choose a different name' : undefined}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150 cursor-pointer disabled:opacity-70 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className={showImportOffer
+              ? 'inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-white text-ink-800 border border-canvas-border rounded-md text-[0.875rem] font-semibold hover:bg-paper-50 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1'
+              : 'inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150 cursor-pointer disabled:opacity-70 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1'}
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
@@ -2387,8 +2453,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           so the job here is verify, not decide. */}
                       <>
                         <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-500">
-                          We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
-                          {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}
+                          {reviewStep === 'theme'
+                            ? <>The cover, the letterhead and the words your report grades in, read off your own document.</>
+                            : reviewStep === 'content'
+                            ? <>We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
+                                {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}</>
+                            : <>The pages that close every report: who signs it, how it ends, what is stamped across it.</>}
                         </p>
                         {/* Its own line, under the sentence. Spliced into it, the
                             whole thing read as one run-on paragraph in three
@@ -2403,8 +2473,41 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                         )}
                       </>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} aria-label="Cancel import" className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-canvas hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={18} /></motion.button>
+                    <div className="flex shrink-0 items-center gap-3">
+                      {/* Where they are, in three named steps. A step already
+                          passed is a way back; one not reached yet is not a
+                          button, because nothing ahead has been read. */}
+                      <ol className="hidden items-center gap-1 lg:flex">
+                        {REVIEW_STEPS.map((st, i) => {
+                          const at = REVIEW_STEPS.findIndex(x => x.key === reviewStep);
+                          const here = i === at;
+                          const done = i < at;
+                          return (
+                            <li key={st.key} className="flex items-center gap-1">
+                              {i > 0 && <span aria-hidden="true" className={`h-px w-5 ${done || here ? 'bg-brand-200' : 'bg-canvas-border'}`} />}
+                              <button
+                                type="button"
+                                onClick={() => { if (done) setReviewStep(st.key); }}
+                                aria-current={here ? 'step' : undefined}
+                                disabled={!done && !here}
+                                className={`inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[0.75rem] transition-colors ${
+                                  here ? 'bg-brand-50 font-semibold text-brand-700'
+                                    : done ? 'text-ink-500 hover:bg-canvas hover:text-brand-700 cursor-pointer'
+                                    : 'text-ink-300'
+                                }`}
+                              >
+                                <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[0.625rem] font-semibold tabular-nums ${
+                                  here ? 'border-brand-300 bg-white text-brand-700'
+                                    : done ? 'border-compliant-200 bg-compliant-50 text-compliant-600'
+                                    : 'border-canvas-border text-ink-300'
+                                }`}>{done ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
+                                {st.label}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                      <motion.button whileTap={{ scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={attemptCancelImport} aria-label="Cancel import" className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-canvas hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={18} /></motion.button>
                     </div>
                   </div>
                 </header>
@@ -2415,8 +2518,93 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     hand-roll two columns and put our reading of their report
                     on the left instead of their report. */}
                 <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
+                  {reviewStep === 'theme' ? (
+                    /* Step one — how the report LOOKS. Their own first page on
+                       the left, the cover we would print on the right, and under
+                       it every setting the read captured, each with the value it
+                       took. Nothing to type: the job is to look and agree. */
+                    <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-0">
+                      <section className="flex min-h-0 flex-col border-r border-canvas-border pr-6">
+                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
+                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
+                          <span className="text-[0.6875rem] text-ink-400">the cover of the {partWord === 'slide' ? 'deck' : 'report'} you uploaded</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+                          {pendingImport.result?.pages?.[0]
+                            ? <img src={pendingImport.result.pages[0]} alt={`${pendingImport.fileName}, first ${partWord}`} className="w-full rounded-lg border border-canvas-border" />
+                            : <p className="text-[0.75rem] text-ink-400">No page image for this file.</p>}
+                        </div>
+                      </section>
+
+                      <section className="flex min-h-0 flex-col pl-6">
+                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
+                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-brand-700">To-be state</span>
+                          <span className="text-[0.6875rem] text-ink-400">the cover your reports come out of</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+                          {(() => {
+                            const chrome = reviewChrome(pendingImport.result, {
+                              title: copyName, desc: template.desc, brand, headerText, footerText, theme, brandColor, logo: logoDataUrl,
+                            });
+                            return (
+                              <>
+                                <div className="rounded-lg border border-canvas-border overflow-hidden">
+                                  <ReportBrandBanner
+                                    title={chrome.title || 'Untitled Template'}
+                                    titleClassName="text-[1.375rem]"
+                                    className="rounded-t-lg"
+                                    gradient={chrome.gradient}
+                                    logo={chrome.logo}
+                                    headerText={chrome.headerText}
+                                    footer={
+                                      <div className="grid grid-cols-2 gap-6">
+                                        {templateCoverFields(chrome.brand).map(f => (
+                                          <div key={f.label} className="min-w-0">
+                                            <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50">{f.label}</div>
+                                            <div className="mt-1 truncate text-[0.875rem] font-medium text-white/90">{f.value}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    }
+                                  >
+                                    <p className="text-[0.8125rem] text-white/75">{chrome.desc || 'Custom report template'}</p>
+                                  </ReportBrandBanner>
+                                  <div className="flex items-center justify-between bg-canvas px-5 py-2.5 text-[0.6875rem] text-ink-400">
+                                    <span className="truncate">{chrome.footerText}</span>
+                                    {pendingImport.result?.furniture?.pageNumberPattern && (
+                                      <span className="shrink-0">{pendingImport.result.furniture.pageNumberPattern === 'N' ? 'Page numbers' : pendingImport.result.furniture.pageNumberPattern}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* What the read took, and where it took it from. */}
+                                <dl className="mt-4 border-t border-canvas-border">
+                                  {([
+                                    ['Organisation', chrome.brand, hasLetterhead ? 'read from your cover' : 'your workspace default'],
+                                    ['Letterhead line', chrome.footerText, pendingImport.result?.furniture?.footer?.length ? 'read from the foot of your pages' : 'our default'],
+                                    ['Confidentiality line', chrome.headerText || 'None', pendingImport.result?.furniture?.confidentiality ? 'read from your pages' : 'your report had none'],
+                                    ['Cover colour', pendingImport.result?.coverColor ?? theme, pendingImport.result?.coverColor ? 'sampled from your cover' : 'the theme you picked'],
+                                    ['Logo', pendingImport.result?.logo ? 'Taken from your report' : (logoDataUrl ? 'The one on this template' : 'None found'), pendingImport.result?.logo ? 'read from your cover' : 'nothing to read'],
+                                  ] as [string, string, string][]).map(([label, value, whence]) => (
+                                    <div key={label} className="flex items-baseline gap-3 border-b border-canvas-border py-2.5">
+                                      <dt className="w-[9.5rem] shrink-0 text-[0.75rem] font-medium text-ink-700">{label}</dt>
+                                      <dd className="min-w-0 flex-1 truncate text-[0.75rem] text-ink-900">{value || 'None'}</dd>
+                                      <dd className="shrink-0 text-[0.6875rem] text-ink-400">{whence}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+
+                                {/* Their grading words against ours: a property of
+                                    the format, so it is settled with the look. */}
+                                {ratingWordsPanel}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </section>
+                    </div>
+                  ) : reviewStep === 'content' ? (
                   <SectionReviewCanvas
-                    ratingWords={ratingWordsPanel}
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
                     pages={pendingImport.result?.pages}
@@ -2440,6 +2628,102 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       logo: logoDataUrl,
                     })}
                   />
+                  ) : (
+                    /* Step three — the pages that close a report. Their own last
+                       page beside the settings the read turned on, each still a
+                       switch: this is where a signature page or a watermark is
+                       agreed, not somewhere in a panel afterwards. */
+                    <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-0">
+                      <section className="flex min-h-0 flex-col border-r border-canvas-border pr-6">
+                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
+                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
+                          <span className="text-[0.6875rem] text-ink-400">the last {partWord} of the {partWord === 'slide' ? 'deck' : 'report'} you uploaded</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+                          {(() => {
+                            const shots = pendingImport.result?.pages ?? [];
+                            const last = shots[shots.length - 1];
+                            return last
+                              ? <img src={last} alt={`${pendingImport.fileName}, last ${partWord}`} className="w-full rounded-lg border border-canvas-border" />
+                              : <p className="text-[0.75rem] text-ink-400">No page image for this file.</p>;
+                          })()}
+                        </div>
+                      </section>
+
+                      <section className="flex min-h-0 flex-col pl-6">
+                        <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
+                          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-brand-700">To-be state</span>
+                          <span className="text-[0.6875rem] text-ink-400">what closes every report you generate</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+                          <div className="border-t border-canvas-border">
+                            {([
+                              {
+                                label: 'Page numbers',
+                                hint: pendingImport.result?.furniture?.pageNumberPattern
+                                  ? `Your ${partWord}s are numbered, so ours are too`
+                                  : `We found no numbers on your ${partWord}s`,
+                                on: pageNumbers,
+                                set: setPageNumbers,
+                              },
+                              {
+                                label: 'Signature block',
+                                hint: signatories.length
+                                  ? `${signatories.length} ${signatories.length === 1 ? 'role' : 'roles'} read from your sign-off page`
+                                  : 'Job titles, signature lines and a date on every report',
+                                on: signoffEnabled,
+                                set: toggleSignoff,
+                              },
+                              {
+                                label: 'Closing page',
+                                hint: closingText.length
+                                  ? 'The last page of your report, printed word for word'
+                                  : 'A last page, printed exactly as written',
+                                on: closingEnabled,
+                                set: toggleClosing,
+                              },
+                              {
+                                label: 'Watermark',
+                                hint: 'A diagonal mark across every page',
+                                on: watermark.enabled,
+                                set: (v: boolean) => setWm({ enabled: v }),
+                              },
+                            ]).map(row => (
+                              <div key={row.label} className="flex items-center justify-between gap-4 border-b border-canvas-border py-3">
+                                <span className="min-w-0">
+                                  <span className="block text-[0.8125rem] font-medium text-ink-900">{row.label}</span>
+                                  <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">{row.hint}</span>
+                                </span>
+                                <Toggle checked={row.on} onChange={row.set} label={row.label} />
+                              </div>
+                            ))}
+                          </div>
+
+                          {signoffEnabled && signatories.length > 0 && (
+                            <div className="mt-4">
+                              <GroupEyebrow hint="read from your report">Who signs</GroupEyebrow>
+                              <ul className="flex flex-wrap gap-1.5">
+                                {signatories.map(sig => (
+                                  <li key={sig.id} className="inline-flex items-center rounded-full border border-canvas-border bg-canvas px-2.5 py-1 text-[0.75rem] text-ink-700">{sig.role}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {closingEnabled && closingText.length > 0 && (
+                            <div className="mt-4">
+                              <GroupEyebrow hint="printed word for word">How it ends</GroupEyebrow>
+                              <div className="rounded-lg border border-canvas-border bg-canvas px-4 py-3">
+                                {closingText.map((line, li) => (
+                                  <p key={li} className="text-[0.75rem] leading-relaxed text-ink-700">{line}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    </div>
+                  )}
                 </div>
 
                 <footer className="shrink-0 px-7 py-3 border-t border-canvas-border flex items-center justify-between gap-4">
@@ -2485,20 +2769,43 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <motion.button whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer">
-                      {importBanner ? 'Cancel' : 'Discard'}
-                    </motion.button>
                     <motion.button
-                      whileTap={namedCount === 0 ? undefined : { scale: 0.97 }}
+                      whileTap={{ scale: 0.97 }}
                       transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                      // Straight in. The preview is a view on this same screen,
-                      // not a gate on the way to using the format.
-                      onClick={applyImport}
-                      disabled={namedCount === 0}
-                      className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        const at = REVIEW_STEPS.findIndex(x => x.key === reviewStep);
+                        if (at > 0) setReviewStep(REVIEW_STEPS[at - 1].key);
+                        else attemptCancelImport();
+                      }}
+                      className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
                     >
-                      <ShieldCheck size={14} /> Use this format
+                      {reviewStep !== 'theme' ? 'Back' : importBanner ? 'Cancel' : 'Discard'}
                     </motion.button>
+                    {reviewStep !== 'signoff' ? (
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        onClick={() => {
+                          const at = REVIEW_STEPS.findIndex(x => x.key === reviewStep);
+                          setReviewStep(REVIEW_STEPS[Math.min(at + 1, REVIEW_STEPS.length - 1)].key);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md hover:bg-brand-500 cursor-pointer"
+                      >
+                        Next: {REVIEW_STEPS[REVIEW_STEPS.findIndex(x => x.key === reviewStep) + 1].label.toLowerCase()} <ArrowRight size={14} />
+                      </motion.button>
+                    ) : (
+                      <motion.button
+                        whileTap={namedCount === 0 ? undefined : { scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        // Straight in. The preview is a view on this same screen,
+                        // not a gate on the way to using the format.
+                        onClick={applyImport}
+                        disabled={namedCount === 0}
+                        className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <ShieldCheck size={14} /> Use this format
+                      </motion.button>
+                    )}
                   </div>
                 </footer>
               </motion.div>
@@ -2538,6 +2845,17 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           <>This clears the {importBanner?.count ?? ''} section{importBanner?.count === 1 ? '' : 's'}{importBanner?.gotLetterhead ? ' and the letterhead' : ''} we read{importBanner?.fileName ? <> from <span className="font-semibold">{importBanner.fileName}</span></> : ''}. You can start from a report again anytime.</>
         }
         confirmLabel="Remove"
+        destructive
+      />
+      <ConfirmDialog
+        open={confirmDiscardRead}
+        onClose={() => setConfirmDiscardRead(false)}
+        onConfirm={() => { setConfirmDiscardRead(false); cancelImport(); }}
+        title="Discard this read?"
+        description={
+          <>We read {reviewSections.filter(s => s.name.trim() && !s.wrapper).length} section{reviewSections.filter(s => s.name.trim() && !s.wrapper).length === 1 ? '' : 's'}{pendingImport?.fileName ? <> from <span className="font-semibold">{pendingImport.fileName}</span></> : ''}. Discarding now throws that away — you'd need to upload it again.</>
+        }
+        confirmLabel="Discard"
         destructive
       />
     </motion.div>

@@ -16,7 +16,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { RowDeleteButton } from './RowDeleteButton';
 import { ReportBrandBanner } from './ReportDocumentChrome';
-import { sectionBlurb } from './reportShared';
+import { sectionBlurb, templateCoverFields } from './reportShared';
 import {
   TAG_GLOSSARY,
   fillTag,
@@ -860,14 +860,11 @@ export default function SectionReviewCanvas({
                   gradient={reportChrome.gradient}
                   logo={reportChrome.logo}
                   footer={
-                    <div className="grid grid-cols-2 gap-4">
-                      {[
-                        { label: 'Prepared by', value: reportChrome.brand || 'Irame' },
-                        { label: 'Period', value: 'Fills from the report' },
-                      ].map(f => (
+                    <div className="grid grid-cols-2 gap-6">
+                      {templateCoverFields(reportChrome.brand).map(f => (
                         <div key={f.label} className="min-w-0">
-                          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-white/50 whitespace-nowrap">{f.label}</div>
-                          <div className="text-[0.8125rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
+                          <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50 whitespace-nowrap">{f.label}</div>
+                          <div className="text-[0.875rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
                         </div>
                       ))}
                     </div>

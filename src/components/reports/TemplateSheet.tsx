@@ -15,6 +15,7 @@ import { ReportBrandBanner, ReportSignoffBlock, ReportClosingBlock } from './Rep
 import {
   sectionBlurb, reportGradient, reportAccent, collectBlockLibrary,
   type EditableTemplate,
+  templateCoverFields,
 } from './reportShared';
 
 const WATERMARK_POS: Record<'center' | 'top' | 'bottom' | 'left' | 'right', string> = {
@@ -43,12 +44,9 @@ export default function TemplateSheet({
   const watermark = template.watermark;
   const pageNumbers = template.pageNumbers !== false;
   const signatories = (template.signatories ?? []).filter(s => s.role.trim());
-  // No section count on a letterhead: no real report prints one, and it is
-  // derived from the outline rather than anything they typed.
-  const footerFields = bannerFooter ?? [
-    { label: 'Prepared by', value: template.brand || 'Irame' },
-    { label: 'Period', value: 'Fills from the report' },
-  ];
+  // One cover, three surfaces: the meta row comes from the shared builder so
+  // this sheet, the editor's live page and the check screen cannot drift.
+  const footerFields = bannerFooter ?? templateCoverFields(template.brand);
 
   return (
     <div

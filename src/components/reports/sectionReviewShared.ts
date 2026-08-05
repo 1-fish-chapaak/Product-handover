@@ -4,7 +4,7 @@
 
 import {
   brandGradient, reportGradient, reportAccent,
-  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE,
+  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE, letterheadLine,
 } from './reportShared';
 import type { SectionFill, DataBinding, TemplateBlock } from './reportShared';
 
@@ -202,8 +202,11 @@ export function reviewChrome(
 ): ReviewChrome {
   const f = read?.furniture;
   const brand = f?.fields.auditEntity || fallback.brand?.trim() || DEFAULT_TEMPLATE_BRAND;
-  const theirHeader = f?.confidentiality || (f?.header.length ? f.header.join('  ·  ') : '');
-  const theirFooter = f?.footer.length ? f.footer.join('  ·  ') : '';
+  // Built, never joined raw: the same builder the editor's own fields use, so
+  // the line on this cover is the line the template saves. A raw join brings
+  // back the page counter ("PwC Page 2") and any repeat.
+  const theirHeader = f?.confidentiality ? letterheadLine([f.confidentiality]) : (f?.header.length ? letterheadLine(f.header) : '');
+  const theirFooter = f?.footer.length ? letterheadLine(f.footer) : '';
   const theme = fallback.theme || DEFAULT_THEME;
   return {
     title: fallback.title.trim() || BLANK_TEMPLATE.name,
