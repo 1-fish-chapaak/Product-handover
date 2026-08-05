@@ -25,11 +25,11 @@ import {
 } from 'lucide-react';
 import {
   LAYER_META,
-  type LayeredInsight, type VerdictTone, type CheckMoreOption,
+  type AuditRecommendation, type LayeredInsight, type VerdictTone, type CheckMoreOption,
   type RecPriority, type EntityRef,
 } from '../../data/layeredInsights';
 import { FRESHNESS_META } from './insightFreshness';
-import { openInChat as openChatTab } from './insightChat';
+import { openInChat as openChatTab, runActionInChat } from './insightChat';
 import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
 import RunTrajectoryBand from './RunTrajectoryBand';
 import InsightEmailModal from './InsightEmailModal';
@@ -82,10 +82,11 @@ const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
   risk: 'Evidence · controls under this risk',
   sop: 'Evidence · risks and controls under this SOP',
   engagement: 'Evidence · risks and controls',
+  portfolio: 'Evidence · engagements in the pattern',
 };
 
 const LAYER_WORD: Record<LayeredInsight['layer'], string> = {
-  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement',
+  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement', portfolio: 'Portfolio',
 };
 
 // ─── Entity navigation — "which risk/control, and take me there" ────────────
@@ -218,17 +219,26 @@ export default function LayeredInsightCard({
   // long stack of collapsed rows stays calm.
   const bodyShown = !collapsible || open;
 
-  // Open an action / follow-up in Ask IRA (new tab), carrying the subject as context.
+  // Open a follow-up question in Ask IRA (new tab), carrying the subject as context.
   const openInChat = (ask: string) => openChatTab(ask, insight.subjectLabel);
-  // Recommended actions honour the caller's handler (e.g. seed a follow-up composer).
-  const openRec = (title: string) => (onRec ? onRec(title) : openInChat(title));
+  // A recommended action RUNS: the whole rec — its rationale, guardrail, target
+  // and this card's evidence — travels to a chat tab that sends it on arrival.
+  // Callers already inside a chat override this (`onRec`) so the step lands in
+  // the thread they're reading rather than opening a tab beside it.
+  const openRec = (rec: AuditRecommendation) => (onRec ? onRec(rec.title) : runActionInChat({ rec, insight }));
+  // The plain "what to do next" list carries strings, not typed recs — wrap each
+  // one so it still runs with this card's context behind it.
+  const openPlainAction = (title: string, i: number) =>
+    openRec({ id: `${insight.id}-next-${i}`, title, rationale: '', category: 'monitoring', priority: 'this-period' });
 
   // ── Entity navigation (rollup surfaces only) ──
   // The anchor is this card's own subject; its only meaningful destination is a
   // real row elsewhere ('insight' would just point the card at itself). The
   // engagement anchor is the surface the reader is already on — no chip.
-  const anchorRef: EntityRef = { kind: insight.layer, id: insight.subjectId, label: insight.subjectLabel };
-  const showAnchorRef = !!entityNav && insight.layer !== 'engagement';
+  // Portfolio cards never render an anchor chip either (the reader is already
+  // on the portfolio surface), so narrowing that layer out of EntityKind is safe.
+  const anchorRef: EntityRef = { kind: insight.layer === 'portfolio' ? 'engagement' : insight.layer, id: insight.subjectId, label: insight.subjectLabel };
+  const showAnchorRef = !!entityNav && insight.layer !== 'engagement' && insight.layer !== 'portfolio';
   const anchorNavigable = showAnchorRef && entityNav!.resolve(anchorRef) === 'row';
   const openAnchor = () => entityNav?.open(anchorRef);
   // Where to check — navigation refs when the caller set them, else the spans
@@ -484,7 +494,10 @@ export default function LayeredInsightCard({
                   Falls back to the plain "what to do next" list when the subject
                   has no typed recommendations. */}
               {recs.length > 0 ? (
-                <RecommendedActions recs={recs} onOpen={openRec} />
+                <RecommendedActions
+                  recs={recs}
+                  onOpen={(r) => openRec(recs.find(x => x.id === r.id) ?? recs[0])}
+                />
               ) : (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
@@ -493,7 +506,7 @@ export default function LayeredInsightCard({
                   <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
                     {insight.recommendedActions.map((a, i) => (
                       <li key={i} className="min-w-0">
-                        <ActionRow text={a} onOpen={() => openRec(a)} />
+                        <ActionRow text={a} onOpen={() => openPlainAction(a, i)} />
                       </li>
                     ))}
                   </ul>

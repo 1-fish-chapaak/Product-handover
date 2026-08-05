@@ -23,7 +23,7 @@ import {
   LAYER_META, REC_INTENT_META, REC_PRIORITY_META, REC_PRIORITY_RANK,
   type EntityKind, type LayeredInsight, type RecIntent, type RecPriority,
 } from '../../data/layeredInsights';
-import { openInChat } from './insightChat';
+import { runActionInChat } from './insightChat';
 import LayeredInsightCard from './LayeredInsightCard';
 import { useToast } from './Toast';
 import {
@@ -34,7 +34,7 @@ import {
 // ─── Small lookups ──────────────────────────────────────────────────────────
 
 const LAYER_WORD: Record<string, string> = {
-  control: 'control-level', risk: 'risk-level', sop: 'SOP-level', engagement: 'engagement-level',
+  control: 'control-level', risk: 'risk-level', sop: 'SOP-level', engagement: 'engagement-level', portfolio: 'portfolio-level',
 };
 
 const SEV_LABEL: Record<string, string> = { high: 'High', med: 'Medium', low: 'Low' };
@@ -508,10 +508,11 @@ export function ActionDrawer({
                 </button>
               )}
               <button
-                type="button" onClick={() => openInChat(action.rec.title, action.source.subjectLabel)}
+                type="button" onClick={() => runActionInChat({ rec: action.rec, insight: action.source })}
+                title="Runs in a new Ask IRA tab — the insight's evidence goes with it"
                 className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-3 h-9 text-[12px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
               >
-                Open in Ask IRA
+                Run in Ask IRA
               </button>
               {getActionStatus(action) !== 'applied' && (
                 <button

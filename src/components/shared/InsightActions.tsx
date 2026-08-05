@@ -31,13 +31,14 @@ const TARGET_TONE: Record<EntityKind, string> = {
 
 // ─── Recommended-action tile (grid cell) ────────────────────────────────────
 // Pared to the essential: the imperative, plus (when the action lands on a
-// different entity) its target chip. The whole tile opens the step in Ask IRA —
-// where the full rationale and methodology live.
+// different entity) its target chip. The whole tile RUNS the step in Ask IRA —
+// the click sends the action with its evidence attached, rather than parking
+// the sentence in a composer for the reader to send.
 export function RecTile({ title, onOpen, target, intent }: { title: string; onOpen: () => void; target?: EntityRef; intent?: RecIntent }) {
   return (
     <button
       type="button" onClick={onOpen}
-      title="Open this recommendation in Ask IRA (new tab)"
+      title="Run this recommendation in Ask IRA (new tab) — its evidence goes with it"
       className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
     >
       <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug group-hover:text-brand-700 transition-colors">
@@ -59,12 +60,14 @@ export function RecTile({ title, onOpen, target, intent }: { title: string; onOp
 export interface RecItem { id: string; title: string; target?: EntityRef; intent?: RecIntent }
 
 // The fix, foregrounded. Tiles two-per-row so a 4–6 item set reads in a couple
-// of rows, not a tall wall. Each tile opens in Ask IRA with the step pre-filled.
+// of rows, not a tall wall. Each tile hands the WHOLE rec back (not just its
+// title) so the caller can carry its rationale, guardrail and target into the
+// run — a title alone is what made these read as follow-ups.
 export function RecommendedActions({
   recs, onOpen, cap = REC_CAP, className = 'mt-2.5',
 }: {
   recs: RecItem[];
-  onOpen: (title: string) => void;
+  onOpen: (rec: RecItem) => void;
   cap?: number;
   className?: string;
 }) {
@@ -79,7 +82,7 @@ export function RecommendedActions({
       <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
         {recs.slice(0, cap).map((r) => (
           <li key={r.id} className="min-w-0">
-            <RecTile title={r.title} onOpen={() => onOpen(r.title)} target={r.target} intent={r.intent} />
+            <RecTile title={r.title} onOpen={() => onOpen(r)} target={r.target} intent={r.intent} />
           </li>
         ))}
       </ul>

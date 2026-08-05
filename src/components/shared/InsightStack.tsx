@@ -48,11 +48,11 @@ const SEV: Record<LayeredInsight['severity'], { rank: number; label: string; pil
   low:  { rank: 2, label: 'Low', pill: 'bg-compliant-50 text-compliant-700 border-compliant-200', dot: 'bg-compliant' },
 };
 const TONE_RANK: Record<VerdictTone, number> = { negative: 0, caution: 1, positive: 2 };
-// A rollup reads top-down: the engagement escalation, then the SOPs and risks
-// under it, then the controls under those.
-const LAYER_RANK: Record<InsightLayer, number> = { engagement: 0, sop: 1, risk: 2, control: 3 };
+// A rollup reads top-down: the portfolio escalation, then the engagement, then
+// the SOPs and risks under it, then the controls under those.
+const LAYER_RANK: Record<InsightLayer, number> = { portfolio: 0, engagement: 1, sop: 2, risk: 3, control: 4 };
 const LAYER_GROUP_LABEL: Record<InsightLayer, string> = {
-  engagement: 'Anchored at engagement', sop: 'Anchored at SOP', risk: 'Anchored at risk', control: 'Anchored at control',
+  portfolio: 'Anchored at portfolio', engagement: 'Anchored at engagement', sop: 'Anchored at SOP', risk: 'Anchored at risk', control: 'Anchored at control',
 };
 // Freshness is a tiebreaker INSIDE a severity+layer band — a new Low must never
 // displace a known High. Escalated outranks new: worse beats first-seen.

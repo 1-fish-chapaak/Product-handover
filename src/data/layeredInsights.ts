@@ -21,7 +21,7 @@ import type { ConfidenceFactors, InsightSeverity, DetectionMethod, KpiFormat } f
 
 // ─── The altitudes ─────────────────────────────────────────────────────────
 
-export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement';
+export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement' | 'portfolio';
 
 // ─── Anchors, spans and targets — the B+C surfacing model ──────────────────
 // Two rules govern where AI content appears across SOP → risk → control:
@@ -848,6 +848,9 @@ export function buildRecommendations(input: {
   // SOP-anchored insights are rare by construction (they need a cross-risk
   // pattern); the SOP surface receives targeted actions instead.
   if (layer === 'sop') return [];
+  // Portfolio insights are hand-authored cross-engagement stories that carry
+  // their own targeted recommendations — never generated from a status hint.
+  if (layer === 'portfolio') return [];
   return engagementRecs(status, flagship);
 }
 
@@ -1142,6 +1145,11 @@ export const LAYER_META: Record<InsightLayer, { label: string; scan: string; den
   engagement: {
     label: 'this engagement',
     scan: 'Rolls up every risk and control across the engagement',
+    density: 'light',
+  },
+  portfolio: {
+    label: 'this portfolio',
+    scan: 'Correlates findings across every engagement in the library',
     density: 'light',
   },
 };

@@ -540,7 +540,7 @@ export function OutputComparePanel({
         <RecommendedActions
           className="mt-2.5"
           recs={recs}
-          onOpen={(title) => onAction?.(title)}
+          onOpen={(rec) => onAction?.(rec.title)}
         />
 
         {/* Signal back — same row, same place, same language as every other
