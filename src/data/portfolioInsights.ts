@@ -65,6 +65,12 @@ const STORIES: PortfolioStory[] = [
         'Three engagements are each remediating a symptom while the shared driver keeps generating exceptions.',
         'A duplicate paid against a changed master record is unrecovered once settled — the exposure compounds per period.',
       ],
+      kpis: [
+        { value: '3', label: 'Engagements, one driver', sub: 'each remediating a symptom — counted once' },
+        { value: '8', label: 'Open items', sub: '2 hits + 6 breaks, all on changed master records', tone: 'bad' },
+        { value: 'Unsized', label: 'Recovery exposure', sub: 'aggregate before the audit-committee cycle' },
+      ],
+      riskType: 'financial',
       factors: { frequency: 0.6, sourceDiversity: 0.85, recency: 0.9, businessImpact: 0.85 },
       confidenceOverride: 0.8,
       evidence: [
@@ -152,6 +158,12 @@ const STORIES: PortfolioStory[] = [
         'A controls-reliance strategy built over an ineffective ITGC layer fails inspection — the fallback is substantive testing at scale.',
         'The annual attestation dated May 16 freezes the ITGC position both SOX files will have to live with.',
       ],
+      kpis: [
+        { value: '58%', label: 'ITGC pass rate', sub: 'below the band where reliance is supportable', tone: 'bad' },
+        { value: '7', label: 'Open findings', sub: 'access review + change management — clear before May 16', tone: 'bad' },
+        { value: '2', label: 'SOX files exposed', sub: 'their automated-control reliance inherits the layer' },
+      ],
+      riskType: 'it',
       factors: { frequency: 0.7, sourceDiversity: 0.75, recency: 0.95, businessImpact: 0.9 },
       confidenceOverride: 0.82,
       evidence: [
@@ -228,6 +240,12 @@ const STORIES: PortfolioStory[] = [
         'The three books share reviewer capacity — a slip on the first date compresses the next two.',
         'Each closeout is also the deadline for the open items above; the collision leaves no absorption room.',
       ],
+      kpis: [
+        { value: '72', unit: 'hrs', label: 'Closeout window', sub: 'three FY milestones, one collision — May 15–17' },
+        { value: '17', label: 'Open items to clear', sub: '4 + 7 + 6 across the three books, before their dates', tone: 'bad' },
+        { value: 'May 16', label: 'Most exposed date', sub: 'the attestation — hardest to move, least ready' },
+      ],
+      riskType: 'operational',
       factors: { frequency: 0.5, sourceDiversity: 0.7, recency: 1, businessImpact: 0.6 },
       confidenceOverride: 0.74,
       evidence: [
@@ -301,6 +319,12 @@ const STORIES: PortfolioStory[] = [
       stakes: [
         'Duplicated testing effort across four books — consolidation is an efficiency gain, not a coverage trade.',
       ],
+      kpis: [
+        { value: '4', label: 'Engagements, same assertion', sub: 'independently corroborated — real assurance' },
+        { value: '0', label: 'Duplicates settled undetected', sub: 'in the periods reviewed, on any surface' },
+        { value: '1', label: 'Standard to consolidate to', sub: 'anchored on the dedicated monitor — effort freed' },
+      ],
+      riskType: 'financial',
       factors: { frequency: 0.8, sourceDiversity: 0.9, recency: 0.85, businessImpact: 0.4 },
       confidenceOverride: 0.77,
       evidence: [

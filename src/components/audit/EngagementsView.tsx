@@ -708,6 +708,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         onClose={() => setInsightsPanelOpen(false)}
         subjectLabel="Engagement portfolio"
         scopeLabel="across your portfolio"
+        preamble="Only patterns no single engagement can tell you qualify at this level — single-engagement findings stay in their own engagement’s run."
         run={insightRun}
         rowNav={insightRowNav}
       />
