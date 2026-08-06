@@ -21,7 +21,9 @@ import { statTone } from './reportTones';
 import { exportBulkAuditExcel } from './reportExport';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import type { WorkflowResult } from './reportShared';
+import type { WorkflowResult, EditableTemplate } from './reportShared';
+import { templateScopeLine } from './templateScope';
+import { findEngagement } from '../../data/engagements';
 import AddObservationModal, {
   computeNextObservationId,
   type EditingObservationInput,
@@ -102,6 +104,8 @@ type Report = {
   pages?: number;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: 'editorial';
+  /** Template last applied from the reader — restored when it reopens. */
+  appliedTemplateId?: string;
 };
 
 export function BulkAuditVariantView({
@@ -109,12 +113,15 @@ export function BulkAuditVariantView({
   templates = REPORT_TEMPLATES,
   onBack,
   onShare,
+  onApplyTemplate,
 }: {
   report: Report;
   /** Options listed in the Apply Template dropdown (standard + custom). */
   templates?: typeof REPORT_TEMPLATES[number][];
   onBack: () => void;
   onShare?: () => void;
+  /** Persist the applied template on the report so it survives a reopen. */
+  onApplyTemplate?: (reportId: string, templateId: string) => void;
 }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -357,7 +364,13 @@ export function BulkAuditVariantView({
         <BulkBackLink onBack={onBack} />
         {!allFailed && (
           <div className="flex items-center gap-2">
-            <BulkCoverActions onShare={onShare} onDownload={() => setShowDownloadModal(true)} templates={templates} />
+            <BulkCoverActions
+              onShare={onShare}
+              onDownload={() => setShowDownloadModal(true)}
+              templates={templates}
+              appliedTemplateId={report.appliedTemplateId}
+              onApplyTemplate={onApplyTemplate ? (templateId: string) => onApplyTemplate(report.id, templateId) : undefined}
+            />
           </div>
         )}
       </div>
@@ -677,7 +690,14 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
               </div>
               <div className="flex-1 min-w-0">
                 <div className={`text-[0.75rem] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
-                <div className="text-[0.625rem] text-ink-400">{rt.category}</div>
+                {/* Same line the report reader's picker carries: where this
+                    format may be used, as answered when it was saved. */}
+                <div className="flex items-center gap-1.5 text-[0.625rem] text-ink-400">
+                  <span className="shrink-0">{rt.category}</span>
+                  {templateScopeLine(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
+                    <span className="min-w-0 truncate">· {templateScopeLine(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}</span>
+                  )}
+                </div>
               </div>
               {isActive && <Check size={14} className="shrink-0 text-brand-600" />}
             </button>
@@ -704,14 +724,20 @@ function BulkBackLink({ onBack }: { onBack: () => void }) {
 // Apply Template / Share / Download — rendered in the cover banner's action slot.
 // Apply Template is a UX match here: a bulk audit report has a fixed editorial
 // layout, so applying a template animates + toasts without swapping sections.
-function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }: {
+function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES, appliedTemplateId, onApplyTemplate }: {
   onShare?: () => void;
   onDownload: () => void;
   templates?: typeof REPORT_TEMPLATES[number][];
+  /** Template saved on the report — the control opens on it. */
+  appliedTemplateId?: string;
+  onApplyTemplate?: (templateId: string) => void;
 }) {
   const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
-  const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // Restored from the report, not reset to null on every mount.
+  const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(
+    () => (appliedTemplateId ? templates.find(t => t.id === appliedTemplateId) ?? null : null)
+  );
   const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
@@ -719,6 +745,7 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }:
     window.setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
+      onApplyTemplate?.(template.id);
       addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
   };

@@ -1974,7 +1974,7 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onApplyTemplate, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1985,6 +1985,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   onUpdateDescription?: (reportId: string, description: string) => void;
   /** Persist manual sign / sign-off state on the report. */
   onUpdateSignoffs?: (reportId: string, signoffs: Record<string, Signoff>) => void;
+  /** Persist the template picked from Apply Template, so the reader reopens on
+   *  it instead of falling back to the report's original template. */
+  onApplyTemplate?: (reportId: string, templateId: string) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
@@ -2024,7 +2027,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealStep]);
   const sectionReady = (i: number) => revealStep > i;
-  const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
+  // The applied template is a saved property of the report, not view state: a
+  // template picked here is written back through onApplyTemplate and restored
+  // on every reopen, so the reader never silently reverts to report.templateId.
+  const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(() => {
+    if (initialTemplate) return initialTemplate;
+    const saved = report.appliedTemplateId;
+    if (!saved) return null;
+    return customTemplates.find(t => t.id === saved) ?? REPORT_TEMPLATES.find(t => t.id === saved) ?? null;
+  });
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
@@ -2050,6 +2061,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
+      // Save the choice on the report itself, not just in this view.
+      onApplyTemplate?.(report.id, template.id);
       addToast({ type: 'success', message: `Template "${template.name}" applied.` });
       recordActivity(`Applied template “${template.name}”`, [`Report reformatted to the “${template.name}” template`]);
     }, 800);
