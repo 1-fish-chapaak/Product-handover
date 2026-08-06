@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -86,7 +86,11 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
 
   blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — TOD & TOE`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
-  const guide = sampleSizeGuide(c);
+  // Sized the way the SCREEN sized it. Read without the engagement, this printed
+  // "1 (test of one)" on a control the app had already resized to 25 because an
+  // ITGC underneath it failed — the paper contradicting the working file it is
+  // supposed to be a record of.
+  const guide = sampleSizeGuide(c, itgcHolds(eng, c));
   // The two population checks are computed, not attested — so the paper prints
   // what the application concluded and, where it disagreed, the reason it was
   // overridden. A row that only ever said "ticked" told a reviewer nothing.

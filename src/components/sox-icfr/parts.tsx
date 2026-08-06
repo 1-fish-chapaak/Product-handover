@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle, MinusCircle } from 'lucide-react';
+// Cpu is the module's icon for "this runs on a machine" — the nature chip uses it
+// too, which is what makes the ITGC banner read as being about the same thing.
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
@@ -334,6 +336,57 @@ export function RagStrip({ meters }: { meters: RagMeterDef[] }) {
   return (
     <div className={cn('grid gap-2.5', meters.length === 4 ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3')}>
       {meters.map(m => <RagCard key={m.label} m={m} />)}
+    </div>
+  );
+}
+
+/**
+ * The ITGC cascade at engagement level — the blast radius, on the two screens
+ * where somebody would otherwise never learn it happened.
+ *
+ * One IT general control concluded ineffective withdraws "test of one" from
+ * every automated and IT-dependent control in the engagement: their operating
+ * tests come back and their samples resize. That is a large, silent change made
+ * from a completely different page, so it is said here, with the count it
+ * affects, the control that caused it, and the way to both.
+ *
+ * Rendered by the caller only when `failed.length > 0` — a banner that renders
+ * itself empty is a banner nobody trusts the absence of.
+ */
+export function ItgcCascadeBanner({ failed, affected, onOpenControl, onShowAffected }: {
+  failed: { id: string; code: string; description: string }[];
+  affected: number;
+  onOpenControl: (id: string) => void;
+  onShowAffected?: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-mitigated-200 bg-mitigated-50/60 p-4 flex items-start gap-3">
+      <Cpu size={16} className="text-mitigated-700 mt-0.5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[0.8125rem] font-bold text-mitigated-800">
+          Test of one is withdrawn across the engagement
+        </h3>
+        <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">
+          {failed.length === 1 ? 'An IT general control' : `${failed.length} IT general controls`} concluded ineffective, so{' '}
+          <b className="font-semibold text-ink-900">{affected}</b> automated and IT-dependent control{affected === 1 ? '' : 's'} lost
+          the one-instance shortcut — population, sample and TOE are back on them, and their samples are sized like manual controls.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {failed.map(f => (
+            <button key={f.id} onClick={() => onOpenControl(f.id)} title={f.description}
+              className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+              <span className="font-mono">{f.code}</span>
+              <span className="truncate font-medium text-ink-600">{f.description}</span>
+            </button>
+          ))}
+          {onShowAffected && affected > 0 && (
+            <button onClick={onShowAffected}
+              className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md text-[0.6875rem] font-bold text-mitigated-800 hover:bg-mitigated-100 transition-colors cursor-pointer">
+              Show the {affected} affected <ChevronDown size={12} className="-rotate-90" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

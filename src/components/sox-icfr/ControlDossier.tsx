@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
+  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay, EXTRACT_WOBBLE,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
 } from './helpers';
@@ -202,6 +202,51 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
       </motion.div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The ITGC cascade, said out loud on the control it landed on.
+ *
+ * Without this, an automated control silently grows three steps it did not have
+ * yesterday and its sample size jumps, because somebody concluded a completely
+ * different control ineffective. The auditor looking at THIS page had no part in
+ * that and no way to find out. So it names the control that did it and offers
+ * the way there — "an ITGC failed" is not something anyone can act on.
+ *
+ * IT-dependent controls get it too. They never had the short form to lose, but
+ * the reliance they place on the same systems is just as gone, and their paper
+ * has to show they knew.
+ */
+function ItgcCascadeNotice({ control }: { control: Control }) {
+  const { eng, openControl } = useIcfr();
+  if (!isItgcDependent(control)) return null;
+  const failed = failedItgcs(eng);
+  if (!failed.length) return null;
+  return (
+    <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 mb-4 flex items-start gap-3">
+      <Cpu size={16} className="text-mitigated-700 mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <h3 className="text-[0.8125rem] font-bold text-mitigated-800">
+          Test of one is withdrawn — {failed.length === 1 ? 'an IT general control has' : `${failed.length} IT general controls have`} failed
+        </h3>
+        <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">
+          {control.nature === 'Automated'
+            ? 'Population, sample and TOE are back on this control, and the sample is sized like a manual one of the same frequency.'
+            : 'This control leans on the same systems, so one instance no longer stands for the rest of them.'}
+          {' '}Nobody can say the logic that ran in March is the logic that ran in October until this is remediated and retested.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {failed.map(f => (
+            <button key={f.id} onClick={() => openControl(f.id)} title={f.description}
+              className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+              <span className="font-mono">{controlCode(f)}</span>
+              <span className="truncate font-medium text-ink-600">{f.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2601,6 +2646,14 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
       <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
         {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
       </p>
+      {/* Which ITGC did it. The note above says a failure is in force; a number
+          the auditor has to defend needs the name behind it, on the same screen
+          as the draw rather than two pages away. */}
+      {!holds && failedItgcs(eng).length > 0 && (
+        <p className="text-[0.65625rem] text-mitigated-700 mt-1 leading-relaxed">
+          Because {failedItgcs(eng).map(f => `${controlCode(f)} — ${f.description.replace(/\.$/, '')}`).join('; ')} concluded ineffective. Test of one comes back when that is remediated and retested.
+        </p>
+      )}
       <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
         Random, seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — spread across the whole period. The seed comes off this control and this round and is stored on the paper, so the reviewer reperforms the draw and lands on these same items.
       </p>
@@ -3322,6 +3375,13 @@ export default function ControlDossier() {
           </div>
         </div>
       )}
+
+      {/* ── the ITGC cascade, named ──────────────────────────────────────────────
+          Same reasoning as the return above: these steps are open because
+          something happened elsewhere, and a control page that quietly grows
+          three steps reads as a bug. It names the ITGC that did it, because "an
+          ITGC failed" is not a fact anyone can act on — "ITGC-04 failed" is. */}
+      {!isOwner && <ItgcCascadeNotice control={control} />}
 
       {/* Blocked testing sits above the steps, because it is the reason none of
           them can run — not a finding underneath them. */}

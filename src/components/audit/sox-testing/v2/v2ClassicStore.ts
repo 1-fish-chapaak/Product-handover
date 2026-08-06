@@ -105,6 +105,26 @@ const QUAL_PICKS: QualPick[] = [
   },
 ];
 
+/**
+ * Scoped without a trial-balance caption, so no derivation can produce them —
+ * they are declared. BEYOND_TB already says ITGC is in scope for this
+ * programme; this is what turns that declaration into a RACM with controls in
+ * it, and it is what an ICFR audit actually looks like: every automated control
+ * in the four financial processes leans on access, change and operations, and
+ * SOX has no way to rely on one instance of an automated control without having
+ * tested the systems underneath it.
+ *
+ * ITGC is tested ONCE at group level, not per company — a process with no entry
+ * in `racms` gets a single row at the group name (see withEntityInstances), and
+ * that is the right shape here rather than eight copies of the same access
+ * review.
+ *
+ * Anything added to this list must survive a Configuration re-derive — see
+ * ConfigurationView, which keeps these names when it rebuilds the scope from
+ * the trial balances.
+ */
+export const GROUP_WORKSTREAMS = ['IT General Controls'] as const;
+
 function buildParitySeed(): SoxProgramme {
   const overall = 12; // ₹ Cr — 5% of ₹ 240 Cr PBT
   const pm = 9; // 75% of overall — decision #2: scoping flags at PM, not overall
@@ -126,7 +146,7 @@ function buildParitySeed(): SoxProgramme {
     id: 'sox-v2-fy26',
     code: 'SOX-104',
     name: 'FY26 ICFR — Altura Infra Group',
-    description: 'SOX 404 / ICFR programme — FY26 cycle scoped from 8 trial balances; 4 in-scope processes, one RACM each.',
+    description: 'SOX 404 / ICFR programme — FY26 cycle scoped from 8 trial balances; 4 in-scope processes plus the ITGC workstream, one RACM each.',
     type: 'SOX / ICFR',
     soxConfig: {
       overallMateriality: 120_000_000,
@@ -136,7 +156,7 @@ function buildParitySeed(): SoxProgramme {
       aggregate: true,
       keyOnly: true,
     },
-    soxProcesses: racms.map(r => r.process),
+    soxProcesses: [...racms.map(r => r.process), ...GROUP_WORKSTREAMS],
     soxSeedMode: 'live',
     process: 'P2P',
     framework: 'COSO 2013 / SOX 404',
@@ -147,7 +167,11 @@ function buildParitySeed(): SoxProgramme {
     startDate: '2026-01-01',
     endDate: '2026-12-31',
     entity: V2C_GROUP,
-    controls: 20,
+    // 5 RACMs × 5 controls (racmTemplate takes the first five of a spread).
+    // Before entity replication — the register splits the four financial
+    // processes across the companies they were scoped at; ITGC is tested once
+    // for the group.
+    controls: 25,
     health: 78,
     openIssues: 0,
     lastActivity: '1d ago',

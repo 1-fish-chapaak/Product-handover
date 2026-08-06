@@ -11,9 +11,9 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
-  conclusionOf, controlCode, courtFor, isAwaitingReview, isControlFinal, isEngagementLocked, isTestDueNow,
+  conclusionOf, controlCode, courtFor, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
 } from './helpers';
-import { NatureChip, Th, Tickmark } from './parts';
+import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -120,6 +120,7 @@ const PRESET_LABEL: Record<string, string> = {
   operating: 'TOE not tested', 'operating-done': 'TOE concluded', effective: 'Effective',
   exceptions: 'Not effective', review: 'Awaiting review', owner: 'Waiting on owner',
   open: 'Not concluded', papers: 'Awaiting sign-off', key: 'Key controls',
+  itgc: 'Test-of-one withdrawn',
 };
 
 // ── card ────────────────────────────────────────────────────────────────────────
@@ -388,6 +389,9 @@ export default function ControlLibrary() {
       case 'open': return conclusionOf(eng, c) === 'In progress';
       case 'papers': return conclusionOf(eng, c) !== 'In progress' && !isControlFinal(c);
       case 'key': return c.isKey;
+      // The controls an ITGC failure landed on — same predicate as the testing
+      // lens, so the banner lands on the same set from either screen.
+      case 'itgc': return isItgcDependent(c) && failedItgcs(eng).length > 0;
       default: return true;
     }
   };
@@ -474,6 +478,22 @@ export default function ControlLibrary() {
           </div>
         ))}
       </div>
+
+      {/* The cascade reaches this lens too: the library is where somebody browses
+          controls without an audit open, and the shortcut is withdrawn there just
+          the same. Same banner, same set — it sets the preset this lens already
+          understands rather than inventing a second filter. Auditor and reviewer
+          only, same as the register and the control page. */}
+      {role !== 'risk-owner' && failedItgcs(eng).length > 0 && (
+        <div className="mb-4">
+          <ItgcCascadeBanner
+            failed={failedItgcs(eng).map(f => ({ id: f.id, code: controlCode(f), description: f.description }))}
+            affected={scoped.filter(isItgcDependent).length}
+            onOpenControl={openControl}
+            onShowAffected={preset === 'itgc' ? undefined : () => setPreset('itgc')}
+          />
+        </div>
+      )}
 
       {/* an Overview count sent us here with intent — say so, and let it go */}
       {preset && (

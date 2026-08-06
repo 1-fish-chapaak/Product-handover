@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, needsRatingConfirmation, parseLooseDate, previewRegrades, sampleSizeGuide, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, needsRatingConfirmation, parseLooseDate, previewRegrades, sampleSizeGuide, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -1852,7 +1852,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // The same attributes, carried over verbatim — a retest that invents its own
       // is not a retest of anything.
       const attributes = c.operating.steps.map(s => ({ code: s.code, description: s.description }));
-      const size = sampleSizeGuide(c).suggested;
+      // Sized against the ITGC state, like every other draw: a retest of an
+      // automated control whose ITGCs have failed cannot be one item — the reason
+      // it is being retested is that one item no longer proves anything.
+      const size = sampleSizeGuide(c, itgcHolds(prev, c)).suggested;
       const from = parseLooseDate(target.remediation.date) ?? new Date();
       const to = new Date();
       const iso = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;

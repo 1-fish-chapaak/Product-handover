@@ -9,10 +9,10 @@ import NewAuditWizard from './NewAuditWizard';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, engagementCompleteness, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isClearlyTrivial, isItgcDependent, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
-import { RagStrip, type RagMeterDef } from './parts';
+import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
@@ -58,7 +58,7 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, meOwner, openAuditId, setView, setTab, openRegister, signOffAudit } = useIcfr();
+  const { eng, role, meOwner, openAuditId, setView, setTab, openControl, openRegister, signOffAudit } = useIcfr();
   const { addToast } = useToast();
   // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
@@ -75,6 +75,9 @@ export default function Overview() {
   // there is no such tab and it stays a drill-in off the Overview.
   const openDeficiencies = () => (inAudit ? setTab('deficiencies') : setView('deficiencies'));
   const scoped = useAuditControls(eng.controls);
+  // Engagement-wide on purpose, not audit-scoped: an ITGC that failed in another
+  // cycle's scope still invalidates the reliance this one leans on.
+  const failedItgc = useMemo(() => failedItgcs(eng), [eng]);
   const scopedIds = useMemo(() => new Set(scoped.map(c => c.id)), [scoped]);
   const scopedDefs = useMemo(() => eng.deficiencies.filter(d => scopedIds.has(d.controlId)), [eng.deficiencies, scopedIds]);
   const stats = engagementProgress(eng, scoped);
@@ -242,6 +245,21 @@ export default function Overview() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* ── the ITGC cascade ─────────────────────────────────────────────────────
+          Above the health meters, because it is the one thing on this page that
+          happened TO the audit rather than in it: an ITGC concluded ineffective
+          takes the one-instance shortcut off every automated and IT-dependent
+          control at once. Whoever concluded it was on a different page and had
+          no way to see the size of what they had just done. */}
+      {!isOwner && failedItgc.length > 0 && (
+        <ItgcCascadeBanner
+          failed={failedItgc.map(f => ({ id: f.id, code: controlCode(f), description: f.description }))}
+          affected={scoped.filter(isItgcDependent).length}
+          onOpenControl={openControl}
+          onShowAffected={() => openRegister({ view: 'itgc' })}
+        />
       )}
 
       {/* progress rail */}
