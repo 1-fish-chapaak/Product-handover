@@ -1148,7 +1148,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <input
                         value={p.processOwner}
                         onChange={e => setPerson(r.process, { processOwner: e.target.value })}
-                        placeholder="Name — role"
+                        placeholder="Name"
                         aria-label={`Process owner for ${r.process}`}
                         className="w-full px-2.5 py-1.5 text-[12px] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                       />
@@ -1164,7 +1164,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <input
                         value={p.controlOwner}
                         onChange={e => setPerson(r.process, { controlOwner: e.target.value })}
-                        placeholder="Name — role"
+                        placeholder="Name"
                         aria-label={`Control owner for ${r.process}`}
                         className="w-full px-2.5 py-1.5 text-[12px] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                       />
@@ -1364,9 +1364,10 @@ export function StepRail({ steps, step, onStepClick }: {
   );
 }
 
-/** "Nikhil Rao — Treasury Manager" → "Nikhil Rao" for compact card footers. */
+/** People are named without a designation. Kept as the one place card footers
+ *  fall back to a dash when a process has nobody against it yet. */
 function ownerShort(s: string): string {
-  return s.split(' — ')[0] || '—';
+  return s.trim() || '—';
 }
 
 function Hint({ text }: { text: string }) {

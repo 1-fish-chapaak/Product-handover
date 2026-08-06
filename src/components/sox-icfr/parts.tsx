@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Conclusion, Court, FileOrigin, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
+import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
@@ -13,8 +13,11 @@ export function ConclusionPill({ c }: { c: Conclusion }) { return <Pill tone={CO
 const TRACK_TONE: Record<TrackConclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'Not tested': 'draft' };
 export function TrackPill({ c }: { c: TrackConclusion }) { return <Pill tone={TRACK_TONE[c]}>{c}</Pill>; }
 
-const SEVERITY_TONE: Record<Severity, Tone> = { 'Material Weakness': 'risk', 'Significant Deficiency': 'high', Deficiency: 'mitigated' };
-export function SeverityPill({ s }: { s: Severity }) { return <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>; }
+// Four outcomes, not three: Clearly Trivial is what the engine returns when the
+// exposure sits under the de-minimis floor, and it reads as its own grade because
+// the ladder stopped there — it was never evaluated down to a deficiency.
+const SEVERITY_TONE: Record<ExceptionGrade, Tone> = { 'Material Weakness': 'risk', 'Significant Deficiency': 'high', Deficiency: 'mitigated', 'Clearly Trivial': 'draft' };
+export function SeverityPill({ s }: { s: ExceptionGrade }) { return <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>; }
 
 /** The house switch. Lifted here because the control page, the rules editor and
  *  the scope table all need the same one. `disabled` matters on a locked control:
@@ -329,3 +332,17 @@ export function OriginPicker({ value, onPick, disabled }: { value?: FileOrigin; 
 }
 
 export { Bot };
+
+/** A header cell with a resize grip on its right edge. Module-level on purpose:
+ *  declared inside a register it would remount on every keystroke and slam the
+ *  open column-filter menu shut. */
+export function Th({ width, onResize, title, children }: {
+  width: number; onResize: (e: React.MouseEvent) => void; title?: string; children: React.ReactNode;
+}) {
+  return (
+    <th style={{ width }} title={title} className="relative">
+      {children}
+      <span onMouseDown={onResize} onClick={e => e.stopPropagation()} className="reg-grip" aria-hidden />
+    </th>
+  );
+}

@@ -6,7 +6,7 @@ import {
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { requiredDatasetsFor, type RequiredDataset } from './mockData';
-import { isControlLocked } from './helpers';
+import { controlCode, isControlLocked } from './helpers';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -36,7 +36,7 @@ function evidenceSummary(c: Control): string {
   if (wf) parts.push(`${wf} workflow${wf === 1 ? '' : 's'}`);
   if (ai) parts.push(`${ai} AI`);
   if (att) parts.push(`${att} attest`);
-  return parts.join(' · ') || 'design only';
+  return parts.join(' · ') || 'TOD only';
 }
 
 const FORMAT_TONE: Record<RequiredDataset['format'], string> = {
@@ -94,11 +94,11 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   const runStepMs = Math.max(160, Math.min(900, 6500 / Math.max(1, active.length)));
   const estRuntimeSec = Math.max(1, Math.round((runStepMs * active.length + 500) / 1000));
 
-  // Same order as the library: groups in library order, rows sorted by W/P reference.
+  // Same order as the library: groups in library order, rows sorted by control code.
   const groups = useMemo(() => {
     const map = new Map<string, Control[]>();
     for (const c of selected) { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
   }, [selected]);
 
   const toggleControl = (id: string) => {
@@ -335,7 +335,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                         <span className="block text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
                         <span className="block text-[10.5px] text-ink-400 mt-0.5">
                           {state === 'done'
-                            ? `${checksOf(c)} checks run · design & operating concluded`
+                            ? `${checksOf(c)} checks run · TOD & TOE concluded`
                             : `${checksOf(c)} checks · ${requiredDatasetsFor(c).map(d => d.name).join(', ') || 'attestation-based'}`}
                         </span>
                       </span>
