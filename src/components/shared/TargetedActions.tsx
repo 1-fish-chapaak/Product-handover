@@ -24,7 +24,7 @@ import {
   type EntityKind, type LayeredInsight, type RecIntent, type RecPriority,
 } from '../../data/layeredInsights';
 import { runActionInChat } from './insightChat';
-import LayeredInsightCard from './LayeredInsightCard';
+import LayeredInsightCard, { InsightStatLine } from './LayeredInsightCard';
 import { useToast } from './Toast';
 import {
   getActionStatus, setActionStatus, actionKey,
@@ -239,7 +239,12 @@ export function InsightSummaryStrip({
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[12.5px] font-semibold text-ink-900 leading-snug">{insight.takeaway}</p>
+            {/* The B stat line leads (review decision Aug 6) — the same hero
+                figure · chips · cause anatomy as every other list surface;
+                the full sentence stays one hover (and one click) away. */}
+            <span title={insight.takeaway} className="block mt-1.5">
+              <InsightStatLine insight={insight} />
+            </span>
             <div className="mt-1.5 flex items-center gap-3">
               {onViewFull && (
                 <button

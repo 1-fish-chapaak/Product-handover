@@ -207,13 +207,48 @@ function CauseLead({ cause }: { cause: LikelyCause }) {
   return (
     <div className="mt-3.5 rounded-r-xl border-l-2 border-brand-500 bg-brand-50/40 px-3.5 py-2.5">
       <div className="flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-brand-700">
-        <Crosshair size={11} aria-hidden="true" /> Likely cause — confirm before relying on it
+        <Crosshair size={11} aria-hidden="true" /> Likely root cause — confirm before relying on it
       </div>
       <p className="mt-1 text-[0.75rem] leading-snug">
         <span className="font-semibold text-ink-900">{cause.label}</span>{' '}
         <span className="text-ink-600">{cause.detail}</span>
       </p>
     </div>
+  );
+}
+
+// ─── Stat line — the teaser's second row, shared with row strips ────────────
+// Hero figure · context chips · cause phrase. The B row form's payload,
+// exported so row-anchored strips (Controls tab, RACM) lead with the same
+// numbers as the collapsed stack rows — one anatomy on every list surface.
+
+export function InsightStatLine({ insight, className = '' }: { insight: LayeredInsight; className?: string }) {
+  const kpis = insightKpis(insight);
+  const hero = kpis[0];
+  const chips = kpis.slice(1, 3).filter(k => /[^\s—]/.test(k.value));
+  return (
+    <span className={`flex w-full min-w-0 items-baseline gap-2.5 ${className}`}>
+      {hero && (
+        <span className={`shrink-0 text-[1.0625rem] font-semibold tabular-nums tracking-tight leading-none ${hero.tone === 'bad' ? 'text-risk' : 'text-ink-900'}`}>
+          {hero.value}
+          <span className="text-[0.71875rem] font-semibold text-ink-500">
+            {hero.unit ? ` ${hero.unit}` : ''} {hero.label.toLowerCase()}
+          </span>
+        </span>
+      )}
+      {chips.map((k, idx) => (
+        <span
+          key={idx}
+          title={k.sub}
+          className={`hidden sm:inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[0.625rem] font-semibold tabular-nums ${k.tone === 'bad' ? 'border-risk-100 bg-risk-50 text-risk' : 'border-canvas-border bg-canvas text-ink-600'}`}
+        >
+          {k.value}{k.unit ? ` ${k.unit}` : ''} {k.label.toLowerCase()}
+        </span>
+      ))}
+      <span className="min-w-0 flex-1 truncate text-[0.71875rem] text-ink-500">
+        <span className="font-semibold text-ink-700">Cause:</span> {insight.likelyCause.label}
+      </span>
+    </span>
   );
 }
 
@@ -295,9 +330,6 @@ export default function LayeredInsightCard({
   //    cause is visible before anything expands. ──
   if (collapsible && !open) {
     const layerWord = LAYER_WORD[insight.layer];
-    const kpis = insightKpis(insight);
-    const hero = kpis[0];
-    const chips = kpis.slice(1, 3).filter(k => /[^\s—]/.test(k.value));
     return (
       <motion.section
         initial={false}
@@ -336,28 +368,7 @@ export default function LayeredInsightCard({
             </span>
           </span>
           {/* Stat line — hero figure · context chips · the cause phrase. */}
-          <span className="flex w-full min-w-0 items-baseline gap-2.5 pl-[22px]">
-            {hero && (
-              <span className={`shrink-0 text-[1.0625rem] font-semibold tabular-nums tracking-tight leading-none ${hero.tone === 'bad' ? 'text-risk' : 'text-ink-900'}`}>
-                {hero.value}
-                <span className="text-[0.71875rem] font-semibold text-ink-500">
-                  {hero.unit ? ` ${hero.unit}` : ''} {hero.label.toLowerCase()}
-                </span>
-              </span>
-            )}
-            {chips.map((k, idx) => (
-              <span
-                key={idx}
-                title={k.sub}
-                className={`hidden sm:inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[0.625rem] font-semibold tabular-nums ${k.tone === 'bad' ? 'border-risk-100 bg-risk-50 text-risk' : 'border-canvas-border bg-canvas text-ink-600'}`}
-              >
-                {k.value}{k.unit ? ` ${k.unit}` : ''} {k.label.toLowerCase()}
-              </span>
-            ))}
-            <span className="min-w-0 flex-1 truncate text-[0.71875rem] text-ink-500">
-              <span className="font-semibold text-ink-700">Cause:</span> {insight.likelyCause.label}
-            </span>
-          </span>
+          <InsightStatLine insight={insight} className="pl-[22px]" />
         </button>
         {/* Straight to the row — the redirect without opening the card first. */}
         {anchorNavigable && (
