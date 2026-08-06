@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown, AlertCircle, AlertTriangle, MinusCircle } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
@@ -228,75 +228,111 @@ export type RagMeterDef = {
   label: string;
   pct: number;
   detail: string;
-  /** One grey sentence under the title — what the score means and what gates on it. */
-  explainer?: string;
   gate?: boolean;
   forceRed?: boolean;
+  /** Nothing to measure yet — no required elements, no attributes, no controls.
+   *  Zero out of zero still computes 0%, but reading that as red would put a
+   *  control nobody has set up next to one whose every check failed. This says
+   *  "not set up" in neutral grey instead, and the arc draws nothing. */
+  empty?: boolean;
+  /** The arithmetic behind the number, revealed when the card is opened. One
+   *  line: what is divided by what. The counting rules that go with it live as
+   *  comments beside each meter — they belong to whoever maintains the score,
+   *  not to the reader checking a percentage. */
+  formula?: string;
 };
 
 export const ragColor = (m: RagMeterDef): string =>
-  m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
-const ragWord = (m: RagMeterDef): string => (ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
+  m.empty ? 'var(--color-ink-300)'
+    : m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
+const ragWord = (m: RagMeterDef): string => (m.empty ? 'none' : ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
 
-/** One confidence score as a card — a ring carrying the percentage, then the
- *  score's name, its fraction and a one-line explainer.
+/** One confidence score as a card that opens.
+ *
+ *  SHUT it is the reading: a ring carrying the percentage and the score's name,
+ *  nothing else. Every card is then the same height, so a row of them scans as
+ *  one line of numbers rather than four paragraphs of different lengths.
+ *
+ *  OPEN it is the arithmetic and nothing else: the fraction, the status, and one
+ *  line saying what is divided by what. Neither a prose paragraph nor a list of
+ *  counting rules — a reader who opens a score wants the sum, and the longer the
+ *  body ran the less alike the four open cards looked.
  *
  *  Colour is spent on exceptions only: a red or amber score tints its whole card
  *  so it pulls the eye out of the row, while a healthy score sits on the plain
- *  card surface. Three green washes side by side used to shout as loudly as the
- *  one card that actually needed reading.
- *
- *  `stacked` drops the status word under the fraction rather than beside the
- *  title — the narrow right rail leaves a title and a status word on one line
- *  with room for neither. */
-export function RagCard({ m, stacked = false }: { m: RagMeterDef; stacked?: boolean }) {
+ *  card surface. Three green washes side by side shout as loudly as the one card
+ *  that actually needs reading. */
+export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no longer stacks — it opens */ stacked?: boolean }) {
+  const [open, setOpen] = useState(false);
   const state = ragWord(m);
   const tint = state === 'red' ? 'border-risk-200 bg-risk-50/50'
     : state === 'amber' ? 'border-high-200 bg-high-50/40'
     : 'border-canvas-border bg-canvas-elevated';
-  const statusCls = state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
-  const StatusIcon = state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
-  const statusWord = state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
-  const status = (
-    <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold shrink-0', statusCls)}>
-      <StatusIcon size={12} /> {statusWord}
-    </span>
-  );
+  const statusCls = state === 'none' ? 'text-ink-400' : state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
+  const StatusIcon = state === 'none' ? MinusCircle : state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
+  const statusWord = state === 'none' ? 'Not set up'
+    : state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
   // r=16 → circumference 100.5, so the dash length is all but the percentage
   // itself. A round cap on a zero-length arc draws a floating dot, so a score
   // of nothing draws no arc at all.
   const C = 2 * Math.PI * 16;
+  const bodyId = `rag-${m.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  // Height, by state. Shut, the card sizes to itself — every shut card is the
+  // same height anyway, and stretching them to whichever neighbour is open would
+  // leave empty boxes around it. Open, it fills the row, so several open cards
+  // read as one block rather than four ragged columns.
   return (
-    <div role="img" aria-label={`${m.label} ${m.pct}% — ${state}`}
-      className={cn('rounded-xl border p-3.5 flex items-start gap-3', tint)}>
-      <div className="relative w-12 h-12 shrink-0">
-        <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
-          <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
-          {m.pct > 0 && (
-            <circle cx="20" cy="20" r="16" fill="none" stroke={ragColor(m)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
-          )}
-        </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-[0.6875rem] font-bold tabular-nums text-ink-900">{m.pct}%</span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug min-w-0">{m.label}</div>
-          {!stacked && <span className="mt-px">{status}</span>}
+    <div className={cn('rounded-xl border transition-colors', open ? 'h-full' : 'self-start', tint)}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={bodyId}
+        aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${state}`}
+        className="w-full min-h-[4.75rem] text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
+        <div className="relative w-12 h-12 shrink-0">
+          <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
+            {!m.empty && m.pct > 0 && (
+              <circle cx="20" cy="20" r="16" fill="none" stroke={ragColor(m)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
+            )}
+          </svg>
+          <span className={cn('absolute inset-0 flex items-center justify-center text-[0.6875rem] font-bold tabular-nums', m.empty ? 'text-ink-300' : 'text-ink-900')}>{m.empty ? '—' : `${m.pct}%`}</span>
         </div>
-        <div className="flex items-center justify-between gap-2 mt-1">
-          <div className="text-[0.75rem] font-semibold text-ink-700 min-w-0">{m.detail}</div>
-          {stacked && status}
-        </div>
-        {m.explainer && <p className="text-[0.71875rem] text-ink-500 mt-1.5 leading-relaxed">{m.explainer}</p>}
-      </div>
+        <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug min-w-0 flex-1">{m.label}</div>
+        <ChevronDown size={15} className={cn('shrink-0 text-ink-400 transition-transform', open && 'rotate-180')} />
+      </button>
+      {/* Fade-and-lift, never a height animation: the body is a formula and four
+          or five rules, and an animated height that measures a beat early cuts
+          the last rule in half. Nothing here is tall enough to need the reveal
+          to be gradual. */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div id={bodyId} key="body" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}>
+            <div className="px-3.5 pb-3.5 pt-0.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-[0.75rem] font-semibold text-ink-700 min-w-0">{m.detail}</div>
+                <span className={cn('inline-flex items-center gap-1 text-[0.6875rem] font-bold shrink-0', statusCls)}>
+                  <StatusIcon size={12} /> {statusWord}
+                </span>
+              </div>
+              {m.formula && (
+                <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{m.formula}</div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-/** The scores side by side, one column each. */
+/** The scores side by side, one column each — the same height as each other shut,
+ *  and the same height as each other open. Four of them break to two rows of two
+ *  rather than squeezing a fourth column onto a laptop. */
 export function RagStrip({ meters }: { meters: RagMeterDef[] }) {
   return (
-    <div className="grid gap-2.5 sm:grid-cols-3">
+    <div className={cn('grid gap-2.5', meters.length === 4 ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3')}>
       {meters.map(m => <RagCard key={m.label} m={m} />)}
     </div>
   );

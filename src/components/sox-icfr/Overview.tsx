@@ -9,7 +9,7 @@ import NewAuditWizard from './NewAuditWizard';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, engagementCompleteness, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { RagStrip, type RagMeterDef } from './parts';
@@ -530,12 +530,18 @@ export default function Overview() {
 }
 
 /**
- * The engagement-wide RAG trio: how much of the RACM is reviewed, how much of it
- * is concluded effective, and how much of the drawn sample ground is covered.
+ * The engagement-wide RAG trio, read in order as one sentence: is the matrix
+ * ready to test against → are the controls working → how far through are we.
  *
  * Exported because the Dashboard (engagement level) and the Overview tab (inside
  * an audit) both read it. One computation, so the two can never disagree about
  * the same engagement.
+ *
+ * Sample testing reads the register's TOE coverage — the same sample × attribute
+ * counting rule the dossier applies to one control as Evidence validated. Kept
+ * at both levels deliberately (user ask): the register answer says how much
+ * testing ground is covered overall, the control answer says where the shortfall
+ * actually is.
  */
 export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): RagMeterDef[] {
     const total = controls.length;
@@ -544,6 +550,7 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
     const concl = controls.map(c => conclusionOf(eng, c));
     const effective = concl.filter(x => x === 'Effective').length;
     const ineffective = concl.filter(x => x === 'Ineffective').length;
+    const done = engagementCompleteness(eng, controls);
     // sample testing counts every sample × attribute verdict across the register;
     // controls without a drawn sample count at attribute level
     let checksDone = 0; let checksTotal = 0;
@@ -557,16 +564,42 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
     });
     return [
       {
-        label: 'RACM', pct: total ? Math.round((approved / total) * 100) : 0, detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
-        explainer: 'Pre-testing review across the register — every row needs approval before testing leans on it, and open remarks pull this down.',
+        // One RACM row IS one control, so the denominator is the scope itself. A
+        // remark is a blocker with a named condition, never a half-approval —
+        // it rides beside the score and is not netted off it.
+        label: 'RACM completeness', pct: total ? Math.round((approved / total) * 100) : 0, empty: total === 0,
+        detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
+        formula: 'rows approved ÷ in-scope controls × 100',
       },
       {
-        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
-        explainer: 'Controls concluded effective across the engagement — a single ineffective conclusion turns this red until it is remediated and retested.',
+        // Effective needs BOTH tracks effective; either one ineffective sinks the
+        // control. A short-form automated control concludes on design alone. Not
+        // an average — one ineffective control turns this red at any percentage.
+        label: 'Control effectiveness', pct: total ? Math.round((effective / total) * 100) : 0, empty: total === 0,
+        detail: `${effective}/${total} controls effective${ineffective ? ` · ${ineffective} ineffective` : ''}`, forceRed: ineffective > 0,
+        formula: 'controls concluded effective ÷ in-scope controls × 100',
       },
       {
-        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, detail: `${checksDone}/${checksTotal} checks done`,
-        explainer: 'Sample-by-attribute checks completed across TOE — how much of the drawn testing ground is actually covered.',
+        // A check is one sample × attribute CELL, not an attribute: 25 items
+        // against 3 attributes is 75 checks on that control alone. Controls with
+        // no sample yet count at attribute level, so the register total never
+        // waits on the first draw, and each control weighs by its own check
+        // count. Where the shortfall SITS is the control page's answer.
+        label: 'Sample testing', pct: checksTotal ? Math.round((checksDone / checksTotal) * 100) : 0, empty: checksTotal === 0,
+        detail: `${checksDone}/${checksTotal} checks done`,
+        formula: 'operating checks run ÷ operating checks total, summed across the register × 100',
+      },
+      {
+        // Each control is worth 1.0 — RACM 0.10 · TOD 0.25 · TOE 0.30 ·
+        // countersign 0.25 · exceptions closed 0.10 — and credits on CONCLUSION,
+        // whichever way it went. Completeness is not effectiveness: a 100%
+        // engagement can still conclude ICFR not effective. See
+        // engagementCompleteness in helpers.ts for the rest.
+        label: 'Engagement completeness', pct: done.pct, empty: total === 0,
+        // The blocker count travels with the percentage on purpose: a number
+        // alone cannot tell steady progress from an engagement that is stuck.
+        detail: `${done.fullyDone}/${done.total} controls finished${done.blocked ? ` · ${done.blocked} blocked` : ''}${done.keyNotStarted ? ` · ${done.keyNotStarted} key not started` : ''}`,
+        formula: 'Σ milestone credits ÷ in-scope controls × 100',
       },
     ];
 }

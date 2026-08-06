@@ -918,7 +918,9 @@ function designRagMeters(c: Control): RagMeterDef[] {
   const passed = points.filter(p => pointResult(p) === 'Pass').length;
   // Evidence validated reads the TOE (user ask): operating checks run across
   // the drawn samples — sample × attribute when a sample exists, attribute
-  // level before one is drawn. Same counting rule as Overview's Sample testing.
+  // level before one is drawn. The same counting rule runs at engagement level
+  // as Sample testing, and both are wanted: the register answer says how much
+  // testing ground is covered, this one says where the shortfall sits.
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const toeTotal = samples.length ? samples.length * steps.length : steps.length;
@@ -927,16 +929,32 @@ function designRagMeters(c: Control): RagMeterDef[] {
     : steps.filter(s => s.result !== 'Not tested').length;
   return [
     {
+      // Optional elements are out of the denominator entirely, and a WAIVED
+      // element counts as done — a recorded judgement with a mandatory reason is
+      // not a missing file. This one gates: below 100% the TOD conclusion is
+      // locked, and the lock names how many are still outstanding.
       label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
-      explainer: "Every required element needs evidence attached before TOD can be concluded effective. Optional elements strengthen the file but don't gate.",
+      empty: comp.total === 0,
+      formula: 'required elements evidenced or waived ÷ required elements × 100',
     },
     {
+      // A check is one sample × attribute CELL, not an attribute — 25 items
+      // against 3 attributes is 75 checks. Before a sample is drawn it counts at
+      // attribute level so the denominator is never zero mid-testing, and any
+      // result other than "not tested" counts as run. Held to 100%: part-tested
+      // is not tested.
       label: 'Evidence validated', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
-      explainer: 'Each operating check has to be run against the sampled evidence — unvalidated checks hold back an effective conclusion.',
+      empty: toeTotal === 0,
+      formula: 'operating checks run ÷ operating checks total × 100',
     },
     {
+      // An overridden pass counts as a pass — the auditor's recorded judgement is
+      // the answer. Not-yet-tested drags this down exactly as hard as failed: an
+      // untested check gives no confidence either way. The only QUALITY measure
+      // of the three, which is why it gates nothing on its own.
       label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
-      explainer: 'How much of the design the considerations cover and pass — higher confidence means a stronger TOD.',
+      empty: points.length === 0,
+      formula: 'design considerations passing ÷ all design considerations × 100',
     },
   ];
 }
@@ -3472,7 +3490,7 @@ export default function ControlDossier() {
             already cards, and a box around cards drew a group boundary the
             rail didn't need. */}
         <motion.div className="space-y-2.5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-          {designRagMeters(control).map(m => <RagCard key={m.label} m={m} stacked />)}
+          {designRagMeters(control).map(m => <RagCard key={m.label} m={m} />)}
           <ActivityRail control={control} />
         </motion.div>
       </div>
