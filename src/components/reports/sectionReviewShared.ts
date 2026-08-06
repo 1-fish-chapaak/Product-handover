@@ -4,7 +4,7 @@
 
 import {
   brandGradient, reportGradient, reportAccent,
-  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE,
+  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText, BLANK_TEMPLATE, letterheadLine,
 } from './reportShared';
 import type { SectionFill, DataBinding, TemplateBlock } from './reportShared';
 
@@ -112,11 +112,11 @@ export const EVIDENCE_META: Record<Evidence, { label: string; dot: string; tint:
  * writes this part of my report?", answerable by anyone.
  */
 export const FILL_META: Record<SectionFill, { label: string; hint: string; tint: string }> = {
-  query: { label: 'Fills from audit results', hint: 'We write this fresh in every report from your audit results. It is the one place the AI writes.', tint: 'bg-compliant-50 text-compliant-700' },
-  manual: { label: 'No data connected', hint: 'Appears blank in every report, for you to fill.', tint: 'bg-canvas text-ink-500' },
-  fixed: { label: 'Fixed wording', hint: 'Prints these words exactly. The AI is never consulted.', tint: 'bg-brand-50 text-brand-700' },
-  human: { label: 'A person fills this', hint: 'An empty box waiting for someone’s input.', tint: 'bg-mitigated-50 text-mitigated-700' },
-  mixed: { label: 'Mixed, per block', hint: 'Different parts behave differently, so each block below carries its own tag.', tint: 'bg-evidence-50 text-evidence-700' },
+  query: { label: 'Fills from audit results', hint: 'We write this fresh in every report from your audit results. It is the one place the AI writes.', tint: 'border-compliant-200 bg-compliant-50 text-compliant-700' },
+  manual: { label: 'No data connected', hint: 'Appears blank in every report, for you to fill.', tint: 'border-canvas-border bg-canvas text-ink-500' },
+  fixed: { label: 'Fixed wording', hint: 'Prints these words exactly. The AI is never consulted.', tint: 'border-brand-200 bg-brand-50 text-brand-700' },
+  human: { label: 'A person fills this', hint: 'An empty box waiting for someone’s input.', tint: 'border-mitigated-200 bg-mitigated-50 text-mitigated-700' },
+  mixed: { label: 'Mixed, per block', hint: 'Different parts behave differently, so each block below carries its own tag.', tint: 'border-evidence-200 bg-evidence-50 text-evidence-700' },
 };
 
 /** Fixed wording whose only changing values are report details we hold, so the
@@ -126,8 +126,14 @@ export const FILL_META: Record<SectionFill, { label: string; hint: string; tint:
 export const FRAME_META = {
   label: 'Fixed frame with blanks',
   hint: 'Prints these words exactly, with your name, your period and the dates filled in each report.',
-  tint: 'bg-brand-50 text-brand-700',
+  tint: 'border-brand-200 bg-brand-50 text-brand-700',
 };
+
+/** Every tag on this screen is the same object: a bordered pill, one height,
+ *  one type size, whatever it says. Bordered is the platform's default status
+ *  chip (DESIGN.md), and the tints alone were reading as coloured text rather
+ *  than as a set. Callers add only the tint. */
+export const TAG_CHIP = 'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 text-[0.625rem] font-semibold leading-none';
 
 /** The tag a part actually shows: a fixed block whose changing values are
  *  report details is a frame, not plain fixed wording. */
@@ -141,10 +147,10 @@ export const TAG_GLOSSARY: { label: string; does: string; tint: string }[] = [
   { label: FILL_META.query.label, does: 'We write it fresh each report from your audit results. The only place the AI writes.', tint: FILL_META.query.tint },
   { label: FILL_META.fixed.label, does: 'Prints your stored words exactly. The AI is not consulted.', tint: FILL_META.fixed.tint },
   { label: FRAME_META.label, does: 'The same, with your name, period and dates filled in each time.', tint: FRAME_META.tint },
-  { label: 'Setting', does: 'Structure printed on every report, like the signature page or the letterhead. Verified once.', tint: 'bg-evidence-50 text-evidence-700' },
-  { label: 'Routed', does: 'Used by the engine, never a section. Your contents page feeds ours; dividers become group markers.', tint: 'bg-canvas text-ink-600' },
-  { label: 'Check this', does: 'Kept, but sent to the top of this list with the reason we are unsure named.', tint: 'bg-mitigated-50 text-mitigated-700' },
-  { label: 'Left out', does: 'Not in the template, listed once with its reason. Covered per report through Add Observation.', tint: 'bg-high-50 text-high-700' },
+  { label: 'Setting', does: 'Structure printed on every report, like the signature page or the letterhead. Verified once.', tint: 'border-evidence-200 bg-evidence-50 text-evidence-700' },
+  { label: 'Routed', does: 'Used by the engine, never a section. Your contents page feeds ours; dividers become group markers.', tint: 'border-canvas-border bg-canvas text-ink-600' },
+  { label: 'Check this', does: 'Kept, but sent to the top of this list with the reason we are unsure named.', tint: 'border-mitigated-200 bg-mitigated-50 text-mitigated-700' },
+  { label: 'Left out', does: 'Not in the template, listed once with its reason. Covered per report through Add Observation.', tint: 'border-high-200 bg-high-50 text-high-700' },
 ];
 
 /** Short type label for a block chip. */
@@ -202,8 +208,11 @@ export function reviewChrome(
 ): ReviewChrome {
   const f = read?.furniture;
   const brand = f?.fields.auditEntity || fallback.brand?.trim() || DEFAULT_TEMPLATE_BRAND;
-  const theirHeader = f?.confidentiality || (f?.header.length ? f.header.join('  ·  ') : '');
-  const theirFooter = f?.footer.length ? f.footer.join('  ·  ') : '';
+  // Built, never joined raw: the same builder the editor's own fields use, so
+  // the line on this cover is the line the template saves. A raw join brings
+  // back the page counter ("PwC Page 2") and any repeat.
+  const theirHeader = f?.confidentiality ? letterheadLine([f.confidentiality]) : (f?.header.length ? letterheadLine(f.header) : '');
+  const theirFooter = f?.footer.length ? letterheadLine(f.footer) : '';
   const theme = fallback.theme || DEFAULT_THEME;
   return {
     title: fallback.title.trim() || BLANK_TEMPLATE.name,

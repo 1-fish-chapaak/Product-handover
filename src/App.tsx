@@ -26,6 +26,7 @@ import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
 import ReportsView from './components/reports/ReportsView';
 import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
+import { LETTERHEAD_SOFT_MAX, letterheadLine } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -317,7 +318,16 @@ function AppInner() {
             // printing after the line was dropped. Clear it here. Only the exact
             // platform wording is cleared: a confidentiality line captured from
             // a client's own report is theirs and stays.
-            .map(t => (t.headerText && LEGACY_HEADER_TEXTS.has(t.headerText) ? { ...t, headerText: '' } : t));
+            .map(t => (t.headerText && LEGACY_HEADER_TEXTS.has(t.headerText) ? { ...t, headerText: '' } : t))
+            // Letterhead lines captured before the reader learned to build one
+            // are the raw join of every repeating strip: "PwC · Section 1 · PwC
+            // · PwC Page 2 · …" at 115 characters against a 60-character line.
+            // Run those back through the builder rather than leaving a template
+            // printing them on every report.
+            .map(t => {
+              if (!t.footerText || t.footerText.length <= LETTERHEAD_SOFT_MAX) return t;
+              return { ...t, footerText: letterheadLine(t.footerText.split(/\s*·\s*/)) };
+            });
         }
       }
     } catch { /* ignore */ }

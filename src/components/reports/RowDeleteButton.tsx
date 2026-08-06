@@ -7,16 +7,21 @@ import { Trash2, Check, X } from 'lucide-react';
 
 const ARM_MS = 3500;
 
-export function RowDeleteButton({ onConfirm, ariaLabel, triggerClassName = '' }: {
+export function RowDeleteButton({ onConfirm, ariaLabel, triggerClassName = '', onArmedChange }: {
   onConfirm: () => void;
   ariaLabel: string;
   /** Classes for the resting trash trigger (match the surrounding row's icons). */
   triggerClassName?: string;
+  /** Armed is much wider than the resting trash icon. A row that floats this
+   *  control over its own content needs to know, so it can give the width back
+   *  instead of letting the Remove pill land on top of a chip. */
+  onArmedChange?: (armed: boolean) => void;
 }) {
-  const [armed, setArmed] = useState(false);
+  const [armed, setArmedState] = useState(false);
   const timer = useRef<number | null>(null);
   const clear = () => { if (timer.current) { window.clearTimeout(timer.current); timer.current = null; } };
   useEffect(() => clear, []);
+  const setArmed = (next: boolean) => { setArmedState(next); onArmedChange?.(next); };
 
   const arm = () => {
     setArmed(true);

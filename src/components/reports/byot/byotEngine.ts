@@ -948,8 +948,14 @@ function passRemoveFurniture(unpacked: Unpacked): Furnished {
     }
   });
 
-  const header: string[] = [];
-  const footer: string[] = [];
+  // Text plus how many pages carried it. A running strip ("PwC") sits on every
+  // page; a section label in the same band ("Merchant Recovery") sits on the
+  // pages of its own section only. Both are furniture as far as reading goes,
+  // and both get struck from the body, but only the one that runs THROUGH the
+  // document is the letterhead the client prints. Coverage is what tells them
+  // apart, so it is carried here rather than thrown away.
+  const header: { text: string; pages: number }[] = [];
+  const footer: { text: string; pages: number }[] = [];
   /** Position-keyed slots to strike out, and their plain text keys. */
   const strikeSlots = new Set<string>();
   const headerLines = new Set<string>();
@@ -963,7 +969,7 @@ function passRemoveFurniture(unpacked: Unpacked): Furnished {
       pageNumberPattern = /of|\//i.test(v.text) ? 'Page N of M' : 'N';
       continue;
     }
-    (v.top >= v.pages.size / 2 ? header : footer).push(v.text.trim());
+    (v.top >= v.pages.size / 2 ? header : footer).push({ text: v.text.trim(), pages: v.pages.size });
   }
 
   // Second net, for documents whose furniture drifts a few points down the
@@ -989,7 +995,7 @@ function passRemoveFurniture(unpacked: Unpacked): Furnished {
       pageNumberPattern = /of|\//i.test(v.text) ? 'Page N of M' : 'N';
       continue;
     }
-    (v.top >= v.count / 2 ? header : footer).push(v.text.trim());
+    (v.top >= v.count / 2 ? header : footer).push({ text: v.text.trim(), pages: v.count });
   }
 
   // Single page reports have nothing repeating, which is a valid result.
@@ -998,10 +1004,25 @@ function passRemoveFurniture(unpacked: Unpacked): Furnished {
     return !headerLines.has(norm(line.text.replace(/\d+/g, '#')));
   }));
 
-  const all = [...header, ...footer];
-  const confidentiality = all.map(t => t.match(CONFIDENTIAL)?.[0]).find(Boolean);
+  // The letterhead keeps what runs through the document, most-covering first,
+  // and one copy of each. A one-page read has nothing to compare, so its parts
+  // all stand. Everything else was still struck from the body above; it just
+  // does not get printed on every report the client generates from now on.
+  const runsThrough = Math.max(REPEAT_PAGES, Math.ceil(pages * REPEAT_SHARE));
+  const letterhead = (found: { text: string; pages: number }[]): string[] => {
+    const seen = new Set<string>();
+    return found
+      .filter(f => pages <= 1 || f.pages >= runsThrough)
+      .sort((a, b) => b.pages - a.pages)
+      .filter(f => { const k = norm(f.text); if (!k || seen.has(k)) return false; seen.add(k); return true; })
+      .map(f => f.text);
+  };
+  const headerText = letterhead(header);
+  const footerText = letterhead(footer);
+  const all = [...headerText, ...footerText];
+  const confidentiality = [...header, ...footer].map(f => f.text.match(CONFIDENTIAL)?.[0]).find(Boolean);
   const furniture: ReadFurniture | null = all.length || pageNumberPattern
-    ? { header, footer, pageNumberPattern, confidentiality, fields: {} }
+    ? { header: headerText, footer: footerText, pageNumberPattern, confidentiality, fields: {} }
     : null;
 
   markPageContinuations(body);

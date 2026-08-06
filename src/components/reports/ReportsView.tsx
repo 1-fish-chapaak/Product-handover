@@ -8,7 +8,7 @@ import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
+  X, BookOpen, Trash2, Plus, Search, Layers, Check,
   WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import TemplatePreview from './TemplatePreview';
@@ -24,10 +24,13 @@ import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import { exportAtrWord } from './atrTemplate';
 import { currentVersion } from './atrReview';
-import { type Tone } from '../shared/StatusBadge';
+import { Pill, type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
+import TemplateScopeModal from './TemplateScopeModal';
+import { templateScopeTag } from './templateScope';
+import { findEngagement } from '../../data/engagements';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   reportKind, startReportDownload,
@@ -317,7 +320,20 @@ export default function ReportsView({
     if (onUpdateCustomTemplate) onUpdateCustomTemplate(t as typeof REPORT_TEMPLATES[number]);
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
+  /** One format at a time is the one internal audit reports are written in, so
+   *  saving a format into that answer clears the flag from whoever held it.
+   *  The old one stays on the list and stays pickable. */
+  const clearRivalDefaults = (saved: EditableTemplate) => {
+    if (!saved.isDefault) return;
+    (customTemplates as EditableTemplate[])
+      .filter(t => t.id !== saved.id && t.isDefault)
+      .forEach(t => updateCustomTemplate({ ...t, isDefault: undefined }));
+  };
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Asked right after a template saves, new or edited, and never blocking the
+  // save itself. It sets where the format may be used; leaving it alone keeps
+  // whatever the template already had.
+  const [scopeForTemplate, setScopeForTemplate] = useState<EditableTemplate | null>(null);
   // Inline rename from the template list — no need to open the full editor just to
   // change a name. `renamingId` marks the row in edit mode; the draft commits on
   // Enter/blur, reverts on Escape, and is guarded against blank / duplicate names.
@@ -489,9 +505,12 @@ export default function ReportsView({
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
-    // A report reads as "Custom" only when it was generated from a template that
-    // still exists in the user's custom list — not merely a `ct-` prefix.
+    // A report reads as "Custom" only when the template it is on still exists in
+    // the user's custom list — not merely a `ct-` prefix. "The template it is
+    // on" is the one applied from the reader when there is one, so switching a
+    // System report to a custom template flips the chip to Custom (and back).
     const customTemplateIds = new Set(customTemplates.map(t => t.id));
+    const templateInForce = (r: GeneratedReport) => r.appliedTemplateId ?? r.templateId;
     const rows: UnifiedRow[] = [];
     // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
     generatedReports.forEach(r => {
@@ -500,7 +519,7 @@ export default function ReportsView({
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
-        source: r.templateId && customTemplateIds.has(r.templateId) ? 'custom' : 'system',
+        source: (() => { const t = templateInForce(r); return t && customTemplateIds.has(t) ? 'custom' : 'system'; })(),
         description: reportDesc(r), pills: reportPills(r),
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => openReport(r),
@@ -777,6 +796,14 @@ export default function ReportsView({
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, signoffs } : prev));
   };
 
+  // Persist the template applied from the reader's Apply Template control. It
+  // is a property of the report from here on, so reopening it lands on the
+  // applied template rather than the one it was generated from.
+  const updateReportAppliedTemplate = (reportId: string, templateId: string) => {
+    setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, appliedTemplateId: templateId } : r)));
+    setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, appliedTemplateId: templateId } : prev));
+  };
+
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
     // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
@@ -892,6 +919,7 @@ export default function ReportsView({
           templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
+          onApplyTemplate={updateReportAppliedTemplate}
         />
       );
     }
@@ -905,6 +933,7 @@ export default function ReportsView({
         customTemplates={customTemplates}
         onUpdateDescription={updateReportDescription}
         onUpdateSignoffs={updateReportSignoffs}
+        onApplyTemplate={updateReportAppliedTemplate}
         onSaveAsTemplate={addCustomTemplateUnique}
         onSaveAtrVersion={saveAtrVersion}
       />
@@ -1382,9 +1411,13 @@ export default function ReportsView({
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
                 className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
                 onClick={() => {
-                  // Whole card = open the template as the report it produces.
-                  // Generating happens from that page, once they can see it.
-                  setPreviewTemplate(rt);
+                  // One click, not two. A custom template opens in the editor,
+                  // which prints the same sheet live beside its settings, so the
+                  // read-only preview page was a detour on the way to Edit. A
+                  // standard template cannot be edited, so it still opens as the
+                  // report it produces.
+                  if (isCustom) editCustomTemplate(rt);
+                  else setPreviewTemplate(rt);
                 }}
               >
                 <div className="flex items-start justify-between gap-3 mb-3.5">
@@ -1422,6 +1455,15 @@ export default function ReportsView({
                   <h3 onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
                 )}
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
+                {/* Where it may be used, in the words the save-time question
+                    used. The plain case (any internal audit) says nothing. */}
+                {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
+                  <p className="mt-2">
+                    <Pill tone={(rt as EditableTemplate).isDefault ? 'info' : 'draft'}>
+                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}
+                    </Pill>
+                  </p>
+                )}
                 {isCustom && ((rt as EditableTemplate).tags?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap items-center gap-1 mt-2">
                     {(rt as EditableTemplate).tags!.slice(0, 3).map(tag => (
@@ -1436,32 +1478,9 @@ export default function ReportsView({
                       <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {isCustom && (
-                      // Single Edit action — renames inline in the editor (or double-
-                      // click the title). Do NOT add a separate Rename pencil back.
-                      <ActionTooltip label="Edit">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
-                          aria-label={`Edit template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                    {isCustom && (
-                      <ActionTooltip label="Delete template">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
-                          aria-label={`Delete template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors duration-200 cursor-pointer"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                  </div>
+                  {/* No actions on the card. The whole card opens the
+                      template, and Delete lives inside it, next to the page it
+                      would throw away. */}
                 </div>
               </motion.div>
             );
@@ -1479,7 +1498,7 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
                 className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
-                onClick={() => setPreviewTemplate(rt)}
+                onClick={() => { if (isCustom) editCustomTemplate(rt); else setPreviewTemplate(rt); }}
               >
                 <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md ${tintBg}`}>
                   <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
@@ -1505,37 +1524,23 @@ export default function ReportsView({
                       <span onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
                     )}
                   </div>
-                  <p className="text-[0.75rem] text-ink-400 truncate leading-snug">{rt.desc}</p>
+                  <p className="text-[0.75rem] text-ink-400 truncate leading-snug">
+                    {rt.desc}
+
+                  </p>
                 </div>
                 {/* Meta + actions — always visible (no hover fade). */}
                 <div className="shrink-0 flex items-center gap-3">
+                  {/* Where this format is used, as a tag rather than a tail on
+                      the description: on a row it is scanned, not read. */}
+                  {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
+                    <Pill tone={(rt as EditableTemplate).isDefault ? 'info' : 'draft'}>
+                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}
+                    </Pill>
+                  )}
                   <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
-                  <div className="flex items-center gap-0.5 pl-1">
-                    {isCustom && (
-                      // Single Edit action — renames inline in the editor (or double-
-                      // click the title). Do NOT add a separate Rename pencil back.
-                      <ActionTooltip label="Edit">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
-                          aria-label={`Edit template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                    {isCustom && (
-                      <ActionTooltip label="Delete template">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
-                          aria-label={`Delete template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                  </div>
+                  {/* No actions on the row: it opens the template, and Delete
+                      lives inside it. */}
                 </div>
               </motion.div>
             );
@@ -1617,22 +1622,18 @@ export default function ReportsView({
                 {filteredStandard.length === 0 ? noSearchMatch : renderGallery(filteredStandard, false)}
               </section>
 
-              {/* Custom gallery. */}
-              <section>
-                {sectionLabel('Custom', filteredCustom.length)}
-                {customTemplates.length === 0 ? (
-                  <EmptyState
-                    icon={FileText}
-                    title="No custom templates"
-                    body="Build one from scratch or from an existing report, then reuse it across all your reports."
-                    size="compact"
-                  />
-                ) : filteredCustom.length === 0 ? (
-                  noSearchMatch
-                ) : (
-                  renderGallery(filteredCustom, true)
-                )}
-              </section>
+              {/* Custom gallery — only when there are custom templates to show.
+                  A "Custom 0" heading over a card explaining what a custom
+                  template is takes as much room as a real one and says nothing:
+                  New template, in the toolbar above, is the way in. It also
+                  disappears under a search that matches no custom template,
+                  rather than repeating "no match" once per gallery. */}
+              {filteredCustom.length > 0 && (
+                <section>
+                  {sectionLabel('Custom', filteredCustom.length)}
+                  {renderGallery(filteredCustom, true)}
+                </section>
+              )}
               </div>
             </div>
           );
@@ -1688,8 +1689,24 @@ export default function ReportsView({
             // there is nothing left for Save to dismiss beyond the editor itself.
             onClose={() => { setEditingTemplate(null); }}
             onCancel={() => { setEditingTemplate(null); }}
-            onSaveNew={(created) => addCustomTemplate(created)}
-            onSaveEdit={(updated) => updateCustomTemplate(updated)}
+            onSaveNew={(created) => { addCustomTemplate(created); setScopeForTemplate(created); }}
+            onSaveEdit={(updated) => { updateCustomTemplate(updated); setScopeForTemplate(updated); }}
+            // Delete lives in the editor's own header menu, and the editor asks
+            // for confirmation there, so this just carries it out.
+            // The editor shows the answer and hands the question straight back
+            // to the one modal that owns it.
+            onEditScope={customTemplates.some(t => t.id === editingTemplate!.id)
+              ? () => setScopeForTemplate(editingTemplate as EditableTemplate)
+              : undefined}
+            onDeleteTemplate={customTemplates.some(t => t.id === editingTemplate!.id)
+              ? () => {
+                  const t = editingTemplate!;
+                  setEditingTemplate(null);
+                  removeCustomTemplate(t.id);
+                  addToast({ type: 'success', message: `Template "${t.name}" deleted.` });
+                  logEvent({ action: 'Delete', description: `Deleted custom template "${t.name}"`, module: 'Reports', entity: 'Template' });
+                }
+              : undefined}
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
             existingStructures={customTemplates
               .filter(t => t.id !== editingTemplate!.id)
@@ -1698,6 +1715,36 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
+      {/* Where the format may be used — the only place scope is set, shown
+          right after a template saves, new or edited. It answers one question
+          with three exclusive answers (every internal audit / one engagement /
+          the internal audit default) and applies to the template that already
+          exists in Custom Templates. Leaving it as it is changes nothing. */}
+      <AnimatePresence>
+        {scopeForTemplate && (
+          <TemplateScopeModal
+            templateName={scopeForTemplate.name}
+            currentEngagementId={scopeForTemplate.engagementId}
+            currentDefaultName={(customTemplates as EditableTemplate[])
+              .find(t => t.isDefault && t.id !== scopeForTemplate.id)?.name}
+            onApply={(next) => {
+              const scoped = { ...scopeForTemplate, ...next };
+              updateCustomTemplate(scoped);
+              clearRivalDefaults(scoped);
+              // The editor may be open behind this, showing the old answer.
+              setEditingTemplate(prev => (prev && prev.id === scoped.id ? scoped as typeof prev : prev));
+              setScopeForTemplate(null);
+              addToast({
+                type: 'success',
+                message: next.engagementId
+                  ? `Reports for ${findEngagement(next.engagementId)?.name ?? 'that engagement'} come out in this format.`
+                  : 'Internal audit reports come out in this format.',
+              });
+            }}
+            onSkip={() => setScopeForTemplate(null)}
+          />
+        )}
+      </AnimatePresence>
 
 
       {/* Generate ATR from Observations — opened by the ATR template "Generate".

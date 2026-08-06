@@ -14,6 +14,8 @@ import {
   ICON_MAP, CATEGORY_COLORS,
   type EditableTemplate,
 } from './reportShared';
+import { findEngagement } from '../../data/engagements';
+import { templateScope, templateScopeLine } from './templateScope';
 
 export default function TemplatePreview({
   template,
@@ -84,6 +86,14 @@ export default function TemplatePreview({
             <span>{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
             <span className="text-ink-300">·</span>
             <span>Empty shape. Your audit data fills it in when you generate.</span>
+            {/* Where this format may be used. The plain case, any internal
+                audit, says nothing: that is the norm, not news. */}
+            {templateScope(template) !== 'internal-audit' && (
+              <>
+                <span className="text-ink-300">·</span>
+                <span>{templateScopeLine(template, template.engagementId ? findEngagement(template.engagementId)?.name : undefined)}</span>
+              </>
+            )}
           </div>
 
           <TemplateSheet template={template} />
