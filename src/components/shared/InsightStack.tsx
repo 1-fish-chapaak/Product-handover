@@ -24,13 +24,13 @@
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpRight, Brain, Sparkles, ChevronDown, Check } from 'lucide-react';
+import { ArrowUpRight, Brain, Sparkles, ChevronDown } from 'lucide-react';
 import {
   insightDisposition, riskTypeOf, insightKpis, DISPOSITION_META, RISK_TYPE_LABEL,
   type LayeredInsight, type CheckMoreOption, type InsightLayer, type VerdictTone,
   type InsightFreshness, type EntityRef, type InsightDisposition, type InsightRiskType,
 } from '../../data/layeredInsights';
-import LayeredInsightCard, { InsightTile, InsightMicroTile, type InsightEntityNav } from './LayeredInsightCard';
+import LayeredInsightCard, { InsightTile, type InsightEntityNav } from './LayeredInsightCard';
 
 /** Row-level navigation a host surface offers the stack: which entities have a
  *  real row it can take the reader to, and how. The stack layers its own
@@ -140,7 +140,9 @@ export default function InsightStack({
   const [flashId, setFlashId] = useState<string | null>(null);
   const entityNav = useMemo<InsightEntityNav | undefined>(() => {
     if (!rowNav) return undefined;
-    const cardFor = (ref: EntityRef) => sorted.find(i => i.layer === ref.kind && i.subjectId === ref.id);
+    // Grid mode no longer renders holding insights, so a chip can't open one.
+    const cardFor = (ref: EntityRef) =>
+      sorted.find(i => i.layer === ref.kind && i.subjectId === ref.id && !(grid && insightDisposition(i) === 'holding'));
     return {
       resolve: ref => (rowNav.canOpen(ref) ? 'row' : cardFor(ref) ? 'insight' : null),
       open: ref => {
@@ -148,7 +150,7 @@ export default function InsightStack({
         const card = cardFor(ref);
         if (!card) return;
         setOpenIds(prev => new Set(prev).add(card.id));
-        setLedgerOpen(o => o || (grid ? insightDisposition(card) === 'holding' : sorted.indexOf(card) >= 1 + TAIL_COUNT));
+        setLedgerOpen(o => o || (!grid && sorted.indexOf(card) >= 1 + TAIL_COUNT));
         setFlashId(card.id);
         window.setTimeout(() => {
           document.getElementById(`insight-card-${card.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -181,29 +183,26 @@ export default function InsightStack({
 
   // ── Grid mode — mechanic D (review decision Aug 6) ────────────────────────
   if (grid) {
-    const bySev = sevF === 'all' ? sorted : sorted.filter(i => i.severity === sevF);
+    // Holding insights (passes, not-yet-run tests) left the drawer on Aug 7 —
+    // the grid raises only what needs a person. Counts and filters follow.
+    const gridStack = sorted.filter(i => insightDisposition(i) !== 'holding');
+    const bySev = sevF === 'all' ? gridStack : gridStack.filter(i => i.severity === sevF);
     const filtered = typeF === 'all' ? bySev : bySev.filter(i => riskTypeOf(i) === typeF);
     const groups: Record<InsightDisposition, LayeredInsight[]> = { action: [], watch: [], holding: [] };
     for (const i of filtered) groups[insightDisposition(i)].push(i);
-    const totals: Record<InsightDisposition, number> = { action: 0, watch: 0, holding: 0 };
-    for (const i of sorted) totals[insightDisposition(i)]++;
 
     // The triage band's stake caption — quoted from the top action insight's
     // own materiality tile, never computed here (no fabricated totals). Only a
     // figure reads as a caption; a word-state ("Unweighed") stays on its tile.
-    const topAction = sorted.find(i => insightDisposition(i) === 'action');
+    const topAction = gridStack.find(i => insightDisposition(i) === 'action');
     const stakeK = topAction && insightKpis(topAction).find(k => /material/i.test(k.label) && /[%$\d]/.test(k.value));
-    const showFilters = sorted.length > 5;
+    const showFilters = gridStack.length > 5;
     const typeCounts = new Map<InsightRiskType, number>();
-    for (const i of sorted) {
+    for (const i of gridStack) {
       const t = riskTypeOf(i);
       typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1);
     }
-    const sevCount = (s: LayeredInsight['severity']) => sorted.filter(i => i.severity === s).length;
-    // Filtering to Low IS asking for the fold's content — open it.
-    const foldOpen = ledgerOpen || sevF === 'low';
-    const holdingClosed = groups.holding.filter(i => !openIds.has(i.id));
-    const holdingOpen = groups.holding.filter(i => openIds.has(i.id));
+    const sevCount = (s: LayeredInsight['severity']) => gridStack.filter(i => i.severity === s).length;
 
     const chipCls = (active: boolean) =>
       `rounded-full border px-2.5 py-0.5 text-[0.65625rem] font-semibold tabular-nums transition-colors cursor-pointer ${
@@ -249,22 +248,20 @@ export default function InsightStack({
           </div>
         </div>
 
-        {/* Triage band — "how much of this needs me?" before anything is read. */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {totals.action > 0 && <span className="rounded-full bg-risk-50 px-3 py-1 text-[0.75rem] font-semibold text-risk tabular-nums">{totals.action} need action</span>}
-          {totals.watch > 0 && <span className="rounded-full bg-mitigated-50 px-3 py-1 text-[0.75rem] font-semibold text-mitigated-700 tabular-nums">{totals.watch} to watch</span>}
-          {totals.holding > 0 && <span className="rounded-full bg-compliant-50 px-3 py-1 text-[0.75rem] font-semibold text-compliant-700 tabular-nums">{totals.holding} holding</span>}
-          {stakeK && (
+        {/* The triage chips are gone (Aug 7) — the section headers below carry
+            the same counts. Only the stake caption remains, when one exists. */}
+        {stakeK && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span className="ml-auto text-[0.65625rem] text-ink-400" title={stakeK.sub}>
               {stakeK.value} of materiality at stake (est.)
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Filters — only once the stack outgrows five insights (Deepak 2). */}
         {showFilters && (
           <div className="mt-2 flex flex-wrap items-center gap-1" role="group" aria-label="Filter insights">
-            <button type="button" onClick={() => setSevF('all')} aria-pressed={sevF === 'all'} className={chipCls(sevF === 'all')}>All {sorted.length}</button>
+            <button type="button" onClick={() => setSevF('all')} aria-pressed={sevF === 'all'} className={chipCls(sevF === 'all')}>All {gridStack.length}</button>
             {(['high', 'med', 'low'] as const).map(s => sevCount(s) > 0 && (
               <button key={s} type="button" onClick={() => setSevF(f => f === s ? 'all' : s)} aria-pressed={sevF === s} className={chipCls(sevF === s)}>
                 {SEV[s].label} {sevCount(s)}
@@ -279,7 +276,10 @@ export default function InsightStack({
           </div>
         )}
 
-        {filtered.length === 0 && (
+        {gridStack.length === 0 && (
+          <p className="mt-4 text-[0.75rem] text-ink-500">Nothing needs you here this period — passes and not-yet-run tests aren’t raised.</p>
+        )}
+        {gridStack.length > 0 && filtered.length === 0 && (
           <p className="mt-4 text-[0.75rem] text-ink-500">Nothing matches these filters — clear one to see the rest of the stack.</p>
         )}
 
@@ -296,50 +296,6 @@ export default function InsightStack({
           </div>
         ))}
 
-        {/* The fold — a pass earns a micro-tile, not a card. Still one click
-            away: auditors need the negative assurance, not nine tiles of it. */}
-        {groups.holding.length > 0 && (
-          <div className="mt-4">
-            <button
-              type="button" onClick={() => setLedgerOpen(o => !o)} aria-expanded={foldOpen}
-              className="group flex w-full items-center gap-2 rounded-xl border border-dashed border-compliant-200 bg-compliant-50/40 px-3.5 py-2.5 text-left hover:border-compliant-300 transition-colors cursor-pointer"
-            >
-              <Check size={13} className="shrink-0 text-compliant" aria-hidden="true" />
-              <span className="text-[0.75rem] font-semibold text-compliant-700 tabular-nums">Holding steady · {groups.holding.length}</span>
-              <span className="hidden sm:inline text-[0.65625rem] text-ink-400">— {DISPOSITION_META.holding.foldLabel}</span>
-              <ChevronDown size={14} className={`ml-auto shrink-0 text-compliant-700/70 transition-transform ${foldOpen ? '' : '-rotate-90'}`} aria-hidden="true" />
-            </button>
-            <AnimatePresence initial={false}>
-              {foldOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden"
-                >
-                  {holdingClosed.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {holdingClosed.map(i => <InsightMicroTile key={i.id} insight={i} onOpen={() => toggle(i.id)} />)}
-                    </div>
-                  )}
-                  {holdingOpen.length > 0 && (
-                    <ul className="mt-2 flex flex-col gap-2">
-                      {holdingOpen.map(i => (
-                        <li key={i.id}>
-                          <div id={`insight-card-${i.id}`} className={flashCls(i.id)}>
-                            <LayeredInsightCard
-                              insight={i} onCheckMore={onCheckMore} collapsible open
-                              onToggleOpen={() => toggle(i.id)} entityNav={entityNav}
-                              summary={i.layer === 'engagement' || i.layer === 'portfolio'}
-                            />
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
       </section>
     );
   }
