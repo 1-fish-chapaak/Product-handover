@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle, ArrowRight, CalendarRange, Building2, Grid3x3, Inbox, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, conclusionOf, engagementProgress } from './helpers';
+import { assessSeverity, controlConclusion, engagementProgress } from './helpers';
 import { engagementRagMeters } from './Overview';
 import { RagStrip } from './parts';
 import { processesForAudit, normaliseProcess } from './auditScope';
@@ -34,13 +34,13 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
     const inScope = procs
       ? eng.controls.filter(c => procs.includes(normaliseProcess(c.process)))
       : eng.controls;
-    const effective = inScope.filter(c => conclusionOf(eng, c) === 'Effective').length;
+    const effective = inScope.filter(c => controlConclusion(c) === 'Effective').length;
     return { total: inScope.length, effective, open: inScope.length - effective };
   };
 
   const W = defWord(eng.id);
   const stats = engagementProgress(eng);
-  const ragMeters = useMemo(() => engagementRagMeters(eng, eng.controls), [eng]);
+  const ragMeters = useMemo(() => engagementRagMeters(eng.controls), [eng.controls]);
 
   // Severity is assessed, not stored — a validly-capped material weakness counts
   // as a significant deficiency here exactly as it does on the Overview.
@@ -64,8 +64,8 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
   // Read-outs, not links: the Control Library lives inside an audit, and there
   // is no non-arbitrary audit to send someone to from the engagement level.
   const tiles = [
-    { k: 'TOD concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
-    { k: 'TOE concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
+    { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
+    { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
     { k: 'Effective', v: String(stats.effective), t: 'text-compliant-700' },
     { k: 'Ineffective', v: String(stats.ineffective), t: 'text-risk-700' },
     { k: 'Awaiting review', v: String(stats.awaitingReview), t: 'text-evidence-700' },

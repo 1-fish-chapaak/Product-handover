@@ -163,17 +163,17 @@ export interface V2PeopleRow {
 }
 
 export const PEOPLE_SUGGESTIONS: Record<string, Omit<V2PeopleRow, 'area'>> = {
-  'Order to Cash': { processOwner: 'Divya Menon', poEmail: 'divya.menon@altura.example', controlOwner: 'Arif Khan', coEmail: 'arif.khan@altura.example' },
-  'Procure to Pay': { processOwner: 'Rohit Bansal', poEmail: 'rohit.bansal@altura.example', controlOwner: 'Arif Khan', coEmail: 'arif.khan@altura.example' },
-  'Fixed Assets': { processOwner: 'Sanjay Kulkarni', poEmail: 'sanjay.k@altura.example', controlOwner: 'Meera Iyer', coEmail: 'meera.iyer@altura.example' },
-  Treasury: { processOwner: 'Nikhil Rao', poEmail: 'nikhil.rao@altura.example', controlOwner: 'Meera Iyer', coEmail: 'meera.iyer@altura.example' },
-  Inventory: { processOwner: 'Pooja Nair', poEmail: 'pooja.nair@altura.example', controlOwner: 'Arif Khan', coEmail: 'arif.khan@altura.example' },
-  'Payroll (Hire to Retire)': { processOwner: 'Imran Qureshi', poEmail: 'imran.q@altura.example', controlOwner: 'Meera Iyer', coEmail: 'meera.iyer@altura.example' },
-  Tax: { processOwner: 'Shreya Patel', poEmail: 'shreya.patel@altura.example', controlOwner: 'Meera Iyer', coEmail: 'meera.iyer@altura.example' },
-  ITGC: { processOwner: 'Tanvi Shah', poEmail: 'tanvi.shah@altura.example', controlOwner: 'Vikram Singh', coEmail: 'vikram.singh@altura.example' },
-  ELC: { processOwner: 'Kavita Krishnan', poEmail: 'kavita.k@altura.example', controlOwner: 'Audit Committee', coEmail: 'auditcommittee@altura.example' },
-  FSCP: { processOwner: 'Arif Khan', poEmail: 'arif.khan@altura.example', controlOwner: 'Meera Iyer', coEmail: 'meera.iyer@altura.example' },
-  Consolidation: { processOwner: 'Leena Thomas', poEmail: 'leena.thomas@altura.example', controlOwner: 'Arif Khan', coEmail: 'arif.khan@altura.example' },
+  'Order to Cash': { processOwner: 'Divya Menon — Billing Lead', poEmail: 'divya.menon@altura.example', controlOwner: 'Arif Khan — Group Controller', coEmail: 'arif.khan@altura.example' },
+  'Procure to Pay': { processOwner: 'Rohit Bansal — Procurement Head', poEmail: 'rohit.bansal@altura.example', controlOwner: 'Arif Khan — Group Controller', coEmail: 'arif.khan@altura.example' },
+  'Fixed Assets': { processOwner: 'Sanjay Kulkarni — Projects Controller', poEmail: 'sanjay.k@altura.example', controlOwner: 'Meera Iyer — CFO', coEmail: 'meera.iyer@altura.example' },
+  Treasury: { processOwner: 'Nikhil Rao — Treasury Manager', poEmail: 'nikhil.rao@altura.example', controlOwner: 'Meera Iyer — CFO', coEmail: 'meera.iyer@altura.example' },
+  Inventory: { processOwner: 'Pooja Nair — Stores Lead', poEmail: 'pooja.nair@altura.example', controlOwner: 'Arif Khan — Group Controller', coEmail: 'arif.khan@altura.example' },
+  'Payroll (Hire to Retire)': { processOwner: 'Imran Qureshi — HR Ops', poEmail: 'imran.q@altura.example', controlOwner: 'Meera Iyer — CFO', coEmail: 'meera.iyer@altura.example' },
+  Tax: { processOwner: 'Shreya Patel — Tax Manager', poEmail: 'shreya.patel@altura.example', controlOwner: 'Meera Iyer — CFO', coEmail: 'meera.iyer@altura.example' },
+  ITGC: { processOwner: 'Tanvi Shah — IT Applications Manager', poEmail: 'tanvi.shah@altura.example', controlOwner: 'Vikram Singh — CIO', coEmail: 'vikram.singh@altura.example' },
+  ELC: { processOwner: 'Kavita Krishnan — Company Secretary', poEmail: 'kavita.k@altura.example', controlOwner: 'Audit Committee', coEmail: 'auditcommittee@altura.example' },
+  FSCP: { processOwner: 'Arif Khan — Group Controller', poEmail: 'arif.khan@altura.example', controlOwner: 'Meera Iyer — CFO', coEmail: 'meera.iyer@altura.example' },
+  Consolidation: { processOwner: 'Leena Thomas — Consolidation Lead', poEmail: 'leena.thomas@altura.example', controlOwner: 'Arif Khan — Group Controller', coEmail: 'arif.khan@altura.example' },
 };
 
 /* ── Controls & the auditor filter ──────────────────────────────────────── */

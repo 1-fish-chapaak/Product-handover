@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet,
-  Grid3x3, Landmark, Paperclip, Pencil, Plus, Scale, Sparkles, Star, Trash2, Upload, X,
+  ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet, Grid3x3,
+  Landmark, Paperclip, Scale, Sparkles, Star, Trash2, Upload, X,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
-import DesignControlAddModal from '../audit/DesignControlAddModal';
 import { StepRail } from '../audit/sox-testing/ScopingWizard';
 import { FormSelect } from '../shared/FilterSelect';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
@@ -14,11 +13,10 @@ import {
   type GroupEntity, type MaterialityBasis,
 } from '../audit/sox-testing/soxTestingData';
 import {
-  chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
+  COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
   entitiesFor, entitiesInFiles, entityTotals, mergeScopeEntities, racmsForEntities,
 } from './auditScope';
 import { useIcfr } from './store';
-import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
 import { cn } from '../../lib/cn';
@@ -45,7 +43,7 @@ import { cn } from '../../lib/cn';
  * controls, the same equivalence Racm.tsx and createRacm() work from.
  */
 
-const STEPS = ['Audit period', 'Materiality & files', 'Scope', 'Review'] as const;
+const STEPS = ['Period', 'Materiality & files', 'Scope', 'Review'] as const;
 const REVIEW = STEPS.length - 1;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -75,8 +73,7 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
-  const { eng, role, createAudit, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
-  const logEvent = useAuditLog();
+  const { eng, createAudit, registerFile, me } = useIcfr();
   const { addToast } = useToast();
   const [step, setStep] = useState(0);
 
@@ -184,10 +181,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   /** Key controls only. SOX scopes to key controls far more often than not, so
    *  this is the switch that does the picking rather than a filter on the eye. */
   const [keyOnly, setKeyOnly] = useState(false);
-  /** Which RACM the add-control screen is adding to. Null when it's closed —
-   *  the RACM is settled by the row the button was pressed on, so the form
-   *  never has to ask which matrix this belongs to. */
-  const [addCtrlRacm, setAddCtrlRacm] = useState<string | null>(null);
   /** Controls chosen inside the RACMs, by id. A RACM ticked whole puts all of
    *  its ids in; unticking one row leaves the RACM partly selected. */
   const [pickedControls, setPickedControls] = useState<string[]>([]);
@@ -200,34 +193,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     },
     [racms, keyOnly],
   );
-
-  /**
-   * Key / non-key, set from the row being scoped.
-   *
-   * Scoping is where the question actually comes up — you are looking at the
-   * matrix deciding what this round covers, and "that one is key too" is the
-   * thought you have there, not on a control's own page three clicks away.
-   *
-   * It is the SAME judgement the control page sets, on the same field, so it
-   * lands on the engagement's control and shows up wherever that control is
-   * read: the RACM, both registers, the working paper and the audit report.
-   *
-   * No concluded-control guard, unlike the control page: scoping runs before
-   * any testing exists. A new audit is created with nothing tested, and a
-   * roll-forward carries the RACM and its controls but starts testing from
-   * zero, so the question is always asked of an untested control.
-   */
-  const toggleKey = (c: Control) => {
-    setControlKey(c.id, !c.isKey);
-    logEvent({
-      action: 'Update', module: 'SOX ICFR', entity: 'Control',
-      description: `${c.isKey ? 'Unmarked' : 'Marked'} ${c.id} as a key control while scoping a new audit`,
-    });
-    // A row that stops being key would vanish out from under the cursor while
-    // the key-only switch is on, so the switch gives way — same as it does when
-    // a non-key control is added to a RACM.
-    if (keyOnly && c.isKey) setKeyOnly(false);
-  };
 
   // Turning "key controls only" ON picks every key control across every RACM
   // (user ask) — the switch does the picking, which is what its copy always
@@ -257,17 +222,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   /** Where the auditor overruled the derivation, by entity id. Absent means
    *  "whatever the numbers said". */
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  /** Why they overruled it, by entity id. Written in the box that opens under a
-   *  flipped row, and required before Continue (user ask) — a scope decision
-   *  that argues with the trial balance has to say what it knows that the
-   *  numbers don't. */
-  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
-  /** The note being typed, by entity id — separate from the saved one above so
-   *  Cancel has something to throw away (user ask). An entry here means that
-   *  row's box is open for editing; no entry means it's saved and collapsed.
-   *  Only a SAVED note releases Continue, which is what makes Save mean
-   *  something rather than decorate a field that already committed itself. */
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   // What the numbers say, weighed against the performance materiality set on
   // the previous step — so changing 75% to 60% up there re-scopes down here.
@@ -281,85 +235,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   const inScope = (r: DerivedScopeRow) =>
     r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
   const scopedEntities = scope.rows.filter(inScope);
-
-  /** Companies left out while the company that HOLDS them is in. Not an error —
-   *  a 26%-owned terminal under an in-scope parent can be a deliberate omission
-   *  — but it is a decision, and on a flat list nobody could see it had been
-   *  made. Named so the reviewer can ask about it before the audit starts.
-   *
-   *  Only from the THIRD level down. Leaving out a subsidiary held directly by
-   *  the top company is ordinary scoping — it is what the coverage meter above
-   *  already governs, and flagging it fires on every audit ever scoped, which
-   *  is how a warning gets ignored. A sub-group split is the news: taking
-   *  Roadways in while the parks it holds stay out. */
-  const splitFromParent = useMemo(
-    () => scope.rows.filter(r => {
-      if (inScope(r) || r.status === 'absent' || !r.parentId) return false;
-      if (chainDepth(r, scope.rows) < 2) return false;
-      const parent = scope.rows.find(x => x.id === r.parentId);
-      return !!parent && inScope(parent);
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scope.rows, overrides],
-  );
-
-  /** What the derivation said before anyone touched it — the baseline a flip is
-   *  measured against. */
-  const derived = (r: DerivedScopeRow) => r.status === 'tb' || r.status === 'coverage';
-  /** Flip one company in or out, and open the note box under it.
-   *
-   *  Landing back on the derivation drops the override entirely and takes the
-   *  note with it: once the audit agrees with the numbers again there is no
-   *  decision left to explain, so holding Continue for a note would be asking
-   *  the auditor to justify changing their mind back. */
-  const flipEntity = (r: DerivedScopeRow) => {
-    const next = !inScope(r);
-    const backToDerived = next === derived(r);
-    setOverrides(prev => {
-      const out = { ...prev };
-      if (backToDerived) delete out[r.id]; else out[r.id] = next;
-      return out;
-    });
-    if (backToDerived) {
-      setScopeNotes(prev => { const out = { ...prev }; delete out[r.id]; return out; });
-      setNoteDrafts(prev => { const out = { ...prev }; delete out[r.id]; return out; });
-    } else {
-      // Moving the company opens its box straight away, primed with whatever
-      // reason was already given if this row has been round the houses before.
-      setNoteDrafts(prev => ({ ...prev, [r.id]: scopeNotes[r.id] ?? '' }));
-    }
-  };
-  /** Commit the typed reason. */
-  const saveNote = (id: string) => {
-    const text = (noteDrafts[id] ?? '').trim();
-    if (!text) return;
-    setScopeNotes(prev => ({ ...prev, [id]: text }));
-    setNoteDrafts(prev => { const out = { ...prev }; delete out[id]; return out; });
-  };
-  /** Cancel means two different things, and the difference is whether a reason
-   *  was ever saved. Re-editing one: drop the edit, keep what was there. Backing
-   *  out of a fresh flip: there can't be a change without a reason, so cancelling
-   *  the reason puts the company back where the trial balance had it. */
-  const cancelNote = (r: DerivedScopeRow) => {
-    setNoteDrafts(prev => { const out = { ...prev }; delete out[r.id]; return out; });
-    if (scopeNotes[r.id]) return;
-    setOverrides(prev => { const out = { ...prev }; delete out[r.id]; return out; });
-  };
-  /** Every company the auditor moved, with the reason they gave. Drives the note
-   *  gate, the Review step and the audit record. */
-  const scopeChanges = useMemo(
-    () => scope.rows
-      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined)
-      .map(r => ({
-        entityId: r.id,
-        name: r.name,
-        inScope: !!overrides[r.id],
-        note: (scopeNotes[r.id] ?? '').trim(),
-      })),
-    [scope.rows, overrides, scopeNotes],
-  );
-  /** Flipped rows still waiting on their note. Continue holds until it's zero. */
-  const notesOutstanding = scopeChanges.filter(c => !c.note).length;
   /** Coverage after overrides, not the raw derivation — the bar has to follow
    *  what the audit actually covers, or it argues with the list beneath it. */
   const coveragePct = scope.groupTotal
@@ -372,16 +247,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const live = new Set(entityRows.map(r => r.id));
     setOverrides(prev => {
-      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => live.has(id)));
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
-    // The notes follow their overrides out — a reason for a company that no
-    // longer has a row would otherwise sit there holding Continue hostage.
-    setScopeNotes(prev => {
-      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => live.has(id)));
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
-    setNoteDrafts(prev => {
       const next = Object.fromEntries(Object.entries(prev).filter(([id]) => live.has(id)));
       return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
@@ -452,10 +317,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     : step === 1 ? benchmark > 0 && (basis === 'custom' || pct > 0)
     // Scoping by RACM means picking controls: a RACM ticked with nothing
     // under it covers nothing, so Continue waits for at least one row.
-    // Every company the auditor moved owes a reason before the step will pass
-    // (user ask) — the scope is the audit's defence, so it can't leave here
-    // with an unexplained change in it.
-    : step === 2 ? (scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0)
+    : step === 2 ? (scopeKind === 'entity' ? scopedEntities.length > 0 : pickedControls.length > 0)
     : true;
 
   const create = () => {
@@ -474,9 +336,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
       // Only the RACM side picks control by control; scoping by entity lets the
       // entities' processes decide, so it leaves this empty on purpose.
       controlIds: scopeKind === 'racm' ? pickedControls : [],
-      // The overrules travel with the audit — the reason a company is in or out
-      // is only worth asking for if it survives past the wizard.
-      scopeNotes: scopeKind === 'entity' && scopeChanges.length ? scopeChanges : undefined,
       files: files.map(f => ({ name: f.name, kind: f.kind })),
       materiality: { basisLabel: basisOpt.label, benchmark, pct, pmPct, ctPct },
       overall,
@@ -501,47 +360,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
-  /** Add a control to the RACM the button was pressed on, then tick it straight
-   *  into scope — you added it because the audit needs it, so making you find it
-   *  in the list and tick it again would be busywork. */
-  const createControl = (input: { description: string; isKey: boolean; subProcess: string; attributes: string[] }) => {
-    const process = addCtrlRacm;
-    if (!process) return;
-    const description = input.description.trim();
-    const id = addControl({
-      description,
-      process,
-      subProcess: input.subProcess.trim() || 'General',
-      // The scope step is not the place to write up a control — these are the
-      // fields the RACM tab fills in properly. Sensible defaults, editable there.
-      riskId: '', riskDescription: '',
-      nature: 'Manual', frequency: 'Monthly',
-      owner: me, isKey: input.isKey,
-      assertions: [],
-    });
-    // addControl returns '' on a locked engagement rather than throwing.
-    if (!id) {
-      addToast({ type: 'error', title: 'Control not added', message: 'This engagement is locked.' });
-      return;
-    }
-    // The attributes typed on the form become the control's design
-    // considerations — the SOX equivalent of "what this control has to achieve",
-    // and the list its walkthrough is tested against.
-    input.attributes.map(a => a.trim()).filter(Boolean).forEach(a => addDesignPoint(id, a));
-    // A non-key control added while "key controls only" is on would be ticked
-    // into scope and then filtered out of sight — selected but invisible, which
-    // is exactly what that switch was written to avoid. Turning it off costs
-    // nothing: it only ever unlocks the rest, it never drops what's picked.
-    if (keyOnly && !input.isKey) setKeyOnly(false);
-    setPicked(prev => (prev.includes(process) ? prev : [...prev, process]));
-    setPickedControls(prev => [...prev, id]);
-    setOpenRacm(process);
-    setAddCtrlRacm(null);
-    addToast({ type: 'success', title: 'Control added', message: `${description} — added to ${process} and put in scope.` });
-  };
-
   return (
-    <>
     <FlowModal label="New audit" widthCls="w-full max-w-[560px]" variant="sheet" hideClose onClose={onClose}>
       {/* FlowModal's sheet is one scroll container (flex-1 overflow-y-auto p-6
           pb-0), so a plain footer just flows after the content and floats
@@ -865,8 +684,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 onClick={() => setKeyOnly(v => !v)}
                 className="w-full mb-2 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-canvas-border bg-white hover:border-brand-300 transition-colors cursor-pointer text-left"
               >
-                {/* Same phantom-token fix as the entity rows' switch below. */}
-                <span className={cn('w-8 h-[18px] rounded-full relative shrink-0 transition-colors', keyOnly ? 'bg-brand-600' : 'bg-canvas-border')}>
+                <span className={cn('w-8 h-[18px] rounded-full relative shrink-0 transition-colors', keyOnly ? 'bg-brand-600' : 'bg-ink-200')}>
                   <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', keyOnly ? 'left-[16px]' : 'left-[2px]')} />
                 </span>
                 <span className="min-w-0">
@@ -879,20 +697,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 </span>
                 <Star size={14} className={cn('ml-auto shrink-0', keyOnly ? 'text-mitigated-600 fill-mitigated-200' : 'text-ink-300')} />
               </button>
-            )}
-
-            {/* The star on each row is an 11px glyph that both STATES the key
-                judgement and SETS it. Unlabelled it is decoration, so it is
-                named once here rather than left to be discovered by hovering
-                the right pixel. Sits directly above the list it explains. */}
-            {scopeKind === 'racm' && (
-              <p className="mb-2 px-1 flex items-center gap-1.5 text-[11px] text-ink-500">
-                <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />
-                Key control
-                <span className="text-ink-300">·</span>
-                <Star size={11} className="text-ink-300 shrink-0" />
-                Non-key — click a star to change it
-              </p>
             )}
 
             {/* ── Entity side: derived, not picked ────────────────────────────
@@ -924,17 +728,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {scopeKind === 'entity' && splitFromParent.length > 0 && (
-              <p className="flex items-start gap-1.5 mb-2 text-[11px] text-high-700">
-                <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                <span>
-                  {splitFromParent.length} compan{splitFromParent.length === 1 ? 'y is' : 'ies are'} held by a
-                  company that IS in scope, but left out{': '}
-                  <b className="font-semibold">{splitFromParent.map(r => r.name).join(', ')}</b>.
-                </span>
-              </p>
-            )}
-
             <div className="border border-canvas-border rounded-xl overflow-hidden">
               {scopeKind === 'entity' ? (
                 scope.rows.length === 0 ? (
@@ -942,12 +735,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 ) : scope.rows.map(row => {
                   const on = inScope(row);
                   const absent = row.status === 'absent';
-                  const depth = chainDepth(row, scope.rows);
-                  /* Moved off what the trial balance derived — so this row owes
-                     a reason, and the box below it is open until it gets one. */
-                  const changed = !absent && overrides[row.id] !== undefined;
-                  /** Box open for typing, as opposed to showing a saved reason. */
-                  const editing = noteDrafts[row.id] !== undefined;
                   return (
                     /* One white surface throughout (user ask). An excluded row
                        carries the design system's disabled treatment instead of
@@ -955,20 +742,10 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                     <div
                       key={row.id}
                       className={cn(
-                        'bg-white border-b border-canvas-border last:border-b-0 transition-colors',
+                        'flex items-start gap-3 px-4 py-2.5 bg-white border-b border-canvas-border last:border-b-0 transition-colors',
                         absent ? 'opacity-50' : 'hover:bg-brand-50/40',
                       )}
                     >
-                    <div className="flex items-start gap-3 px-4 py-2.5">
-                      {/* Indent carries the group's shape, and ONLY the name
-                          moves: the toggle stays in its own column so the
-                          switches read as one straight line down the list
-                          (user ask). A row you can flip should not wander left
-                          and right depending on how deep it sits. */}
-                      {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: depth * 12 }} />}
-                      {depth >= 2 && (
-                        <span aria-hidden className="text-[11px] text-ink-300 leading-none shrink-0 mt-1 -mr-1.5">↳</span>
-                      )}
                       {/* Colours stay as they are on every row — the wrapper's
                           opacity is what says "excluded", so the row reads as
                           the same row, dimmed. */}
@@ -1001,87 +778,14 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                           role="switch"
                           aria-checked={on}
                           aria-label={`${on ? 'Take' : 'Bring'} ${row.name} ${on ? 'out of' : 'into'} scope`}
-                          onClick={() => flipEntity(row)}
+                          onClick={() => setOverrides(prev => ({ ...prev, [row.id]: !on }))}
                           className="shrink-0 mt-1 cursor-pointer"
                         >
-                          {/* Off is bg-canvas-border, per DESIGN.md's form-control
-                              line. It used to be bg-ink-200 — a token that has
-                              never existed (the ink ramp starts at 300), so the
-                              utility was never generated and the off track came
-                              out fully transparent: a white knob on a white row. */}
-                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
+                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-ink-200')}>
                             <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
                           </span>
                         </button>
                       )}
-                    </div>
-
-                    {/* ── Why ─────────────────────────────────────────────────
-                        Opens under any company the auditor moved, in either
-                        direction (user ask), and Continue waits on it. The
-                        override tint is the house one for a judgement that
-                        argues with the evidence — same treatment the control
-                        dossier uses when a conclusion is overridden. */}
-                    <AnimatePresence initial={false}>
-                      {changed && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.18 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mx-4 mb-3 p-3 rounded-xl border border-high-200 bg-high-50/40">
-                            <span className="text-[11px] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
-                              <Pencil size={11} className="shrink-0" />
-                              {on ? 'Why is this company in scope?' : 'Why is this company out of scope?'}
-                            </span>
-                            {editing ? (
-                              <>
-                                <textarea
-                                  id={`scope-why-${row.id}`}
-                                  aria-label={on ? `Why ${row.name} is in scope` : `Why ${row.name} is out of scope`}
-                                  autoFocus
-                                  rows={2}
-                                  value={noteDrafts[row.id] ?? ''}
-                                  onChange={e => setNoteDrafts(prev => ({ ...prev, [row.id]: e.target.value }))}
-                                  placeholder="Record your rationale — retained in the working paper."
-                                  className="w-full text-[12px] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
-                                />
-                                <div className="flex items-center justify-end gap-2 mt-2">
-                                  <button
-                                    onClick={() => cancelNote(row)}
-                                    className="h-7 px-2.5 text-[11.5px] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => saveNote(row.id)}
-                                    disabled={!(noteDrafts[row.id] ?? '').trim()}
-                                    className="h-7 px-3 text-[11.5px] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              /* Saved — the reason reads back as text, so a list
-                                 of moved companies stays scannable instead of
-                                 being a column of open textareas. */
-                              <div className="flex items-start justify-between gap-3">
-                                <p className="text-[12px] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{scopeNotes[row.id]}</p>
-                                <button
-                                  onClick={() => setNoteDrafts(prev => ({ ...prev, [row.id]: scopeNotes[row.id] ?? '' }))}
-                                  className="shrink-0 h-6 px-2 text-[11.5px] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
-                                >
-                                  Edit
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                     </div>
                   );
                 })
@@ -1118,27 +822,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                         <span className="text-[11px] text-ink-400 shrink-0 ml-auto tabular-nums">
                           {chosen > 0 ? `${chosen}/${rows.length} selected` : `${rows.length} control${rows.length === 1 ? '' : 's'}`}
                         </span>
-                      </button>
-                      {/* On the RACM row beside the chevron (user ask), so a
-                          missing control can be added without opening the matrix
-                          first. Its own button rather than part of the row's:
-                          nesting a button inside a button isn't valid, and this
-                          one must not expand the RACM. */}
-                      <button
-                        onClick={() => setAddCtrlRacm(o.id)}
-                        title={`Add a control to ${o.primary}`}
-                        aria-label={`Add a control to ${o.primary}`}
-                        className="shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
-                      >
-                        <Plus size={12} className="shrink-0" /> Control
-                      </button>
-                      <button
-                        onClick={() => setOpenRacm(expanded ? null : o.id)}
-                        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${o.primary}`}
-                        aria-expanded={expanded}
-                        className="shrink-0 cursor-pointer"
-                      >
-                        <ChevronDown size={14} className={cn('text-ink-400 transition-transform', expanded && 'rotate-180')} />
+                        <ChevronDown size={14} className={cn('text-ink-400 shrink-0 transition-transform', expanded && 'rotate-180')} />
                       </button>
                     </div>
 
@@ -1150,24 +834,10 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                           </p>
                         ) : rows.map(c => {
                           const ticked = pickedControls.includes(c.id);
-                          const settable = role === 'auditor';
                           return (
-                            // A div, not a button: the star inside it is one, and a
-                            // button inside a button is invalid. Same
-                            // role/tabIndex/onKeyDown pattern the registers use.
-                            <div
+                            <button
                               key={c.id}
-                              role="button"
-                              tabIndex={0}
-                              aria-pressed={ticked}
-                              // Named explicitly. Without it the row's name is
-                              // computed from its contents — which now starts
-                              // with the star button's own label, so the row
-                              // and the star announced as near-identical
-                              // controls and matched the same query.
-                              aria-label={`${c.id} — ${c.description}`}
                               onClick={() => toggleControl(o.id, c.id)}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleControl(o.id, c.id); } }}
                               className="w-full flex items-start gap-3 pl-9 pr-4 py-2 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
                             >
                               <span className={cn(
@@ -1178,39 +848,12 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex items-center gap-1.5">
-                                  {/* The star states the judgement AND sets it. It
-                                      shows on every row now, hollow when non-key —
-                                      an empty space is not something you can click,
-                                      and marking a control key is the whole point. */}
-                                  {settable ? (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); toggleKey(c); }}
-                                      title={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'} — click to mark it ${c.isKey ? 'non-key' : 'key'}`}
-                                      aria-label={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'}. Mark it ${c.isKey ? 'non-key' : 'key'}`}
-                                      className="shrink-0 w-[18px] h-[18px] -ml-[3px] inline-flex items-center justify-center rounded cursor-pointer transition-colors hover:bg-mitigated-100"
-                                    >
-                                      <Star size={11} className={c.isKey ? 'text-mitigated-600 fill-mitigated-200' : 'text-ink-300'} />
-                                    </button>
-                                  ) : c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
+                                  {c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                                   <span className="text-[12px] text-ink-800 truncate">{c.description}</span>
                                 </span>
-                                {/* The company, not just the id's @suffix. A
-                                    control runs at several of them and the rows
-                                    are otherwise word-for-word identical — five
-                                    controls across two companies read as five
-                                    duplicated pairs without this. */}
-                                <span className="flex items-center gap-1.5 mt-0.5 min-w-0 text-[10.5px] text-ink-400">
-                                  <span className="font-mono shrink-0">{c.id} · {c.subProcess}</span>
-                                  {c.entity && (
-                                    <span className="inline-flex items-center gap-1 min-w-0" title={c.entity}>
-                                      <span className="text-ink-300">·</span>
-                                      <Building2 size={10} className="shrink-0 text-ink-300" />
-                                      <span className="truncate">{c.entity}</span>
-                                    </span>
-                                  )}
-                                </span>
+                                <span className="block text-[10.5px] text-ink-400 font-mono mt-0.5">{c.id} · {c.subProcess}</span>
                               </span>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -1229,7 +872,7 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
         )}
 
         {step === REVIEW && (
-          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's SOX testing tab.">
+          <StepShell title="Review" sub="Check it over — creating the audit adds it to this engagement's SOX audit tab.">
             <div className="rounded-xl border border-canvas-border bg-white p-4">
               {/* Same order the steps ran in — Period, then materiality and its
                   files, then what they scoped. */}
@@ -1255,25 +898,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                   value={<>{pickedControls.length} selected{keyOnly && <span className="font-normal text-ink-400"> · key controls only</span>}</>}
                 />
               )}
-              {/* Where the auditor overruled the trial balance, and why. This is
-                  the part of the scope that isn't self-evident from the numbers,
-                  so it's the part worth re-reading before creating the audit. */}
-              {scopeKind === 'entity' && scopeChanges.length > 0 && (
-                <ReviewRow
-                  label="Scope changes"
-                  value={(
-                    <span className="block space-y-1.5">
-                      {scopeChanges.map(c => (
-                        <span key={c.entityId} className="block">
-                          {c.name}
-                          <span className="font-normal text-ink-400"> · {c.inScope ? 'brought in' : 'taken out'}</span>
-                          <span className="block text-[11px] font-normal text-ink-500 leading-relaxed">{c.note}</span>
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                />
-              )}
             </div>
           </StepShell>
         )}
@@ -1291,13 +915,6 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
           <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
         </button>
         <div className="flex items-center gap-2">
-          {/* Says what the greyed button is waiting for. Without it a disabled
-              Continue is a dead end — the boxes are further up the scroll. */}
-          {step === 2 && notesOutstanding > 0 && (
-            <span className="text-[11.5px] text-high-700 font-medium">
-              {notesOutstanding} change{notesOutstanding === 1 ? '' : 's'} need{notesOutstanding === 1 ? 's' : ''} a note
-            </span>
-          )}
           {step < REVIEW ? (
             <button
               onClick={() => setStep(s => s + 1)}
@@ -1318,23 +935,5 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
       </div>
       </div>
     </FlowModal>
-
-    {/* Rendered beside the sheet rather than inside it: both are fixed-position
-        overlays, and a later sibling wins the stack without either having to
-        know the other's z-index. A sheet, not a dialog (user ask) — arriving
-        from a sheet, it reads as one level deeper rather than a context switch. */}
-    <AnimatePresence>
-      {addCtrlRacm && (
-        <DesignControlAddModal
-          presentation="sheet"
-          subProcesses={Array.from(new Set(
-            eng.controls.filter(c => c.process === addCtrlRacm).map(c => c.subProcess).filter(Boolean),
-          ))}
-          onClose={() => setAddCtrlRacm(null)}
-          onCreate={createControl}
-        />
-      )}
-    </AnimatePresence>
-    </>
   );
 }

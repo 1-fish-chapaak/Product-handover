@@ -45,12 +45,6 @@ interface Props {
   // 'kh-add'  — 2 tabs (Upload · Connect database), no search; the Connect
   //             tab renders the engine picker + credentials form.
   mode?: 'chat' | 'kh-add';
-  // Explicit tab list, overriding whatever `mode` would have chosen. Added so a
-  // caller can offer a combination the two modes don't — the SOX population
-  // picker needs the chat tabs AND Connect, because a population is legitimately
-  // either a file the client sent or a pull straight from the system of record.
-  // Omit it and every existing caller behaves exactly as before.
-  tabs?: TabId[];
   // Footer hint shown (in chat mode) when nothing is selected yet. Defaults to
   // the chat-composer copy; callers embedding the picker elsewhere (e.g. a
   // workflow executor) can override it to match their context.
@@ -63,7 +57,7 @@ interface Props {
   initialFiles?: File[];
 }
 
-export type TabId = 'all' | 'file' | 'integrated' | 'upload' | 'connect' | 'favourites' | 'folder';
+type TabId = 'all' | 'file' | 'integrated' | 'upload' | 'connect' | 'favourites' | 'folder';
 
 const CHAT_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'favourites', label: 'Favourites', icon: Star },
@@ -90,17 +84,13 @@ export default function DataPickerModal({
   title = 'Add data',
   confirmLabel = 'Add',
   mode = 'chat',
-  tabs,
   attachHint,
   initialSourceIds,
   initialFiles,
 }: Props) {
   const { addToast } = useToast();
   const { favs, toggleFav } = useFavouriteSources();
-  const TAB_REGISTRY: Record<TabId, { id: TabId; label: string; icon: React.ElementType }> = Object.fromEntries(
-    [...CHAT_TABS, ...KH_ADD_TABS].map(t => [t.id, t]),
-  ) as Record<TabId, { id: TabId; label: string; icon: React.ElementType }>;
-  const TABS = tabs?.length ? tabs.map(id => TAB_REGISTRY[id]) : mode === 'kh-add' ? KH_ADD_TABS : CHAT_TABS;
+  const TABS = mode === 'kh-add' ? KH_ADD_TABS : CHAT_TABS;
   const [tab, setTab] = useState<TabId>(defaultTab);
   const [search, setSearch] = useState('');
   // Multi-select state — keyed by source id (for source rows) or local upload id.

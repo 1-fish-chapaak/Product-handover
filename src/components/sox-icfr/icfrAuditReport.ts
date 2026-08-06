@@ -1,13 +1,9 @@
 import * as XLSX from 'xlsx';
 import {
-  assessSeverity, conclusionOf, controlConclusion, formatDueDate, formatINR, icfrConclusion,
+  assessSeverity, controlConclusion, formatDueDate, formatINR, icfrConclusion,
   openMaterialWeaknesses, trackResult,
 } from './helpers';
-import { gapNature } from './types';
-// ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
-// Restore this import alongside the blocks parked further down the file.
-//
-// import { exposureTotal, GAP_LABEL } from './types';
+import { exposureTotal, GAP_LABEL } from './types';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, Deficiency, IcfrEngagement } from './types';
 
@@ -53,17 +49,12 @@ function observationStatus(d: Deficiency): string {
 export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
-  const concl = controls.map(c => conclusionOf(eng, c));
+  const concl = controls.map(controlConclusion);
   const ineffective = concl.filter(x => x === 'Ineffective').length;
   const effective = concl.filter(x => x === 'Effective').length;
   const untested = concl.filter(x => x === 'Not started').length;
   const mwOpen = openMaterialWeaknesses(eng).length;
-  // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────────────
-  // Recovery / working-capital unblock / leakage are internal-audit VALUE
-  // metrics. ICFR asks what could have been misstated, which is a different
-  // number — so the report no longer puts a price on an observation.
-  //
-  // const exposure = defs.reduce((sum, d) => sum + exposureTotal(d.exposure), 0);
+  const exposure = defs.reduce((sum, d) => sum + exposureTotal(d.exposure), 0);
   const opinion = eng.signoff.icfrConclusion ?? icfrConclusion(eng);
   const signed = !!eng.signoff.preparer && !!eng.signoff.reviewer;
   const processes = [...new Set(controls.map(c => c.process))];
@@ -110,44 +101,29 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           ['Not yet tested', String(untested)],
           ['Observations raised', String(defs.length)],
           ['Material weaknesses open', String(mwOpen)],
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // Read as "the number management acts on", but it is an internal-audit
-          // value metric: severity already says what could have slipped through,
-          // and what the gap cost the business is a different question this
-          // report is not the place to answer.
-          //
-          // ['Priced impact — total', exposure > 0 ? formatINR(exposure) : 'Not priced'],
-          // ['— recoverable', formatINR(defs.reduce((s, d) => s + (d.exposure?.recovery ?? 0), 0))],
-          // ['— working capital released by the fix', formatINR(defs.reduce((s, d) => s + (d.exposure?.workingCapital ?? 0), 0))],
-          // ['— leakage (not recoverable)', formatINR(defs.reduce((s, d) => s + (d.exposure?.leakage ?? 0), 0))],
+          // The number management acts on. Severity says what could have slipped
+          // through; this says what it cost, which is a different question.
+          ['Priced impact — total', exposure > 0 ? formatINR(exposure) : 'Not priced'],
+          ['— recoverable', formatINR(defs.reduce((s, d) => s + (d.exposure?.recovery ?? 0), 0))],
+          ['— working capital released by the fix', formatINR(defs.reduce((s, d) => s + (d.exposure?.workingCapital ?? 0), 0))],
+          ['— leakage (not recoverable)', formatINR(defs.reduce((s, d) => s + (d.exposure?.leakage ?? 0), 0))],
         ],
       },
       {
         kind: 'table', title: 'By process',
         note: `${processes.length} process${processes.length === 1 ? '' : 'es'} in scope`,
-        // Header and row are one column per line, in step — park a column here
-        // and its cell below, or the sheet shears.
-        headers: [
-          'Process', 'Controls', 'Key', 'Effective', 'Ineffective', 'Not tested', 'Observations',
-          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number.
-          //
-          // 'Priced impact',
-        ],
+        headers: ['Process', 'Controls', 'Key', 'Effective', 'Ineffective', 'Not tested', 'Observations', 'Priced impact'],
         rows: processes.map(p => {
           const inP = controls.filter(c => c.process === p);
           const pDefs = defs.filter(d => inP.some(c => c.id === d.controlId));
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // const pExposure = pDefs.reduce((s, d) => s + exposureTotal(d.exposure), 0);
+          const pExposure = pDefs.reduce((s, d) => s + exposureTotal(d.exposure), 0);
           return [
             p, String(inP.length), String(inP.filter(c => c.isKey).length),
             String(inP.filter(c => controlConclusion(c) === 'Effective').length),
             String(inP.filter(c => controlConclusion(c) === 'Ineffective').length),
             String(inP.filter(c => controlConclusion(c) === 'Not started').length),
             String(pDefs.length),
-            // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-            // pExposure > 0 ? formatINR(pExposure) : '—',
+            pExposure > 0 ? formatINR(pExposure) : '—',
           ];
         }),
       },
@@ -159,20 +135,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
       {
         kind: 'table', title: 'Observations',
         note: `${defs.length} observation${defs.length === 1 ? '' : 's'} · ordered as they appear in the report`,
-        // Header and row are one column per line, in step — park a column here
-        // and its cell below, or the sheet shears.
-        headers: [
-          'Report ref', 'W/P', 'Control', 'What we found', 'Why it happened',
-          // Derived off the failed track and the control's nature — read-only.
-          'Gap nature',
-          'Severity',
-          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number.
-          //
-          // 'Priced impact',
-          'Standing',
-        ],
+        headers: ['Report ref', 'W/P', 'Control', 'What we found', 'Why it happened', 'Gap type', 'Severity', 'Priced impact', 'Standing'],
         rows: [...defs]
           .sort((a, b) => (a.reportRef ?? 'zz').localeCompare(b.reportRef ?? 'zz'))
           .map(d => {
@@ -183,31 +146,17 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
               c ? `${c.id} — ${c.description}` : d.controlId,
               d.description,
               d.rootCause,
-              c ? gapNature(d.track, c.nature) : '—',
-              // ─── PARKED (Aug 2026) — Gap type ────────────────────────────
-              // Asked by hand (MDG / ITDG / TG) until the control's RACM row
-              // was found to answer it already. Superseded by the cell above.
-              //
-              // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
+              d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
               severityOf(d, eng),
-              // ─── PARKED (Aug 2026) — Priced impact ──────────────────────
-              // d.exposure ? formatINR(exposureTotal(d.exposure)) : 'Not priced',
+              d.exposure ? formatINR(exposureTotal(d.exposure)) : 'Not priced',
               observationStatus(d),
             ];
           }),
       },
       {
         kind: 'note', label: 'Reading this', tone: 'neutral',
-        text: 'Gap nature says where the failure was found and what kind of control broke. It is read off the control’s own RACM row and the track that failed, never asked again: a design gap means the control as built cannot do the job; an operating failure means the design is sound but the control did not run as designed. Severity answers the separate question of what could have gone through undetected, measured against materiality.',
+        text: 'Gap type says where the failure was found and what kind of thing broke: a design gap means the control as built cannot do the job, whether because a person cannot (MDG) or because the system does not enforce it (ITDG); a testing gap (TG) means the design is sound but the control did not operate. Severity answers what could have gone through undetected; priced impact answers what it actually cost.',
       },
-      // ─── PARKED (Aug 2026) — Gap type & Priced impact ────────────────────
-      // The note above used to explain the hand-typed MDG / ITDG / TG labels and
-      // the rupee value of each observation. Both are gone from the report.
-      //
-      // {
-      //   kind: 'note', label: 'Reading this', tone: 'neutral',
-      //   text: 'Gap type says where the failure was found and what kind of thing broke: a design gap means the control as built cannot do the job, whether because a person cannot (MDG) or because the system does not enforce it (ITDG); a testing gap (TG) means the design is sound but the control did not operate. Severity answers what could have gone through undetected; priced impact answers what it actually cost.',
-      // },
     ] : [
       { kind: 'note', label: 'Observations', tone: 'good', text: 'No observations were raised. Every control tested concluded effective in both design and operation.' },
     ],
@@ -247,7 +196,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
       {
         kind: 'table', title: 'Appendix — controls tested',
         note: `${controls.length} control${controls.length === 1 ? '' : 's'} · the working paper reference for each`,
-        headers: ['W/P', 'Control', 'Objective', 'Process', 'Class', 'Key', 'Risk rating', 'Frequency', 'TOD', 'Report (IPE)', 'TOE', 'Conclusion', 'Performed by', 'Report ref'],
+        headers: ['W/P', 'Control', 'Objective', 'Process', 'Class', 'Key', 'Risk rating', 'Frequency', 'Design', 'Report (IPE)', 'Operating', 'Conclusion', 'Performed by', 'Report ref'],
         rows: controls.map(c => [
           c.wpRef,
           `${c.id} — ${c.description}`,
@@ -272,13 +221,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           ['Test of operating effectiveness', 'Whether it did address the risk across the period — proved by a sample sized on the control’s frequency and its risk rating.'],
           ['IPE', 'Information produced by the entity. A report the client ran is tested for source, completeness and accuracy before anything is sampled from it.'],
           ['Severity', 'Likelihood × magnitude against materiality, with the material-weakness indicators applied.'],
-          ['Gap nature', 'What kind of control broke and on which track — derived from the control’s nature on the RACM and the track that failed, not stated by the auditor.'],
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number — so nothing in this report
-          // prices an observation any more and the definition has no referent.
-          //
-          // ['Priced impact', 'What the gap is worth: recoverable amounts, working capital the fix releases, and leakage that is gone.'],
+          ['Priced impact', 'What the gap is worth: recoverable amounts, working capital the fix releases, and leakage that is gone.'],
         ],
       },
     ],

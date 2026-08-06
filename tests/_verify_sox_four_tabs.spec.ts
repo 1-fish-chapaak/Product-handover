@@ -3,7 +3,7 @@ import { openFromLibrary } from './_sox_helpers';
 
 /**
  * Every SOX engagement opens on one level and the same four tabs (user ask):
- * Overview · RACM · Control Library · SOX testing. Risk Register and Configuration
+ * Overview · RACM · Control Library · SOX audit. Risk Register and Configuration
  * are parked on both shells; the reworked shell also lost its audit level
  * (Dashboard / Audit logs / audits) and its Deficiency management tab, which
  * goes back to being a drill-in.
@@ -13,21 +13,16 @@ import { openFromLibrary } from './_sox_helpers';
  *   • SoxIcfrApp    — SOX-104 Altura
  */
 
-const WANTED = ['Overview', 'RACM', 'Control Library', 'SOX testing'];
+const WANTED = ['Overview', 'RACM', 'Control Library', 'SOX audit'];
 const PARKED = ['Risk Register', 'Configuration', 'Deficiency management', 'Dashboard', 'Audit logs'];
 
-/** The tab bar is the row of buttons under the engagement header / breadcrumb.
- *  Scoped to `main`, which is what "the tab bar" always meant: the app's left
- *  nav carries a global "Risk Register" entry (Sidebar.tsx), so asking the whole
- *  document whether that name exists answers a different question and fails on
- *  a tab that is correctly parked. */
+/** The tab bar is the row of buttons under the engagement header / breadcrumb. */
 async function assertFourTabs(page: import('@playwright/test').Page) {
-  const main = page.getByRole('main');
   for (const label of WANTED) {
-    await expect(main.getByRole('button', { name: label, exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: label, exact: true }).first()).toBeVisible();
   }
   for (const label of PARKED) {
-    await expect(main.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
   }
 }
 
@@ -38,15 +33,11 @@ test('classic SOX engagement shows the four tabs and nothing else', async ({ pag
   await openFromLibrary(page, 'FY26 ICFR — Airline P2P & O2C');
   await assertFourTabs(page);
 
-  // SOX testing is the audit register, and the New audit sheet opens off it.
-  // It is NOT empty any more — the classic SOX seeds were back-filled with
-  // programme records, so ENG-001 arrives with a year-end cycle already on it.
-  // What still has to be true is that it is an audit REGISTER and not the run
-  // registry that used to live here, which is parked.
-  await page.getByRole('button', { name: 'SOX testing', exact: true }).first().click();
+  // SOX audit is the audit register: empty to start, and the New audit sheet
+  // opens off it. The run registry that used to live here is parked.
+  await page.getByRole('button', { name: 'SOX audit', exact: true }).first().click();
   await page.waitForTimeout(600);
-  const main = page.getByRole('main');
-  await expect(main.getByRole('button').filter({ hasText: /^(CY|FY) ?20\d\d/ }).first()).toBeVisible();
+  await expect(page.getByText('No audits yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'All types' })).toHaveCount(0);
   await page.getByRole('button', { name: /New audit/ }).first().click();
   await page.waitForTimeout(500);

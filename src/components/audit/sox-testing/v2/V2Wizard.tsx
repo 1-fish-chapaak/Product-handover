@@ -694,7 +694,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                         <input
                           value={row.processOwner}
                           onChange={e => setPeople(prev => ({ ...prev, [area]: { ...peopleFor(area), processOwner: e.target.value } }))}
-                          placeholder="Name"
+                          placeholder="Name — role"
                           className="w-full text-[12px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                         />
                         <div className="text-[10.5px] font-mono text-text-muted truncate">{row.poEmail || '—'}</div>
@@ -703,7 +703,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                         <input
                           value={row.controlOwner}
                           onChange={e => setPeople(prev => ({ ...prev, [area]: { ...peopleFor(area), controlOwner: e.target.value } }))}
-                          placeholder="Name"
+                          placeholder="Name — role"
                           className="w-full text-[12px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                         />
                         <div className="text-[10.5px] font-mono text-text-muted truncate">{row.coEmail || '—'}</div>

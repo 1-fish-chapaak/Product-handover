@@ -1,9 +1,9 @@
-import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning, Inbox, ListChecks, PenLine } from 'lucide-react';
+import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning, Inbox, ListChecks } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useIcfr } from './store';
 import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
 import { cn } from '../../lib/cn';
-import type { Deficiency, ExceptionStatus, HandoffTask, TaskType } from './types';
+import type { HandoffTask, TaskType } from './types';
 
 const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: string }> = {
   pbc: { label: 'document request', Icon: Upload, action: 'Provide documents' },
@@ -17,44 +17,16 @@ export default function RiskOwnerPortal() {
   // person-lane: only this persona's tasks and controls — never the whole engagement
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
-
-  // The exception flow is six steps and only two of them are the owner's: ③ write
-  // the plan, ④ do the fix and show the proof. Everything else — sizing, the
-  // rating confirmation, the auditor's read of the plan, the retest, the close —
-  // sits in someone else's court, and a reminder for work you cannot do is worse
-  // than no reminder. So a remediation row appears while the exception is at one
-  // of those two states, and disappears while it is away.
-  const OWNER_STATES: ExceptionStatus[] = ['Planning', 'Remediation'];
-  const exceptionFor = (t: HandoffTask): Deficiency | undefined =>
-    eng.deficiencies.find(d => d.controlId === t.controlId && OWNER_STATES.includes(d.status));
-  const inMyCourt = (t: HandoffTask) => t.type !== 'remediation' || !!exceptionFor(t);
-  // The two steps ask for different things, so the row's call to action says
-  // which one it is: at ③ there is nothing to submit yet — the plan has to be
-  // written first, and only ④ ends in "submit for retest".
-  const remediationCta = (t: HandoffTask): { label: string; Icon: typeof Upload } => {
-    const def = exceptionFor(t);
-    return def?.status === 'Planning'
-      ? { label: 'Write the plan', Icon: PenLine }
-      : { label: TASK_META.remediation.action, Icon: TASK_META.remediation.Icon };
-  };
-
   // due-today / overdue tasks lead the inbox
-  const open = mine.filter(t => t.status === 'open' && inMyCourt(t)).sort((a, b) => Number(dueNow(b)) - Number(dueNow(a)));
+  const open = mine.filter(t => t.status === 'open').sort((a, b) => Number(dueNow(b)) - Number(dueNow(a)));
   const submitted = mine.filter(t => t.status !== 'open');
 
   const act = (t: HandoffTask) => {
     // a remediation "done" goes through the same gate as the exceptions page:
     // proof first, then the submit — never a reminder cleared on its own
     if (t.type === 'remediation') {
-      const def = exceptionFor(t);
+      const def = eng.deficiencies.find(d => d.controlId === t.controlId && (d.status === 'Identified' || d.status === 'Remediation'));
       if (def) {
-        // ③ nothing to submit yet — the plan is what the auditor judges against
-        // the root cause, so this points at writing it rather than at finishing.
-        if (def.status === 'Planning') {
-          setView('deficiencies');
-          addToast({ type: 'info', title: 'Write the plan first', message: `${def.id} needs the action, who does it and a due date — the auditor judges it against the root cause.` });
-          return;
-        }
         if ((def.remediation.evidence?.length ?? 0) > 0) {
           setExceptionStatus(def.id, 'Retest'); // clears this reminder with it
           addToast({ type: 'success', title: 'Submitted for retest', message: `${def.id} is with the auditor — your evidence rides along.` });
@@ -118,8 +90,6 @@ export default function RiskOwnerPortal() {
             {/* requests from audit — the row opens the control; the inline link acts without navigating */}
             {open.map(t => {
               const m = TASK_META[t.type];
-              // a remediation row says which of the owner's two steps it is on
-              const cta = t.type === 'remediation' ? remediationCta(t) : { label: m.action, Icon: m.Icon };
               const urgent = dueNow(t);
               return (
                 <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId)}
@@ -132,7 +102,7 @@ export default function RiskOwnerPortal() {
                   <span className={cn('shrink-0 text-[11.5px] font-semibold', t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400')}>{t.dueLabel}</span>
                   <button onClick={e => { e.stopPropagation(); act(t); }}
                     className="shrink-0 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
-                    <cta.Icon size={12} /> {cta.label}
+                    <m.Icon size={12} /> {m.action}
                   </button>
                   {chevron}
                 </div>

@@ -1,4 +1,4 @@
-import { assessSeverity, conclusionOf } from './helpers';
+import { assessSeverity, controlConclusion } from './helpers';
 import { auditCovers } from './auditScope';
 import type { AuditRecord, AuditRound, Conclusion, Control, Deficiency, IcfrEngagement, Severity } from './types';
 
@@ -103,7 +103,7 @@ export function auditStatus(a: AuditRecord, eng: IcfrEngagement): AuditStatus {
   if (a.archive || (a.signoff?.preparer && a.signoff?.reviewer)) return 'concluded';
   if (!isLiveAudit(a, eng)) return 'planned';
   const covered = eng.controls.filter(c => auditCovers(a, c, eng.id));
-  return covered.some(c => conclusionOf(eng, c) !== 'Not started') ? 'active' : 'planned';
+  return covered.some(c => controlConclusion(c) !== 'Not started') ? 'active' : 'planned';
 }
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export function auditProgress(a: AuditRecord, eng: IcfrEngagement): AuditProgres
   // A planned round has not run. Its scope is real, so the total counts, but the
   // live cycle's conclusions are not its results and must not be shown as them.
   if (!isLiveAudit(a, eng)) return { total: covered.length, effective: 0, ineffective: 0, concluded: 0 };
-  const concl = covered.map(c => conclusionOf(eng, c));
+  const concl = covered.map(controlConclusion);
   return {
     total: covered.length,
     effective: concl.filter(x => x === 'Effective').length,

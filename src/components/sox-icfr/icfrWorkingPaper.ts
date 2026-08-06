@@ -1,11 +1,6 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
-import { FIVE_W_1H, gapNature } from './types';
-import { ownersOf } from './auditScope';
-// ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
-// Restore this import alongside the blocks parked further down the file.
-//
-// import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
+import { assessSeverity, combinedSample, controlConclusion, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { exposureTotal, FIVE_W_1H, GAP_LABEL } from './types';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -84,7 +79,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const def = eng.deficiencies.find(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
 
-  blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — TOD & TOE`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
+  blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — Test of Design & Operating Effectiveness`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
 
   const guide = sampleSizeGuide(c);
   // The two population checks are computed, not attested — so the paper prints
@@ -104,9 +99,6 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   blocks.push({
     kind: 'kv', title: 'Control', rows: [
       ['Control owner', c.owner],
-      // The paper names both: a reviewer asking "who was this chased from" needs
-      // the process owner, and it is not always the accountable name above.
-      ...(ownersOf(c).single ? [] : [['Process owner', ownersOf(c).processOwner] as [string, string]]),
       ['Control number', c.id],
       // what the control is FOR, above what it does and how it is worded
       ['Control objective', c.objective ?? '—'],
@@ -196,27 +188,14 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // somebody's word reads very differently from one the auditor reperformed, and
   // a paper that prints only the tick invites the reader to assume the stronger.
   blocks.push({
-    kind: 'table', title: 'TOD',
+    kind: 'table', title: 'Test of design',
     note: [
       `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
-      // Derived from the auditor's own proof across the checks, not asserted —
-      // see designBasis. A reader can now check the claim against the two
-      // columns below it rather than taking the sentence on trust.
-      `basis: ${designBasis(c)} (${auditorProvenChecks(c)}/${c.design.points.length} checks carry the auditor's own proof)`,
+      `basis: ${c.design.walkthrough ? `one transaction traced (${c.design.walkthrough.sampleRef})` : 'documents on file only'}`,
     ].join(' · '),
-    // What backs each check, split by who produced it. A check evidenced only by
-    // the client's documents and one the auditor reperformed both tick the same
-    // box, and a paper that prints only the tick invites the reader to assume
-    // the stronger of the two.
-    headers: ['', 'Design consideration', 'Evidenced by (client)', "Auditor's own proof", 'Tick'],
-    rows: c.design.points.map((p, i) => [
-      String(i + 1),
-      p.text,
-      c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind)).join('; ') || '—',
-      p.auditorProof ? `${p.auditorProof.kind} — ${p.auditorProof.file.name}` : '—',
-      tick(p.override?.result ?? p.result),
-    ]),
-    tickFrom: 4,
+    headers: ['', 'Design consideration', 'Tick'],
+    rows: c.design.points.map((p, i) => [String(i + 1), p.text, tick(p.override?.result ?? p.result)]),
+    tickFrom: 2,
   });
 
   // Every design element with what backs it — and, where nothing does, the reason
@@ -308,12 +287,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     blocks.push({
       kind: 'table', title: 'IPE — validation of the report',
       note: `${ipe.checks.filter(k => k.result === 'Pass').length}/${ipe.checks.length} checks passed · a report that does not conclude reliable cannot be sampled from`,
-      // The proof is its own column. A finding written down and a finding
-      // evidenced are not the same standard, and the reviewer reperforming this
-      // needs to see which one they are reading.
-      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Proof on file', 'Tick'],
-      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', k.evidence?.map(f => f.name).join('; ') || '—', tick(k.result)]),
-      tickFrom: 6,
+      headers: ['', 'Check', 'Assertion proven', 'How it was proven', 'Finding', 'Tick'],
+      rows: ipe.checks.map((k, i) => [String(i + 1), k.dimension, k.description, k.method, k.note ?? '—', tick(k.result)]),
+      tickFrom: 5,
     });
   } else {
     blocks.push({ kind: 'note', label: 'IPE', text: 'No entity-produced report registered — the population has not been validated for source, completeness or accuracy.', tone: 'neutral' });
@@ -375,60 +351,31 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // Results narrative + conclusion
   const d = trackResult(c.design); const o = trackResult(c.operating);
   const totalFails = steps.reduce((n, s) => n + samples.filter(smp => s.sampleResults?.[smp.id] === 'Fail').length, 0);
-  // A short-form control's paper has to say WHY there is no operating test, or it
-  // reads as a paper with a hole in it. The precondition is named too, because
-  // that is the thing a reviewer would otherwise have to go and check.
-  const opApplies = operatingApplies(eng, c);
   const results = [
-    `TOD: ${d}${c.design.points.length ? ` — ${c.design.points.filter(p => (p.override?.result ?? p.result) === 'Pass').length}/${c.design.points.length} considerations satisfied` : ''}.`,
-    opApplies
-      ? `TOE: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`
-      : 'TOE: not applicable — the control is automated, so it performs identically on every transaction and the test of design is the whole test. Valid while the ITGCs behind it are effective; an ITGC failure puts the full population, sample and operating test back.',
-    opApplies && c.operating.testedBy ? `Tested by ${c.operating.testedBy}, ${c.operating.testedAt}.` : '',
+    `Design: ${d}${c.design.points.length ? ` — ${c.design.points.filter(p => (p.override?.result ?? p.result) === 'Pass').length}/${c.design.points.length} considerations satisfied` : ''}.`,
+    `Operating: ${o}${steps.length ? ` — ${steps.length} attribute${steps.length === 1 ? '' : 's'} tested${samples.length ? ` across ${samples.length} samples, ${totalFails} exception${totalFails === 1 ? '' : 's'}` : ''}` : ''}.`,
+    c.operating.testedBy ? `Tested by ${c.operating.testedBy}, ${c.operating.testedAt}.` : '',
   ].filter(Boolean).join(' ');
-  const concl = controlConclusion(c, opApplies);
+  const concl = controlConclusion(c);
   blocks.push({ kind: 'note', label: 'Test results', text: results, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
   blocks.push({ kind: 'note', label: 'Conclusion', text: `${concl} control`, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
-  // The auditor's own words behind each track's conclusion. The box that collects
-  // them says "retained in the working paper", so this is that promise being kept.
-  const rationales = [
-    c.design.rationale ? `TOD — ${c.design.rationale}` : '',
-    c.operating.rationale ? `TOE — ${c.operating.rationale}` : '',
-  ].filter(Boolean);
-  if (rationales.length) blocks.push({ kind: 'note', label: 'Rationale', text: rationales.join(' '), tone: 'neutral' });
 
   // Linked exception, if the testing raised one
   if (def) {
     const a = assessSeverity(def, eng);
-    // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────────
-    // Recovery / working-capital unblock / leakage are internal-audit VALUE
-    // metrics. ICFR asks what could have been misstated, which is a different
-    // number. Restore with the Exposure rows parked inside the block below.
-    //
-    // const ex = def.exposure;
+    const ex = def.exposure;
     blocks.push({
       kind: 'kv', title: `Exception — ${def.id}`, rows: [
         ['Description', def.description],
-        // Where it was found and what kind of control broke — DERIVED from the
-        // track that failed and the control's own nature, never asked. The
-        // control is right here, so the paper states it rather than storing it.
-        ['Gap nature', gapNature(def.track, c.nature)],
-        // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────────
-        // The auditor used to classify this by hand (MDG / ITDG / TG). The
-        // control's own RACM row already answers it, so asking again could only
-        // produce a contradiction. Superseded by the derived row above.
-        //
-        // ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
+        // Where it was found and what kind of thing broke — the label the fix follows
+        ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
         ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
-        // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
-        // What the gap is worth, split the way the source RACM splits it — an
-        // internal-audit value metric, not an ICFR misstatement number.
-        //
-        // ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
-        // ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
-        // ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
-        // ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
-        // ['Exposure — basis', ex?.basis ?? '—'],
+        // What the gap is worth, split the way the source RACM splits it
+        ['Exposure — total', ex ? formatINR(exposureTotal(ex)) : '—'],
+        ['Exposure — recovery / debit note', ex ? formatINR(ex.recovery) : '—'],
+        ['Exposure — working-capital unblock', ex ? formatINR(ex.workingCapital) : '—'],
+        ['Exposure — leakage', ex ? formatINR(ex.leakage) : '—'],
+        ['Exposure — basis', ex?.basis ?? '—'],
         ['Report reference', def.reportRef ?? c.reportRef ?? '—'],
         ['Status', def.status],
         ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${formatDueDate(def.remediation.date)}` : ''} · ${def.remediation.owner}`],
@@ -444,27 +391,27 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
  *  The .xlsx stays ONE flowing sheet (real-audit format) — the tabs just page
  *  through that same reading order. */
 export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet[] {
-  const order = ['Control', 'Sign-off', 'TOD', 'TOE', 'Results'] as const;
+  const order = ['Control', 'Sign-off', 'Design Testing', 'Operating Testing', 'Results'] as const;
   const sectionOf = (b: PaperBlock): (typeof order)[number] => {
     if (b.kind === 'heading') return 'Control';
     if (b.kind === 'kv') {
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
-      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'TOE';
+      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'Operating Testing';
       // the walkthrough and the judgements are the design's own work, so they read
       // on the design tab beside the considerations they support
-      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'TOD';
+      if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'Design Testing';
       return 'Results'; // linked exception
     }
     if (b.kind === 'table') {
-      if (b.title === 'TOD' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'TOD';
+      if (b.title === 'Test of design' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'Design Testing';
       // the programme is what the auditor was instructed to do, so it reads with
       // the control it belongs to rather than inside one track's results
       if (b.title === 'Audit programme — steps performed') return 'Control';
-      return 'TOE';
+      return 'Operating Testing';
     }
-    if (b.label === 'Walkthrough') return 'TOD';
-    return b.label === 'Samples' || b.label === 'IPE' ? 'TOE' : 'Results'; // notes
+    if (b.label === 'Walkthrough') return 'Design Testing';
+    return b.label === 'Samples' || b.label === 'IPE' ? 'Operating Testing' : 'Results'; // notes
   };
   const grouped = new Map<string, PaperBlock[]>(order.map(n => [n, []]));
   buildControlPaper(eng, c).forEach(b => grouped.get(sectionOf(b))!.push(b));
@@ -504,7 +451,7 @@ export const ENG_SIGNOFF_TITLE = 'Engagement sign-off';
 export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
-  const concl = controls.map(c => conclusionOf(eng, c));
+  const concl = controls.map(controlConclusion);
   const overall = concl.includes('Ineffective')
     ? 'Deficiencies identified — see Deficiencies sheet'
     : concl.length && concl.every(c => c === 'Effective') ? 'Effective — no exceptions' : 'Testing in progress';
@@ -530,8 +477,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
         kind: 'kv', title: 'Progress', rows: [
           ['Controls in scope', String(controls.length)],
           ['Key controls', String(controls.filter(c => c.isKey).length)],
-          ['TOD concluded', String(controls.filter(c => trackResult(c.design) !== 'Not tested').length)],
-          ['TOE concluded', String(controls.filter(c => trackResult(c.operating) !== 'Not tested').length)],
+          ['Design concluded', String(controls.filter(c => trackResult(c.design) !== 'Not tested').length)],
+          ['Operating concluded', String(controls.filter(c => trackResult(c.operating) !== 'Not tested').length)],
           ['Effective', String(concl.filter(c => c === 'Effective').length)],
           ['Ineffective', String(concl.filter(c => c === 'Ineffective').length)],
           ['Deficiencies', String(defs.length)],
@@ -553,23 +500,19 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Control owner', 'Process owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
-      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
-        // one column, both tracks — the register answers "why does this read the
-        // way it does" without opening the control's own paper
-        [c.design.rationale && `TOD — ${c.design.rationale}`, c.operating.rationale && `TOE — ${c.operating.rationale}`].filter(Boolean).join(' ') || '—',
-        c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'Root cause', 'TOD (design)', 'Report (IPE)', 'TOE (operating)', 'TOE method', 'Conclusion', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c), c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
     }],
   };
 
   // Design testing — documents + considerations + conclusion
   const design: IcfrSheet = {
-    name: 'TOD', blocks: [{
-      kind: 'table', title: 'TOD', note: 'documents received · considerations ticked · conclusion per control',
-      headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Rationale', 'Override', 'Tested by'],
+    name: 'Design Testing', blocks: [{
+      kind: 'table', title: 'Test of design', note: 'documents received · considerations ticked · conclusion per control',
+      headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Override', 'Tested by'],
       rows: controls.map(c => {
         const p = designProgress(c);
-        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.rationale ?? '—', c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
+        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
       }),
     }],
   };
@@ -577,8 +520,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   // Operating testing — attribute-level (each attribute has its own workflow / attestation)
   const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const operating: IcfrSheet = {
-    name: 'TOE', blocks: [{
-      kind: 'table', title: 'TOE', note: `${opRows.length} attribute rows`,
+    name: 'Operating Testing', blocks: [{
+      kind: 'table', title: 'Test of operating effectiveness', note: `${opRows.length} attribute rows`,
       headers: ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'],
       rows: opRows,
     }],
@@ -587,49 +530,12 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
       kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
-      // The header and the row below are written one column per line and in the
-      // same order, so a column parked here has its cell parked there — the two
-      // lists must stay the same length or the sheet shears.
-      headers: [
-        'Deficiency', 'Control', 'Track',
-        // Derived off the failed track and the control's nature — read-only.
-        'Gap nature',
-        'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality',
-        'MW indicators', 'Compensating control', 'Severity',
-        // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
-        // Recovery / working-capital unblock / leakage are internal-audit VALUE
-        // metrics. ICFR asks what could have been misstated, which is a
-        // different number.
-        //
-        // 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis',
-        'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence',
-      ],
+      headers: ['Deficiency', 'Control', 'Track', 'Gap type', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Recovery', 'Working capital', 'Leakage', 'Exposure total', 'Exposure basis', 'Report ref', 'Remediation', 'Due', 'Status', 'Remediation evidence'],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        const ctl = controls.find(x => x.id === d.controlId);
-        // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-        // const ex = d.exposure;
-        return [
-          d.id, d.controlId, d.track,
-          ctl ? gapNature(d.track, ctl.nature) : '—',
-          // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────
-          // Asked by hand (MDG / ITDG / TG) until the control's RACM row was
-          // found to answer it already. Superseded by the derived cell above.
-          //
-          // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
-          d.description, d.rootCause, d.likelihood, String(d.magnitude),
-          formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None',
-          d.compensatingControlId ?? 'None', sev,
-          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-          // ex ? formatINR(ex.recovery) : '—',
-          // ex ? formatINR(ex.workingCapital) : '—',
-          // ex ? formatINR(ex.leakage) : '—',
-          // ex ? formatINR(exposureTotal(ex)) : '—',
-          // ex?.basis ?? '—',
-          d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date),
-          d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None',
-        ];
+        const ex = d.exposure;
+        return [d.id, d.controlId, d.track, d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—', d.description, d.rootCause, d.likelihood, String(d.magnitude), formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, ex ? formatINR(ex.recovery) : '—', ex ? formatINR(ex.workingCapital) : '—', ex ? formatINR(ex.leakage) : '—', ex ? formatINR(exposureTotal(ex)) : '—', ex?.basis ?? '—', d.reportRef ?? '—', d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
       }),
     }],
   };

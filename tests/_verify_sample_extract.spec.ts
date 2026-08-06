@@ -29,23 +29,18 @@ async function openT05(page: Page) {
   await page.waitForTimeout(1200);
   await page.getByText('Control Library', { exact: true }).first().click();
   await page.waitForTimeout(900);
-  // T-05 is the last shell in its process, so it is the one control whose design
-  // and operating tracks are both untested — the whole journey is reachable from
-  // its opening state. It used to come out Automated (4 % 3 === 1), which after
-  // operatingApplies landed meant it short-formed to TOD and had no sample step
-  // at all; the seed now keeps the fresh control Manual for exactly this reason.
   await page.getByText('FX deals confirmed independently of dealing.').first().click();
   await page.waitForTimeout(1300);
   const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
   await runCard.first().click();
   await page.waitForTimeout(1400);
-  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 /** Step ① end to end: filter a file down, agree the count, lock it. */
 async function extractAndLockPopulation(page: Page) {
-  await expect(page.getByText('Select the source')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Select the source file')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button').filter({ hasText: /altura-group-gl-2026\.csv/ }).first().click();
   await page.getByPlaceholder('e.g. 1,400').fill('1200');
   await page.getByRole('button', { name: /Extract population/ }).click();
@@ -66,29 +61,7 @@ async function extractAndLockPopulation(page: Page) {
     await page.waitForTimeout(500);
   }
 
-  // The report the population came out of is under test too, and it holds the
-  // lock shut until it concludes reliable — so step ① is not finished without
-  // it. Register it, work all three checks, conclude.
   const lock = page.getByRole('button', { name: 'Lock the population' });
-  await expect(lock).toBeDisabled();
-  await expect(page.getByText('IPE test', { exact: true })).toBeVisible({ timeout: 10_000 });
-
-  await page.getByPlaceholder('e.g. SAP S/4HANA — Production').fill('SAP S/4HANA — Production');
-  await page.getByPlaceholder('e.g. S_ALR_87012086').fill('S_ALR_87012086');
-  await page.getByPlaceholder('who generated it').fill('R. Kulkarni · Treasury');
-  await page.getByRole('button', { name: /Register the report/ }).click();
-  await page.waitForTimeout(700);
-
-  for (const dim of ['Source & parameters', 'Completeness', 'Accuracy']) {
-    const row = page.locator('.subcard').filter({ hasText: dim }).first();
-    await expect(row.locator('textarea')).toBeVisible({ timeout: 10_000 });
-    await row.locator('textarea').fill(`Proven — ${dim} agreed to the source system.`);
-    await row.getByRole('button', { name: 'Pass', exact: true }).click();
-    await page.waitForTimeout(450);
-  }
-  await page.getByRole('button', { name: 'Reliable', exact: true }).click();
-  await page.waitForTimeout(700);
-
   await expect(lock).toBeEnabled();
   await lock.click();
   await page.waitForTimeout(900);
@@ -164,7 +137,7 @@ test('the sample step is a size and a draw — nothing else', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Send' })).toHaveCount(0);
   await expect(page.getByPlaceholder(/Explain how to filter the transactions/)).toHaveCount(0);
   // and no filter control of any kind reachable from this step
-  await expect(page.getByText('Extraction criteria')).toHaveCount(0);
+  await expect(page.getByText('Filter criteria')).toHaveCount(0);
 });
 
 test('draw → reject → draw again → approve', async ({ page }) => {

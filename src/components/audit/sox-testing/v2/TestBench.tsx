@@ -105,7 +105,7 @@ export default function TestBench({ control, chase, owner, defaultEffective, onC
             <span className="text-border">·</span>
             <span>{control.frequency} → {base} sample{base === 1 ? '' : 's'}{chase.split ? ` (${chase.split})` : ''}</span>
             <span className="text-border">·</span>
-            <span>evidence from {owner?.processOwner ?? 'process owner'}</span>
+            <span>evidence from {owner?.processOwner.split('—')[0].trim() ?? 'process owner'}</span>
             {chase.popFile && (<>
               <span className="text-border">·</span>
               <span className="font-mono text-[10.5px]">{chase.popFile}</span>

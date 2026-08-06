@@ -21,7 +21,7 @@ async function openWizard(page: Page) {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
   await openFromLibrary(page, ENGAGEMENT);
-  await page.getByRole('button', { name: 'SOX testing', exact: true }).first().click();
+  await page.getByRole('button', { name: 'SOX audit', exact: true }).first().click();
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: /New audit/ }).first().click();
   await page.waitForTimeout(500);

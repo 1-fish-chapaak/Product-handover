@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
+import { ChevronRight, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { controlConclusion } from './helpers';
-import { ownersOf } from './auditScope';
 import { ConclusionPill, NatureChip } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, KeyControlChip, menuItem, WORKFLOW_LIBRARY } from './ControlDossier';
@@ -76,31 +75,8 @@ function AttributeTableRow({ control, step, canEdit }: { control: Control; step:
   );
 }
 
-/** One owner line, reassignable in place. Read-only for anyone who can't edit,
- *  so the name still reads the same — it just stops being a button. */
-function OwnerField({ label, value, options, canEdit, onChange }: { label: string; value: string; options: string[]; canEdit: boolean; onChange: (v: string) => void }) {
-  if (!canEdit) return <span className="inline-flex items-center gap-1"><span className="text-ink-400">{label}</span> · <b className="font-semibold text-ink-700">{value}</b></span>;
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="text-ink-400">{label}</span> ·
-      <Dropdown trigger={<span className="inline-flex items-center gap-1 font-semibold text-ink-700 hover:text-brand-700"><b>{value}</b><ChevronDown size={12} className="text-ink-400" /></span>}>
-        {close => (
-          <>
-            {options.map(o => (
-              <button key={o} className={menuItem} onClick={() => { if (o !== value) onChange(o); close(); }}>
-                {o === value && <Check size={12} className="text-brand-600" />}
-                <span className={o === value ? 'font-semibold' : undefined}>{o}</span>
-              </button>
-            ))}
-          </>
-        )}
-      </Dropdown>
-    </span>
-  );
-}
-
 export default function ControlLibraryDetail() {
-  const { eng, role, selectedControlId, back, openControl, openAudit, addAttribute, updateControlMeta } = useIcfr();
+  const { eng, role, selectedControlId, back, openControl, openAudit, addAttribute } = useIcfr();
   const logEvent = useAuditLog();
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
@@ -109,14 +85,6 @@ export default function ControlLibraryDetail() {
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold cursor-pointer">Back to Control Library</button></div>;
 
   const canEdit = role === 'auditor' || role === 'risk-owner';
-  const detailOwners = ownersOf(control);
-  // Auditor only, matching the store's own guard on updateControlMeta. Rendering
-  // the dropdown for the risk owner would offer a click that silently does
-  // nothing — and who answers for a control is the audit's call, not theirs.
-  const canReassign = role === 'auditor';
-  // Everyone already named on the engagement, in either capacity — reassignment
-  // is between people who exist, not an invitation to invent one.
-  const ownerNames = Array.from(new Set(eng.controls.flatMap(c => { const o = ownersOf(c); return [o.controlOwner, o.processOwner]; }))).sort();
   const { attrs, mapped } = attributeStats(control);
   const pct = attrs === 0 ? 0 : Math.round((mapped / attrs) * 100);
   const audits = auditsForControl(eng, control);
@@ -160,18 +128,14 @@ export default function ControlLibraryDetail() {
             )}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[0.71875rem] text-ink-500">
               <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
-              {/* both names — the accountable one and the one you actually ask.
-                  Reassignable here rather than only at creation: people move
-                  roles mid-cycle, and a control still addressed to whoever held
-                  the job in April sends every request into an empty inbox. */}
-              <OwnerField label="Control owner" value={detailOwners.controlOwner} options={ownerNames} canEdit={canReassign}
-                onChange={v => { updateControlMeta(control.id, { owner: v }); logEvent({ action: 'Update', description: `Reassigned control owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
-              <OwnerField label="Process owner" value={detailOwners.processOwner} options={ownerNames} canEdit={canReassign}
-                onChange={v => { updateControlMeta(control.id, { processOwner: v }); logEvent({ action: 'Update', description: `Reassigned process owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
+              <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
               <span><span className="text-ink-400">Risk {control.riskId}</span> · {control.riskDescription}</span>
               <span><span className="text-ink-400">Assertions</span> · {control.assertions.join(', ')}</span>
               {control.rootCause && <span><span className="text-ink-400">Root cause</span> · {control.rootCause}</span>}
             </div>
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-2">
+            <div className="leadsheet-stamp">W/P<br />{control.wpRef}</div>
           </div>
         </div>
         <div className="ac-div mt-3" />

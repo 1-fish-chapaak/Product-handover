@@ -1,10 +1,5 @@
 import { test, expect } from './_helpers';
 
-// NOTE (Aug 2026): the Control Library opens on the TABLE layout now (6170143),
-// so the owner's scoped result is a `tr.reg-row`, not an `.ac-card`. The old
-// selector made the "before" assertion pass for the wrong reason — zero cards
-// exist in either state — so it was checking nothing at all.
-
 /**
  * Phase 3 — the owner is a scoped persona (person-lane, not role-lane):
  * a to-do list of their own controls, tasks and exceptions. The engagement-wide
@@ -37,12 +32,12 @@ test('owner mode is a scoped to-do list, not the workspace', async ({ page }) =>
   await expect(page.getByText(/in your name/)).toBeVisible();
   await page.getByPlaceholder(/Search controls/).fill('P2P-C-02');
   await page.waitForTimeout(500);
-  await expect(page.locator('tr.reg-row')).toHaveCount(0);
+  await expect(page.locator('.ac-card')).toHaveCount(0);
   // ...until the picker wears the S. Iyer persona
   await page.getByRole('button', { name: 'Owner persona' }).click();
-  await page.getByRole('menuitemradio', { name: 'S. Iyer' }).click();
+  await page.getByRole('menuitemradio', { name: 'S. Iyer · Procurement' }).click();
   await page.waitForTimeout(500);
-  await expect(page.locator('tr.reg-row')).toHaveCount(1);
+  await expect(page.locator('.ac-card')).toHaveCount(1);
 });
 
 test('owner exceptions are scoped to their own controls', async ({ page }) => {

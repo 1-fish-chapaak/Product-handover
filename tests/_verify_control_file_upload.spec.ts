@@ -38,7 +38,7 @@ test('control-level upload registers the file and selects it', async ({ page }) 
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
   await runCard.first().click();
   await page.waitForTimeout(1400);
-  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
   // Step ① — if this control already has a population, withdraw it so the
   // source picker (and its upload) is on screen.
@@ -50,37 +50,18 @@ test('control-level upload registers the file and selects it', async ({ page }) 
     await confirm.click();
     await page.waitForTimeout(900);
   }
-  await expect(page.getByText('Select the source')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Select the source file')).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${SHOTS}/00-step1.png`, fullPage: true });
 
-  // The source now comes from the platform's shared data picker — files and live
-  // database connections in one place. Upload lands the file, then it carries
-  // straight into the provenance question rather than being chosen twice.
-  await page.getByRole('button', { name: /Add a source/ }).first().click();
-  await expect(page.getByText(/Add a population source/)).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Add a file|Upload a source file/ }).first().click();
+  await expect(page.getByText('Add a source file')).toBeVisible();
 
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
-    page.getByRole('button', { name: /Choose files/i }).first().click(),
+    page.getByRole('button', { name: /Choose a file/ }).click(),
   ]);
-  // A real ZIP magic header (PK\x03\x04). The shared picker sniffs the first
-  // bytes of an .xlsx and rejects anything that isn't OOXML — the old bespoke
-  // modal took the file name and asked no questions, so a 1-byte stub passed.
-  await chooser.setFiles({
-    name: 'Finance & Accounts.xlsx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00]),
-  });
-  // The picker validates then simulates the upload before the file counts as a
-  // selection, so wait on the button rather than on a clock — the progress step
-  // is randomised and any fixed sleep is a race.
-  const useSource = page.getByRole('button', { name: /Use this source/ });
-  await expect(useSource).toBeEnabled({ timeout: 20_000 });
-  await useSource.click();
-  await page.waitForTimeout(1200);
-
-  // provenance modal, pre-filled with the file the picker already took
-  await expect(page.getByText('Add a source file')).toBeVisible();
+  await chooser.setFiles({ name: 'Finance & Accounts.xlsx', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from('x') });
+  await page.waitForTimeout(1500);
   await expect(page.getByText('Finance & Accounts.xlsx').first()).toBeVisible();
 
   await page.getByRole('button', { name: /Client-prepared/ }).first().click();
