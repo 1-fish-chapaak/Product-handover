@@ -1,54 +1,101 @@
 import { test, expect } from './_helpers';
 
 /**
- * SOX / ICFR — Materiality & scope is a read-only screen. The ground rules are
- * planning-time decisions: re-cutting them mid-period would re-grade exceptions
- * already concluded. In place of editing, the screen reports what this period's
- * exceptions say about the thresholds, as advice for next period's planning.
+ * SOX / ICFR — the grading thresholds are editable, but nothing reaches the
+ * engagement until it has been reviewed against the exceptions it would move and
+ * given a reason.
+ *
+ * REWRITTEN Aug 2026 (Step-2 action item 24). This spec used to assert the
+ * opposite — that the screen was read-only, which is what 7493a8d built on
+ * 20 Jul. The 23 Jul merge (24c5264) took main's side of extraViews.tsx
+ * wholesale and made the fields live again, so this file has been asserting a
+ * screen that stopped existing that day, and nobody noticed because its
+ * navigation was stale enough that it never reached the assertions. The product
+ * decision now is deliberate and the other way round: editable, but guarded.
+ *
+ * Walked on the Altura engagement, not the flagship: the flagship carries a
+ * `materialityBasis`, which renders the locked worksheet instead of the three
+ * threshold fields. Scoping-derived engagements are where the editable path is.
  */
-test('Materiality & scope is view-only, with threshold advice', async ({ page }) => {
-  test.setTimeout(90_000);
+test('a threshold change is drafted, reviewed against its re-grades, and logged', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.goto('/');
-  await page.locator('[title="Engagements"]').first().click();
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(900);
+  await page.getByRole('tab', { name: /All Engagements/ }).click();
   await page.waitForTimeout(800);
-  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
+  await page.getByText(/ICFR/).first().click();
+  await page.waitForTimeout(1200);
+
+  // Into the audit, whose Configuration tab carries the ground rules.
+  const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
+  await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
+  await runCard.first().click();
+  await page.waitForTimeout(1400);
+  await page.getByRole('tab', { name: /Configuration/ }).or(
+    page.getByRole('button', { name: /^Configuration$/ })).first().click();
   await page.waitForTimeout(1000);
 
-  // Overview → Materiality & scope
-  await page.getByRole('link', { name: /Materiality & scope/ }).or(
-    page.getByRole('button', { name: /Materiality & scope/ })).first().click();
-  await page.waitForTimeout(900);
-  await expect(page.getByRole('heading', { name: 'Materiality & scope' })).toBeVisible();
+  const overall = page.locator('#materiality-ground-rules input[type=number]').first();
+  await expect(overall).toBeVisible({ timeout: 15_000 });
 
-  // the engagement header is gone — the breadcrumb carries the context instead
-  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
-  await expect(crumbs).toBeVisible();
-  await expect(crumbs.getByRole('button', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
-  await expect(crumbs.getByText('Materiality & scope')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Back to Engagements' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toHaveCount(0);
-  await expect(page.getByText('Viewing as')).toHaveCount(0);
-
-  // the thresholds read as stated values, and the screen says why they're fixed
-  await expect(page.getByText('Set at planning · read-only')).toBeVisible();
-  await expect(page.getByText('₹50,00,000').first()).toBeVisible();
-
-  // nothing on the screen is editable — no inputs, no switches
-  await expect(page.locator('input')).toHaveCount(0);
-  await expect(page.locator('[role=switch]')).toHaveCount(0);
-
-  // and the old mid-engagement edit flow is gone
-  await expect(page.getByText(/changing the ground rules mid-engagement/i)).toHaveCount(0);
+  // ── nothing pending, nothing offered ──
   await expect(page.getByRole('button', { name: /Review & apply/ })).toHaveCount(0);
 
-  // in its place: advice read off this period's exceptions, explicitly next-period
-  await expect(page.getByText(/Carried into next period's planning/)).toBeVisible();
-  await expect(page.getByText(/exceptions? ·.*clearly-trivial/)).toBeVisible();
+  // ── edit a threshold: it drafts, it does not commit ──
+  await overall.fill('90000000');
+  await page.waitForTimeout(500);
+  await expect(page.getByText('Not saved yet.')).toBeVisible();
+  const review = page.getByRole('button', { name: /Review & apply/ });
+  await expect(review).toBeVisible();
 
-  // back returns to the engagement Overview — header, tabs and sign-off restored
-  await crumbs.getByRole('button', { name: 'Back', exact: true }).click();
+  // ── the review states the consequence and refuses without a reason ──
+  await review.click();
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('heading', { name: 'Review & apply' })).toBeVisible();
+  await expect(page.getByText('What changes')).toBeVisible();
+
+  const apply = page.getByRole('button', { name: 'Apply the change' });
+  await expect(apply).toBeDisabled();
+  await page.locator('.modal textarea').first().fill('Audited revenue came in above the planning estimate; materiality re-cut on the final figure.');
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  await page.waitForTimeout(900);
+
+  // ── and it is on the record, where somebody can find it ──
+  await expect(page.getByText('Changes to the ground rules')).toBeVisible();
+  await expect(page.getByText(/Audited revenue came in above the planning estimate/)).toBeVisible();
+  // the pending bar clears once applied — the draft IS the saved value now
+  await expect(page.getByText('Not saved yet.')).toHaveCount(0);
+});
+
+/** Discarding a draft puts the stated thresholds back and offers nothing. */
+test('a drafted threshold can be discarded without touching the engagement', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(900);
+  await page.getByRole('tab', { name: /All Engagements/ }).click();
   await page.waitForTimeout(800);
-  await expect(page.getByText('Engagement sign-off')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'FY26 ICFR — Airline P2P & O2C' })).toBeVisible();
+  await page.getByText(/ICFR/).first().click();
+  await page.waitForTimeout(1200);
+  const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
+  await runCard.first().click();
+  await page.waitForTimeout(1400);
+  await page.getByRole('tab', { name: /Configuration/ }).or(
+    page.getByRole('button', { name: /^Configuration$/ })).first().click();
+  await page.waitForTimeout(1000);
+
+  const overall = page.locator('#materiality-ground-rules input[type=number]').first();
+  await expect(overall).toBeVisible({ timeout: 15_000 });
+  const before = await overall.inputValue();
+
+  await overall.fill('12345678');
+  await page.waitForTimeout(400);
+  await expect(page.getByText('Not saved yet.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Discard' }).click();
+  await page.waitForTimeout(500);
+  await expect(page.getByText('Not saved yet.')).toHaveCount(0);
+  await expect(overall).toHaveValue(before);
 });

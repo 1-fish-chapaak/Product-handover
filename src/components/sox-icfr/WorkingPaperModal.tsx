@@ -191,9 +191,9 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   const designDone = control ? trackResult(control.design) !== 'Not tested' : true;
   const operatingDone = control ? trackResult(control.operating) !== 'Not tested' : true;
   const downloadBlocked = !!control && (!designDone || !operatingDone);
-  const blockedWhy = !designDone && !operatingDone ? 'design and operating not concluded'
-    : !designDone ? 'test of design not concluded'
-    : 'test of operating effectiveness not concluded';
+  const blockedWhy = !designDone && !operatingDone ? 'TOD and TOE not concluded'
+    : !designDone ? 'TOD not concluded'
+    : 'TOE not concluded';
 
   // an irreversible sign-off waits behind this attest confirm before it commits
   const [attest, setAttest] = useState<AttestReq | null>(null);

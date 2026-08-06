@@ -46,6 +46,115 @@ const selectCls = inputCls + ' cursor-pointer appearance-none';
  *  so the entity type matches Owner instead of falling back to a raw <select>. */
 const rowSelectCls = 'w-full text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none hover:border-primary/40 transition-colors';
 const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
+/** The same label without its own spacing — for a header row that carries the
+ *  margin itself, so the label and the control beside it sit on one baseline. */
+const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider';
+
+/** ── The group a sample org chart describes ────────────────────────────────
+ *  Matches docs/samples/meridian-global-holdings-org-chart.* — upload that file
+ *  and these are the rows that land, so the document and the screen agree.
+ *
+ *  Shaped like a real SOX 404 registrant rather than a tidy list: ONE listed
+ *  parent (only the parent carries the NYSE listing — subsidiaries sit under it
+ *  unlisted), wholly-owned subsidiaries, one majority-owned with a 26%
+ *  non-controlling interest, and a second-level subsidiary held through another
+ *  subsidiary. Depth and partial ownership are the two things an org chart tells
+ *  you that a list of names cannot, so the sample carries both. */
+const ORG_CHART_GROUP_NAME = 'Meridian Global Holdings, Inc. (NYSE: MGH)';
+/** Authored in the order the chart reads — parent, then everything held beneath
+ *  it — because the table indents rather than sorts. */
+const ORG_CHART_ENTITIES: GroupEntity[] = [
+  { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100 },
+  { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+  { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs' },
+  { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs' },
+  { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+  { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
+  { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
+  { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+  { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle' },
+  { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle' },
+  { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh' },
+  { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps' },
+];
+
+/** A row and everything held beneath it, however deep. Deleting one company
+ *  has to take its whole family: a subsidiary only reaches the group THROUGH
+ *  its parent, so leaving the children behind would claim the group still owns
+ *  them after the chain to them was cut. */
+const familyOf = (entId: string, all: GroupEntity[]): Set<string> => {
+  const family = new Set([entId]);
+  // Repeat until nothing new falls in: children, then their children.
+  for (let pass = 0; pass < 8; pass++) {
+    const before = family.size;
+    all.forEach(e => { if (e.parentId && family.has(e.parentId)) family.add(e.id); });
+    if (family.size === before) break;
+  }
+  return family;
+};
+
+/** How deep a row sits in the ownership chain. A row with no parent is either
+ *  the top company (0) or a hand-added subsidiary, which is a peer of the
+ *  chart's first level (1) — so a typed row lines up with the extracted ones
+ *  instead of climbing to the holding's indent. */
+const entityDepth = (ent: GroupEntity, all: GroupEntity[]): number => {
+  // No parent means top level, full stop. It used to read the Type dropdown,
+  // which meant retyping the first row to Subsidiary shunted it in to the same
+  // indent as the companies it owns — the table then showed a group with no top
+  // company. Position in the chain is a fact; Type is a field someone can edit.
+  if (!ent.parentId) return 0;
+  let depth = 0;
+  let cur: GroupEntity | undefined = ent;
+  while (cur?.parentId && depth < 8) {
+    cur = all.find(x => x.id === cur!.parentId);
+    depth++;
+  }
+  return depth;
+};
+
+/** What actually reaches the listed parent through the chain. Wholly owning a
+ *  74%-held company gets the group 74%, not 100% — and that is the number
+ *  scoping has to weigh, not the direct holding printed on the chart. */
+const effectiveOwnership = (ent: GroupEntity, all: GroupEntity[]): number => {
+  let pct = ent.ownership;
+  let cur: GroupEntity | undefined = ent;
+  let hops = 0;
+  while (cur?.parentId && hops < 8) {
+    const parent: GroupEntity | undefined = all.find(x => x.id === cur!.parentId);
+    if (!parent) break;
+    pct = (pct * parent.ownership) / 100;
+    cur = parent;
+    hops++;
+  }
+  return Math.round(pct * 10) / 10;
+};
+
+/** Rows an org chart put in the table. The chart names companies, not
+ *  processes, so these rows keep the hand-added treatment in the process
+ *  column — until a RACM or trial balance parse has something to extract. */
+const ORG_CHART_ENTITY_IDS = new Set(ORG_CHART_ENTITIES.map(e => e.id));
+
+/** The listing parenthetical belongs to the group field, not to a name people
+ *  will read on a card: "Meridian Global Holdings, Inc. (NYSE: MGH)" is how the
+ *  registrant is identified, "Meridian Global Holdings, Inc." is what the
+ *  engagement is called. */
+const groupShort = (g: string) => g.replace(/\s*\((listed|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim();
+
+/** House convention for a SOX engagement name — the year it covers, what kind
+ *  of work it is, and who it runs for, in the order an auditor scans them.
+ *  Suggested rather than imposed: it fills the field so nobody starts on a
+ *  required error, and the moment the user types, it stops following. */
+const suggestEngagementName = (group: string, fyLbl: string) =>
+  `${fyLbl.replace(/\s+/, ' ')} ICFR — ${groupShort(group) || 'Group'}`;
+
+/** Year label, as the Basics dropdown shows it. Shared so the suggested name
+ *  can be built before that state exists. */
+const yearLabel = (basis: 'fy' | 'cy', end: number) =>
+  basis === 'fy' ? `FY ${end - 1}-${String(end).slice(-2)}` : `CY ${end}`;
+
+/** Formats an org chart is realistically kept in. Deliberately wide: whatever
+ *  the client has is what we take. */
+const ORG_CHART_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio,image/*,application/pdf';
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
   { type: 'SOX / ICFR',     icon: <ShieldCheck size={22} />,    tagline: 'SOX 404 / ICFR — scoping, materiality rules, design + operating effectiveness, deficiency evaluation', tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-200',          ring: 'ring-brand-600 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-600 text-white' },
@@ -143,7 +252,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // Step 1 — type & basics. Only identity lives here: entity/company and
   // processes are NOT asked — the scoping steps collect and derive them.
   const [type, setType] = useState<EngType | null>('SOX / ICFR');
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => suggestEngagementName(SEED_GROUP_NAME, yearLabel('fy', currentFyEnd())));
+  /** Once the user types their own name, the suggestion stops following the
+   *  group and the year. A name someone wrote is an answer, and nothing
+   *  downstream gets to overwrite an answer. */
+  const [nameTouched, setNameTouched] = useState(false);
   const [code, setCode] = useState(genCode());
   const [description, setDescription] = useState('');
   // SOX is an annual recurring cycle, not a dated project — so no start/end
@@ -169,6 +282,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // from the uploaded RACM / trial balances, with manual add as the fallback.
   const [groupName, setGroupName] = useState(SEED_GROUP_NAME);
   const [entities, setEntities] = useState<GroupEntity[]>([]);
+
+  /** The suggested name keeps following the group and the year while it is
+   *  still ours: read an org chart and the engagement renames itself to the
+   *  group it just found; switch FY to CY and it re-dates. Stops dead the
+   *  moment the user types. */
+  useEffect(() => {
+    if (nameTouched) return;
+    setName(suggestEngagementName(groupName, fyLabel));
+  }, [groupName, fyLabel, nameTouched]);
   const [racmUpload, setRacmUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
   const [tbUpload, setTbUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
 
@@ -181,6 +303,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  rather than silently binning their typing. */
   const [soloEntity, setSoloEntity] = useState(false);
   const preSoloEntities = useRef<GroupEntity[]>([]);
+  /** Readable from inside the org-chart parse timeout, which was captured
+   *  before the user could have ticked the box. */
+  const soloEntityRef = useRef(false);
 
   // Required-files card: the attached list is the source of truth for the
   // step gate; RACM / TB attachments also trigger the simulated parses that
@@ -282,6 +407,92 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     window.setTimeout(() => { setRacmUpload('done'); mergeExtractedEntities(); }, 800);
   };
 
+  /** ── Org chart → the entity table ──────────────────────────────────────
+   *  The fastest honest way to fill this table. Every group already has a
+   *  chart naming each company and showing which one sits on top, so asking
+   *  the user to re-key it into our shape is exactly why the table sits empty.
+   *  Whatever format they keep it in is accepted — a PDF, a photo or export of
+   *  the printed chart, a Visio file — because "convert it first" is the same
+   *  re-keying by another name.
+   *
+   *  It reads STRUCTURE only: who exists, holding vs subsidiary, ownership. An
+   *  org chart says nothing about processes, so those cells stay the user's to
+   *  fill until a RACM or trial balance arrives with something to extract.
+   *  Merged by name, so a row already typed never doubles up. */
+  const [orgChart, setOrgChart] = useState<{ name: string; state: 'parsing' | 'done' } | null>(null);
+  /** Companies the chart names that are already sitting in the table, typed by
+   *  hand. Held rather than silently resolved: skipping them quietly orphaned
+   *  everything held beneath them, and overwriting them quietly binned the
+   *  user's typing. Neither is ours to choose (user ask). */
+  const [clash, setClash] = useState<string[] | null>(null);
+  /** The live table, readable from inside the parse timeout. */
+  const entitiesRef = useRef<GroupEntity[]>([]);
+  entitiesRef.current = entities;
+
+  /** Merge the chart in, keeping the chain intact either way.
+   *  `adopt`   — the row already in the table stays and becomes the parent the
+   *              chart's companies attach to.
+   *  `replace` — the chart's version wins; anything the user had hanging off
+   *              their row is re-pointed at the chart's row so it isn't cut
+   *              loose along with it. */
+  const mergedWithChart = (existing: GroupEntity[], mode: 'adopt' | 'replace'): GroupEntity[] => {
+    const byName = new Map(existing.map(e => [e.name.trim().toLowerCase(), e]));
+    if (mode === 'replace') {
+      const swap = new Map<string, string>(); // the user's row id → the chart's
+      ORG_CHART_ENTITIES.forEach(e => {
+        const mine = byName.get(e.name.toLowerCase());
+        if (mine) swap.set(mine.id, e.id);
+      });
+      const kept = existing
+        .filter(e => !swap.has(e.id))
+        .map(e => (e.parentId && swap.has(e.parentId) ? { ...e, parentId: swap.get(e.parentId) } : e));
+      return [...ORG_CHART_ENTITIES.map(e => ({ ...e })), ...kept];
+    }
+    const adopted = new Map<string, string>(); // the chart's row id → the user's
+    ORG_CHART_ENTITIES.forEach(e => {
+      const mine = byName.get(e.name.toLowerCase());
+      if (mine) adopted.set(e.id, mine.id);
+    });
+    const fresh = ORG_CHART_ENTITIES
+      .filter(e => !byName.has(e.name.toLowerCase()))
+      .map(e => ({ ...e, parentId: e.parentId ? adopted.get(e.parentId) ?? e.parentId : undefined }));
+    return [...existing, ...fresh];
+  };
+
+  const resolveClash = (mode: 'adopt' | 'replace') => {
+    setEntities(prev => mergedWithChart(prev, mode));
+    setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? ORG_CHART_GROUP_NAME : prev));
+    setClash(null);
+  };
+
+  const onOrgChartSelected = (list: FileList | null) => {
+    const file = list?.[0];
+    if (!file) return;
+    setClash(null);
+    setOrgChart({ name: file.name, state: 'parsing' });
+    window.setTimeout(() => {
+      // The user can tick "There are no separate entities" while this is still
+      // reading. That answer wins: merging twelve companies in underneath it
+      // would contradict the box they just ticked, and none of the rows would
+      // be removable. Drop the extraction rather than half-apply it.
+      if (soloEntityRef.current) { setOrgChart(null); return; }
+      const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
+      const clashing = ORG_CHART_ENTITIES.filter(e => have.has(e.name.toLowerCase()));
+      if (clashing.length) {
+        // Stop and ask. Nothing is merged until the user says which version wins.
+        setClash(clashing.map(c => c.name));
+        setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
+        return;
+      }
+      setEntities(prev => mergedWithChart(prev, 'adopt'));
+      // The chart's root IS the group. Filled in only while the field still
+      // holds the untouched default or nothing — a name the user typed is an
+      // answer, and an extraction does not get to overwrite an answer.
+      setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? ORG_CHART_GROUP_NAME : prev));
+      setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
+    }, 900);
+  };
+
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
   /** RACMs attached to rows that are still in the list — entities dropped or
    *  swapped out by the checkbox must not keep counting. */
@@ -356,22 +567,88 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   };
 
   /** Dropping an entity takes its RACM with it — no orphan attachment left
-   *  ticking off a requirement for a row that no longer exists. */
+   *  ticking off a requirement for a row that no longer exists — and everything
+   *  held beneath it goes too. A company only reaches the group THROUGH its
+   *  parent; leaving the children behind would claim the group still owns them
+   *  when the chain to them has just been cut. */
   const removeEntity = (entId: string) => {
-    removeEntityRacm(entId);
-    setEntities(prev => prev.filter(e => e.id !== entId));
+    const doomed = familyOf(entId, entities);
+    doomed.forEach(removeEntityRacm);
+    setEntities(prev => prev.filter(e => !doomed.has(e.id)));
+    setConfirmRemoveId(null);
+  };
+
+  /** The row whose delete is waiting to be confirmed. Only rows that hold
+   *  others ask — deleting a leaf is one click, as it always was, so the
+   *  friction appears exactly where the damage does. */
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  /** A company added BENEATH a named parent, rather than appended to the end of
+   *  the list. It lands directly after that parent's existing family, so the
+   *  table still reads top-down and the new row is already indented under the
+   *  company it belongs to — nothing to re-parent afterwards. */
+  const newRowSeq = useRef(0);
+  /** The row to put the cursor in once it renders. Without it the button reads
+   *  as broken: on a twelve-row group the new row lands below the fold, so the
+   *  click appears to do nothing at all. */
+  const [focusEntityId, setFocusEntityId] = useState<string | null>(null);
+
+  /** A company added at the top of the list — the first one is the group's own
+   *  holding, everything after it a subsidiary. Focused on arrival for the same
+   *  reason as the per-parent add: the row lands below the fold on a long list,
+   *  and a click that shows nothing reads as a broken button. */
+  const addTopLevelEntity = () => {
+    const row: GroupEntity = {
+      id: `ent-new-${newRowSeq.current++}-${Date.now()}`,
+      name: '',
+      type: entities.length === 0 ? 'Holding' : 'Subsidiary',
+      ownership: 100,
+    };
+    setFocusEntityId(row.id);
+    setEntities(prev => [...prev, row]);
+  };
+
+  const addChildEntity = (parentId: string) => {
+    const child: GroupEntity = {
+      id: `ent-new-${newRowSeq.current++}-${Date.now()}`,
+      name: '',
+      type: 'Subsidiary',
+      ownership: 100,
+      parentId,
+    };
+    setFocusEntityId(child.id);
+    setEntities(prev => {
+      const idx = prev.findIndex(e => e.id === parentId);
+      if (idx < 0) return [...prev, child];
+      // Walk past everything already held under this parent — directly or
+      // through one of its own subsidiaries — so the new row joins the end of
+      // the family instead of splitting it.
+      const family = new Set([parentId]);
+      let insertAt = idx + 1;
+      while (insertAt < prev.length && prev[insertAt].parentId && family.has(prev[insertAt].parentId!)) {
+        family.add(prev[insertAt].id);
+        insertAt++;
+      }
+      return [...prev.slice(0, insertAt), child, ...prev.slice(insertAt)];
+    });
   };
 
   /** "No separate entities" — swap the table for the company itself. */
   const toggleSoloEntity = () => {
     if (!soloEntity) {
       preSoloEntities.current = entities;
-      setEntities([{ id: SOLO_ENTITY_ID, name: groupName.trim(), type: 'Holding', ownership: 100 }]);
+      // groupShort: the listing tag belongs to the group field, not to a row
+      // that names one company — otherwise the same company reads as
+      // "Meridian Global Holdings, Inc." on the chart's row and
+      // "Meridian Global Holdings, Inc. (NYSE: MGH)" here.
+      setEntities([{ id: SOLO_ENTITY_ID, name: groupShort(groupName), type: 'Holding', ownership: 100 }]);
+      soloEntityRef.current = true;
       setSoloEntity(true);
       return;
     }
     removeEntityRacm(SOLO_ENTITY_ID);
     setEntities(preSoloEntities.current);
+    soloEntityRef.current = false;
     setSoloEntity(false);
   };
 
@@ -417,7 +694,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       id,
       code: code.trim().toUpperCase(),
       name: name.trim(),
-      description: description.trim() || `SOX 404 / ICFR programme — scoped from ${entities.length} trial balances; ${derived.length} in-scope processes, each a RACM.`,
+      description: description.trim() || `SOX 404 / ICFR programme — ${entities.length} ${entities.length === 1 ? 'company' : 'companies'} in scope; RACMs added from the RACM tab.`,
       type: 'SOX / ICFR',
       soxConfig: {
         overallMateriality: Math.round(overallCr * CR),
@@ -427,9 +704,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         aggregate: true,
         keyOnly: true,
       },
-      // The workspace seeds one RACM per scoping-derived process, so the RACM
-      // tab mirrors the scoping summary exactly.
-      soxProcesses: derived.map(r => r.process),
+      // NO seeded RACM (user ask). Creation never asks for one — no matrix is
+      // uploaded, no process is picked — so seeding two off the trial-balance
+      // captions put work in the engagement the user never authored and could
+      // not account for. The RACM tab opens empty and Create RACM fills it.
+      soxProcesses: [],
       soxSeedMode: 'fresh',
       // No process was asked for — the anchor is the biggest scoping-derived
       // process (falls back to P2P).
@@ -450,7 +729,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     logEvent({
       action: 'Create',
-      description: `Created SOX ICFR engagement "${name.trim()}" via scoping — ${derived.length} in-scope processes → ${derived.length} RACMs, materiality ${fmtCr(overallCr)}`,
+      description: `Created SOX ICFR engagement "${name.trim()}" — ${entities.length} companies in scope, no RACM yet, materiality ${fmtCr(overallCr)}`,
       module: 'SOX ICFR',
       entity: 'Engagement',
     });
@@ -483,7 +762,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       totalCaptions: captions.length,
       quantCount: quantScope.length,
       qualCount: qualScope.length,
-      racms: derived,
+      // Empty for the same reason as soxProcesses above — the programme must not
+      // claim matrices the workspace does not have, or "By RACM" scoping on the
+      // New audit wizard would offer rows that lead nowhere.
+      racms: [],
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
       // The workspace banner nags for a missing RACM, so flag only when one
       // was genuinely never attached — the group TB / GL are asked for on
@@ -583,7 +865,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <div className="space-y-4">
               <div>
                 <label className={basicsLabelCls}>Engagement name <span className="text-risk-700">*</span></label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. P2P — SOX Q3 Testing" className={inputCls} />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => { setNameTouched(true); setName(e.target.value); }}
+                  placeholder="e.g. P2P — SOX Q3 Testing"
+                  className={inputCls}
+                />
+                {!nameTouched && name.trim().length > 0 && (
+                  <p className="text-[0.6875rem] text-ink-500 mt-1">Suggested from the group — edit if your team names them differently.</p>
+                )}
                 {name.trim().length === 0 && <Hint text="Name is required" />}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -710,9 +1001,108 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
               */}
               <div>
-                <div className={basicsLabelCls}>
-                  {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
+                {/* The label shares its line with the org-chart upload — the
+                    fast path to filling the table sits on the table's own
+                    header, not buried under it. Hidden once the company is
+                    the single entity: there is no structure left to read. */}
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <div className={basicsLabelInlineCls}>
+                    {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
+                  </div>
+                  {/* Both ways to fill the table sit together on its header —
+                      the fast one and the manual one, offered at the same
+                      moment rather than one up here and one at the far end of a
+                      twelve-row list. The chart control keeps the OUTER slot
+                      because it is the one that changes shape (button → spinner
+                      → file chip); Add entity holds still beside it. */}
+                  {!soloEntity && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                    <button
+                      onClick={addTopLevelEntity}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-primary transition-colors cursor-pointer shrink-0"
+                    >
+                      <Plus size={11} /> Add entity
+                    </button>
+                    {(
+                    orgChart === null ? (
+                      <label
+                        title="PDF, image, Visio — the structure is read off the chart"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
+                      >
+                        <Upload size={11} /> Org Chart
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept={ORG_CHART_ACCEPT}
+                          aria-label="Upload org chart"
+                          onChange={e => { onOrgChartSelected(e.target.files); e.target.value = ''; }}
+                        />
+                      </label>
+                    ) : orgChart.state === 'parsing' ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-muted shrink-0">
+                        <Loader2 size={11} className="animate-spin" /> Reading the chart…
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-[15rem] min-w-0 shrink-0">
+                        <FileText size={11} className="text-text-muted shrink-0" />
+                        <span className="text-[11px] text-text truncate" title={orgChart.name}>{orgChart.name}</span>
+                        <button
+                          onClick={() => setOrgChart(null)}
+                          aria-label="Remove org chart"
+                          title="Removes the file — the entities it found stay in the table"
+                          className="p-1 rounded text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    )
+                    )}
+                    </div>
+                  )}
                 </div>
+                {/* Extraction is a first draft, not an answer — say so once, in
+                    the place the rows landed. */}
+                {/* The chart named a company the table already has. Nothing is
+                    merged until this is answered — resolving it silently either
+                    orphaned the chart's subsidiaries or binned what the user
+                    typed, and neither is a decision the screen gets to make. */}
+                {!soloEntity && clash && (
+                  <div className="mb-1.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
+                    <p className="flex items-start gap-1.5 text-[11px] text-high-700">
+                      <AlertCircle size={11} className="shrink-0 mt-0.5" />
+                      <span>
+                        {clash.length === 1 ? 'This company is' : `These ${clash.length} companies are`} already
+                        in the table: <b className="font-semibold">{clash.join(', ')}</b>.
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      <button
+                        onClick={() => resolveClash('adopt')}
+                        className="px-2 py-1 rounded-md bg-primary text-white text-[11px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+                      >
+                        Keep mine and continue
+                      </button>
+                      <button
+                        onClick={() => resolveClash('replace')}
+                        className="px-2 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
+                      >
+                        Remove mine, use the chart's
+                      </button>
+                    </div>
+                    <p className="text-[10.5px] text-text-muted mt-1.5">
+                      Either way the companies held beneath it come in attached — nothing is left without a parent.
+                    </p>
+                  </div>
+                )}
+                {!soloEntity && !clash && orgChart?.state === 'done' && (
+                  <p className="flex items-start gap-1.5 text-[11px] text-compliant-700 mb-1.5">
+                    <Sparkles size={11} className="shrink-0 mt-0.5" />
+                    <span>
+                      Read {ORG_CHART_ENTITIES.length} companies off the chart — check the names and types before
+                      you continue.
+                    </span>
+                  </p>
+                )}
                 {/* Ownership % column — parked for now (grid was
                     [2.4fr_1fr_0.8fr_44px] with an Ownership header cell and this
                     per-row input; the data still seeds and shows downstream):
@@ -726,34 +1116,86 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       <span className="text-[11px] text-text-muted">%</span>
                     </div>
                 */}
-                <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-                  <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                    <div>Entity</div><div>Type</div><div>Processes — extracted</div><div />
+                {/* overflow-VISIBLE, deliberately: the Type dropdown's menu is
+                    absolutely positioned inside its row, so `overflow-hidden`
+                    here sliced it off at the row below. The header band takes
+                    the top corners itself (11px = the 12px outer radius less
+                    the 1px border) so nothing squares off without the clip. */}
+                <div className="border border-border-light rounded-xl bg-white">
+                  {/* PARKED (user ask): the "Processes — extracted" column.
+                      Grid was [2.6fr_0.95fr_1.05fr_34px] with a
+                      <div>Processes — extracted</div> header cell here and the
+                      per-row cell below; both are commented out in place, and
+                      `entityProcesses` / `manualProcs` / `applyManualProcs` stay
+                      wired so restoring is uncommenting three blocks and putting
+                      the third column back in the two grids.
+
+                      Its width goes to the entity name, which is the row's
+                      identity and was clipping the longest ones. */}
+                  <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                    <div>Entity</div><div>Type</div>{/* <div>Processes — extracted</div> */}<div />
                   </div>
                   {entities.length === 0 && (
                     <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
-                      No entities yet — add the companies in scope. If there are none, tick the box below.
+                      No entities yet — upload the org chart or add them by hand.
                     </div>
                   )}
                   {entities.map((ent, i) => {
                     const racm = entityRacm[ent.id];
+                    // Where this company sits in the chain, and what actually
+                    // reaches the top through it. Both come off the org chart —
+                    // a hand-added row is depth 1 with nothing to say.
+                    const depth = soloEntity ? 0 : entityDepth(ent, entities);
+                    const parent = ent.parentId ? entities.find(x => x.id === ent.parentId) : undefined;
+                    const effective = effectiveOwnership(ent, entities);
+                    /** How many companies go with this one if it is deleted. */
+                    const heldBeneath = familyOf(ent.id, entities).size - 1;
+                    /* Said only when it is news: a wholly-owned company held
+                       directly by the parent is the default, and repeating
+                       "100% owned" on every such row buries the two rows where
+                       the number is the point.
+
+                       NOT gated on type. Retyping a 74%-owned company to
+                       Holding used to hide its "74% owned" line while
+                       effectiveOwnership kept multiplying by that 74% — the
+                       rows beneath it still read "74% · held through …" with
+                       the source of the number nowhere on screen. The top
+                       company is silent anyway: it owns 100% and has no parent,
+                       so both branches below already decline to speak. */
+                    const ownershipNote = soloEntity ? null
+                      : parent && depth >= 2 ? `${effective}% · held through ${parent.name}`
+                      : ent.ownership !== 100 ? `${effective}% owned`
+                      : null;
                     return (
                     <div key={ent.id} className="border-b border-border-light last:border-b-0">
                       {/* py, not pt: the RACM line under each row used to supply
                           the bottom padding and is parked. */}
-                      <div className="grid grid-cols-[2fr_0.9fr_1.6fr_44px] gap-3 px-4 py-2.5 items-center">
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2.5 items-center">
+                      {/* Indented by its depth in the chain, so the table keeps
+                          the shape the chart had instead of flattening twelve
+                          companies into twelve peers. */}
+                      <div className="flex items-center gap-1.5 min-w-0" style={depth > 0 ? { paddingLeft: depth * 10 } : undefined}>
+                        {depth >= 2 && (
+                          <span aria-hidden className="text-[11px] text-text-muted/70 leading-none shrink-0">↳</span>
+                        )}
                         {ent.type === 'Holding'
                           ? <Landmark size={14} className="text-brand-700 shrink-0" />
                           : <Building2 size={14} className="text-text-muted shrink-0" />}
                         {soloEntity ? (
                           // The company's own row — its name is the group name.
-                          <span className="text-[13px] text-text truncate py-0.5">{ent.name || '—'}</span>
+                          <span className="block text-[13px] text-text truncate py-0.5">{ent.name || '—'}</span>
                         ) : (
                           <input
                             value={ent.name}
                             onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
                             aria-label={`Entity ${i + 1} name`}
+                            title={ent.name}
+                            ref={el => {
+                              if (!el || focusEntityId !== ent.id) return;
+                              el.focus();
+                              el.scrollIntoView({ block: 'nearest' });
+                              queueMicrotask(() => setFocusEntityId(null));
+                            }}
                             className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                           />
                         )}
@@ -770,6 +1212,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           menuCls="w-full min-w-[150px]"
                         />
                       )}
+                      {/* PARKED (user ask): the per-row "Processes — extracted"
+                          cell. Uncomment with its header cell and the third
+                          column in both grids to bring it back.
+
                       {(() => {
                         // A parsed RACM speaks for its own entity, whoever added it.
                         if (racm?.state === 'done') {
@@ -780,8 +1226,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             </div>
                           );
                         }
-                        // Hand-added rows: nothing was extracted — the user fills it in
-                        if (ent.id.startsWith('ent-new-') || ent.id === SOLO_ENTITY_ID) {
+                        // Hand-added rows — and rows an org chart put here, which
+                        // names companies but not what they run — have nothing
+                        // extracted yet, so the user fills it in.
+                        if (ent.id.startsWith('ent-new-') || ent.id === SOLO_ENTITY_ID
+                          || (ORG_CHART_ENTITY_IDS.has(ent.id) && !extractedReady)) {
                           return (
                             <input
                               value={manualProcs[ent.id] ?? ''}
@@ -799,15 +1248,65 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           </div>
                         );
                       })()}
-                      <button
-                        onClick={() => removeEntity(ent.id)}
-                        disabled={soloEntity || entities.length === 1}
-                        aria-label={`Remove ${ent.name}`}
-                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer justify-self-end"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      */}
+                      {/* Row actions — delete only (user ask; the per-row add
+                          button is gone, adding is the header's job). Kept as a
+                          flex cell so the icon sits hard right on every row and
+                          the column reads as one straight line. */}
+                      <div className="flex items-center justify-end">
+                        <button
+                          onClick={() => (heldBeneath > 0 ? setConfirmRemoveId(ent.id) : removeEntity(ent.id))}
+                          disabled={soloEntity || entities.length === 1}
+                          aria-label={`Remove ${ent.name.trim() || `entity ${i + 1}`}`}
+                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
+                      </div>
+                      {/* The chain, on its own line at full row width. It sat
+                          inside the name cell first and truncated to
+                          "100% · held throu…", which is worse than not saying
+                          it — a fact you cannot finish reading is not a fact.
+                          Indented to line up with the name it belongs to. */}
+                      {/* Confirm, but only where the damage is real: deleting a
+                          company that holds others takes all of them, and the
+                          count is the fact the user needs before they click.
+                          A leaf still deletes in one click. */}
+                      {confirmRemoveId === ent.id && (
+                        <div className="px-4 pb-2.5 -mt-0.5">
+                          <div className="flex items-center gap-2 flex-wrap rounded-md border border-risk-100 bg-risk-50 px-2.5 py-2">
+                            <span className="flex-1 min-w-0 text-[11px] text-risk-700">
+                              Remove this and the {heldBeneath} compan{heldBeneath === 1 ? 'y' : 'ies'} held beneath it?
+                            </span>
+                            <button
+                              onClick={() => setConfirmRemoveId(null)}
+                              className="px-2 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => removeEntity(ent.id)}
+                              aria-label={`Confirm remove ${ent.name.trim() || `entity ${i + 1}`} and everything beneath it`}
+                              className="px-2 py-1 rounded-md bg-risk-600 text-white text-[11px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer shrink-0"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {ownershipNote && (
+                        <div
+                          className="pr-4 pb-2 -mt-1 text-[10.5px] text-text-muted leading-tight"
+                          /* px-4 (16) + icon box (14 + gap 6) + the row's own
+                             indent + the ↳ the name cell adds from depth 2 —
+                             which is every row this note ever renders on, so
+                             leaving it out misaligned all of them. */
+                          style={{ paddingLeft: 16 + 20 + depth * 10 + (depth >= 2 ? 14 : 0) }}
+                        >
+                          {ownershipNote}
+                        </div>
+                      )}
                       {/* PARKED (user ask): the per-entity RACM upload that sat
                           on its own line under each row. The engagement is now
                           created without a matrix; one is added or generated
@@ -856,14 +1355,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     </div>
                     );
                   })}
-                  {!soloEntity && (
-                    <button
-                      onClick={() => setEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', ownership: 100 }])}
-                      className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
-                    >
-                      <Plus size={13} /> Add entity
-                    </button>
-                  )}
+                  {/* "Add entity" used to close the table off here. It now sits
+                      on the table's header beside Upload org chart (user ask) —
+                      on a twelve-row group this footer was a scroll away from
+                      the point of deciding you needed another company. */}
                 </div>
 
                 {/* No subsidiaries is a real answer, not an empty table. */}
@@ -883,7 +1378,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <span>
                     <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
                     <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
-                      {groupName.trim() || 'The company'} is audited as the single entity in scope — no subsidiaries to list.
+                      {groupShort(groupName) || 'The company'} is audited as the single entity in scope — no subsidiaries to list.
                     </span>
                   </span>
                 </button>
@@ -1312,7 +1807,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
             <div className="border border-border-light rounded-xl bg-white p-4">
               <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
-                RACMs to be generated — one per in-scope process
+                RACMs — added from the RACM tab once the engagement exists
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {derived.map(r => (

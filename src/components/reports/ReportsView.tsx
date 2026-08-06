@@ -1678,8 +1678,11 @@ export default function ReportsView({
             // One that arrives with sections came from a report we read, so it
             // keeps the name that read gave it.
             initialName={editingTemplate.id === 'ct-blank' && (editingTemplate.sections?.length ?? 0) === 0 ? '' : undefined}
-            // Save dismisses everything (terminal); Cancel just closes the
-            // editor so the still-mounted wizard reappears with its selections.
+            // Save and Cancel do the same thing now. They used to differ because
+            // Save was terminal and dismissed the wizard underneath, while Cancel
+            // left it mounted with its selections — but d93751a removed that
+            // wizard along with the state this handler was still clearing, so
+            // there is nothing left for Save to dismiss beyond the editor itself.
             onClose={() => { setEditingTemplate(null); }}
             onCancel={() => { setEditingTemplate(null); }}
             onSaveNew={(created) => { addCustomTemplate(created); setAssignEngagementFor(created); }}

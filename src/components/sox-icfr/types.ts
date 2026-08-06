@@ -28,6 +28,16 @@ export type Court = 'auditor' | 'risk-owner' | 'reviewer' | 'none';
 export type Likelihood = 'Remote' | 'Reasonably possible' | 'Probable';
 export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakness';
 
+/** What the severity engine actually answers. `Severity` above is the reportable
+ *  grade — the three the auditor's report names. Clearly Trivial is the fourth
+ *  outcome: logged, never evaluated further, and it stops the ladder dead. The
+ *  conclusion shown on an exception is always this, never a hand-set field. */
+export type ExceptionGrade = 'Clearly Trivial' | Severity;
+export const EXCEPTION_GRADES: ExceptionGrade[] = ['Clearly Trivial', 'Deficiency', 'Significant Deficiency', 'Material Weakness'];
+export const GRADE_RANK: Record<ExceptionGrade, number> = {
+  'Clearly Trivial': -1, Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2,
+};
+
 /** A manual override of a computed/automated result, with who/why. */
 export interface Override {
   result: TestResult | 'Effective' | 'Ineffective';
@@ -124,6 +134,19 @@ export const DESIGN_BASES: { id: DesignBasis; hint: string }[] = [
   { id: 'Reperformance included', hint: 'The control was performed again independently and the outcome agreed.' },
 ];
 
+/** What the auditor did on a check with their own hands.
+ *
+ *  The three kinds are not decoration — they are what the design conclusion's
+ *  stated basis is derived from, so nobody types a basis they did not earn. */
+export type AuditorProofKind = 'Walkthrough note' | 'Configuration extract' | 'Reperformance result';
+export const AUDITOR_PROOF_KINDS: AuditorProofKind[] = ['Walkthrough note', 'Configuration extract', 'Reperformance result'];
+export interface AuditorProof {
+  kind: AuditorProofKind;
+  file: EvidenceFile;
+  /** What it showed — the finding, not the filename. */
+  note?: string;
+}
+
 /** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
@@ -134,6 +157,21 @@ export interface DesignPoint {
   validation?: ValidationResult;
   /** How this consideration was proven. Inquiry alone earns a warning. */
   evidenceType?: EvidenceType;
+  /** Which design ELEMENTS on this control evidence this check — DesignDoc ids.
+   *
+   *  A reference, never a copy. The client's file is uploaded once against the
+   *  element it belongs to and pointed at from here; the same document must not
+   *  enter the audit twice for one control, and certainly not once per check.
+   *  So there is deliberately NO client-evidence slot on a check. */
+  evidencedBy?: string[];
+  /** The auditor's OWN proof — a walkthrough note, a configuration extract they
+   *  pulled themselves, a reperformance result.
+   *
+   *  One slot, because this is the only thing with no home at element level:
+   *  elements are what the client supplied. A check carrying nothing here was
+   *  taken on the documents; a check carrying something is one the auditor did
+   *  work on, and that difference is what designBasis reads. */
+  auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
 }
@@ -216,6 +254,12 @@ export interface DesignTrack {
    *  conclusion, because a half-walked transaction proves nothing. */
   walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
+  /** Why the track concluded the way it did — recorded on EVERY conclusion, not
+   *  only on an override. A working paper whose conclusion carries no words is a
+   *  hole; see `concludeRationale`, which drafts it from the evidence so agreeing
+   *  stays one click. `override.rationale` is the narrower thing: why the auditor
+   *  went against what the evidence pointed at. */
+  rationale?: string;
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
@@ -375,6 +419,10 @@ export interface AuditFileRecord {
   /** The platform pulled this data itself: provenance is known from the fetch,
    *  so the question is never put. */
   systemFetched?: boolean;
+  /** The system of record it was pulled from — 'SAP S/4HANA — Production'. Set
+   *  only alongside `systemFetched`; it is what makes the fetch answerable on
+   *  the working paper without anybody typing it. */
+  system?: string;
   /** Who answered, and when. Re-stamped when the answer is changed on the file
    *  record — the only place it can be changed. */
   originBy?: string;
@@ -467,8 +515,8 @@ export interface EvidenceReport {
 // under test: was it run with the right parameters, does it hold every record it
 // should, and is what it says true? Reliance without that is reliance on nothing —
 // so a report that isn't concluded Reliable locks the sample step behind it.
-export type IpeDimension = 'Source & parameters' | 'Completeness' | 'Accuracy';
-export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Completeness', 'Accuracy'];
+export type IpeDimension = 'Source & parameters' | 'Period coverage' | 'Completeness' | 'Accuracy';
+export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Period coverage', 'Completeness', 'Accuracy'];
 /** One dimension's proof — what is claimed, how it was proven, what was found. */
 export interface IpeCheck {
   id: string;
@@ -526,6 +574,8 @@ export interface OperatingTrack {
   /** IPE gate 3 — the reports standing behind the evidence. */
   evidenceReports?: EvidenceReport[];
   conclusion: TrackConclusion;
+  /** Why the track concluded the way it did — see DesignTrack.rationale. */
+  rationale?: string;
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
@@ -560,6 +610,23 @@ export const CONTROL_CLASSES: ControlClass[] = ['Financial', 'Operational', 'Com
 
 export interface Control {
   id: string;
+  /** THE CONTROL NUMBER THE CLIENT KNOWS — set only when `id` had to be made
+   *  unique because the same control runs at more than one company. The register,
+   *  the control page and the working paper all print `code ?? id`, so two rows
+   *  of the same control read with the same number and are told apart by their
+   *  entity. See `entity`. */
+  code?: string;
+  /** THE COMPANY THIS ROW IS TESTED AT.
+   *
+   *  A group audit tests the same control separately at every entity in its
+   *  scope: same number, same wording, entirely separate lives. Altura's
+   *  Treasury controls run at four companies — one may be concluded effective
+   *  while another has not started, and a failure at one says nothing about the
+   *  others. So an entity's copy is its OWN row with its own design and
+   *  operating tracks, its own sample, its own conclusion and its own findings.
+   *
+   *  Absent on engagements that were never scoped by entity. */
+  entity?: string;
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
@@ -585,7 +652,19 @@ export interface Control {
   // at which the reviewer investigates, checked against performance materiality.
   isMrc?: boolean;
   mrcThreshold?: number;
+  /** THE CONTROL OWNER — accountable that the control operates. The name the
+   *  register shows and the one a failure lands on. */
   owner: string;
+  /** THE PROCESS OWNER — runs the area day to day, and is therefore who an
+   *  evidence request actually reaches; the control owner is only copied.
+   *
+   *  Two people, not one, because they are usually not the same person: the CFO
+   *  owns the control, the finance manager is the one who can produce the file.
+   *  A request addressed to the accountable name alone is a request addressed to
+   *  someone who has to forward it. Recorded per RACM in the scoping wizard's
+   *  People step; absent on controls created before that step existed, which is
+   *  why it is optional and every read falls back to `owner`. */
+  processOwner?: string;
   riskId: string;
   riskDescription: string;
   /** WHY the risk exists — the condition underneath it. The source RACM carries
@@ -621,6 +700,32 @@ export interface Control {
   /** The reviewer sent the concluded paper back instead of countersigning —
    *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
   reviewReturn?: { reason: string; by: string; at: string };
+  /** The auditor could not test at all. Deliberately NOT an exception: nothing
+   *  has been shown to have failed, so exposure and likelihood do not apply and
+   *  a severity would be a fabrication. See `UnableToTest`. */
+  unableToTest?: UnableToTest;
+}
+
+/** "Unable to test — waiting on owner". A status on the CONTROL, not a second
+ *  exception lifecycle: the auditor records why testing is blocked and what is
+ *  needed, and it sits in the owner's court like any other document request.
+ *
+ *  If it is still open at period end it converts to an ordinary exception — the
+ *  control could not be evidenced as operating, so it concludes ineffective and
+ *  runs the normal severity ladder. The reason carries across so the working
+ *  paper shows why it was never evidenced rather than merely that it failed. */
+export interface UnableToTest {
+  track: 'design' | 'operating';
+  /** Why testing could not proceed — the blocker, in the auditor's words. */
+  reason: string;
+  /** What the owner has to produce for testing to resume. */
+  needed: string;
+  raisedBy: string;
+  raisedAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  /** Set when period end forced it into an exception — the id it became. */
+  convertedTo?: string;
 }
 
 // ─── Discussions (role-tagged threads) ──────────────────────────────────────────
@@ -676,76 +781,225 @@ export interface HandoffTask {
   status: TaskStatus;
 }
 
-// ─── Gap taxonomy — the source RACM's own vocabulary ─────────────────────────────
-// A finding is named by where it was found and what kind of thing broke. The
-// walkthrough finds DESIGN gaps: the control as built can't do the job (MDG), or
-// the system doesn't enforce what the narrative claims (ITDG). Sampling finds
-// TESTING gaps: the control is designed fine but didn't operate (TG). The
-// distinction drives the fix — a design gap needs a redesign, a testing gap needs
-// discipline — so it is recorded on the exception, not inferred later.
-export type GapType = 'MDG' | 'ITDG' | 'TG';
-export const GAP_LABEL: Record<GapType, string> = {
-  MDG: 'Manual design gap',
-  ITDG: 'IT design gap',
-  TG: 'Testing gap',
-};
-export const GAP_HINT: Record<GapType, string> = {
-  MDG: 'Found in the walkthrough — the manual control as designed cannot prevent or detect the risk.',
-  ITDG: 'Found in the walkthrough — the system does not enforce what the control claims.',
-  TG: 'Found in sampling — the control is designed adequately but did not operate as designed.',
-};
+// ─── Gap nature — DERIVED, never asked ───────────────────────────────────────────
+// The old Gap type field asked the auditor to classify a finding as a manual
+// design gap, an IT design gap or a testing gap. It is gone: manual vs IT is
+// already settled by the control's nature on the RACM, and design vs operating is
+// already settled by which track failed. Asking again could only produce a
+// contradiction. This derives the same sentence read-only for the working paper.
+export const gapNature = (track: 'design' | 'operating', nature: Nature): string =>
+  track === 'design'
+    ? (nature === 'Manual' ? 'Design gap — manual control' : 'Design gap — IT-dependent control')
+    : (nature === 'Manual' ? 'Operating failure — manual control' : 'Operating failure — IT-dependent control');
 
-/** What the gap is worth in rupees, split the way the source RACM splits it.
- *  Quantifying is what turns a finding into something a CFO acts on. */
-export interface Exposure {
-  /** Recoverable from a counterparty — raise a debit note and get it back. */
-  recovery: number;
-  /** Cash sitting trapped that the fix releases — not a loss, a timing gain. */
-  workingCapital: number;
-  /** Gone. Value that left the business and isn't coming back. */
-  leakage: number;
-  /** How the numbers were arrived at — the arithmetic behind the claim. */
-  basis?: string;
+// ─── PARKED (Aug 2026) — Gap type ────────────────────────────────────────────────
+// Removed from the exception screen: derivable from the control's nature and the
+// failed track, so it was a question with a knowable answer. Superseded by
+// `gapNature` above. Kept commented so it can be restored.
+// Note: 'Testing gap' here meant "designed fine, did not operate" — a real
+// deficiency. It is NOT the same as an auditor who could not test; that case now
+// lives on the control as `unableToTest` and never becomes an exception on its own.
+//
+// export type GapType = 'MDG' | 'ITDG' | 'TG';
+// export const GAP_LABEL: Record<GapType, string> = {
+//   MDG: 'Manual design gap',
+//   ITDG: 'IT design gap',
+//   TG: 'Testing gap',
+// };
+// export const GAP_HINT: Record<GapType, string> = {
+//   MDG: 'Found in the walkthrough — the manual control as designed cannot prevent or detect the risk.',
+//   ITDG: 'Found in the walkthrough — the system does not enforce what the control claims.',
+//   TG: 'Found in sampling — the control is designed adequately but did not operate as designed.',
+// };
+
+// ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────────────────
+// Recovery / working-capital unblock / leakage are internal-audit VALUE metrics —
+// what the gap was worth to the business. ICFR asks a different question: what
+// could have been misstated. Those are not the same number and mixing them made
+// the severity ladder read off the wrong one. Belongs on the Internal Audit
+// engagement type; kept commented so it can be lifted across intact.
+//
+// export interface Exposure {
+//   /** Recoverable from a counterparty — raise a debit note and get it back. */
+//   recovery: number;
+//   /** Cash sitting trapped that the fix releases — not a loss, a timing gain. */
+//   workingCapital: number;
+//   /** Gone. Value that left the business and isn't coming back. */
+//   leakage: number;
+//   /** How the numbers were arrived at — the arithmetic behind the claim. */
+//   basis?: string;
+// }
+// export const EXPOSURE_LABEL: Record<Exclude<keyof Exposure, 'basis'>, string> = {
+//   recovery: 'Recovery / debit note',
+//   workingCapital: 'Working-capital unblock',
+//   leakage: 'Leakage',
+// };
+// export const exposureTotal = (e?: Exposure): number =>
+//   e ? e.recovery + e.workingCapital + e.leakage : 0;
+
+/** One pass of the retest. The control is tested AGAIN — its own attributes, a
+ *  fresh sample drawn from the period since the fix landed, item by item. A round
+ *  is never edited: a failure appends the next round, which is what the loop
+ *  counter counts. */
+export interface RetestRound {
+  /** 1-based. Two or more failed rounds put the exception in front of the reviewer. */
+  n: number;
+  /** The window the sample came off — from the day the fix landed, never earlier. */
+  windowFrom: string;
+  windowTo: string;
+  /** The attributes carried over from the original test, verbatim. */
+  attributes: { code: string; description: string }[];
+  samples: { id: string; ref: string; date: string }[];
+  /** sample id → attribute code → result. Any Fail fails the round. */
+  results: Record<string, Record<string, TestResult>>;
+  result: 'Pass' | 'Fail';
+  /** Required on a failure — the owner reads this when the plan comes back. */
+  rationale?: string;
+  by: string;
+  at: string;
 }
-export const EXPOSURE_LABEL: Record<Exclude<keyof Exposure, 'basis'>, string> = {
-  recovery: 'Recovery / debit note',
-  workingCapital: 'Working-capital unblock',
-  leakage: 'Leakage',
-};
-export const exposureTotal = (e?: Exposure): number =>
-  e ? e.recovery + e.workingCapital + e.leakage : 0;
 
 export interface Deficiency {
   id: string;
   controlId: string;
   track: 'design' | 'operating';
-  /** MDG / ITDG / TG. Defaults from the track and the control's nature when the
-   *  exception is raised; the auditor can re-type it on the exception card. */
-  gapType?: GapType;
-  /** What the gap is worth — priced by the auditor, argued by the owner. */
-  exposure?: Exposure;
+  // PARKED (Aug 2026) — see the Gap type / Priced impact banners above.
+  // gapType?: GapType;
+  // exposure?: Exposure;
   /** Where this lands in the report — the source RACM's report reference number. */
   reportRef?: string;
   description: string;
+  /** THE MECHANISM, not the symptom. "The system allows manual posting that
+   *  bypasses approval", never "3 of 25 lacked approval" — the count is the
+   *  evidence, this is the thing the fix has to change. Step 3's plan is judged
+   *  against it, which is why it sits above the plan on screen. */
   rootCause: string;
+  /** The sampled items that failed — what the exception was found in. */
+  failedSamples?: string[];
   likelihood: Likelihood;
   magnitude: number;
   mwIndicators: string[];
   compensatingControlId?: string;
   aggregationGroup?: string;
+  /** The auditor's "these two share a root cause" link. Process and assertion
+   *  aggregate on their own from the control and the failed attributes; a shared
+   *  mechanism cannot be read off free prose, so it is stated here instead. */
+  rootCauseLinkId?: string;
+  /** Reviewer's confirmation of a Significant Deficiency or worse. Nothing moves
+   *  until this exists — a wrong rating must not drive weeks of remediation. */
+  ratingConfirm?: { grade: string; by: string; at: string };
+  /** Reviewer disagreed and sent the rating back to the auditor, with a reason. */
+  ratingReturn?: { reason: string; by: string; at: string };
   // The owner's commitment: what will fix the ROOT CAUSE, who does it, by when —
   // and the evidence they attach before declaring it done (submit for retest).
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
+  /** The owner has put the plan up for the auditor to judge. */
+  planSubmitted?: { by: string; at: string };
+  /** The auditor's verdict on the plan — does it address the root cause? A
+   *  rejection carries the reason back to the owner. The auditor never writes
+   *  or executes the fix; this is the whole of their say in it. */
+  planReview?: { decision: 'Accepted' | 'Rejected'; reason?: string; by: string; at: string };
+  /** The auditor's stated retest-ready date. Normally there is none: the date is
+   *  DERIVED from the fix date plus the control's operating period, so storing it
+   *  would just be a second copy that drifts. It is set only where the derivation
+   *  cannot run — an ad-hoc control has no rhythm to count from — or where the
+   *  auditor knowingly overrules it. Either way it wins over the calculation, and
+   *  the screen says it was stated rather than computed. */
+  expectedRetestReady?: string;
   // exception lifecycle
   status: ExceptionStatus;
+  /** Every retest pass, oldest first. `retests.length` IS the loop counter. */
+  retests?: RetestRound[];
+  /** The round being worked right now — drawn, part-marked, not yet recorded.
+   *  Separate from `retests` so an unfinished pass never counts as a failure. */
+  retestDraft?: RetestRound;
+  /** The latest round's verdict, mirrored for readers that only want the answer. */
   retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
   signoff?: { by: string; at: string };
   // Prudent-official judgment: severity can be argued UP (never down) with a
   // recorded rationale — the handbook's judgment floor over the pure math.
   prudentOverride?: { to: Severity; rationale: string; by: string; at: string };
+  /** Carried across when a control that could never be tested converts to an
+   *  exception at period end — the working paper has to say why it was never
+   *  evidenced, not just that it failed. */
+  unableToTestReason?: string;
+  /** The owner's disagreements with the grading, and what the auditor did with
+   *  them. Oldest first — a contested rating keeps its argument. */
+  challenges?: SeverityChallenge[];
 }
-// A passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
-export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Awaiting reviewer' | 'Closed';
+
+// ─── The owner's challenge — disagreement with a record instead of a phone call ──
+//
+// SOX 404(a) is MANAGEMENT'S assessment of its own controls, and the process owner
+// is management. They are not an opposing party to be kept from the file: they
+// need the exposure to argue for budget, and the likelihood to rank this against
+// everything else open on their desk.
+//
+// The real hazard was never that the owner reads the numbers. It is that they
+// argue them down informally — a corridor conversation with the auditor, a grade
+// that moves, and nothing on the paper saying why. So the numbers are shown, and
+// the disagreement is given somewhere to go: a form, a routed item, an answer that
+// must carry a reason, and a trail. A challenge changes NOTHING on its own. The
+// auditor either adjusts an input — after which the engine re-grades, as it does
+// for any other edit — or declines and says why.
+/** What the grade MEANS for the person who has to act on it — who hears about it,
+ *  and whether it has to be fixed and proven before the books close. The owner
+ *  sees the label, the exposure and the likelihood; this is the sentence that
+ *  turns those into a priority. Shared by the screen and the owner's brief so the
+ *  two can never say different things about the same grade. */
+export const SEVERITY_URGENCY: Record<string, string> = {
+  'Clearly Trivial': 'Logged for the record. No fix is being asked for.',
+  'Deficiency': 'A fix is expected, by the date agreed below.',
+  'Significant Deficiency': 'Serious enough that senior finance and the audit committee are told about it — the date below is a commitment, not an estimate.',
+  'Material Weakness': 'The most serious grade. It is reported outside the company, and it has to be fixed and proven to work before the books close.',
+};
+
+export type ChallengedInput = 'exposure' | 'likelihood' | 'compensating control';
+export const CHALLENGED_INPUT_LABEL: Record<ChallengedInput, string> = {
+  exposure: 'Exposure — what could have slipped through',
+  likelihood: 'Likelihood — how probable it was',
+  'compensating control': 'Compensating control — something else already catches this',
+};
+export interface SeverityChallenge {
+  id: string;
+  /** Which of the three inputs is disputed. Not the grade itself: the grade is
+   *  computed, so arguing with it means arguing with one of its inputs. */
+  input: ChallengedInput;
+  reasoning: string;
+  evidence?: EvidenceFile[];
+  by: string;
+  at: string;
+  /** The grade standing when the challenge was raised, so the history reads as an
+   *  argument about a specific number rather than about the current one. */
+  gradeAtRaise: string;
+  /** Absent while it is still with the auditor. A reason is required either way —
+   *  "declined" with no words is the informal lobbying this exists to replace. */
+  response?: { decision: 'Accepted' | 'Declined'; reason: string; by: string; at: string };
+}
+
+// The six steps, as eight states — two of the steps have a handoff inside them.
+// Sizing parks for the reviewer when it lands on Significant Deficiency or worse;
+// planning parks for the auditor to judge the plan against the root cause. A
+// passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+export type ExceptionStatus =
+  | 'Identified'          // ① raised + ② the auditor sizes it
+  | 'Rating review'       // ② reviewer confirms Significant Deficiency or worse — blocking
+  | 'Planning'            // ③ risk owner writes the plan
+  | 'Plan review'         // ③ auditor judges it against the root cause
+  | 'Remediation'         // ④ risk owner implements and attaches evidence
+  | 'Retest'              // ⑤ auditor retests on a post-fix sample
+  | 'Awaiting reviewer'   // ⑥ reviewer reads the retest evidence
+  | 'Closed';             // ⑥ reviewer has signed off
+
+/** The six steps as the screen shows them, and where each state sits. */
+export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: ExceptionStatus[] }[] = [
+  { n: 1, title: 'Exception raised', role: 'auditor', states: ['Identified'] },
+  { n: 2, title: 'Size it', role: 'auditor', states: ['Identified', 'Rating review'] },
+  { n: 3, title: 'Plan the fix', role: 'risk-owner', states: ['Planning', 'Plan review'] },
+  { n: 4, title: 'Fix and submit', role: 'risk-owner', states: ['Remediation'] },
+  { n: 5, title: 'Retest', role: 'auditor', states: ['Retest'] },
+  { n: 6, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
+];
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
@@ -797,7 +1051,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -809,6 +1063,13 @@ export interface ExecutionEvent {
   by: string;                                 // actor display name
   role: Role;                                 // actor role — drives the trail's glyph + tint
   at: string;
+  /** What it was and what it became. A trail that says only "something changed"
+   *  cannot be audited; a severity that moved has to show which way. */
+  from?: string;
+  to?: string;
+  /** Why — required by the flow wherever a decision goes against the obvious
+   *  reading: a rejected plan, a failed retest, a raised grade, a reopen. */
+  rationale?: string;
 }
 
 // ─── Runs (execution registry — the Runs tab) ────────────────────────────────────
@@ -931,6 +1192,11 @@ export interface AuditRecord {
    *  empty means the whole of every picked RACM — an audit scoped by entity
    *  never sets it, because there the processes decide. */
   controlIds?: string[];
+  /** Where the auditor overruled the derived entity scope, and why. Absent when
+   *  the audit took the trial balance's answer as it stood, or was scoped by
+   *  RACM. Every entry carries a reason — the wizard won't leave the scope step
+   *  with an unexplained change in it. */
+  scopeNotes?: { entityId: string; name: string; inScope: boolean; note: string }[];
   /** Simulated TB / GL uploads; empty when the step was skipped. */
   files: { name: string; kind: 'tb' | 'gl' }[];
   /** The rule as set on the materiality step. Shape is inlined rather than
@@ -1008,19 +1274,32 @@ export interface IcfrEngagement {
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
 
-/** Where a fresh exception starts on the gap taxonomy. Sampling finds testing
- *  gaps; the walkthrough finds design gaps — IT-flavoured when the control leans
- *  on the system to work, manual when a person is the control. */
-export const defaultGapType = (track: 'design' | 'operating', nature: Nature): GapType =>
-  (track === 'operating' ? 'TG' : nature === 'Manual' ? 'MDG' : 'ITDG');
+// PARKED (Aug 2026) — the exception no longer carries a gap type. `gapNature`
+// derives the same sentence read-only from the track and the control's nature.
+//
+// export const defaultGapType = (track: 'design' | 'operating', nature: Nature): GapType =>
+//   (track === 'operating' ? 'TG' : nature === 'Manual' ? 'MDG' : 'ITDG');
 
-/** The three checks every entity-produced report answers before it is relied on.
+/** The checks every entity-produced report answers before it is relied on.
+ *  Period coverage joined the original three in Aug 2026, off the parked
+ *  "Checked automatically" row — same question, answered by a person now.
  *  Seeded when the report is registered so the auditor tests, never authors. */
 export const ipeChecklist = (reportLabel: string): Omit<IpeCheck, 'id'>[] => [
   {
     dimension: 'Source & parameters',
     description: `${reportLabel} was run from the live system over the audit period, with the scoping filters the test assumes.`,
     method: 'Inspect the parameter screen capture — system, company code, date range and document types — and agree each to the test scope.',
+    result: 'Not tested',
+  },
+  {
+    // Was the "Period covered" row under "Checked automatically", where the
+    // application measured the extract's span against the audit window and went
+    // green on its own. It is a person's check now: the arithmetic never knew
+    // whether a month with no instances is a hole in the extract or a month the
+    // control genuinely did not run in, and that is the whole question.
+    dimension: 'Period coverage',
+    description: 'The extract spans the whole audit period — and where a month inside it is empty, that is the control not running, not the extract stopping short.',
+    method: 'Agree the earliest and latest instance to the audit period, and account for any month inside it with no instances.',
     result: 'Not tested',
   },
   {
@@ -1037,7 +1316,7 @@ export const ipeChecklist = (reportLabel: string): Omit<IpeCheck, 'id'>[] => [
   },
 ];
 
-/** What the three checks add up to. A single failure sinks the report — an
+/** What the checks add up to. A single failure sinks the report — an
  *  incomplete population is the wrong population, not a slightly worse one. */
 export const ipeSuggestion = (t: IpeTest): IpeConclusion =>
   t.checks.some(c => c.result === 'Fail') ? 'Not reliable'

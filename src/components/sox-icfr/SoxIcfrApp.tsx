@@ -9,6 +9,7 @@ import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import type { SoxTabLike } from './types';
 import { AUDIT_TABS, defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
+import { ownersOf } from './auditScope';
 import SoxClassicInner from './SoxClassicApp';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -68,7 +69,7 @@ const SOX_TABS: TabDef[] = [
      audit's four (AUDIT_TABS below). Reached from the engagement level it is
      still a DRILL-IN under a breadcrumb: every route in calls
      setView('deficiencies'), which works at either level. */
-  { id: 'runs', label: 'SOX audit' },
+  { id: 'runs', label: 'SOX testing' },
   /* Configuration is not an ENGAGEMENT tab — it belongs to an audit, and lives
      in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
      cycle, so there is nothing engagement-wide left to configure here; the
@@ -109,13 +110,26 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   const audit = eng.audits.find(a => a.id === openAuditId);
   const inAudit = !!audit;
 
-  // The owner's SOX is a to-do list, not a workspace: just their inbox and their
-  // controls. RACM and the audit register are auditor-side surfaces.
+  // The owner's SOX is a to-do list, not a workspace: their inbox, their controls
+  // and their exceptions. RACM and the audit register stay auditor-side.
+  //
+  // The exceptions tab is not optional for them. Steps ③ and ④ — writing the plan
+  // and doing the fix — are the owner's, and a role that cannot reach its own
+  // work cannot do it. The list scopes itself to their controls, so this is their
+  // queue rather than the engagement's exposure.
   const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
   const tabs = role === 'risk-owner'
-    ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
+    ? [
+        ...levelTabs.filter(t => t.id === 'overview' || t.id === 'controls'),
+        { id: 'deficiencies' as const, label: W.mine },
+      ]
     : levelTabs;
-  const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
+  // Every first-line name on the engagement, both capacities — a process owner
+  // has controls to answer for too, so they need to be someone you can be.
+  const owners = Array.from(new Set(eng.controls.flatMap(c => {
+    const o = ownersOf(c);
+    return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner];
+  }))).sort();
 
   // Header matches the production engagement page: a "Back to Engagements" line,
   // then avatar-initials tile + name + status/type pills, with code · Configuration
@@ -296,7 +310,7 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
             register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Deficiency management',
-            scope: 'Materiality & scope', runs: 'SOX audit', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
+            scope: 'Materiality & scope', runs: 'SOX testing', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';

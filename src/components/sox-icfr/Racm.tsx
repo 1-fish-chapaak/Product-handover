@@ -4,9 +4,10 @@ import {
   Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
+import { entitiesFor } from './auditScope';
 import { defWord } from './flow';
 import { useIcfr } from './store';
-import { controlConclusion, trackResult } from './helpers';
+import { conclusionOf, controlCode, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -15,7 +16,7 @@ import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
 import { CONTROL_CLASSES } from './types';
-import type { Control } from './types';
+import type { Control, IcfrEngagement } from './types';
 
 /** The processes a SOX RACM can be created for — the scoping wizard's seven
  *  plus the two cycles it doesn't scope from the trial balance. A process
@@ -59,9 +60,9 @@ function openEditorTab(engId: string, process: string): void {
 type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
 
 /** Roll-up status of one RACM — shared by the landing cards and the matrix header. */
-function matrixStatusOf(controls: Control[], engagementId: string): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
-  const concl = controls.map(controlConclusion);
-  if (concl.includes('Ineffective')) return { label: defWord(engagementId).Many, tone: 'risk' };
+function matrixStatusOf(controls: Control[], eng: IcfrEngagement): { label: string; tone: Parameters<typeof Pill>[0]['tone'] } {
+  const concl = controls.map(c => conclusionOf(eng, c));
+  if (concl.includes('Ineffective')) return { label: defWord(eng.id).Many, tone: 'risk' };
   if (concl.every(x => x === 'Not started')) return { label: 'Not tested', tone: 'draft' };
   if (concl.every(x => x === 'Effective')) return { label: 'Concluded', tone: 'compliant' };
   return { label: 'In testing', tone: 'evidence' };
@@ -73,17 +74,22 @@ function matrixStatusOf(controls: Control[], engagementId: string): { label: str
  * thing SOX has to ask that the Process Hub doesn't is WHICH process: the Hub
  * runs inside a single business process, this landing spans all of them.
  */
-function NewRacmModal({ available, inScope, onClose, onPick }: {
+function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
   /** canonical processes with no RACM yet — the picker's options */
   available: string[];
   /** every process already carrying a RACM — guards a hand-typed duplicate */
   inScope: string[];
+  /** the companies named when the engagement was created — a matrix belongs to
+   *  one of them, because a group audit tests the same process separately at
+   *  each. Empty on an engagement that was never scoped by entity. */
+  entities: string[];
   onClose: () => void;
-  onPick: (process: string, source: 'racm' | 'sop') => void;
+  onPick: (process: string, source: 'racm' | 'sop', entity: string) => void;
 }) {
   // every process may already be in scope — then naming one is the only way in
   const [choice, setChoice] = useState(available[0] ?? NEW_PROCESS);
   const [custom, setCustom] = useState('');
+  const [entity, setEntity] = useState(entities[0] ?? '');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -108,6 +114,22 @@ function NewRacmModal({ available, inScope, onClose, onPick }: {
           </div>
         </div>
         <div className="p-5">
+          {/* Which company the matrix is for. First, because it scopes the
+              question underneath it — "Record to Report" means nothing until
+              you know whose. Hidden when the engagement named no companies, so
+              a single-entity audit is not asked a question with one answer. */}
+          {entities.length > 0 && (
+            <>
+              <label htmlFor="new-racm-entity" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Entity</label>
+              <select id="new-racm-entity" value={entity} onChange={e => setEntity(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                {entities.map(en => <option key={en} value={en}>{en}</option>)}
+              </select>
+              <p className="text-[11.5px] text-ink-400 mt-1.5 mb-4">
+                The companies in scope of this engagement — the same process is tested separately at each.
+              </p>
+            </>
+          )}
           <label htmlFor="new-racm-process" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Business process</label>
           <select id="new-racm-process" value={choice} onChange={e => setChoice(e.target.value)}
             className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
@@ -127,12 +149,12 @@ function NewRacmModal({ available, inScope, onClose, onPick }: {
           {taken && <p className="text-[11.5px] text-risk-700 mt-1.5">{process} already has a RACM — open it from the list instead.</p>}
 
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <button onClick={() => onPick(process, 'racm')} disabled={!ready} className={cardCls}>
+            <button onClick={() => onPick(process, 'racm', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
               <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload a RACM</span>
               <span className="block text-[11.5px] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
             </button>
-            <button onClick={() => onPick(process, 'sop')} disabled={!ready} className={cardCls}>
+            <button onClick={() => onPick(process, 'sop', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Sparkles size={15} className="text-brand-600" /></span>
               <span className="block text-[13px] font-semibold text-ink-900 mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-ink-400">→</span> extract</span>
               <span className="block text-[11.5px] text-ink-500 leading-relaxed">IRA reads a procedure (.pdf / .docx) and drafts the RACM.</span>
@@ -191,7 +213,7 @@ export function RacmLanding() {
   // openRacmMatrix is deliberately not read here any more — the row opens the
   // spreadsheet editor. The action stays on the store (parked, house
   // convention), and with it the drilled matrix page it used to reach.
-  const { eng, role, createRacm } = useIcfr();
+  const { eng, role, createRacm, racmCreateOpen, clearRacmCreate } = useIcfr();
   const { addToast } = useToast();
 
   // The matrix shows what the OPEN audit covers — its entities' processes.
@@ -209,19 +231,34 @@ export function RacmLanding() {
   const racmFileRef = useRef<HTMLInputElement>(null);
   const sopFileRef = useRef<HTMLInputElement>(null);
   const pendingProcess = useRef<string>('');
+  /** The company chosen in the chooser, held across the file picker. */
+  const pendingEntity = useRef<string>('');
   const extractTimer = useRef<number | null>(null);
   useEffect(() => () => { if (extractTimer.current != null) window.clearTimeout(extractTimer.current); }, []);
 
   const canCreate = role === 'auditor' && !isEngagementLocked(eng);
+
+  // Arriving from the Overview's "Upload RACM": open the chooser on landing,
+  // then consume the flag so a later visit to this tab is not ambushed by it.
+  // Gated on canCreate for the same reason the button is — a hat that cannot
+  // create should not be handed the modal by a navigation.
+  useEffect(() => {
+    if (!racmCreateOpen) return;
+    if (canCreate) setCreating(true);
+    clearRacmCreate();
+  }, [racmCreateOpen, canCreate, clearRacmCreate]);
   const inScope = useMemo(() => processes.map(p => p.name), [processes]);
   const available = useMemo(() => {
     const have = new Set(inScope);
     return SOX_PROCESSES.filter(p => !have.has(p));
   }, [inScope]);
+  /** The companies the engagement was created with — the Entity picker's list. */
+  const racmEntities = useMemo(() => entitiesFor(eng.id).map(e => e.name), [eng.id]);
 
   // the chooser hands back the process + which door; the file picker follows
-  const onPick = (process: string, source: 'racm' | 'sop') => {
+  const onPick = (process: string, source: 'racm' | 'sop', entity: string) => {
     pendingProcess.current = process;
+    pendingEntity.current = entity;
     setCreating(false);
     (source === 'racm' ? racmFileRef : sopFileRef).current?.click();
   };
@@ -232,7 +269,7 @@ export function RacmLanding() {
     const process = pendingProcess.current;
     e.target.value = '';
     if (!file || !process) return;
-    createRacm(process, file.name);
+    createRacm(process, file.name, pendingEntity.current);
     addToast({ type: 'success', title: 'RACM created', message: `Imported "${file.name}" — the ${process} RACM is now in the list.` });
   };
 
@@ -246,7 +283,7 @@ export function RacmLanding() {
     extractTimer.current = window.setTimeout(() => {
       extractTimer.current = null;
       setExtracting(null);
-      createRacm(process, file.name);
+      createRacm(process, file.name, pendingEntity.current);
       const label = racmNameFromFilename(file.name);
       addToast({ type: 'success', title: 'RACM extracted', message: `Drafted the ${process} RACM from "${label || file.name}" — review its rows before testing.` });
     }, 1600);
@@ -275,7 +312,7 @@ export function RacmLanding() {
     )}
     <input ref={racmFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onRacmFile} aria-label="Upload a RACM workbook" />
     <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} aria-label="Upload an SOP to extract a RACM from" />
-    {creating && <NewRacmModal available={available} inScope={inScope} onClose={() => setCreating(false)} onPick={onPick} />}
+    {creating && <NewRacmModal available={available} inScope={inScope} entities={racmEntities} onClose={() => setCreating(false)} onPick={onPick} />}
     {extracting && <RacmExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}
     <div className="reg-wrap">
       <table className="w-full border-collapse">
@@ -291,7 +328,7 @@ export function RacmLanding() {
         </thead>
         <tbody>
           {processes.map(({ name, rows }) => {
-            const status = matrixStatusOf(rows, eng.id);
+            const status = matrixStatusOf(rows, eng);
             const risks = new Set(rows.map(c => c.riskId)).size;
             const approved = rows.filter(c => c.racmReview?.status === 'Approved').length;
             const remarks = rows.filter(c => c.racmReview?.status === 'Remark').length;
@@ -366,8 +403,8 @@ function ReviewCell({ c }: { c: Control }) {
 }
 
 /**
- * One business process's RACM — the full risks & controls matrix, rows in W/P
- * order. Every row carries the auditor's approval / remark status; the
+ * One business process's RACM — the full risks & controls matrix, rows in
+ * control-code order. Every row carries the auditor's approval / remark status; the
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
@@ -412,7 +449,7 @@ export default function Racm() {
     pending: controls.filter(c => !c.racmReview).length,
   }), [controls]);
 
-  const matrixStatus = useMemo(() => matrixStatusOf(controls, eng.id), [controls, eng.id]);
+  const matrixStatus = useMemo(() => matrixStatusOf(controls, eng), [controls, eng]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -424,9 +461,9 @@ export default function Racm() {
       if (natureF.length && !natureF.includes(c.nature)) return false;
       if (designF.length && !designF.includes(trackResult(c.design))) return false;
       if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
-      if (term && !(`${c.id} ${c.wpRef} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${c.id} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
-    }).sort((a, b) => a.wpRef.localeCompare(b.wpRef));
+    }).sort((a, b) => controlCode(a).localeCompare(controlCode(b)));
   }, [controls, q, review, classF, natureF, designF, operatingF]);
 
   const allVisible = filtered.map(c => c.id);
@@ -438,9 +475,9 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  // 13 columns: W/P · Risk · Root cause · Control · Nature · Design · Operating ·
+  // 12 columns: Risk · Root cause · Control · Class · Nature · TOD · TOE ·
   // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
-  const colSpan = isAuditor ? 14 : 13;
+  const colSpan = isAuditor ? 13 : 12;
 
   return (
     <div>
@@ -498,9 +535,9 @@ export default function Racm() {
         </div>
       )}
 
-      {/* the matrix — flat rows in W/P order (already scoped to one process).
+      {/* the matrix — flat rows in control-code order (already scoped to one process).
           The tickmark legend is VISIBLE — hover-titles alone fail touch and
-          keyboard users, and Design→Operating is the one rule worth teaching. */}
+          keyboard users, and TOD→TOE is the one rule worth teaching. */}
       <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-ink-400">
         <span className="text-compliant-700 font-semibold">✓</span> effective
         <span className="text-ink-300" aria-hidden>·</span>
@@ -508,14 +545,13 @@ export default function Racm() {
         <span className="text-ink-300" aria-hidden>·</span>
         <span className="font-semibold">–</span> not tested
         <span className="text-ink-300" aria-hidden>·</span>
-        <span>Design → Operating is the test order</span>
+        <span>TOD → TOE is the test order</span>
       </div>
       <div className="reg-wrap">
         <table className="w-full border-collapse">
           <thead className="reg-head">
             <tr>
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
-              <th style={{ width: 56 }} title="Working-paper reference">W/P</th>
               <th style={{ width: 200 }}>Risk</th>
               {/* why the risk exists — the source RACM carries it beside the risk,
                   because a control aimed at the symptom is the commonest design gap */}
@@ -531,14 +567,14 @@ export default function Racm() {
                   <ColumnFilter label="Nature" options={['Manual', 'Automated', 'IT-dependent']} value={natureF} onChange={setNatureF} />
                 </span>
               </th>
-              <th style={{ width: 88 }} title="Test of design — tested first; operating unlocks after design passes">
-                <span className="inline-flex items-center gap-1">Design
-                  <ColumnFilter label="Design" options={['Effective', 'Ineffective', 'Not tested']} value={designF} onChange={setDesignF} />
+              <th style={{ width: 88 }} title="Test of design — tested first; TOE unlocks after TOD passes">
+                <span className="inline-flex items-center gap-1">TOD
+                  <ColumnFilter label="TOD" options={['Effective', 'Ineffective', 'Not tested']} value={designF} onChange={setDesignF} />
                 </span>
               </th>
-              <th style={{ width: 104 }} title="Test of operating effectiveness — tested after design">
-                <span className="inline-flex items-center gap-1">Operating
-                  <ColumnFilter label="Operating" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
+              <th style={{ width: 104 }} title="Test of operating effectiveness — tested after TOD">
+                <span className="inline-flex items-center gap-1">TOE
+                  <ColumnFilter label="TOE" options={['Effective', 'Ineffective', 'Not tested']} value={operatingF} onChange={setOperatingF} />
                 </span>
               </th>
               {/* who did the work, where the evidence lives, and which report
@@ -553,13 +589,12 @@ export default function Racm() {
           <tbody>
             {filtered.map(c => {
               const d = trackResult(c.design); const o = trackResult(c.operating);
-              const ineffective = controlConclusion(c) === 'Ineffective';
+              const ineffective = conclusionOf(eng, c) === 'Ineffective';
               return (
                 <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}
                   style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>
                   {/* row-select — auditor only (they alone have bulk actions); toggle from the input's change only, a td-level toggle would double-fire when the checkbox itself is clicked */}
                   {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
-                  <td><span className="wp-ref">{c.wpRef}</span></td>
                   <td className="tight">
                     <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
                     <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
@@ -587,8 +622,8 @@ export default function Racm() {
                   </td>
                   <td>{c.clazz ? <Pill tone="draft">{c.clazz}</Pill> : <span className="text-ink-300">—</span>}</td>
                   <td><NatureChip nature={c.nature} small /></td>
-                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Design — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
-                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`Operating — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOD — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
+                  <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOE — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td>{c.performedBy ? <span className="text-[11.5px] text-ink-600">{c.performedBy}</span> : <span className="text-ink-300">—</span>}</td>
                   <td className="tight">
                     {c.wpRefHard || c.wpRefSoft ? (
@@ -672,7 +707,7 @@ export default function Racm() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Remark — <span className="wp-ref">{remarkFor.wpRef}</span></h2>
+                <h2 className="text-[15px] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
                 <button onClick={() => setRemarkFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
               <p className="text-[12px] text-ink-500 mt-1 line-clamp-2">{remarkFor.description}</p>

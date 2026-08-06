@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Meridian Global Holdings, Inc. — Legal Entity Structure</title>
+<style>
+  /* A client document, not product UI: this is the chart an audit team is
+     handed, so it reads like something a company secretary produced in Word or
+     Visio — serif masthead, hairline rules, no brand colour.
+
+     Layout note: twelve companies across three levels will not fit as a pure
+     top-down tree on A4 landscape (the third level alone would run past 1400px).
+     So the group branches ACROSS at level two and DOWN inside each branch — the
+     shape legal-entity charts use once a group outgrows one row. */
+  @page { size: A4 landscape; margin: 11mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 28px 18px;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #1a1d23;
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────────────────── */
+  .masthead { border-bottom: 2px solid #1a1d23; padding-bottom: 9px; }
+  .masthead .company {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0;
+  }
+  .masthead .doc-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.16em; color: #5b6270; margin: 5px 0 0;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0 24px;
+    font-size: 9.5px; color: #5b6270; margin: 8px 0 0; padding: 0; list-style: none;
+  }
+  .meta strong { color: #1a1d23; font-weight: 600; }
+
+  /* ── Cards ────────────────────────────────────────────────────────────── */
+  .node {
+    border: 1px solid #c3c8d2; background: #fff; border-radius: 3px;
+    padding: 8px 10px; text-align: left;
+  }
+  .node .name { font-size: 11px; font-weight: 700; line-height: 1.28; }
+  .node .line { font-size: 8.5px; color: #5b6270; margin-top: 2px; line-height: 1.4; }
+  .node .own { font-size: 8.5px; font-weight: 700; margin-top: 3px; }
+
+  /* The registrant carries the filing obligation — the only card that is
+     visually senior, and the only one that names an exchange. */
+  .node.root { border: 2px solid #1a1d23; padding: 10px 14px; width: 268px; margin: 0 auto; text-align: center; }
+  .node.root .name { font-size: 14px; }
+  .node.root .line { font-size: 9px; }
+  .ticker {
+    display: inline-block; margin-top: 5px; padding: 2px 7px;
+    border: 1px solid #1a1d23; border-radius: 2px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.07em;
+  }
+  /* Dashed = part of the company sits outside the group. That 26% is the whole
+     reason this branch is scoped differently from its siblings. */
+  .node.partial { border-style: dashed; }
+  .node.sub { padding: 7px 9px; }
+  .node.sub .name { font-size: 10px; }
+
+  /* ── Level 2: branches across ─────────────────────────────────────────── */
+  .chart { margin-top: 20px; }
+  .trunk { width: 0; height: 20px; border-left: 1px solid #9aa1af; margin: 0 auto; }
+  .tier { display: flex; justify-content: center; align-items: flex-start; list-style: none; margin: 0; padding: 0; }
+  .tier > li { position: relative; padding: 20px 7px 0; width: 214px; }
+  /* The two half-rules that build the rail above each branch, plus its drop. */
+  .tier > li::before, .tier > li::after {
+    content: ''; position: absolute; top: 0; right: 50%;
+    border-top: 1px solid #9aa1af; width: 50%; height: 20px;
+  }
+  .tier > li::after { right: auto; left: 50%; border-left: 1px solid #9aa1af; }
+  .tier > li:first-child::before, .tier > li:last-child::after { border-top: 0 none; }
+  .tier > li:last-child::before { border-right: 1px solid #9aa1af; }
+
+  /* ── Level 3: children down, indented under their own parent ──────────── */
+  .kids { list-style: none; margin: 0; padding: 0 0 0 13px; position: relative; }
+  /* Spine, stopped at the last elbow so no line dangles past the last child. */
+  .kids::before {
+    content: ''; position: absolute; left: 13px; top: 0; bottom: 22px;
+    border-left: 1px solid #9aa1af;
+  }
+  .kids > li { position: relative; padding: 9px 0 0 13px; }
+  .kids > li::before {
+    content: ''; position: absolute; left: 0; top: 22px;
+    width: 13px; border-top: 1px solid #9aa1af;
+  }
+
+  /* ── Footnotes ────────────────────────────────────────────────────────── */
+  .notes {
+    margin-top: 22px; border-top: 1px solid #c3c8d2; padding-top: 8px;
+    font-size: 8.5px; color: #5b6270; line-height: 1.6;
+  }
+  .notes .h {
+    font-size: 8px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.14em; color: #1a1d23; margin-bottom: 4px;
+  }
+  .notes ol { margin: 0; padding-left: 14px; }
+  .footer {
+    margin-top: 10px; display: flex; justify-content: space-between;
+    font-size: 8px; color: #8a90a0; border-top: 1px solid #e4e7ec; padding-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+  <header class="masthead">
+    <h1 class="company">Meridian Global Holdings, Inc.</h1>
+    <p class="doc-title">Legal entity structure chart — consolidated group</p>
+  </header>
+  <ul class="meta">
+    <li><strong>Listing</strong> New York Stock Exchange (NYSE: MGH)</li>
+    <li><strong>Registrant</strong> SEC — Form 10-K filer</li>
+    <li><strong>As of</strong> 31 December 2026</li>
+    <li><strong>Entities</strong> 12 across three levels</li>
+    <li><strong>Prepared for</strong> FY26 SOX 404 scoping</li>
+  </ul>
+
+  <div class="chart">
+    <div class="node root">
+      <div class="name">Meridian Global Holdings,&nbsp;Inc.</div>
+      <div class="line">Delaware, USA · Listed parent / SEC registrant</div>
+      <div class="ticker">NYSE: MGH</div>
+    </div>
+    <div class="trunk"></div>
+
+    <ul class="tier">
+      <li>
+        <div class="node">
+          <div class="name">Meridian Freight Systems&nbsp;LLC</div>
+          <div class="line">Delaware, USA · Surface freight &amp; brokerage</div>
+          <div class="own">100% owned</div>
+        </div>
+        <ul class="kids">
+          <li>
+            <div class="node sub">
+              <div class="name">Meridian Trucking Midwest&nbsp;LLC</div>
+              <div class="line">Illinois, USA · Regional trucking</div>
+              <div class="own">100% · effective 100%</div>
+            </div>
+          </li>
+          <li>
+            <div class="node sub partial">
+              <div class="name">Meridian Last Mile&nbsp;LLC</div>
+              <div class="line">Illinois, USA · Final-mile delivery</div>
+              <div class="own">80% · effective 80%</div>
+            </div>
+          </li>
+        </ul>
+      </li>
+
+      <li>
+        <div class="node">
+          <div class="name">Meridian Air Cargo,&nbsp;Inc.</div>
+          <div class="line">Delaware, USA · Air freight</div>
+          <div class="own">100% owned</div>
+        </div>
+        <ul class="kids">
+          <li>
+            <div class="node sub">
+              <div class="name">Meridian Air Cargo Canada&nbsp;ULC</div>
+              <div class="line">Ontario, Canada · Cross-border air freight</div>
+              <div class="own">100% · effective 100%</div>
+            </div>
+          </li>
+          <li>
+            <div class="node sub">
+              <div class="name">Meridian Charter Services&nbsp;LLC</div>
+              <div class="line">Florida, USA · Charter &amp; wet lease</div>
+              <div class="own">100% · effective 100%</div>
+            </div>
+          </li>
+        </ul>
+      </li>
+
+      <li>
+        <div class="node">
+          <div class="name">Meridian Logistics Europe&nbsp;B.V.</div>
+          <div class="line">Amsterdam, Netherlands · EU distribution</div>
+          <div class="own">100% owned</div>
+        </div>
+        <ul class="kids">
+          <li>
+            <div class="node sub">
+              <div class="name">Meridian Logistics Deutschland&nbsp;GmbH</div>
+              <div class="line">Hamburg, Germany · Warehousing</div>
+              <div class="own">100% · effective 100%</div>
+            </div>
+          </li>
+          <li>
+            <div class="node sub partial">
+              <div class="name">Meridian Logistics France&nbsp;SAS</div>
+              <div class="line">Lyon, France · Warehousing</div>
+              <div class="own">95% · effective 95%</div>
+            </div>
+          </li>
+        </ul>
+      </li>
+
+      <li>
+        <div class="node partial">
+          <div class="name">Meridian Port Services&nbsp;LLC</div>
+          <div class="line">Texas, USA · Port terminal joint venture</div>
+          <div class="own">74% owned · 26% non-controlling</div>
+        </div>
+        <ul class="kids">
+          <li>
+            <div class="node sub partial">
+              <div class="name">Gulf Terminal Operations&nbsp;LLC</div>
+              <div class="line">Texas, USA · Terminal handling</div>
+              <div class="own">100% · effective 74%</div>
+            </div>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <div class="h">Notes</div>
+    <ol>
+      <li>Only Meridian Global Holdings, Inc. is listed. All eleven subsidiaries are privately held and consolidate into the registrant's financial statements; none has securities registered on any exchange.</li>
+      <li>Percentages on level-three companies are the direct holding of their immediate parent; "effective" is the share reaching the listed parent through the chain. Gulf Terminal Operations LLC is wholly owned by Meridian Port Services LLC, which is itself 74% owned — so 74% reaches the group.</li>
+      <li>Meridian Port Services LLC is consolidated notwithstanding the 26% non-controlling interest held by an unrelated port authority.</li>
+      <li>Dashed outline denotes an entity in which part of the equity is held outside the group.</li>
+      <li>Dormant entities and branch registrations are excluded. No entity was acquired or disposed of during the period.</li>
+    </ol>
+  </div>
+
+  <div class="footer">
+    <span>Meridian Global Holdings, Inc. — Legal entity structure chart</span>
+    <span>Confidential — prepared for external audit</span>
+  </div>
+
+</body>
+</html>
