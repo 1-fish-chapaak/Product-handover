@@ -328,6 +328,29 @@ export const letterheadLine = (parts: string[]): string => {
   }
   return kept.join(' · ');
 };
+/** Page counter shapes, the giveaway that a line was lifted off their pages
+ *  rather than typed: the same strip reads "Page 2" on one page and "Page 3" on
+ *  the next, and the page number is already its own setting. */
+const PAGE_COUNTER = /\bpages?\s*\d+\b|\b\d+\s*of\s*\d+\b/i;
+/** Whether a stored letterhead line is one WE joined out of a read, rather than
+ *  one the user typed. Length alone cannot tell them apart: a long footer
+ *  somebody wrote by hand is theirs and must be left exactly as written. A raw
+ *  join always carries the marks of the page strip it came from — several parts
+ *  separated by the join character, and either the same part more than once or
+ *  a page counter. Nothing else is rewritten. */
+export const looksLikeCapturedLetterhead = (text: string): boolean => {
+  if (text.length <= LETTERHEAD_SOFT_MAX) return false;
+  const parts = text.split(/\s*·\s*/).map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return false;
+  const seen = new Set<string>();
+  for (const part of parts) {
+    if (PAGE_COUNTER.test(part)) return true;
+    const key = part.toLowerCase();
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+};
 export const DEFAULT_TEMPLATE_BRAND = 'Irame';
 /* No platform letterhead line. A template prints the confidentiality line a
  * read of the client's own report captured, and nothing at all otherwise: the
