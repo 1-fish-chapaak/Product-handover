@@ -686,6 +686,10 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
   scaleMap?: ScaleMap;
   /** Free-form tags for findability once the library grows (§9). */
   tags?: string[];
+  /** The engagement this template was built for, set once after creation.
+   *  Informational only — it labels the template, it does not restrict who
+   *  can use it or hide it from any other engagement's reports. */
+  engagementId?: string;
 };
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };

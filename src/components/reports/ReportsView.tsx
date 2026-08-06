@@ -28,6 +28,8 @@ import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
+import AssignEngagementModal from './AssignEngagementModal';
+import { findEngagement } from '../../data/engagements';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   reportKind, startReportDownload,
@@ -318,6 +320,10 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Offered once, right after a brand-new template saves — never on edit, and
+  // never blocking the save itself. Purely a label; skipping leaves the
+  // template exactly as usable as one that was never offered this.
+  const [assignEngagementFor, setAssignEngagementFor] = useState<EditableTemplate | null>(null);
   // Inline rename from the template list — no need to open the full editor just to
   // change a name. `renamingId` marks the row in edit mode; the draft commits on
   // Enter/blur, reverts on Escape, and is guarded against blank / duplicate names.
@@ -1426,6 +1432,11 @@ export default function ReportsView({
                   <h3 onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
                 )}
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
+                {isCustom && (rt as EditableTemplate).engagementId && (
+                  <p className="mt-1 text-[0.6875rem] text-ink-400 truncate">
+                    Engagement: {findEngagement((rt as EditableTemplate).engagementId!)?.name ?? 'Unknown'}
+                  </p>
+                )}
                 {isCustom && ((rt as EditableTemplate).tags?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap items-center gap-1 mt-2">
                     {(rt as EditableTemplate).tags!.slice(0, 3).map(tag => (
@@ -1498,7 +1509,12 @@ export default function ReportsView({
                       <span onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
                     )}
                   </div>
-                  <p className="text-[0.75rem] text-ink-400 truncate leading-snug">{rt.desc}</p>
+                  <p className="text-[0.75rem] text-ink-400 truncate leading-snug">
+                    {rt.desc}
+                    {isCustom && (rt as EditableTemplate).engagementId && (
+                      <> · {findEngagement((rt as EditableTemplate).engagementId!)?.name ?? 'Unknown engagement'}</>
+                    )}
+                  </p>
                 </div>
                 {/* Meta + actions — always visible (no hover fade). */}
                 <div className="shrink-0 flex items-center gap-3">
@@ -1666,7 +1682,7 @@ export default function ReportsView({
             // editor so the still-mounted wizard reappears with its selections.
             onClose={() => { setEditingTemplate(null); }}
             onCancel={() => { setEditingTemplate(null); }}
-            onSaveNew={(created) => addCustomTemplate(created)}
+            onSaveNew={(created) => { addCustomTemplate(created); setAssignEngagementFor(created); }}
             onSaveEdit={(updated) => updateCustomTemplate(updated)}
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
             existingStructures={customTemplates
@@ -1676,6 +1692,23 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
+      {/* Tag-to-engagement offer — shown once, right after a brand-new
+          template saves. Assigning updates the template that already exists
+          in Custom Templates; skipping just closes, no different from not
+          being asked. */}
+      <AnimatePresence>
+        {assignEngagementFor && (
+          <AssignEngagementModal
+            templateName={assignEngagementFor.name}
+            onAssign={(engagementId) => {
+              updateCustomTemplate({ ...assignEngagementFor, engagementId });
+              setAssignEngagementFor(null);
+              addToast({ type: 'success', message: `Tagged to ${findEngagement(engagementId)?.name ?? 'the engagement'}.` });
+            }}
+            onSkip={() => setAssignEngagementFor(null)}
+          />
+        )}
+      </AnimatePresence>
 
 
       {/* Generate ATR from Observations — opened by the ATR template "Generate".

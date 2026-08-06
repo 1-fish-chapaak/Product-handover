@@ -37,20 +37,24 @@ import { RowDeleteButton } from './RowDeleteButton';
 import { renderSectionShape, sectionTypeLabel, type ShapeFill } from './templateSectionShape';
 import { reviewChrome, belowTheReadFloor, type CanvasSection, type CanvasBlock } from './sectionReviewShared';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { ENGAGEMENTS, PROCESS_COLORS, findEngagement } from '../../data/engagements';
 
 // Soft length guide for letterhead header/footer text — past this the counter
 // turns amber and a hint warns about truncation, but saving is never blocked.
 
-/** The check screen, in the order a client actually approves a format: what it
- *  looks like (and closes with), then what is in it. Three steps used to split
- *  this — look, content, sign-off — but look and sign-off are both a glance and
- *  a few toggles, not work, so they read as one job. Content is the only one
- *  that takes real attention, and it now gets a step to itself instead of
- *  sharing top billing with two quick confirmations. */
-type ReviewStep = 'look' | 'content';
+/** The check screen, in the order a client actually approves a format: the
+ *  file they handed over, what is in it, then what it looks like and closes
+ *  with. Upload is the read itself, already done by the time this screen
+ *  opens, so it shows here as a passed step rather than a re-run. Content is
+ *  the one that takes real attention. Preview — cover, letterhead, rating
+ *  words, sign-off, watermark — is a glance and a few toggles, and it goes
+ *  last: you approve the finished thing, not a promise of it, and "Use this
+ *  format" belongs on the step that shows the whole format. */
+type ReviewStep = 'upload' | 'content' | 'preview';
 const REVIEW_STEPS: { key: ReviewStep; label: string }[] = [
-  { key: 'look', label: 'Look' },
+  { key: 'upload', label: 'Upload' },
   { key: 'content', label: 'Content' },
+  { key: 'preview', label: 'Preview' },
 ];
 // Hard cap on the template name — mirrors the letterhead 60-char counter, but
 // enforced (a name this long overflows the cover and the picker rows).
@@ -610,6 +614,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // generate in it. Off unless their own report had one.
   const [closingEnabled, setClosingEnabled] = useState(template.closingEnabled ?? false);
   const [closingText, setClosingText] = useState<string[]>(template.closingText ?? []);
+  // Which engagement this template was built for. Informational only: it
+  // labels the template, nothing reads it to filter or restrict anything.
+  const [engagementId, setEngagementId] = useState(template.engagementId ?? '');
+  const [showEngagement, setShowEngagement] = useState(false);
+  const [engagementQuery, setEngagementQuery] = useState('');
   const toggleClosing = (on: boolean) => {
     setClosingEnabled(on);
     if (on && closingText.length === 0) setClosingText(['Thank you']);
@@ -651,11 +660,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // seeing sits behind a chevron. The chevron stays, for tidying away.
   const [showPageSetup, setShowPageSetup] = useState(true);
   const [showCoverLook, setShowCoverLook] = useState(true);
-  // The check screen runs in two steps: what the report LOOKS like and closes
-  // with (brand, letterhead, colours, rating words, sign-off, watermark) and
-  // then what is IN it (the sections). Confirming a look and confirming an
-  // outline are two different jobs, and one screen carrying both read as a wall.
-  const [reviewStep, setReviewStep] = useState<ReviewStep>('look');
+  // The check screen opens on Content — Upload is already behind it the
+  // moment this state exists, so it never actually sits on 'upload' itself;
+  // that key only drives the passed-step pill. What is IN the report (the
+  // sections) and what it LOOKS like and closes with (brand, letterhead,
+  // colours, rating words, sign-off, watermark) are two different jobs, so
+  // they stay two steps, content first because it is the one that takes work.
+  const [reviewStep, setReviewStep] = useState<ReviewStep>('content');
   // A new template opens on the question that actually matters first: do you
   // already have a report that looks the way you want, or are you building one?
   // Uploading one is the shorter road by a mile, so it leads. Editing an
@@ -964,7 +975,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // until it is confirmed beside the pages of the real document.
     setReviewSections(detected);
     setReviewBaseline(detected);
-    setReviewStep('look');
+    setReviewStep('content');
     setPendingImport({ fileName: file.name, kind, result });
 
     // Headings with nothing beneath them aren't turned into sections, but they
@@ -1369,6 +1380,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           closingEnabled,
           closingText: cleanClosing,
           logoDataUrl: logoDataUrl || undefined,
+          engagementId: engagementId || undefined,
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
@@ -1404,6 +1416,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             closingEnabled,
             closingText: cleanClosing,
             logoDataUrl: logoDataUrl || undefined,
+            engagementId: engagementId || undefined,
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
@@ -1684,6 +1697,52 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       </button>
                     )}
                   </div>
+              </SettingsFold>
+
+              {/* Purely a label. Nothing downstream reads it to restrict or
+                  filter who can use this template — it just answers "which
+                  engagement was this built for" wherever the template is
+                  listed. Closed by default: most templates are not tagged. */}
+              <SettingsFold
+                title="Engagement"
+                summary={engagementId ? (findEngagement(engagementId)?.name ?? 'Not tagged') : 'Not tagged'}
+                open={showEngagement}
+                onToggle={() => setShowEngagement(v => !v)}
+              >
+                <GroupEyebrow hint="which engagement this template was built for">Tag</GroupEyebrow>
+                {engagementId ? (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-white px-3 py-2">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: findEngagement(engagementId) ? PROCESS_COLORS[findEngagement(engagementId)!.process] : undefined }} />
+                    <span className="flex-1 min-w-0 text-[0.75rem] font-medium text-ink-700 truncate">{findEngagement(engagementId)?.name ?? 'Unknown engagement'}</span>
+                    <button type="button" onClick={() => setEngagementId('')} className="shrink-0 text-[0.6875rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Clear</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={engagementQuery}
+                      onChange={e => setEngagementQuery(e.target.value)}
+                      placeholder="Search engagements…"
+                      className="w-full h-9 px-3 rounded-lg border border-canvas-border text-[0.75rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                    />
+                    <div className="mt-2 max-h-[180px] overflow-y-auto rounded-lg border border-canvas-border">
+                      {ENGAGEMENTS.filter(e => {
+                        const q = engagementQuery.trim().toLowerCase();
+                        return !q || e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q);
+                      }).map(e => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => { setEngagementId(e.id); setEngagementQuery(''); }}
+                          className="flex w-full items-center gap-2 border-b border-canvas-border px-2.5 py-2 text-left transition-colors last:border-b-0 hover:bg-brand-50/50 cursor-pointer"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: PROCESS_COLORS[e.process] }} />
+                          <span className="min-w-0 flex-1 truncate text-[0.75rem] text-ink-800">{e.name}</span>
+                          <span className="shrink-0 font-mono text-[0.625rem] text-ink-400">{e.code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </SettingsFold>
 
               {/* Set up once, then left alone: a second visit is here to change a
@@ -2455,7 +2514,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           so the job here is verify, not decide. */}
                       <>
                         <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-500">
-                          {reviewStep === 'look'
+                          {reviewStep === 'preview'
                             ? <>The cover, the letterhead and the words your report grades in, plus how every report signs off and closes.</>
                             : <>We kept {kept.length} {kept.length === 1 ? partWord : `${partWord}s`} we can fill from your audit results. Confirm, rename, reorder or untick them.
                                 {dropped.length > 0 && <> The rest of your report is not included, and it is listed at the end with the reason.</>}</>}
@@ -2482,17 +2541,23 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           const at = REVIEW_STEPS.findIndex(x => x.key === reviewStep);
                           const here = i === at;
                           const done = i < at;
+                          // Upload already happened — the read that produced
+                          // everything on this screen — so it always shows
+                          // passed and is never a button to click back into;
+                          // there's nothing to re-run and no body to land on.
+                          const clickable = done && st.key !== 'upload';
                           return (
                             <li key={st.key} className="flex items-center gap-1">
                               {i > 0 && <span aria-hidden="true" className={`h-px w-5 ${done || here ? 'bg-brand-200' : 'bg-canvas-border'}`} />}
                               <button
                                 type="button"
-                                onClick={() => { if (done) setReviewStep(st.key); }}
+                                onClick={() => { if (clickable) setReviewStep(st.key); }}
                                 aria-current={here ? 'step' : undefined}
-                                disabled={!done && !here}
+                                disabled={!clickable && !here}
                                 className={`inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[0.75rem] transition-colors ${
                                   here ? 'bg-brand-50 font-semibold text-brand-700'
-                                    : done ? 'text-ink-500 hover:bg-canvas hover:text-brand-700 cursor-pointer'
+                                    : clickable ? 'text-ink-500 hover:bg-canvas hover:text-brand-700 cursor-pointer'
+                                    : done ? 'text-ink-500'
                                     : 'text-ink-300'
                                 }`}
                               >
@@ -2518,15 +2583,17 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     hand-roll two columns and put our reading of their report
                     on the left instead of their report. */}
                 <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
-                  {reviewStep === 'look' ? (
-                    /* Step one — how the report LOOKS and how it closes. Their
+                  {reviewStep === 'preview' ? (
+                    /* Last step — how the report LOOKS and how it closes. Their
                        own first page on the left; on the right, the cover we'd
                        print, every setting the read captured, and — since
                        agreeing a cover and flipping four closing switches are
                        both a glance, not work — the sign-off/watermark toggles
                        stacked underneath rather than gated behind their own
                        step. Nothing to type up top: the job there is to look
-                       and agree. The toggles are the only real decisions here. */
+                       and agree. The toggles are the only real decisions here,
+                       and "Use this format", the sign-off itself, lives below
+                       once they're set. */
                     <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-0">
                       <section className="flex min-h-0 flex-col border-r border-canvas-border pr-6">
                         <div className="shrink-0 pb-3 flex items-baseline gap-1.5">
@@ -2754,15 +2821,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       whileTap={{ scale: 0.97 }}
                       transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                       onClick={() => {
+                        // Content is the first real step of this screen — Upload
+                        // is already behind it and has no body to land back on —
+                        // so Back only steps within content/preview; from content
+                        // it discards the import instead.
                         const at = REVIEW_STEPS.findIndex(x => x.key === reviewStep);
-                        if (at > 0) setReviewStep(REVIEW_STEPS[at - 1].key);
+                        if (at > 1) setReviewStep(REVIEW_STEPS[at - 1].key);
                         else attemptCancelImport();
                       }}
                       className="inline-flex items-center justify-center h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
                     >
-                      {reviewStep !== 'look' ? 'Back' : importBanner ? 'Cancel' : 'Discard'}
+                      {reviewStep !== 'content' ? 'Back' : importBanner ? 'Cancel' : 'Discard'}
                     </motion.button>
-                    {reviewStep !== 'content' ? (
+                    {reviewStep !== 'preview' ? (
                       <motion.button
                         whileTap={{ scale: 0.97 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
@@ -2778,8 +2849,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <motion.button
                         whileTap={namedCount === 0 ? undefined : { scale: 0.97 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                        // Straight in. The preview is a view on this same screen,
-                        // not a gate on the way to using the format.
+                        // The sign-off itself — this is the last step, showing
+                        // the whole format, so this is where it's used.
                         onClick={applyImport}
                         disabled={namedCount === 0}
                         className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.875rem] font-semibold transition-colors rounded-md enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
