@@ -26,7 +26,7 @@ import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
 import ReportsView from './components/reports/ReportsView';
 import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
-import { LETTERHEAD_SOFT_MAX, letterheadLine } from './components/reports/reportShared';
+import { letterheadLine, looksLikeCapturedLetterhead } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -323,9 +323,11 @@ function AppInner() {
             // are the raw join of every repeating strip: "PwC · Section 1 · PwC
             // · PwC Page 2 · …" at 115 characters against a 60-character line.
             // Run those back through the builder rather than leaving a template
-            // printing them on every report.
+            // printing them on every report. Only lines that carry the marks of
+            // a page strip are touched — a long footer somebody typed is theirs
+            // and prints exactly as they wrote it.
             .map(t => {
-              if (!t.footerText || t.footerText.length <= LETTERHEAD_SOFT_MAX) return t;
+              if (!t.footerText || !looksLikeCapturedLetterhead(t.footerText)) return t;
               return { ...t, footerText: letterheadLine(t.footerText.split(/\s*·\s*/)) };
             });
         }
