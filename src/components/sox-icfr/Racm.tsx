@@ -428,6 +428,10 @@ export default function Racm() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isAuditor = role === 'auditor';
+  // Reviewing rows is the auditor's lane AND only while the engagement is open.
+  // Once it is countersigned the matrix is part of what was signed, so the
+  // approve / withdraw / remark controls go rather than sit there doing nothing.
+  const canReview = isAuditor && !isEngagementLocked(eng);
   const proc = racmProcess ?? eng.controls[0]?.process ?? '';
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -636,7 +640,7 @@ export default function Racm() {
                   <td>{c.reportRef ? <span className="font-mono text-[11px] text-ink-600">{c.reportRef}</span> : <span className="text-ink-300">—</span>}</td>
                   <td><ReviewCell c={c} /></td>
                   <td onClick={e => e.stopPropagation()}>
-                    {isAuditor && (
+                    {canReview && (
                       <span className="inline-flex items-center gap-1">
                         {c.racmReview?.status === 'Approved' ? (
                           <button onClick={() => clearRacmReview(c.id)} title="Withdraw approval" aria-label={`Withdraw approval on ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /></button>
@@ -665,7 +669,7 @@ export default function Racm() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {isAuditor && <button onClick={() => {
+          {canReview && <button onClick={() => {
             const ids = Array.from(sel);
             // approving over an open remark erases it — that never happens silently
             const remarked = ids.filter(id => controls.find(c => c.id === id)?.racmReview?.status === 'Remark').length;

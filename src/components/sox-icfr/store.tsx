@@ -1411,18 +1411,28 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchControl, role, pushExec, raiseDeficiencyIfIneffective]);
 
   // ── RACM row review + bulk testing ────────────────────────────────────────────
+  // Pre-testing review is the auditor's call and only while the engagement is
+  // open — the same two checks every other mutation in this store makes. They
+  // matter more here than most: these rows feed a reported completeness figure,
+  // and a countersigned engagement's matrix must not move under the signature.
   const approveRacmRows = useCallback<IcfrCtx['approveRacmRows']>((controlIds) => {
+    if (role !== 'auditor') return;
     const ids = new Set(controlIds);
-    setEng(prev => ({ ...prev, controls: prev.controls.map(c => ids.has(c.id) ? { ...c, racmReview: { status: 'Approved', by: me, at: 'just now' } as RacmReview } : c) }));
-  }, [me]);
+    setEng(prev => isEngagementLocked(prev) ? prev
+      : { ...prev, controls: prev.controls.map(c => ids.has(c.id) ? { ...c, racmReview: { status: 'Approved', by: me, at: 'just now' } as RacmReview } : c) });
+  }, [me, role]);
 
   const remarkRacmRow = useCallback<IcfrCtx['remarkRacmRow']>((controlId, remark) => {
-    setEng(prev => ({ ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: { status: 'Remark', remark, by: me, at: 'just now' } as RacmReview } : c) }));
-  }, [me]);
+    if (role !== 'auditor') return;
+    setEng(prev => isEngagementLocked(prev) ? prev
+      : { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: { status: 'Remark', remark, by: me, at: 'just now' } as RacmReview } : c) });
+  }, [me, role]);
 
   const clearRacmReview = useCallback<IcfrCtx['clearRacmReview']>((controlId) => {
-    setEng(prev => ({ ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: undefined } : c) }));
-  }, []);
+    if (role !== 'auditor') return;
+    setEng(prev => isEngagementLocked(prev) ? prev
+      : { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: undefined } : c) });
+  }, [role]);
 
   // Bulk test — for each selected control, validate every design consideration and
   // test every operating attribute (an existing Fail / overridden Fail stays Fail),
