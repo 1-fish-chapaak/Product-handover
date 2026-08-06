@@ -1489,6 +1489,63 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
   };
 }
 
+/**
+ * How much of the engagement is FINISHED — the third engagement score.
+ *
+ * Milestone-weighted, because "done" is not one event: a control travels RACM
+ * approval → TOD → TOE → countersign, and an exception raised on the way has to
+ * be closed before the control is off the table. Each control is worth exactly
+ * 1.0, split across those five, and the engagement reads the average.
+ *
+ * Weights sum to 1.0 per control, so `Σ credits ÷ control count` is the same
+ * number as `Σ credits ÷ Σ maximum credits` — the control is the denominator
+ * because every milestone above is an event ON a control. Nothing here is done
+ * to a process or an entity directly.
+ *
+ * COMPLETENESS IS NOT EFFECTIVENESS. A control that concluded ineffective is
+ * finished work, so every milestone credits on conclusion, whichever way it
+ * went. An engagement can read 100% and still conclude ICFR not effective.
+ */
+const MILESTONE = { racm: 0.10, tod: 0.25, toe: 0.30, countersign: 0.25, exceptions: 0.10 } as const;
+
+export function engagementCompleteness(eng: IcfrEngagement, controls?: Control[]) {
+  const cs = controls ?? eng.controls;
+  let credits = 0;
+  let fullyDone = 0;
+  let blocked = 0;
+  let keyNotStarted = 0;
+  cs.forEach(c => {
+    // A short-form automated control has no operating track to conclude, so its
+    // TOE weight moves to design rather than leaving it unable to reach 1.0.
+    // Dropping it from the denominator instead would make the score move every
+    // time an ITGC conclusion changed, which is not progress.
+    const shortForm = !operatingApplies(eng, c);
+    let n = 0;
+    if (c.racmReview?.status === 'Approved') n += MILESTONE.racm;
+    if (trackResult(c.design) !== 'Not tested') n += MILESTONE.tod + (shortForm ? MILESTONE.toe : 0);
+    if (!shortForm && trackResult(c.operating) !== 'Not tested') n += MILESTONE.toe;
+    if (isControlLockedIn(eng, c) && !!c.wpSignoff?.reviewer) n += MILESTONE.countersign;
+    if (!eng.deficiencies.some(d => d.controlId === c.id && d.status !== 'Closed')) n += MILESTONE.exceptions;
+    credits += n;
+    if (n >= 1) fullyDone += 1;
+    else {
+      // Blocked = the work cannot move without somebody else — testing recorded
+      // as unable to proceed, or the baton sitting in the owner's court.
+      const u = c.unableToTest;
+      if ((u && !u.resolvedAt && !u.convertedTo) || courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner') blocked += 1;
+      if (c.isKey && !designStarted(c) && !operatingStarted(c)) keyNotStarted += 1;
+    }
+  });
+  return {
+    total: cs.length,
+    credits,
+    fullyDone,
+    blocked,
+    keyNotStarted,
+    pct: cs.length ? Math.round((credits / cs.length) * 100) : 0,
+  };
+}
+
 export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
 }
