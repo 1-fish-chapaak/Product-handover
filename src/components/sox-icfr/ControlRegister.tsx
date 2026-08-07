@@ -9,10 +9,10 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import {
-  conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, isAwaitingReview, isControlFinal, isEngagementLocked, openDiscussionCount,
+  conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
-import { ConclusionPill, NatureChip, Th, Tickmark } from './parts';
+import { ConclusionPill, ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
@@ -22,7 +22,7 @@ import { isOwnerOf, ownersOf } from './auditScope';
 import type { Conclusion, Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
-  | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key';
+  | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key' | 'itgc';
 const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'due', label: 'Due now' },
@@ -38,6 +38,11 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'open', label: 'Not concluded' },
   { id: 'papers', label: 'Awaiting sign-off' },
   { id: 'key', label: 'Key' },
+  // Conditional (user ask): only in the list while an ITGC has actually failed.
+  // Every other view answers a question you can ask any day; this one answers a
+  // question that only exists after something broke, and an always-present chip
+  // reading "(0)" would teach people to ignore it.
+  { id: 'itgc', label: 'Test-of-one withdrawn' },
 ];
 
 // binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
@@ -147,9 +152,14 @@ export default function ControlRegister() {
   // The register shows what the OPEN audit covers — its entities' processes.
   const auditScoped = useAuditControls(eng.controls);
   // Classic engagements still say Exceptions; the rework renamed them.
+  // The ITGC cascade — computed once here because three things read it: the
+  // banner, the conditional saved view, and the view's own count.
+  const failedItgc = useMemo(() => failedItgcs(eng), [eng]);
   const viewOptions = useMemo(
-    () => VIEWS.map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
-    [eng.id],
+    () => VIEWS
+      .filter(v => v.id !== 'itgc' || failedItgc.length > 0)
+      .map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
+    [eng.id, failedItgc.length],
   );
   // preview-before-download for the consolidated working paper, and for the audit
   // report — the deliverable the paper isn't. Same modal, same block format.
@@ -217,6 +227,10 @@ export default function ControlRegister() {
     if (v === 'open') return conclusionOf(eng, c) === 'In progress';
     if (v === 'papers') return conclusionOf(eng, c) !== 'In progress' && !isControlFinal(c);
     if (v === 'key') return c.isKey;
+    // The controls the cascade landed on — automated and IT-dependent, and only
+    // while an ITGC is actually down. isItgcDependent alone would list them all
+    // the time, which is not what the banner is pointing at.
+    if (v === 'itgc') return isItgcDependent(c) && failedItgc.length > 0;
     return true;
   };
   // search + process + nature first — the Status dropdown's counts read from this base
@@ -334,6 +348,22 @@ export default function ControlRegister() {
           </div>
         ))}
       </div>
+
+      {/* The cascade, where the affected controls are listed — above the list
+          because it changes what the list means, and it sets the filter rather
+          than describing it. Not to the risk owner: how the audit sizes its
+          samples is the auditor's method, and the owner meets it as data
+          requests. Same gate as the notice on the control page. */}
+      {role !== 'risk-owner' && failedItgc.length > 0 && (
+        <div className="mb-4">
+          <ItgcCascadeBanner
+            failed={failedItgc.map(f => ({ id: f.id, code: controlCode(f), description: f.description }))}
+            affected={scoped.filter(isItgcDependent).length}
+            onOpenControl={openControl}
+            onShowAffected={savedView === 'itgc' ? undefined : () => setSavedView('itgc')}
+          />
+        </div>
+      )}
 
       {/* register body — table (default) or cards */}
       {layout === 'cards' ? (

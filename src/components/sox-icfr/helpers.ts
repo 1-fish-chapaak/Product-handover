@@ -970,11 +970,19 @@ const RATING_NOTE: Record<RiskRating, string> = {
 };
 export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
   if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
-  if (c.nature === 'Automated' && !itgcHolds) return { suggested: 25, range: '25–60', note: 'ITGC failure in force — test of one is invalid; size like a manual control.' };
+  // Everything below this line is the manual path — and an automated control
+  // whose ITGCs have failed takes it. "Sized like a manual control" has to mean
+  // sized like a manual control OF THIS FREQUENCY AND RATING, not a flat number:
+  // a quarterly control does not become a daily one because an ITGC broke.
   const band = SIZE_BANDS[c.frequency];
   const rating = c.riskRating;
   const suggested = rating === 'High' ? band.high : rating === 'Low' ? band.low : band.mid;
-  return { suggested, range: band.range, note: rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note };
+  const sized = rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note;
+  return {
+    suggested,
+    range: band.range,
+    note: c.nature === 'Automated' ? `ITGC failure in force — test of one is invalid; sized like a manual control. ${sized}` : sized,
+  };
 }
 
 // ─── Identity ────────────────────────────────────────────────────────────────────

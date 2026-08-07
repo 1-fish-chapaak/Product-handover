@@ -365,7 +365,11 @@ const PAGE_COUNTER = /\bpages?\s*\d+\b|\b\d+\s*of\s*\d+\b/i;
  *  somebody wrote by hand is theirs and must be left exactly as written. A raw
  *  join always carries the marks of the page strip it came from — several parts
  *  separated by a join character, and either the same part more than once or a
- *  page counter. Nothing else is rewritten. */
+ *  page counter. Nothing else is rewritten.
+ *
+ *  Splits through splitLetterhead rather than on the middot alone: their pages
+ *  join the strip with a pipe or a spaced dash just as often, and a line joined
+ *  that way is just as captured. */
 export const looksLikeCapturedLetterhead = (text: string): boolean => {
   if (text.length <= LETTERHEAD_SOFT_MAX) return false;
   const parts = splitLetterhead(text);
