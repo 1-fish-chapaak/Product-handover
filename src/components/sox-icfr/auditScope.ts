@@ -3,6 +3,7 @@ import {
   type GroupEntity, type SoxProgramme, type TbCaption, entityShort,
 } from '../audit/sox-testing/soxTestingData';
 import { CAPTIONS as V2C_CAPTIONS, V2C_PEOPLE, V2C_PROGRAMMES, type V2cPerson } from '../audit/sox-testing/v2/v2ClassicStore';
+import { findEngagement } from '../../data/engagements';
 import type { AuditRecord, Control } from './types';
 
 /**
@@ -249,9 +250,22 @@ export function auditCovers(a: AuditRecord, c: Control, engagementId: string): b
   return !procs || procs.includes(normaliseProcess(c.process));
 }
 
-/** The processes an engagement has RACMs for, as the programme derived them. */
+/**
+ * Every process an engagement has a RACM for — the ones the trial balances
+ * derived, and the ones that were declared beyond them.
+ *
+ * The engagement record's `soxProcesses` is the authority, not the programme's
+ * `racms`: a group-level workstream (ITGC, the close, consolidation) is scoped
+ * without a trial-balance caption, so it has controls and a matrix but no
+ * derived RACM to be found in. Reading only `racms` left ITGC off the New audit
+ * wizard's scope step and off an audit's own "What this audit covers" picker —
+ * so touching either would have quietly dropped the whole workstream out of the
+ * audit while its controls sat in the register.
+ */
 export function processesFor(engagementId: string): string[] {
-  return programmeFor(engagementId)?.racms.map(r => r.process) ?? [];
+  const derived = programmeFor(engagementId)?.racms.map(r => r.process) ?? [];
+  const declared = findEngagement(engagementId)?.soxProcesses ?? [];
+  return Array.from(new Set([...derived, ...declared]));
 }
 
 /** Trial-balance captions name processes slightly differently from the control

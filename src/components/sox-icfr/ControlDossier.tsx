@@ -38,7 +38,7 @@ import { cn } from '../../lib/cn';
 import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
-  AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, OperatingStep,
+  AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
   AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
@@ -499,6 +499,17 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 const VALIDATE_MS = 6000;
+
+/** A picked file's extension, read as one of the four evidence kinds the model
+ *  knows. Same mapping the store uses when a file arrives by any other door. */
+function evidenceKindOf(name: string): EvidenceFile['kind'] {
+  const n = name.toLowerCase();
+  if (n.endsWith('.csv')) return 'CSV';
+  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return 'XLSX';
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'IMG';
+  return 'PDF';
+}
+
 function PointRow({ control, point, canEdit }: { control: Control; point: DesignPoint; canEdit: boolean }) {
   const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
   const [over, setOver] = useState(false);
@@ -506,6 +517,12 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
   const [showQA, setShowQA] = useState(false);
   const [linking, setLinking] = useState(false);
   const [proving, setProving] = useState(false);
+  // The attach form's draft — what the auditor did, the file itself, and why it
+  // was attached. Held here until Submit, so a half-filled form writes nothing.
+  const [proofKind, setProofKind] = useState<AuditorProofKind>(AUDITOR_PROOF_KINDS[0]);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofNote, setProofNote] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const eff = pointResult(point);
   const runValidate = () => { setValidating(true); window.setTimeout(() => { validateDesignPoint(control.id, point.id); setValidating(false); }, VALIDATE_MS); };
 
@@ -513,12 +530,15 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
   // cached — an element that was removed must stop being cited, not linger as a
   // reference to a document nobody can open.
   const linked = control.design.documents.filter(d => point.evidencedBy?.includes(d.id));
-  const attach = (kind: AuditorProofKind) => {
+  const closeProof = () => { setProving(false); setProofFile(null); setProofNote(''); setProofKind(AUDITOR_PROOF_KINDS[0]); setDragOver(false); };
+  const submitProof = () => {
+    if (!proofFile) return;
     setDesignPointProof(control.id, point.id, {
-      kind,
-      file: { id: `ap-${point.id}`, name: `${kind.replace(/[^A-Za-z0-9]+/g, '_')}_${control.id}.pdf`, kind: 'PDF', uploadedBy: me, uploadedAt: 'just now' },
+      kind: proofKind,
+      file: { id: `ap-${point.id}`, name: proofFile.name, kind: evidenceKindOf(proofFile.name), uploadedBy: me, uploadedAt: 'just now' },
+      note: proofNote.trim() || undefined,
     });
-    setProving(false);
+    closeProof();
   };
 
   return (
@@ -554,13 +574,20 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
               <span className="text-ink-400 shrink-0">Auditor's proof</span>
               {point.auditorProof ? (
                 <span className="inline-flex items-center gap-1 rounded-md border border-evidence-200 bg-evidence-50/50 px-1.5 py-0.5 text-evidence-700" title={point.auditorProof.file.name}>
-                  <Paperclip size={9} /> {point.auditorProof.kind}
+                  <Paperclip size={9} /> {point.auditorProof.kind} · <span className="font-medium text-evidence-600 max-w-[16rem] truncate">{point.auditorProof.file.name}</span>
                 </span>
               ) : <span className="text-ink-300">none — taken on the documents</span>}
               {canEdit && (point.auditorProof
                 ? <button onClick={() => setDesignPointProof(control.id, point.id, null)} className="text-ink-400 font-semibold hover:text-risk-600 hover:underline cursor-pointer">Remove</button>
                 : <button onClick={() => setProving(p => !p)} className="text-brand-600 font-semibold hover:underline cursor-pointer">Attach your own</button>)}
             </div>
+
+            {/* the comment the auditor left with it — the finding, not the filename */}
+            {point.auditorProof?.note && (
+              <div className="flex items-start gap-1 text-[0.6875rem] text-ink-500 leading-relaxed">
+                <CornerDownRight size={11} className="mt-0.5 shrink-0 text-ink-300" /> {point.auditorProof.note}
+              </div>
+            )}
           </div>
 
           {/* pick from what is already on this control — never an upload box */}
@@ -587,23 +614,98 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
             </div>
           )}
 
+          {/* ── attach your own proof ────────────────────────────────────────────
+              Three answers, in the order the work happened: what the auditor did,
+              the file it produced, and what it showed. The file is picked off this
+              machine rather than minted for them, and nothing is written until
+              Submit — so a form abandoned half-way leaves the check as it was. */}
           {proving && canEdit && (
-            <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5">
-              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What did you do on this check?</span>
-              <div className="flex flex-wrap gap-1.5">
-                {AUDITOR_PROOF_KINDS.map(k => (
-                  <button key={k} onClick={() => attach(k)} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-700 hover:border-evidence-300 hover:text-evidence-700 transition-colors cursor-pointer">{k}</button>
-                ))}
+            <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5 space-y-2.5">
+              <div>
+                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What did you do on this check?</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {AUDITOR_PROOF_KINDS.map(k => (
+                    <button key={k} onClick={() => setProofKind(k)}
+                      className={cn('h-7 px-2.5 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer',
+                        proofKind === k ? 'bg-evidence-50 border-evidence-300 text-evidence-700' : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-evidence-300 hover:text-evidence-700')}>
+                      {proofKind === k && <Check size={10} className="inline -mt-0.5 mr-1" />}{k}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="text-[0.625rem] text-ink-400 mt-2">This is what the conclusion's basis is read from — nobody types the basis.</p>
+
+              <div>
+                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">The file</span>
+                {proofFile ? (
+                  <div className="flex items-center gap-2 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
+                    <span className="w-6 h-6 rounded inline-flex items-center justify-center bg-evidence-50 text-evidence-700 shrink-0"><FileText size={11} /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.71875rem] font-semibold text-ink-800 truncate" title={proofFile.name}>{proofFile.name}</p>
+                      <p className="text-[0.625rem] text-ink-400">{evidenceKindOf(proofFile.name)} · {Math.max(1, Math.round(proofFile.size / 1024)).toLocaleString()} KB</p>
+                    </div>
+                    <button onClick={() => setProofFile(null)} title="Choose a different file"
+                      className="h-6 w-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-600 cursor-pointer"><X size={12} /></button>
+                  </div>
+                ) : (
+                  <label
+                    onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setProofFile(f); }}
+                    className={cn('block cursor-pointer rounded-md border border-dashed px-3 py-4 text-center transition-colors',
+                      dragOver ? 'border-brand-400 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30')}>
+                    <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx" className="sr-only"
+                      aria-label="Choose the file that proves this check"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) setProofFile(f); e.target.value = ''; }} />
+                    <Upload size={14} className="mx-auto text-ink-400 mb-1" />
+                    <p className="text-[0.6875rem] font-semibold text-ink-700 leading-tight">Drop a file, or click to browse</p>
+                    <p className="text-[0.625rem] text-ink-400 mt-0.5">PDF, image, XLSX, CSV or Word</p>
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why you attached it</span>
+                <textarea value={proofNote} onChange={e => setProofNote(e.target.value)} rows={2}
+                  placeholder="e.g. Reperformed the 14 May payment run — both authorisers were distinct from the preparer."
+                  className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-[0.625rem] text-ink-400">This is what the conclusion's basis is read from — nobody types the basis.</p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={closeProof} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button disabled={!proofFile} onClick={submitProof}
+                    title={proofFile ? 'Attach this file to the check' : 'Choose a file first'}
+                    className="h-7 px-3 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Submit</button>
+                </div>
+              </div>
             </div>
           )}
         </div>
         {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
             {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
-            <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button>
-            <button onClick={() => setOver(o => !o)} title="Override" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
+            {/* PARKED (Aug 2026, user ask) — the workflow Validate / Re-run button.
+                The tester states the result themselves now, with the two buttons
+                below. `runValidate` and the `validating` machinery are left in
+                place above, so putting this back is one line:
+                <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
+            <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
+              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
+                eff === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700')}>
+              <Check size={13} />
+            </button>
+            <button onClick={() => setDesignPoint(control.id, point.id, 'Fail')} title="Mark this check failed" aria-label="Mark this check failed"
+              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
+                eff === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700')}>
+              <X size={13} />
+            </button>
+            {/* PARKED (Aug 2026, user ask) — the override pencil. It existed to
+                contradict a workflow's verdict; with Pass / Fail set by hand there
+                is nothing left to contradict. The `over` state and the
+                RationaleForm below stay put, so this goes back as one line:
+                <button onClick={() => setOver(o => !o)} title="Override" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button> */}
             <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
           </div>
         )}
@@ -1014,7 +1116,7 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, validateDesignPoint } = useIcfr();
+  const { role, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1033,6 +1135,12 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const [customName, setCustomName] = useState('');
   const [customDesc, setCustomDesc] = useState('');
   const runValidateAll = () => { setValidatingAll(true); logEvent({ action: 'Run', description: `Validated all design considerations for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
+  // Every check at once, the same call the row buttons make one at a time — so
+  // the trail reads identically whether they were marked together or singly.
+  const markAll = (result: TestResult) => {
+    logEvent({ action: 'Update', description: `Marked every design consideration ${result.toLowerCase()} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
+    control.design.points.forEach(p => setDesignPoint(control.id, p.id, result));
+  };
   const attach = (doc: DesignDoc) => {
     setAttaching(doc.id);
     const label = docLabel(doc);
@@ -1209,9 +1317,17 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
             </div>
           )}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· AI-validated against the evidence</span></h4>
+            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span></h4>
             <div className="flex items-center gap-2">
-              {canEdit && d.points.length > 0 && <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button>}
+              {/* PARKED (Aug 2026, user ask) — the Validate all button. `runValidateAll`
+                  and `validatingAll` are left above so restoring it is one line:
+                  <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button> */}
+              {canEdit && d.points.length > 0 && (<>
+                <button onClick={() => markAll('Pass')} title="Mark every check passed"
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.71875rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
+                <button onClick={() => markAll('Fail')} title="Mark every check failed"
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button>
+              </>)}
               {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
             </div>
           </div>

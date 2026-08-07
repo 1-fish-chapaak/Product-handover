@@ -1759,6 +1759,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
   }, [role]);
+  /**
+   * Bring the register into line with a new scope: drop the processes that left
+   * it, seed shells for the ones that joined.
+   *
+   * Everything a control carries has to leave WITH it. Seven record types point
+   * at a control id, and dropping the control while leaving them behind is worse
+   * than the deletion itself: Deficiency management shows a finding whose control
+   * cannot be opened, the reviewer queue holds a note nobody can answer, and the
+   * Dashboard counts work against controls that are not in the audit. That is not
+   * a scope change, it is a broken screen.
+   *
+   * What deliberately does NOT get pruned: an audit's `archive`. A prior-year
+   * snapshot is a record of what was concluded then, and this cycle's scope has
+   * no business editing it.
+   */
   const reconcileScope = useCallback<IcfrCtx['reconcileScope']>((processes) => {
     setEng(prev => {
       const want = new Set(processes);
@@ -1770,7 +1785,27 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // rather than assumed, so a group audit doesn't get the wrong one.
       const entity = kept[0]?.entity ?? prev.controls[0]?.entity ?? prev.entity;
       const fresh = racmTemplateForProcesses(missing, 'fresh').map(c => (entity ? { ...c, entity } : c));
-      return { ...prev, controls: missing.length ? [...kept, ...fresh] : kept };
+      const controls = missing.length ? [...kept, ...fresh] : kept;
+      // Nothing left the register, so there is nothing to clean up after it.
+      if (kept.length === prev.controls.length) return { ...prev, controls };
+      const live = new Set(controls.map(c => c.id));
+      const runs = prev.runs
+        .map(r => ({ ...r, controls: r.controls.filter(rc => live.has(rc.controlId)) }))
+        // A run whose every control has gone is a record of work on nothing.
+        .filter(r => r.controls.length > 0);
+      return {
+        ...prev,
+        controls,
+        deficiencies: prev.deficiencies.filter(d => live.has(d.controlId)),
+        tasks: prev.tasks.filter(t => live.has(t.controlId)),
+        discussions: prev.discussions.filter(d => live.has(d.controlId)),
+        reviewNotes: prev.reviewNotes.filter(n => live.has(n.controlId)),
+        executions: prev.executions.filter(e => live.has(e.controlId)),
+        runs,
+        // Only the hand-picked scope lists control ids; an audit scoped by RACM
+        // filters by process at read time and needs nothing done to it here.
+        audits: prev.audits.map(a => (a.controlIds ? { ...a, controlIds: a.controlIds.filter(id => live.has(id)) } : a)),
+      };
     });
   }, []);
   // The guarded path for changing the ground rules mid-engagement: applies the

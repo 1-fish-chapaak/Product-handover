@@ -119,9 +119,10 @@ const QUAL_PICKS: QualPick[] = [
  * that is the right shape here rather than eight copies of the same access
  * review.
  *
- * Anything added to this list must survive a Configuration re-derive — see
- * ConfigurationView, which keeps these names when it rebuilds the scope from
- * the trial balances.
+ * This list is what the SEED declares. It is NOT what protects these from a
+ * Configuration re-derive — that guard is structural (a process no trial-balance
+ * caption maps to is not the derivation's to remove), so it covers a matrix an
+ * auditor uploads from the RACM tab just as well as it covers this list.
  */
 export const GROUP_WORKSTREAMS = ['IT General Controls'] as const;
 
