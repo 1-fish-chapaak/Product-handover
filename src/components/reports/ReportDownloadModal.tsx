@@ -7,7 +7,8 @@ import {
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml } from './reportExport';
+import { exportReportWord, exportReportPpt, exportReportHtml } from './reportExport';
+import { exportReportPdfFile } from './reportPdf';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import type { QueryGraph, QueryTableDef } from '../../data/queryGraphs';
 import { cellRender } from './queryTableCell';
@@ -83,13 +84,18 @@ interface Props {
 
 type Format = 'pdf' | 'docx' | 'pptx' | 'html' | 'xlsx';
 
-const BASE_FORMATS: { id: Format; label: string; ext: string }[] = [
-  { id: 'pdf', label: 'PDF', ext: 'pdf' },
-  { id: 'docx', label: 'DOCX', ext: 'doc' },
-  { id: 'pptx', label: 'PPTX', ext: 'ppt' },
-  { id: 'html', label: 'HTML', ext: 'html' },
+// Tab labels name the application, not a file type the export does not
+// actually produce. Word and PowerPoint both import the Office-HTML blob, so
+// the file lands as .doc / .ppt and the modal says so out loud rather than
+// promising .docx / .pptx. `what` is printed in the footer so the reader knows
+// exactly what arrives before they commit.
+const BASE_FORMATS: { id: Format; label: string; ext: string; what: string }[] = [
+  { id: 'pdf', label: 'PDF', ext: 'pdf', what: 'PDF document (.pdf). Selectable text, numbered pages, A4.' },
+  { id: 'docx', label: 'Word', ext: 'doc', what: 'Word document (.doc). Opens in Word, Pages and Google Docs.' },
+  { id: 'pptx', label: 'PowerPoint', ext: 'ppt', what: 'PowerPoint deck (.ppt). Opens in PowerPoint, Keynote and Slides.' },
+  { id: 'html', label: 'Web page', ext: 'html', what: 'Web page (.html). Opens in any browser.' },
 ];
-const EXCEL_FORMAT = { id: 'xlsx' as Format, label: 'Excel', ext: 'xlsx' };
+const EXCEL_FORMAT = { id: 'xlsx' as Format, label: 'Excel', ext: 'xlsx', what: 'Excel workbook (.xlsx). One sheet per workflow.' };
 
 // Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
 function severityBadgeClass(severity: string): string {
@@ -133,6 +139,7 @@ export default function ReportDownloadModal({
   }, []);
 
   const activeFormat = FORMATS.find(f => f.id === format)!;
+  const fileLabel = `${reportName}.${activeFormat.ext}`;
 
   // Skip 'cover' and 'stats' kinds. For 'query' sections, only keep the ones
   // that actually have widgets (graphs/KPIs) so the preview shows visual
@@ -149,6 +156,28 @@ export default function ReportDownloadModal({
     }),
     [sections],
   );
+
+  // What the footer can state as fact. A deck is exactly one slide per section
+  // plus a title and a contents slide, so PowerPoint gets a real slide count.
+  // A PDF or a Word file paginates on content — a long results table runs onto
+  // the next page — so those name the sections they carry rather than a page
+  // count that the file would then contradict.
+  const pageLabel = useMemo(() => {
+    if (format === 'html' || format === 'xlsx') return '';
+    if (format === 'pptx') {
+      const n = bodySections.length + 2;
+      return `${n} slide${n === 1 ? '' : 's'}`;
+    }
+    const n = bodySections.length;
+    return `${n} section${n === 1 ? '' : 's'}`;
+  }, [format, bodySections]);
+
+  const logExport = () => logEvent({
+    action: 'Export',
+    description: `Downloaded report "${reportName}" as ${activeFormat.label}`,
+    module: 'Reports',
+    entity: 'Report',
+  });
 
   const handleDownload = () => {
     if (isDownloading) return;
@@ -169,19 +198,24 @@ export default function ReportDownloadModal({
       } else if (format === 'html') {
         exportReportHtml(ctx);
         addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
-      } else if (exportReportPdf(ctx)) {
-        addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
       } else {
-        addToast({ type: 'error', message: 'Pop-up blocked — allow pop-ups to export the PDF.' });
-        setIsDownloading(false);
+        // The PDF is composed and written in the browser, which takes a moment
+        // on a long report, so the modal stays open with its spinner until the
+        // file is actually handed over rather than closing on an empty promise.
+        exportReportPdfFile(ctx)
+          .then(() => {
+            addToast({ type: 'success', message: `${reportName}.pdf downloaded.` });
+            logExport();
+            setIsDownloading(false);
+            onClose();
+          })
+          .catch(() => {
+            addToast({ type: 'error', message: 'The PDF could not be built. Try Word or Web page, or reload and retry.' });
+            setIsDownloading(false);
+          });
         return;
       }
-      logEvent({
-        action: 'Export',
-        description: `Downloaded report "${reportName}" as ${activeFormat.label}`,
-        module: 'Reports',
-        entity: 'Report',
-      });
+      logExport();
       setIsDownloading(false);
       onClose();
     }, 700);
@@ -210,7 +244,7 @@ export default function ReportDownloadModal({
           aria-modal="true"
           aria-label={`Download preview for ${reportName}`}
           tabIndex={-1}
-          className="relative w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl overflow-hidden"
+          className="relative w-[1040px] max-w-[95vw] h-[840px] max-h-[92vh] flex flex-col bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl overflow-hidden"
         >
           {/* Header — matches the shared Modal chrome (px-7, canonical title) */}
           <div className="shrink-0 flex items-center justify-between gap-4 px-7 py-3.5 border-b border-canvas-border">
@@ -313,14 +347,21 @@ export default function ReportDownloadModal({
             </AnimatePresence>
           </div>
 
-          {/* Footer — primary Download action */}
-          <div className="shrink-0 px-7 py-3 border-t border-canvas-border bg-canvas-elevated flex items-center justify-end">
+          {/* Footer — names the file that arrives, then the action that makes
+              it. The PDF tab hands off to the browser print view, so its button
+              says that rather than "Download". */}
+          <div className="shrink-0 px-7 py-3 border-t border-canvas-border bg-canvas-elevated flex items-center justify-between gap-6">
+            <p className="text-[0.75rem] text-ink-500 leading-relaxed min-w-0">
+              <span className="font-semibold text-ink-700">{fileLabel}</span>
+              {pageLabel && <span> · {pageLabel}</span>}
+              <span className="block text-ink-400">{activeFormat.what}</span>
+            </p>
             <Gated permission="rp_edit" mode="disable" title="You don't have permission to export reports">
             <button
               onClick={handleDownload}
               disabled={isDownloading}
               aria-busy={isDownloading || undefined}
-              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="shrink-0 flex items-center justify-center gap-1.5 h-9 px-5 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               {isDownloading ? 'Preparing…' : 'Download'}

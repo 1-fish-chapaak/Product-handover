@@ -42,7 +42,16 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
       raf = requestAnimationFrame(tick);
     };
     if (delay > 0) to = setTimeout(begin, delay); else begin();
-    return () => { cancelAnimationFrame(raf); if (to!) clearTimeout(to); };
+    // Printing captures whatever frame the counter happens to be on, so a
+    // print started mid-ramp would put a number on paper that was never the
+    // real one. Snap to the target before the browser paints the print view.
+    const snap = () => { cancelAnimationFrame(raf); if (to) clearTimeout(to); setN(parsed.num); };
+    window.addEventListener('beforeprint', snap);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (to!) clearTimeout(to);
+      window.removeEventListener('beforeprint', snap);
+    };
   }, [parsed, delay, duration, prefersReducedMotion]);
 
   if (!parsed) return <>{value}</>;
@@ -75,10 +84,14 @@ export interface KpiTileProps {
   valueClassName?: string;
   /** When true, renders an active/selected brand outline (used for KPI-as-filter tiles). */
   selected?: boolean;
+  /** Skip the count-up and print the settled value straight away. For tiles
+   *  inside a document or beside another surface showing the same metric,
+   *  where a ramping counter means two places disagree for a second. */
+  instant?: boolean;
   className?: string;
 }
 
-export function KpiTile({ label, value, index = 0, onClick, editing, footer, valueClassName = 'text-ink-900', className = '', selected = false }: KpiTileProps) {
+export function KpiTile({ label, value, index = 0, onClick, editing, footer, valueClassName = 'text-ink-900', className = '', selected = false, instant = false }: KpiTileProps) {
   const prefersReducedMotion = useReducedMotion();
   return (
     <motion.div
@@ -105,7 +118,7 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, val
             {label}
           </p>
           <p className={`text-[1.625rem] font-bold leading-none tabular-nums ${valueClassName}`} aria-hidden="true">
-            <KpiCountUp value={value} delay={120 + index * 80} />
+            {instant ? value : <KpiCountUp value={value} delay={120 + index * 80} />}
           </p>
           {footer && <div className="mt-2">{footer}</div>}
         </>

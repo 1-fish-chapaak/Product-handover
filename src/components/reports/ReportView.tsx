@@ -28,10 +28,12 @@ import { QUERY_GRAPHS, QUERY_TABLES, QUERY_KPIS, QUERY_TABLE_SETS } from '../../
 import { cellRender } from './queryTableCell';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
+import { atrFromReport } from './atrBuilder';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
-  computeQueryKpis, reportKind, collectBlockLibrary, sayRating,
+  computeQueryKpis, rollupReportStats, reportKind, collectBlockLibrary, sayRating,
+  sectionBlurb, isSectionGuidance,
   type WorkflowResult,
   type QueryShape, type QueryComment, type GeneratedReport,
   type SignatorySlot, type Signoff,
@@ -335,8 +337,13 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
                   className="flex-1 min-w-[120px] flex flex-col gap-1.5"
                 >
-                  <span className={`text-[1.5rem] font-bold leading-none tracking-[-0.02em] ${kpiInlineTone(k.label)}`}>
-                    <KpiCountUp value={k.value} delay={120 + ki * 80} />
+                  {/* Static, like the executive stat bar above it. These are
+                      audit figures inside a document that gets screenshotted,
+                      printed and exported, and a counter ramping 0 → target
+                      means the number on screen is wrong for the first second
+                      and disagrees with the same metric elsewhere on the page. */}
+                  <span className={`text-[1.5rem] font-bold leading-none tracking-[-0.02em] tabular-nums ${kpiInlineTone(k.label)}`}>
+                    {k.value}
                   </span>
                   <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 leading-none">{k.label}</span>
                 </motion.div>
@@ -1188,14 +1195,18 @@ function ContentsRow({
       ) : (
         <button
           onClick={onScroll}
+          title={section.title}
           aria-current={active ? 'true' : undefined}
           className={`flex-1 min-w-0 text-left text-[0.8125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {section.title}
         </button>
       )}
+      {/* Rename / delete float over the row on hover instead of reserving a
+          column. Holding the space cost the title about 60px at rest, which is
+          why a heading as short as "Executive Summary" came out clipped. */}
       {!isEditing && (
-        <div className="shrink-0 flex items-center gap-1.5 opacity-0 group-hover/crow:opacity-100 transition-opacity">
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 shrink-0 flex items-center gap-1.5 rounded-md bg-canvas-elevated opacity-0 pointer-events-none group-hover/crow:opacity-100 group-hover/crow:pointer-events-auto transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
@@ -2319,12 +2330,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         { label: 'Medium Severity', value: String(mediumCount), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
       ];
     }
-    return [
-      { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
-      { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
-      { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
-      { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
-    ];
+    // Rolled up from the query cards printed below, so the headline row and the
+    // sections agree. Reading off the same KPI resolution the cards use
+    // (curated set when one exists, computed otherwise) keeps them identical.
+    return rollupReportStats(
+      activeQueries,
+      q => QUERY_KPIS[q.id] ?? computeQueryKpis(q as QueryShape),
+    );
   })();
 
   // Sections — reorderable / add / remove
@@ -2375,9 +2387,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         id: 'sec-summary',
         kind: 'summary',
         title: 'Executive Summary',
+        // Composed from this report's own queries. The fallback used to be a
+        // fixed paragraph about an 87-control SOX audit, which printed on every
+        // report that carried no summary of its own — including procure-to-pay
+        // internal audits it had nothing to do with, and into the exports.
         content: report.execSummary ?? (isBulkAudit
           ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
-          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.'),
+          : composeExecSummary(reportDisplayName(report.name), queries, report.scaleMap)),
       },
     ];
     if (isBulkAudit) {
@@ -2995,21 +3011,41 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     if (appliedTemplate) {
       const tmplSections = appliedTemplate.sections ?? [];
       if (tmplSections.length === 0 && appliedObservations.length === 0) return null;
+      // The query cards print inside the document at the anchor section, so the
+      // outline lists them there too. Listing only the template's own sections
+      // made the rail count smaller than the document it describes.
+      const anchorIdx = tmplSections.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+      const queryAfter = anchorIdx === -1 ? tmplSections.length - 1 : anchorIdx;
+      const railRows: { key: string; label: string; anchor?: string }[] = [];
+      tmplSections.forEach((s, i) => {
+        railRows.push({ key: `tsec-${s.name}-${i}`, label: s.name });
+        if (i === queryAfter) {
+          activeQueries.forEach(q => railRows.push({
+            key: `tq-${q.id}`,
+            label: `${q.id} · ${q.title}`,
+            anchor: `sec-query-${q.id}`,
+          }));
+        }
+      });
       return (
         <div className={railCls}>
-          <RailHeader count={tmplSections.length + appliedObservations.length} />
+          <RailHeader count={railRows.length + appliedObservations.length} />
           <Reorder.Group axis="y" values={appliedObservations} onReorder={(o) => { setAppliedObservations(o); recordActivityCoalesced('Reordered observations'); }} as="ol" className="list-none p-0 m-0 space-y-0.5">
-            {tmplSections.map((s, i) => (
-              <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md hover:bg-brand-50/30 transition-colors">
+            {railRows.map((row, i) => (
+              <li
+                key={row.key}
+                onClick={row.anchor ? () => scrollToSection(row.anchor!) : undefined}
+                className={`flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md transition-colors ${row.anchor ? 'cursor-pointer hover:bg-brand-50/50' : 'hover:bg-brand-50/30'} ${row.anchor && activeSectionId === row.anchor ? 'bg-brand-50/60' : ''}`}
+              >
                 <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{s.name}</span>
+                <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{row.label}</span>
               </li>
             ))}
             {appliedObservations.map((o, i) => (
               <ContentsRow
                 key={o.id}
                 section={o}
-                index={tmplSections.length + i + 1}
+                index={railRows.length + i + 1}
                 active={activeSectionId === o.id}
                 isEditing={contentsEditingId === o.id}
                 draftValue={contentsDraft}
@@ -3070,6 +3106,32 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const canGenerateAtr = reportKind(report) !== 'sox';
   // Report-level "Generate ATR" — same editable ATR preview as the Action Hub.
   const [atrModalOpen, setAtrModalOpen] = useState(false);
+
+  // The ATR the button generates: this report's own queries and observations,
+  // under this report's own cover meta. A report that already carries a saved
+  // ATR shows that one rather than recomposing over the top of it.
+  const reportAtrData = useMemo(() => {
+    if (report.atrData) return report.atrData;
+    const manual = sections
+      .filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation')
+      .map(s => ({ obsId: s.obsId, title: s.title, description: s.description }));
+    const summarySection = sections.find(s => s.kind === 'summary');
+    return atrFromReport(
+      {
+        id: report.id,
+        name: reportDisplayName(report.name),
+        generatedBy: report.generatedBy,
+        generatedAt: report.generatedAt,
+        reportPeriod: report.reportPeriod,
+        execSummary: report.execSummary,
+      },
+      activeQueries,
+      manual,
+      q => QUERY_KPIS[q.id] ?? computeQueryKpis(q as QueryShape),
+      summaryOverride ?? (summarySection && summarySection.kind === 'summary' ? summarySection.content : undefined),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report, sections, activeQueries, summaryOverride]);
 
   // ─── Shared comments state (common activity log across all query cards) ───
   const [comments, setComments] = useState<QueryComment[]>([
@@ -3303,12 +3365,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   <>
                     {canGenerateAtr && (
                     <button
+                      // Same control, same words as the standard banner below.
+                      // It used to read "Live ATR" here and "Generate ATR"
+                      // there, so applying a format appeared to change what the
+                      // button did when nothing about it had changed.
                       onClick={() => setAtrModalOpen(true)}
-                      title="Open the live Action Taken Report"
+                      title="Generate Action Taken Report"
                       className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
-                      Live ATR
+                      Generate ATR
                     </button>
                     )}
                   </>
@@ -3334,10 +3400,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
             {/* Summary Stats Bar — ATR-style KPI tiles. A custom template with
                 its own summary section carries the tiles there instead, so the
-                reader never meets the same four numbers twice. */}
+                reader never meets the same four numbers twice.
+                A format with no summary section leaves the tiles standing on
+                their own, so they get a heading that says what they count and
+                where the numbers come from — an unlabelled row of four figures
+                above an unrelated section reads as belonging to it. */}
             {!(appliedTemplate.sections ?? []).some(s =>
               /\b(executive summary|overall (opinion|conclusion)|audit opinion|assurance opinion)\b/i.test(s.name)) && (
               <div className="mb-5">
+                <div className="mb-3">
+                  <h2 className="text-[1.0625rem] font-semibold text-ink-900 tracking-tight">Report totals</h2>
+                  <p className="text-[0.8125rem] text-ink-500 mt-0.5">Rolled up from the queries in this report.</p>
+                </div>
                 <ReportKpiTiles stats={activeStats} animate />
               </div>
             )}
@@ -3366,10 +3440,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   const tmplTyped = tmplSections as TemplateSection[];
                   const appliedLibrary = collectBlockLibrary(tmplTyped);
                   const appliedScale = (appliedTemplate as { findingScale?: string[] }).findingScale;
+                  // Each query card carries the same `section-` anchor id the
+                  // normal path uses, so the rail can list them and scroll to
+                  // them. Without it the outline claimed the document held
+                  // three blocks while five were printed.
                   const queryBlocks = (
                     <div className="space-y-4">
                       {activeQueries.map((q, qi) => (
-                        <QueryCard key={q.id} query={q} index={qi} onOpenQuery={onOpenQuery} scaleMap={appliedScaleMap} />
+                        <div key={q.id} id={`section-sec-query-${q.id}`}>
+                          <QueryCard query={q} index={qi} onOpenQuery={onOpenQuery} scaleMap={appliedScaleMap} />
+                        </div>
                       ))}
                     </div>
                   );
@@ -3490,9 +3570,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                   cardFill={makeCardFill(sectionKey, s.name)}
                                   proseFill={makeProseFill(sectionKey, s.name)}
                                 />
+                              ) : isSectionGuidance(s.name, editedContent ?? content) && !sectionEditing ? (
+                                // Nothing has been written here and no query
+                                // data feeds it, so the section says so. It used
+                                // to print the "what belongs here" guidance as
+                                // if it were the finding, which shipped a
+                                // placeholder inside a downloadable report.
+                                <p className="text-[0.875rem] text-ink-400 leading-relaxed">
+                                  Nothing written here yet. {sectionBlurb(s.name)}
+                                </p>
                               ) : (
                                 <EditableProse
-                                  value={editedContent ?? content}
+                                  value={isSectionGuidance(s.name, editedContent ?? content) ? '' : (editedContent ?? content)}
                                   editing={sectionEditing}
                                   onSave={(next) => saveSectionEdit(sectionKey, next, s.name)}
                                   onCancel={() => stopEditingSection(sectionKey)}
@@ -3885,7 +3974,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             // longer incomplete.
             incomplete={sections
               .filter(s => {
+                // A note section still carrying only its "what belongs here"
+                // guidance has nothing written in it, so it is named on the
+                // checklist rather than exporting the guidance as prose.
+                if (s.kind === 'note') return isSectionGuidance(s.title, s.content);
                 if (s.kind !== 'tblock') return false;
+                if (isSectionGuidance(s.tsec.name ?? s.title, s.composed)
+                    && !(manualFills[s.id] ?? s.tsec.savedContent ?? '').trim()
+                    && !(s.tsec.blocks?.length ?? 0)) return true;
                 const filled = (manualFills[s.id] ?? s.tsec.savedContent ?? '').trim().length > 0;
                 const manualOpen = !filled && (
                   (s.tsec.blocks ?? []).some(b => b.fill === 'manual')
@@ -3997,8 +4093,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       </AnimatePresence>
 
 
-      {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
-      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion} />}
+      {/* Generate ATR — the report restated in Action Taken Report form. The
+          document is composed from this report's queries, observations and
+          cover meta, so the ATR names the same audit the reader came from. */}
+      {atrModalOpen && (
+        <GenerateATRModal
+          onClose={() => setAtrModalOpen(false)}
+          onSaveVersion={onSaveAtrVersion}
+          atrData={reportAtrData}
+        />
+      )}
 
       {/* Confirm dialog — section delete from Contents */}
       <ConfirmDialog

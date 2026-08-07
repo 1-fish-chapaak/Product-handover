@@ -8,7 +8,7 @@
 // previewed is what generates.
 
 import { motion } from 'motion/react';
-import { ArrowLeft, Edit3, Trash2, FileText } from 'lucide-react';
+import { ArrowLeft, Edit3, Copy, Trash2, FileText } from 'lucide-react';
 import TemplateSheet from './TemplateSheet';
 import {
   ICON_MAP, CATEGORY_COLORS,
@@ -22,13 +22,18 @@ export default function TemplatePreview({
   isCustom,
   onBack,
   onEdit,
+  onDuplicate,
   onDelete,
 }: {
   template: EditableTemplate;
-  /** Custom templates carry Edit + Delete; system templates are read-only. */
+  /** Custom templates carry Edit + Delete; standard ones are edited by copy. */
   isCustom?: boolean;
   onBack: () => void;
   onEdit?: () => void;
+  /** Copy this format into Custom templates and open the copy in the editor.
+   *  A standard format is shared and cannot be edited in place, so this is the
+   *  route out of the preview rather than leaving the page with no action. */
+  onDuplicate?: () => void;
   onDelete?: () => void;
 }) {
   const sections = template.sections ?? [];
@@ -49,6 +54,14 @@ export default function TemplatePreview({
           <ArrowLeft size={14} /> Back to Templates
         </button>
         <div className="flex items-center gap-2">
+          {onDuplicate && (
+            <button
+              onClick={onDuplicate}
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+            >
+              <Copy size={14} /> Duplicate
+            </button>
+          )}
           {isCustom && onEdit && (
             <button
               onClick={onEdit}

@@ -93,9 +93,16 @@ export interface EscalationMatrixConfig {
   activeEmployeesOnly: boolean;
 }
 
-/** The screenshot preset — the editable starting point every new report gets. */
+/**
+ * The screenshot preset — the editable starting point every new report gets.
+ *
+ * Off by default. Turning this on sends reminder and escalation mail to named
+ * people and their managers, so it is a decision the auditor makes on purpose
+ * rather than something that starts running because they uploaded a file. The
+ * cadence below is the preset it starts from once they do switch it on.
+ */
 export const DEFAULT_ESCALATION_MATRIX: EscalationMatrixConfig = {
-  enabled: true,
+  enabled: false,
   initialTriggers: [1],
   reminderDaily: false,
   reminders: [2, 2, 2],

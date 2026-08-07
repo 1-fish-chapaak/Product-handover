@@ -149,13 +149,17 @@ export default function AtrDocument({
   // Executive Summary — exactly six KPIs. Overdue observations fold into Open.
   const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
   const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
+  // Three of these six count observations and two count something else, so each
+  // status tile names its unit and sits next to the total it breaks down.
+  // Unlabelled "Open / Closed / In Progress" beside "Action Plans" read as a
+  // breakdown of the action plans, which they are not.
   const kpis: { label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
     { label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
+    { label: 'Observations Open', value: openCount, tone: 'high', icon: CircleDot },
+    { label: 'Observations In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
+    { label: 'Observations Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
     { label: 'Exceptions', value: totalExceptions, tone: 'ink', icon: AlertTriangle },
     { label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
-    { label: 'Open', value: openCount, tone: 'high', icon: CircleDot },
-    { label: 'Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
-    { label: 'In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
   ];
 
   const displayStatus = (s?: AtrObservationStatus): 'Open' | 'In Progress' | 'Closed' =>

@@ -394,7 +394,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
     styleEl.id = 'atr-print-opts';
     styleEl.textContent = `@page { size: A4 ${pdfOrientation}; } @media print { .report-printable { font-size: ${pdfFontScale}% !important; } }`;
     document.head.appendChild(styleEl);
-    addToast({ type: 'info', message: `Opening print dialog — ${pdfOrientation}, ${pdfFontScale}% font. Choose “Save as PDF”.` });
+    addToast({ type: 'info', message: `Print view opened at ${pdfOrientation}, ${pdfFontScale}% font. Choose “Save as PDF” to keep the file.` });
     window.setTimeout(() => window.print(), 250);
   };
 
