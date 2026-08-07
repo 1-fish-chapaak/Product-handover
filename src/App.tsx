@@ -26,7 +26,7 @@ import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
 import ReportsView from './components/reports/ReportsView';
 import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
-import { letterheadLine, looksLikeCapturedLetterhead } from './components/reports/reportShared';
+import { letterheadLine, looksLikeCapturedLetterhead, oneDefaultOnly, splitLetterhead } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -101,6 +101,20 @@ const SHARED_DASHBOARD_OPTIONS = [
   { id: 'shared-2', name: 'SOX Compliance Tracker', description: 'SOX compliance progress and control testing', accent: 'bg-brand-50 text-brand-700', sharedBy: 'Michael Chen' },
   { id: 'shared-3', name: 'GL Reconciliation Monitor', description: 'General Ledger reconciliation status', accent: 'bg-brand-50 text-brand-700', sharedBy: 'Sneha Desai' },
 ];
+
+// v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
+// dozens of test copies); new templates persist here going forward.
+const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
+// The old demo seeds — filtered out of any previously persisted blob so the
+// Custom section only ever shows templates the user actually created.
+const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
+// The two platform letterhead lines this product used to print before the
+// header line was dropped altogether. Templates saved back then still carry
+// one on the object, so it is cleared on load.
+const LEGACY_HEADER_TEXTS = new Set([
+  'Confidential \u2014 For Internal Use Only',
+  'Confidential \u00b7 For Internal Use Only',
+]);
 
 // ─── Error Boundary ──────────────────────────────────────────────────────
 import React from 'react';
@@ -292,26 +306,13 @@ function AppInner() {
     setView('racm-full-editor');
   };
   type CustomTemplate = EditableTemplate;
-  // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
-  // dozens of test copies); new templates persist here going forward.
-  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
-  // The old demo seeds — filtered out of any previously persisted blob so the
-  // Custom section only ever shows templates the user actually created.
-  const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
-  // The two platform letterhead lines this product used to print before the
-  // header line was dropped altogether. Templates saved back then still carry
-  // one on the object, so it is cleared on load.
-  const LEGACY_HEADER_TEXTS = new Set([
-    'Confidential \u2014 For Internal Use Only',
-    'Confidential \u00b7 For Internal Use Only',
-  ]);
-  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
-    try {
-      const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return (parsed as CustomTemplate[])
+  // Everything a stored blob needs on the way in: the demo seeds dropped, the
+  // old platform letterhead cleared, a captured page strip rebuilt, and the
+  // one-format-at-a-time rule enforced. Shared by the first read and by the
+  // storage event another tab fires, so both tabs hold the same list.
+  const hydrateTemplates = useCallback((parsed: CustomTemplate[]): CustomTemplate[] =>
+    oneDefaultOnly(
+      parsed
             .filter(t => !DEMO_TEMPLATE_IDS.has(t.id))
             // Templates saved while the platform still printed its own
             // letterhead line carry that string on the object, so it keeps
@@ -323,14 +324,21 @@ function AppInner() {
             // are the raw join of every repeating strip: "PwC · Section 1 · PwC
             // · PwC Page 2 · …" at 115 characters against a 60-character line.
             // Run those back through the builder rather than leaving a template
-            // printing them on every report. Only lines that carry the marks of
-            // a page strip are touched — a long footer somebody typed is theirs
-            // and prints exactly as they wrote it.
+            // printing them on every report. Only lines carrying the marks of a
+            // page strip are touched, whatever character their document joined
+            // them with: a long footer somebody typed is theirs and prints
+            // exactly as written.
             .map(t => {
               if (!t.footerText || !looksLikeCapturedLetterhead(t.footerText)) return t;
-              return { ...t, footerText: letterheadLine(t.footerText.split(/\s*·\s*/)) };
-            });
-        }
+              return { ...t, footerText: letterheadLine(splitLetterhead(t.footerText)) };
+            })
+    ), []);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
+    try {
+      const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return hydrateTemplates(parsed as CustomTemplate[]);
       }
     } catch { /* ignore */ }
     return [];
@@ -338,6 +346,20 @@ function AppInner() {
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
   }, [customTemplates]);
+  // Another tab saved a template. The storage event only fires in the OTHER
+  // tabs, so there is no loop with the write above: this tab takes what that
+  // one wrote instead of holding a list that quietly disagrees with it.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== CUSTOM_TEMPLATES_KEY || e.newValue == null) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (Array.isArray(parsed)) setCustomTemplates(hydrateTemplates(parsed as CustomTemplate[]));
+      } catch { /* a half-written blob from the other tab — keep what we have */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [hydrateTemplates]);
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
   const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
@@ -933,7 +955,7 @@ function AppInner() {
         return (
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
-            onShare={(id) => setShowShareModal(true, { type: 'report', id })}
+            onShare={(id, name) => setShowShareModal(true, { type: 'report', id, name })}
             onManageExceptions={(returnId) => { setMexReturnReportId(returnId ?? null); setView('manage-exceptions'); }}
             onOpenQuery={(q) => {
               setChatInitialQuery(`Open ${q.id}: ${q.title}`);
@@ -1206,7 +1228,7 @@ function AppInner() {
   return (
     <ToastProvider>
       <BulkRunProgressProvider>
-      <ShareProvider openShare={({ type, id, anchor }) => setShowShareModal(true, { type, id: id ?? type }, anchor)}>
+      <ShareProvider openShare={({ type, id, name, anchor }) => setShowShareModal(true, { type, id: id ?? type, name }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
         {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (
           <Sidebar
@@ -1253,6 +1275,7 @@ function AppInner() {
           {state.showShareModal && (
             <ShareModal
               scope={state.shareContext?.type === 'workflow-output' ? 'result' : state.shareContext?.type}
+              subjectName={state.shareContext?.name}
               anchor={state.shareAnchor}
               onClose={() => setShowShareModal(false)}
               onShare={(recipients) => {
