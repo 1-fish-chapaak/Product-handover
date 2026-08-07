@@ -12,6 +12,7 @@ import {
   captionsForEntities, deriveRacms, fmtCr, ruleOverall,
   type GroupEntity, type MaterialityRule, type SoxProgramme,
 } from '../audit/sox-testing/soxTestingData';
+import { GROUP_WORKSTREAMS } from '../audit/sox-testing/v2/v2ClassicStore';
 
 /** The programme's group-default rule always sits first and can't be deleted. */
 const GROUP_RULE_ID = 'rule-group';
@@ -143,6 +144,14 @@ function ConfigInner({ prog, engId, reconcileScope }: {
     const quant = caps.filter(c => c.balance >= thr(c.entityId));
     const qual = caps.filter(c => c.balance < thr(c.entityId) && qualSeed.has(c.id));
     const derived = deriveRacms([...quant, ...qual], new Set(qual.map(c => c.id)), entities);
+    // Group-level workstreams survive the re-derivation. ITGC has no trial-balance
+    // caption — that is what "beyond the trial balance" means — so a derivation
+    // that reads only the TB will never produce it, and handing that shorter list
+    // to reconcileScope would DELETE every ITGC control the engagement has tested.
+    // Re-deriving materiality must not silently drop a whole RACM.
+    const workstreams = (findEngagement(engId)?.soxProcesses ?? [])
+      .filter(p => (GROUP_WORKSTREAMS as readonly string[]).includes(p) && !derived.some(d => d.process === p));
+    const inScope = [...derived.map(r => r.process), ...workstreams];
     // Processes that stay in scope keep their live testing counts.
     for (const r of derived) {
       const old = prog.racms.find(x => x.process === r.process);
@@ -156,7 +165,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
     const e = findEngagement(engId);
     const CR = 10_000_000;
     if (e) {
-      e.soxProcesses = derived.map(r => r.process);
+      e.soxProcesses = inScope;
       e.soxConfig = {
         overallMateriality: Math.round(groupOverall * CR),
         performanceMateriality: Math.round(groupOverall * pmPct / 100 * CR),
@@ -167,9 +176,13 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       };
       e.entity = prog.groupName;
     }
-    reconcileScope(derived.map(r => r.process));
+    reconcileScope(inScope);
     setStale(false);
-    setLastDerive(`${derived.length} processes in scope — ${quant.length} quantitative + ${qual.length} qualitative captions across ${entities.length} entities.`);
+    // The sentence counts what the trial balances produced, then names what was
+    // kept beyond them — a plain "5 processes in scope" would credit the
+    // derivation with a RACM it did not derive.
+    const beyond = workstreams.length ? ` ${workstreams.join(', ')} kept — scoped beyond the trial balance.` : '';
+    setLastDerive(`${derived.length} processes in scope — ${quant.length} quantitative + ${qual.length} qualitative captions across ${entities.length} entities.${beyond}`);
     logEvent({ action: 'Update', description: `Scope re-derived from configuration — ${derived.length} in-scope processes, materiality ${fmtCr(groupOverall)}`, module: 'SOX ICFR', entity: 'Engagement' });
     addToast({ message: `Scope re-derived — ${derived.length} processes in scope`, type: 'success' });
   };
