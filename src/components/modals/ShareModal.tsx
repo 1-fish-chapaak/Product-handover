@@ -525,7 +525,11 @@ export default function ShareModal({ onClose, onShare, scope, subjectName, ancho
         transition={{ type: 'spring', stiffness: 460, damping: 34, mass: 0.7 }}
         role="dialog"
         aria-modal="true"
-        aria-label={scopeLabel ? `Share this ${scopeLabel}` : 'Share'}
+        aria-label={
+          subjectName
+            ? `Share ${scopeLabel ?? 'item'} ${subjectName}`
+            : scopeLabel ? `Share this ${scopeLabel}` : 'Share'
+        }
         onClick={e => e.stopPropagation()}
         style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
         className="fixed z-[61] origin-top-left bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg flex flex-col max-h-[82vh] overflow-hidden"

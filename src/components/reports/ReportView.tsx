@@ -1206,7 +1206,7 @@ function ContentsRow({
           column. Holding the space cost the title about 60px at rest, which is
           why a heading as short as "Executive Summary" came out clipped. */}
       {!isEditing && (
-        <div className="absolute right-1 top-1/2 -translate-y-1/2 shrink-0 flex items-center gap-1.5 rounded-md bg-canvas-elevated opacity-0 pointer-events-none group-hover/crow:opacity-100 group-hover/crow:pointer-events-auto transition-opacity">
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 shrink-0 flex items-center gap-1.5 rounded-md bg-canvas-elevated opacity-0 pointer-events-none group-hover/crow:opacity-100 group-hover/crow:pointer-events-auto group-focus-within/crow:opacity-100 group-focus-within/crow:pointer-events-auto transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
@@ -3112,9 +3112,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // ATR shows that one rather than recomposing over the top of it.
   const reportAtrData = useMemo(() => {
     if (report.atrData) return report.atrData;
-    const manual = sections
-      .filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation')
-      .map(s => ({ obsId: s.obsId, title: s.title, description: s.description }));
+    // Observations live in one of two places depending on whether a template is
+    // applied: the section stream on the normal path, appliedObservations under
+    // a template. Reading only the first meant an observation added to a
+    // templated report never reached the ATR it was supposed to be in.
+    const manual = [
+      ...sections.filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation'),
+      ...appliedObservations,
+    ].map(s => ({ obsId: s.obsId, title: s.title, description: s.description }));
     const summarySection = sections.find(s => s.kind === 'summary');
     return atrFromReport(
       {
@@ -3131,7 +3136,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       summaryOverride ?? (summarySection && summarySection.kind === 'summary' ? summarySection.content : undefined),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [report, sections, activeQueries, summaryOverride]);
+  }, [report, sections, appliedObservations, activeQueries, summaryOverride]);
 
   // ─── Shared comments state (common activity log across all query cards) ───
   const [comments, setComments] = useState<QueryComment[]>([

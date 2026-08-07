@@ -65,6 +65,10 @@ async function loadPdfMake(): Promise<PdfMake> {
       });
       return pdfMake;
     })();
+    // A rejected promise must not stay in the cache. Caching it would mean one
+    // transient chunk-fetch failure disables PDF export for the rest of the
+    // session, with a page reload the only way back.
+    pdfMakePromise.catch(() => { pdfMakePromise = null; });
   }
   return pdfMakePromise;
 }
@@ -254,7 +258,9 @@ function dataTable(t: { title: string; columns: string[]; rows: string[][] }, ac
       margin: [0, 0, 0, trimmed.length ? 4 : 12],
     },
     ...(trimmed.length
-      ? [{ text: `Not shown here: ${trimmed.join(' and ')}. The full table is in the Excel export.`, fontSize: 6.5, italics: true, color: MUTED, margin: [0, 0, 0, 12] } as Content]
+      // Names what was left out without pointing at a file the product may not
+      // produce: the Excel export is optional and most reports never offer it.
+      ? [{ text: `Not shown here: ${trimmed.join(' and ')}. The full table is on the query in the app.`, fontSize: 6.5, italics: true, color: MUTED, margin: [0, 0, 0, 12] } as Content]
       : []),
   ];
 }
@@ -518,18 +524,23 @@ export async function exportReportPdfFile(ctx: ReportExportContext): Promise<voi
     ...contentsPage(body, accent, showPageNo, anchorId),
   ];
 
+  // Anchors are handed out by position as the blocks are walked. Looking the
+  // section up with indexOf compared by reference, so the same section object
+  // appearing twice gave both occurrences the first one's id — a duplicate
+  // anchor, and a contents page pointing at the wrong page. It was also a scan
+  // per section.
   let n = 0;
   blocks.forEach(block => {
     content.push({ text: '', pageBreak: 'before' });
     block.forEach((s, j) => {
-      n += 1;
       if (j > 0) {
         content.push({
           canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - PAGE_MARGIN[0] - PAGE_MARGIN[2], y2: 0, lineWidth: 0.5, lineColor: HAIRLINE }],
           margin: [0, 14, 0, 16],
         });
       }
-      content.push(...sectionBody(s, n, accent, anchorId(body.indexOf(s))));
+      content.push(...sectionBody(s, n + 1, accent, anchorId(n)));
+      n += 1;
     });
   });
 

@@ -179,7 +179,7 @@ export default function Step2bReportUpload({ onExtract }: {
           icon={FileSpreadsheet}
           tint="bg-evidence-50 text-evidence-700"
           title="Annexures"
-          blurb=".xlsx workbooks · power Manage Exceptions"
+          blurb="Excel or CSV · power Manage Exceptions"
           cta="Upload annexures"
           badge="Optional"
           badgeCls="bg-paper-100 text-ink-500"

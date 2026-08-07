@@ -103,6 +103,10 @@ export default function GenerateATRModal({
                 "Live preview · read-only" sat above a Save button, which read
                 as a contradiction and told nobody whether an ATR now exists. */}
             <p className="text-[0.8125rem] font-medium text-ink-600 truncate">
+              {/* Always a draft while this is on screen: saving closes the
+                  modal (the reader unmounts on onSaveVersion) and the toast
+                  confirms it, so there is no state where a saved ATR is still
+                  being looked at here. */}
               <span className="text-ink-800 font-semibold">Draft, not saved yet</span>
               {meta.auditTitle ? <span> · built from “{meta.auditTitle}”</span> : null}
               <span> · {observations.length} observation{observations.length === 1 ? '' : 's'}</span>
@@ -143,7 +147,7 @@ export default function GenerateATRModal({
                     />
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => setShowSavePrompt(false)} className="h-8 px-3 text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 cursor-pointer">Discard</button>
-                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer">Save to ATR tab</button>
+                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer">Save to ATR reports</button>
                     </div>
                   </div>
                 </>

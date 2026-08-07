@@ -280,7 +280,9 @@ const toRisk = (severity?: string): AtrObservation['risk'] =>
 const classifyFrom = (risk?: string): AtrObservation['classification'] => {
   const r = (risk ?? '').toLowerCase();
   if (r.includes('compliance')) return 'Procedural Non-Compliance';
-  if (r.includes('operational') || r.includes('technology') || r.includes('it')) return 'System Deficiency';
+  // "IT" has to match as a word. As a substring it also matched Audit Risk and
+  // Credit Risk, filing both of them as a system deficiency.
+  if (r.includes('operational') || r.includes('technology') || /\bit\b/.test(r)) return 'System Deficiency';
   return 'Design Deficiency';
 };
 

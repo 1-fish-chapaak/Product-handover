@@ -164,13 +164,17 @@ export default function ReportDownloadModal({
   // count that the file would then contradict.
   const pageLabel = useMemo(() => {
     if (format === 'html' || format === 'xlsx') return '';
+    // Counts the sections the EXPORT receives, not the narrower set the preview
+    // renders. bodySections drops a query with no widgets, so the footer could
+    // promise fewer sections than the downloaded file contained.
+    const exported = sections.filter(s => s.kind !== 'cover' && s.kind !== 'stats');
     if (format === 'pptx') {
-      const n = bodySections.length + 2;
+      const n = exported.length + 2;
       return `${n} slide${n === 1 ? '' : 's'}`;
     }
-    const n = bodySections.length;
+    const n = exported.length;
     return `${n} section${n === 1 ? '' : 's'}`;
-  }, [format, bodySections]);
+  }, [format, sections]);
 
   const logExport = () => logEvent({
     action: 'Export',

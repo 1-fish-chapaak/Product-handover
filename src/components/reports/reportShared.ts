@@ -814,10 +814,17 @@ export function renderedQueryCount(report: {
 export function renderedSectionCount(report: {
   generatedQueries?: unknown[];
   workflowResults?: unknown[];
+  templateSections?: unknown[];
   atrData?: unknown;
   queries?: number;
 }): number {
-  return 1 + renderedQueryCount(report) + (report.workflowResults?.length ?? 0);
+  // Template sections baked in at generate time render as blocks in the body,
+  // so they count. A report carrying them used to advertise fewer sections on
+  // its card than the reader opened with. When they are present they carry the
+  // summary themselves, so the standalone summary is not added on top.
+  const tmpl = report.templateSections?.length ?? 0;
+  const base = renderedQueryCount(report) + (report.workflowResults?.length ?? 0);
+  return tmpl > 0 ? tmpl + base : 1 + base;
 }
 
 export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string; attachments?: string[] };

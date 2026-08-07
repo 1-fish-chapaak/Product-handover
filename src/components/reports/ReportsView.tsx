@@ -370,13 +370,17 @@ export default function ReportsView({
   /** `quiet` is for the import, which lands on this tab with a notice of its
    *  own above the library. A toast saying the same thing at the same moment is
    *  the message twice. */
-  const addCustomTemplateUnique = (t: EditableTemplate, quiet = false) => {
+  /** Saves under a free name and returns the template as stored, so a caller
+   *  that goes on to open it edits the object that was actually persisted. */
+  const addCustomTemplateUnique = (t: EditableTemplate, quiet = false): EditableTemplate => {
     const names = [...REPORT_TEMPLATES.map(x => x.name), ...customTemplates.map(x => x.name)];
     let name = t.name;
     let i = 2;
     while (names.some(n => n.toLowerCase() === name.toLowerCase())) name = `${t.name} (${i++})`;
-    addCustomTemplate({ ...t, name });
+    const stored = { ...t, name };
+    addCustomTemplate(stored);
     if (!quiet) addToast({ type: 'success', message: `Template "${name}" saved to Custom templates.` });
+    return stored;
   };
   const [hydrationFailed, setHydrationFailed] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
@@ -1006,9 +1010,12 @@ export default function ReportsView({
             engagementId: undefined,
           };
           setPreviewTemplate(null);
-          addCustomTemplateUnique(copy, true);
-          setEditingTemplate(copy);
-          addToast({ type: 'success', message: `Copied “${previewTemplate.name}”. Editing the copy now.` });
+          // Edit the object that was actually stored. addCustomTemplateUnique
+          // renames on a collision, so opening `copy` showed a name the saved
+          // template did not have and saved a second clashing one.
+          const saved = addCustomTemplateUnique(copy, true);
+          setEditingTemplate(saved);
+          addToast({ type: 'success', message: `Copied “${previewTemplate.name}” as “${saved.name}”. Editing the copy now.` });
         }}
         onDelete={() => {
           // The confirm dialog lives on the list page, so return there first.
