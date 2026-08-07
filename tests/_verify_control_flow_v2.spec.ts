@@ -67,16 +67,13 @@ test('five steps, and only five', async ({ page }) => {
     await expect(extract).toBeVisible();
     await expect(extract).toBeDisabled();
   } else {
-    // What the application worked out for itself — stated, never ticked.
-    await expect(page.getByText('Checked automatically')).toBeVisible();
-    await expect(page.getByText('Count', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Period covered')).toBeVisible();
-    // The window must read as the day it IS, not the day before. A date-only
-    // ISO parsed as UTC midnight and rendered locally prints 31 Dec 2025 for
-    // 2026-01-01 anywhere west of UTC, which silently misstates the period the
-    // audit covers. Run this spec with TZ=America/New_York to exercise it.
-    await expect(page.getByText(/Covers the whole audit period, 1 Jan 2026/)).toBeVisible();
-    // Provenance is NOT asked here. It moved onto the file record (b5e3f96) —
+    // The "Checked automatically" strip — count, period covered, and the window
+    // sentence — was parked in Aug 2026: three rows that greened themselves and
+    // then asked a person to tick that they agreed. Period coverage survived as
+    // the second of the four IPE checks, which a person actually performs. What
+    // this branch used to assert is now in the `gone` list below.
+    //
+    // Provenance is NOT asked here either. It moved onto the file record —
     // per file, once, rather than per extraction — so the three-field form is
     // gone and a file that hasn't answered is disabled in the source list above.
     await expect(page.getByText('Where this data came from')).toHaveCount(0);
@@ -113,6 +110,10 @@ test('five steps, and only five', async ({ page }) => {
     // The step ③ badge promised a confirmation that went with the IPE gates,
     // so nothing could ever clear it.
     'awaiting gate 2',
+    // Parked Aug 2026 — the self-greening rows. A row that computes its own
+    // answer and then asks for a tick is not a check, it is a formality.
+    'Checked automatically',
+    'Does the count read right?',
   ];
   for (const text of gone) {
     await expect(page.getByText(text, { exact: false })).toHaveCount(0);
