@@ -1120,6 +1120,12 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  *                  combined ₹6.4 Cr against a ₹2.4 Cr band
  *   Fixed 4        clearly trivial (₹45 L, under the ₹60 L floor) and closed —
  *                  logged, and deliberately never aggregated
+ *   ITGC 0         a Significant Deficiency on its own exposure that AGGREGATES
+ *                  to a Material Weakness — and the one finding whose real cost
+ *                  is not a number at all: a failed IT general control withdraws
+ *                  "test of one" from every automated and IT-dependent control in
+ *                  the engagement (helpers.itgcHolds), so it is paid for in work
+ *                  that comes back rather than in rupees that moved
  *
  * The five are also spread down the exception lifecycle, one per stage, so the
  * tab shows the whole journey rather than five rows all sitting at the start:
@@ -1128,6 +1134,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
  *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
  *   DEF-A-05  Closed           passed its retest and countersigned
+ *   DEF-A-06  Planning         the ITGC — rating confirmed, owner writing the plan
  *
  * Priced against Altura's own thresholds, not the flagship's: materiality
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
@@ -1178,6 +1185,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
   const revenueCutoff = pick('Order to Cash', 2);
   const creditNotes = pick('Order to Cash', 3);
   const disposals = pick('Fixed Assets', 3);
+  // The ITGC workstream is scoped beyond the trial balance (GROUP_WORKSTREAMS in
+  // v2ClassicStore) and tested once for the group, so there is exactly one row to
+  // pick — no entity copies to choose between.
+  const privilegedAccess = pick('IT General Controls', 0);
 
   const out: Deficiency[] = [];
 
@@ -1371,6 +1382,45 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       retest: { result: 'Pass', at: '18 Jul 2026', by: 'A. Mehta' },
       signoff: { by: 'J. Fernandes', at: '19 Jul 2026' },
       status: 'Closed',
+    });
+  }
+
+  if (privilegedAccess) {
+    fail(privilegedAccess, 'operating');
+    out.push({
+      id: 'DEF-A-06', controlId: privilegedAccess.id, track: 'operating', reportRef: '4.6',
+      description: 'The quarterly privileged-access review was performed for Q1 only. Q2 was not run, and the Q1 review was signed without any of the 14 flagged conflicts being cleared — eleven of them were still open at the date of testing.',
+      rootCause: 'The review is produced as a spreadsheet extract and signed as a whole, so a reviewer can complete it without resolving anything on it: nothing in the process turns a flagged conflict into a task somebody has to close, and nothing stops the next quarter from opening while the last one is still outstanding.',
+      failedSamples: ['SAP-PRIV-Q1-2026', 'SAP-PRIV-Q2-2026', 'ARIBA-PRIV-Q2-2026'],
+      likelihood: 'Probable',
+      // Priced by what the access could have moved, not by what it did: no
+      // improper transaction was found. Eleven standing conflicts across the ERP
+      // and procurement platforms could post and release a payment unchallenged,
+      // so the number is the value that could have gone out on one person's
+      // credentials in the period.
+      magnitude: 68_000_000,
+      // Deliberately NO indicator. On its own ₹6.8 Cr is a Significant
+      // Deficiency — above Altura's ₹2.4 Cr band, below the ₹12 Cr materiality.
+      // It grades a Material Weakness anyway, because rule 6 combines it with
+      // every other live exception failing on Accuracy and the group clears
+      // materiality several times over. That is the engine doing its job, and it
+      // is a truer answer than an indicator hand-set here: an access failure this
+      // wide is material because of what it sits on top of, not because someone
+      // typed that it was.
+      mwIndicators: [],
+      aggregationGroup: 'IT general controls',
+      ratingConfirm: { grade: 'Material Weakness', by: 'J. Fernandes', at: '02 Jul 2026' },
+      remediation: {
+        // Blank on purpose, like DEF-A-01/02 — the plan is the owner's sentence
+        // to write, and the auditor judges it against the root cause.
+        action: '',
+        date: null, owner: 'V. Menon', status: 'Open',
+      },
+      // The heaviest consequence of this row is not its grade. Until it is fixed
+      // and retested, no automated control in the engagement can be tested on one
+      // instance — see helpers.itgcHolds, and the banner it puts on the Dashboard
+      // and the Control Library.
+      status: 'Planning',
     });
   }
 
