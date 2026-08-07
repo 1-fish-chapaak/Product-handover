@@ -56,13 +56,15 @@ test('ITGC cascade — the withdrawal is visible where it lands', async ({ page 
   await page.goto('/');
   await openAnAudit(page);
 
-  // ── the audit's Control Library, before anything has failed ────────────────
+  // ── the audit's Control Library, with the seeded failure already in force ──
+  // One ITGC is down from the seed (DEF-A-06), so the banner opens in its
+  // singular voice — "An IT general control concluded ineffective".
   await backToAuditRoot(page);
   await openAuditLibrary(page);
-  await expect(page.getByText(/Test of one is withdrawn/)).toHaveCount(0);
-  await page.screenshot({ path: `${SHOTS}/01-before.png`, fullPage: true });
+  await expect(page.getByText(/An IT general control concluded ineffective/).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/01-one-down.png`, fullPage: true });
 
-  // ── break an ITGC: the seed leaves the last control of each RACM untested ──
+  // ── break a second one: the seed leaves the last control of each RACM untested ──
   await page.getByPlaceholder(/Search controls/).fill('Emergency changes');
   await page.waitForTimeout(900);
   await page.getByText('Emergency changes reviewed post-implementation.').first().click();
@@ -80,7 +82,11 @@ test('ITGC cascade — the withdrawal is visible where it lands', async ({ page 
   await backToAuditRoot(page);
   await openAuditLibrary(page);
   await expect(page.getByText(/Test of one is withdrawn/).first()).toBeVisible();
-  // The chip names the control that did it — its code and its words, not "an ITGC".
+  // Two down now, and the banner counts rather than repeating itself.
+  await expect(page.getByText(/2 IT general controls concluded ineffective/).first()).toBeVisible();
+  // A chip each — the code and the words, not "an ITGC". Naming one and hiding
+  // the other would send the auditor to fix half the problem.
+  await expect(page.getByText('Privileged access reviewed quarterly.').first()).toBeVisible();
   await expect(page.getByText('Emergency changes reviewed post-implementation.').first()).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/04-banner.png`, fullPage: true });
 
@@ -105,7 +111,8 @@ test('ITGC cascade — the withdrawal is visible where it lands', async ({ page 
   await expect(rows.first()).toBeVisible({ timeout: 15_000 });
   await rows.first().click();
   await page.waitForTimeout(1600);
-  await expect(page.getByText(/Test of one is withdrawn — an IT general control has failed/).first()).toBeVisible();
+  await expect(page.getByText(/Test of one is withdrawn — 2 IT general controls have failed/).first()).toBeVisible();
+  await expect(page.getByText('Privileged access reviewed quarterly.').first()).toBeVisible();
   await expect(page.getByText('Emergency changes reviewed post-implementation.').first()).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/06-affected-control.png`, fullPage: true });
 
