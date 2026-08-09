@@ -623,7 +623,35 @@ function buildHistory(): SeedLog[] {
 }
 
 /** The seeded history. Built once at module load; deterministic. */
-export const SEED_LOGS: SeedLog[] = buildHistory();
+/**
+ * Memory governance events — the audit log's Memory module. Hand-authored
+ * (not persona-generated): memory actions are sparse, named decisions, and
+ * each one must match a seeded row in src/data/memoryStore.ts so the trail
+ * and the registry tell one story. Live actions (approve/forget/renew/capture)
+ * append to this module at runtime via the `irame:memory-audit` bridge.
+ */
+const MEMORY_SEED_EVENTS: SeedLog[] = [
+  { timestamp: '2026-04-20 16:42:11', user: 'Abhinav Sharma', action: 'Update',
+    description: 'Approved team memory proposal — chargeback settlement formula (v2: null-price guard added)',
+    module: 'Memory', entity: 'mem-team-001', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+  { timestamp: '2026-04-19 11:05:37', user: 'Nilesh Anand', action: 'Create',
+    description: 'Org rule created — client-facing reports replace employee names with IDs',
+    module: 'Memory', entity: 'mem-org-003', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+  { timestamp: '2026-04-18 09:31:02', user: 'Meera Nair', action: 'Create',
+    description: 'Memory proposed from recurring analyst edits — shipping costs classified as COGS',
+    module: 'Memory', entity: 'mem-team-004', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+  { timestamp: '2026-04-17 14:12:48', user: 'Aditya Thakur', action: 'Update',
+    description: 'Source mapping re-confirmed after schema drift — vendor master Amount column',
+    module: 'Memory', entity: 'mem-src-007', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+  { timestamp: '2026-04-16 10:55:20', user: 'Meera Nair', action: 'Update',
+    description: 'Engagement memory renewed — interim evidence window for price-master testing',
+    module: 'Memory', entity: 'mem-eng-003', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+  { timestamp: '2026-04-15 17:20:33', user: 'Aditya Thakur', action: 'Delete',
+    description: 'Personal memory forgotten at the user’s request',
+    module: 'Memory', entity: 'personal-scope', status: 'Success', workspaceId: DEFAULT_WORKSPACE.id },
+];
+
+export const SEED_LOGS: SeedLog[] = [...buildHistory(), ...MEMORY_SEED_EVENTS];
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Last sign-in, derived — so seats and activity can't drift apart

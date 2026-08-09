@@ -22,7 +22,7 @@ import {
   REC_CATEGORY_META, REC_PRIORITY_META,
   type AuditRecommendation, type RecCategory, type VerdictTone,
 } from '../../data/layeredInsights';
-import { openInChat } from './insightChat';
+import { runActionInChat } from './insightChat';
 
 const REC_ICON: Record<RecCategory, LucideIcon> = {
   coverage: ShieldAlert, sampling: SlidersHorizontal, evidence: FileCheck2,
@@ -150,7 +150,7 @@ export default function AIRecommendsPopover({
                 <div className="flex items-center gap-1.5 px-3 pt-2.5 flex-wrap">
                   {doNow > 0 && <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${TONE_PILL.negative}`}><span className={`size-1 rounded-full ${TONE_DOT.negative}`} /> {doNow} do now</span>}
                   {thisPeriod > 0 && <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${TONE_PILL.caution}`}><span className={`size-1 rounded-full ${TONE_DOT.caution}`} /> {thisPeriod} this period</span>}
-                  <span className="ml-auto text-[9.5px] text-ink-400 inline-flex items-center gap-1"><MessageSquare size={9} aria-hidden="true" /> click one to work it in chat</span>
+                  <span className="ml-auto text-[9.5px] text-ink-400 inline-flex items-center gap-1"><MessageSquare size={9} aria-hidden="true" /> click one to run it in chat</span>
                 </div>
 
                 {/* Recommendations */}
@@ -162,8 +162,8 @@ export default function AIRecommendsPopover({
                       <li key={r.id ?? `${r.category}-${i}`}>
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); openInChat(r.title, subjectLabel); setOpen(false); }}
-                          title="Open this recommendation in Ask IRA (new tab)"
+                          onClick={(e) => { e.stopPropagation(); runActionInChat({ rec: r, subjectLabel, subjectSub }); setOpen(false); }}
+                          title="Runs this recommendation in Ask IRA (new tab)"
                           className="group w-full text-left px-2 py-2.5 rounded-lg hover:bg-brand-50/60 transition-colors cursor-pointer"
                         >
                           <div className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -174,7 +174,7 @@ export default function AIRecommendsPopover({
                               <CatIcon size={9} aria-hidden="true" /> {REC_CATEGORY_META[r.category].label}
                             </span>
                             <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600/70 group-hover:text-brand-700 transition-colors">
-                              <MessageSquare size={10} aria-hidden="true" /><span className="hidden sm:inline">Open in chat</span><ArrowUpRight size={9} aria-hidden="true" />
+                              <MessageSquare size={10} aria-hidden="true" /><span className="hidden sm:inline">Run in chat</span><ArrowUpRight size={9} aria-hidden="true" />
                             </span>
                           </div>
                           <p className="text-[12px] font-semibold text-ink-900 leading-snug">{r.title}</p>

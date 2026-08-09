@@ -31,6 +31,10 @@ import {
   buildChatPlanSteps, buildChatPlanRiskItems, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
   CHAT_RISK_TABLE_COLUMNS, buildChatPlanRiskRows, CHAT_RISK_SUMMARY, buildChatOutputInsight,
 } from '../../data/chatPlan';
+import {
+  getActiveActionRun, buildActionPlan, buildActionResult, buildActionProse, buildActionFollowUps,
+  type ActionRun, type ActionRunPlan, type ActionRunResult,
+} from '../../data/actionRun';
 import InsightGenerator from '../shared/InsightGenerator';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
 import type { WorkflowTypeId } from '../../data/mockData';
@@ -3326,6 +3330,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // parks at the risk step until this flips, then finishes and renders the
   // result. Reset to false at the start of every run (and on stop/reset).
   const [severityGateOpen, setSeverityGateOpen] = useState(false);
+  // The recommended action this thread is running, when the tab was opened by
+  // one (?action=<id>). Held for the length of ONE run: it shapes the plan the
+  // loader builds and the result that replaces it. Cleared the moment a plain
+  // question starts, so a follow-up in the same tab gets the standard query
+  // shape rather than inheriting the action's frame.
+  const actionRunRef = useRef<ActionRun | null>(null);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
   // Answers for the legacy phase-based workflow clarification, now rendered
   // through the shared QueryClarificationCard. Keyed by question index; each
@@ -3754,6 +3764,47 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Recommended action → this tab RUNS it ──
+  // The action arrives as a complete payload (?action=<id>, body in the handoff
+  // store): the imperative plus the finding, cause, stakes, guardrail and every
+  // evidence row behind it. Unlike ?draft, this one SENDS — an action that waits
+  // in a composer for the reader to press Enter is a follow-up wearing an
+  // action's clothes, which is the behaviour this replaces. The prompt lands as
+  // the user's own turn, chipped with the context that travelled, and the run
+  // starts straight away with no clarify gate: everything it would have asked
+  // for came in with the action.
+  const actionRunStartedRef = useRef(false);
+  useEffect(() => {
+    if (actionRunStartedRef.current) return;
+    const run = getActiveActionRun();
+    if (!run) return;
+    actionRunStartedRef.current = true;
+    actionRunRef.current = run;
+    setActiveChatHistoryId(null);
+    setMessages(prev => [...prev, {
+      id: `msg-action-${run.id}`,
+      role: 'user',
+      text: run.prompt,
+      timestamp: new Date(),
+      attachments: [{ kind: 'source', name: run.contextChip, type: 'insight' }],
+    }]);
+    logEvent({
+      action: 'Create',
+      description: `Ran AI recommendation in Ask IRA: "${run.goal.length > 80 ? `${run.goal.slice(0, 80)}…` : run.goal}"`,
+      module: 'Ask IRA',
+      entity: 'Query',
+    });
+    setIsTyping(true);
+    // No cleanup return: under StrictMode the mount/unmount/mount rehearsal
+    // would cancel this timer and the guard above would then skip re-arming it,
+    // leaving the action sent but never run. The guard is what keeps it once.
+    window.setTimeout(() => {
+      setIsTyping(false);
+      startAuditQueryRun();
+    }, 700);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Canvas → composer context handoff. A right-side CTA seeds a context mode;
   // enter it, clear any stale draft, and focus the composer so the user can
   // type their feedback immediately. Does NOT auto-submit.
@@ -3945,6 +3996,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     auditRunMsgIdRef.current = msgId;
     // Fresh run parks at the risk step again until severity is (re)answered.
     setSeverityGateOpen(false);
+    // A run started from a recommended action carries its OWN plan: the goal,
+    // the anchor and the evidence rows came in with the prompt, so the loader
+    // builds that plan rather than the stock query shape (and never parks at
+    // the severity gate — the action's own rating travelled with it).
+    const run = actionRunRef.current;
 
     if (STREAM_V2) {
       // v2: no checklist / gate — stream straight through with whatever severity
@@ -3953,10 +4009,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       setMessages(prev => [...prev, {
         id: msgId,
         role: 'assistant',
-        text: AUDIT_PROSE,
+        text: run ? buildActionProse(run) : AUDIT_PROSE,
         timestamp: new Date(),
         richType: 'audit-result',
-        richData: AUDIT_RESULT,
+        richData: (run ? buildActionResult(run) : AUDIT_RESULT) as unknown as Record<string, unknown>,
       }]);
       setStreamingActive(true);
       setArtifactMode('query');
@@ -3969,14 +4025,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       id: msgId,
       role: 'assistant',
       text: '',
-      thinking: [
-        'Generating execution plan',
-        'Writing SQL query',
-        'Connecting to data sources',
-        'Processing 1.2M records',
-      ],
+      thinking: run
+        ? [
+            'Reading the action and everything attached to it',
+            `Anchoring on ${run.subject.label}`,
+            `Loading ${run.evidence.length} evidence row${run.evidence.length === 1 ? '' : 's'}`,
+            'Building the plan for this action',
+          ]
+        : [
+            'Generating execution plan',
+            'Writing SQL query',
+            'Connecting to data sources',
+            'Processing 1.2M records',
+          ],
       timestamp: new Date(),
       richType: 'audit-loading',
+      richData: run ? ({ plan: buildActionPlan(run) } as unknown as Record<string, unknown>) : undefined,
     }]);
 
     setShowProgressiveLoader(true);
@@ -4160,6 +4224,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // unanswered question while a clarification is open).
   const startQueryClarificationFlow = () => {
     clearTimers();
+    // A plain question is not the action's run: drop the action frame so this
+    // turn gets the standard plan, assumptions and clarify gate.
+    actionRunRef.current = null;
     setIsTyping(true);
 
     schedule(() => {
@@ -4199,15 +4266,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     const targetId = auditRunMsgIdRef.current;
     auditRunMsgIdRef.current = null;
 
+    const run = actionRunRef.current;
     setMessages(prev => prev.map(m => {
       if (m.id !== targetId) return m;
       return {
         ...m,
         // Same prose as the v2 stream path — one source so they never diverge.
-        text: AUDIT_PROSE,
-        followUpTracks: AUDIT_FOLLOWUP_TRACKS,
+        // An action's answer is written from its own payload: its rows, its
+        // stakes, and the guardrail quoted rather than paraphrased.
+        text: run ? buildActionProse(run) : AUDIT_PROSE,
+        followUpTracks: run ? buildActionFollowUps(run) : AUDIT_FOLLOWUP_TRACKS,
         richType: 'audit-result',
-        richData: AUDIT_RESULT,
+        richData: (run ? buildActionResult(run) : AUDIT_RESULT) as unknown as Record<string, unknown>,
       };
     }));
 
@@ -6486,22 +6556,47 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       // node-by-node, pauses at the risk step for the severity
                       // rule, then finishes — the same diagram then carries into
                       // the result below, so there's no swap-flicker.
+                      //
+                      // A run started from a recommended action builds ITS plan
+                      // (carried on the message, so the thread stays readable
+                      // after the next turn) and never gates: the rating, scope
+                      // and evidence all arrived with the action.
                       <div className="w-full" style={{ paddingBottom: 40 }}>
-                        {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
-                          <PlanFlowDiagram
-                            building
-                            steps={buildChatPlanSteps(severityThreshold)}
-                            outputLabel="Risk results"
-                            outputItems={buildChatPlanRiskItems(severityThreshold)}
-                            outputNote={severityRuleNote(severityThreshold)}
-                            gateAfterId={PLAN_RUN_GATE_ID}
-                            gateOpen={severityGateOpen}
-                            onReachGate={showSeverityClarification}
-                            onBuildComplete={handleProgressiveLoadingComplete}
-                          />
-                        )}
+                        {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (() => {
+                          const plan = (msg.richData as unknown as { plan?: ActionRunPlan } | undefined)?.plan;
+                          return (
+                            <PlanFlowDiagram
+                              building
+                              steps={plan?.steps ?? buildChatPlanSteps(severityThreshold)}
+                              outputLabel={plan?.outputLabel ?? 'Risk results'}
+                              outputItems={plan?.outputItems ?? buildChatPlanRiskItems(severityThreshold)}
+                              outputNote={plan?.outputNote ?? severityRuleNote(severityThreshold)}
+                              gateAfterId={plan ? undefined : PLAN_RUN_GATE_ID}
+                              gateOpen={plan ? true : severityGateOpen}
+                              onReachGate={plan ? undefined : showSeverityClarification}
+                              onBuildComplete={handleProgressiveLoadingComplete}
+                            />
+                          );
+                        })()}
                       </div>
-                    ) : msg.richType === 'audit-result' ? (
+                    ) : msg.richType === 'audit-result' ? (() => {
+                      // An action's answer carries its own result: the plan it
+                      // ran, its rows, and the levels the insight already rated
+                      // them at. A plain query's message holds AUDIT_RESULT and
+                      // renders exactly as before.
+                      const actionResult = (msg.richData as unknown as ActionRunResult | undefined);
+                      const actionPlan = actionResult?.plan;
+                      const kpis = actionPlan ? actionResult!.kpis : AUDIT_RESULT.kpis;
+                      const charts = actionPlan ? actionResult!.charts : AUDIT_RESULT.charts;
+                      const table = actionPlan
+                        ? actionResult!.table
+                        : { ...AUDIT_RESULT.table, title: 'Risky payments', caption: `Risk column · ${severityRuleNote(severityThreshold)}` };
+                      // Row → level by position: the action's rows are rated by
+                      // the insight, not re-derived from an amount column.
+                      const actionLevels = actionPlan
+                        ? new Map(actionResult!.table.rows.map((r, i) => [r.join('|'), actionResult!.levels[i]]))
+                        : null;
+                      return (
                       <div className="space-y-4 w-full">
                         {/* Provenance flow — how this output was built from the
                             input files. Sits between the reasoning trail and the
@@ -6509,10 +6604,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             not the text-heavy plan in the right workspace. Full
                             chat-column width, matching the result body below. */}
                         <PlanFlowDiagram
-                          steps={buildChatPlanSteps(severityThreshold)}
-                          outputLabel="Risk results"
-                          outputItems={buildChatPlanRiskItems(severityThreshold)}
-                          outputNote={severityRuleNote(severityThreshold)}
+                          steps={actionPlan?.steps ?? buildChatPlanSteps(severityThreshold)}
+                          outputLabel={actionPlan?.outputLabel ?? 'Risk results'}
+                          outputItems={actionPlan?.outputItems ?? buildChatPlanRiskItems(severityThreshold)}
+                          outputNote={actionPlan?.outputNote ?? severityRuleNote(severityThreshold)}
                         />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all
@@ -6523,10 +6618,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         <AuditResultBody
                           messageId={msg.id}
                           text={msg.text}
-                          kpis={AUDIT_RESULT.kpis}
-                          previewRowCount={Math.min(PREVIEW_ROW_COUNT, AUDIT_RESULT.table.rows.length)}
+                          kpis={kpis}
+                          previewRowCount={Math.min(PREVIEW_ROW_COUNT, table.rows.length)}
                           forceComplete={msg.stopped}
-                          streamData={STREAM_V2 ? AUDIT_STREAM_DATA : undefined}
+                          streamData={STREAM_V2
+                            ? (actionPlan
+                                ? { reasoning: msg.thinking ?? [], answer: msg.text, kpis, chart: { id: charts[0]?.id ?? 'evidence-source' }, columns: table.columns, rows: table.rows }
+                                : AUDIT_STREAM_DATA)
+                            : undefined}
                           onDone={() => handleStreamDone(msg.id)}
                           afterProse={
                             /* Affordance: link inline result to the auto-opened
@@ -6544,21 +6643,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             ) : null
                           }
                           renderChart={() => (
-                            <ChartGroup charts={AUDIT_RESULT.charts} embedded />
+                            charts.length > 0 ? <ChartGroup charts={charts} embedded /> : null
                           )}
                           renderTable={(revealedRows) => (
                             <ResultsTable
-                              title="Risky payments"
-                              columns={AUDIT_RESULT.table.columns}
-                              rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
-                              totalRows={AUDIT_RESULT.table.totalRows}
+                              title={table.title}
+                              columns={table.columns}
+                              rows={table.rows.slice(0, revealedRows)}
+                              totalRows={table.totalRows}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                               animateRows={STREAM_V2}
                               // The rule the user set mid-run stamps the table:
                               // a caption states it, and each row's Risk is
                               // computed from its Amount (column 1) against the threshold.
-                              caption={`Risk column · ${severityRuleNote(severityThreshold)}`}
+                              caption={table.caption}
                               levelForRow={(row) => {
+                                if (actionLevels) return actionLevels.get(row.join('|')) ?? null;
                                 const amount = parseInt(String(row[1]).replace(/[^\d]/g, ''), 10);
                                 return Number.isFinite(amount) && isHighByAmount(amount, severityThreshold) ? 'High' : 'Medium';
                               }}
@@ -6578,7 +6678,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             the advisory recommendation points at Save as
                             workflow, which is how a second run is earned.
                             Hidden while the answer is still streaming, like
-                            the action bar below it. */}
+                            the action bar below it.
+
+                            An action's answer skips it outright: this run WAS
+                            an insight's recommendation, and generating a second
+                            insight over the rows the first one handed in would
+                            be the engine reading its own homework. */}
+                        {!actionPlan && (
                         <div className={streamingActive && msg.id === auditRunMsgIdRef.current ? 'hidden' : ''}>
                           <InsightGenerator
                             layer="control"
@@ -6627,6 +6733,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             )}
                           />
                         </div>
+                        )}
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
                             All buttons share the same outline-default / pressed-linked
@@ -6758,7 +6865,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           </div>
                         </div>
                       </div>
-                    ) : msg.richType === 'summary-kpi' ? (
+                      );
+                    })() : msg.richType === 'summary-kpi' ? (
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {((msg.richData?.kpis as { label: string; value: string; color: string }[] | undefined) || []).map((kpi, ki) => (
                           <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />

@@ -6,9 +6,11 @@ import {
   Upload, MessageSquare, RefreshCw, Shield,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
+import { Sparkles } from 'lucide-react';
 import type { Engagement, EngStatus, EngType, ProcessCode } from '../../data/engagements';
 import { ENGAGEMENT_EXCEPTIONS, type Severity } from '../../data/engagement-exceptions';
 import { ENGAGEMENT_ACTIVITY, formatDay, type ActivityType } from '../../data/engagement-activity';
+import { getReflectionsFor, useInsightCacheVersion } from '../shared/insightCache';
 
 /** Filter payload the overview hands back to the page to deep-link into the list. */
 export interface ListFilter {
@@ -21,6 +23,9 @@ interface Props {
   engagements: Engagement[];
   onOpenEngagement: (engagementId: string) => void;
   onGoToList: (filter?: ListFilter) => void;
+  /** Open the portfolio AI insights drawer (results of the header's Generate).
+   *  Needs-attention rows chip up when a portfolio insight spans them. */
+  onOpenPortfolioInsights?: () => void;
 }
 
 // ─── Shared token maps (kept in sync with EngagementsView) ──────────────────
@@ -169,9 +174,11 @@ function nextMilestone(e: Engagement): UpcomingEntry | null {
 const fmtMilestoneDate = (d: Date) =>
   d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-export default function EngagementsOverview({ engagements, onOpenEngagement, onGoToList }: Props) {
+export default function EngagementsOverview({ engagements, onOpenEngagement, onGoToList, onOpenPortfolioInsights }: Props) {
   const attentionRef = useRef<HTMLDivElement>(null);
   const scrollToAttention = () => attentionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Re-render when a portfolio Generate lands, so the row chips light up live.
+  useInsightCacheVersion();
 
   const nameById = useMemo(
     () => new Map(engagements.map(e => [e.id, e.name])),
@@ -336,12 +343,26 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                 {stats.attention.map((eng, i) => {
                   const tier = healthTier(eng.health);
                   const sev = worstOpenSeverity(eng.id);
+                  const spannedBy = getReflectionsFor('engagement', eng.id).length;
                   return (
                     <Row key={eng.id} index={i} onClick={() => onOpenEngagement(eng.id)}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           {sev && <span className={`w-2 h-2 rounded-full shrink-0 ${SEV_DOT[sev]}`} title={`${sev} exception open`} aria-hidden="true" />}
                           <span className="text-[0.8125rem] font-semibold text-text truncate">{eng.name}</span>
+                          {/* role="button" span — this row is itself a <button>,
+                              so a nested native button would be invalid. */}
+                          {spannedBy > 0 && onOpenPortfolioInsights && (
+                            <span
+                              role="button" tabIndex={0}
+                              title={`Part of ${spannedBy} portfolio insight${spannedBy === 1 ? '' : 's'} — click to view`}
+                              onClick={(e) => { e.stopPropagation(); onOpenPortfolioInsights(); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenPortfolioInsights(); } }}
+                              className="inline-flex items-center gap-1 rounded-full px-2 h-5 text-[0.625rem] font-bold border bg-brand-50 text-brand-700 border-brand-100 hover:bg-brand-100 cursor-pointer shrink-0"
+                            >
+                              <Sparkles size={9} aria-hidden="true" /> Portfolio insight{spannedBy === 1 ? '' : `s · ${spannedBy}`}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[0.6875rem] text-text-muted">
                           <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-semibold border ${TYPE_CLS[eng.type]}`}>

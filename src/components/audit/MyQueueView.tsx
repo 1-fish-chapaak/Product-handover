@@ -21,6 +21,15 @@ import {
   type Severity,
 } from '../../data/engagement-exceptions';
 import { CURRENT_USER, PEOPLE, myQueueFor, personForUser, slaStatus } from '../../data/grc-domain';
+import {
+  KIND_META, SCOPE_META, RENEWAL_TARGET, MEMORY_STORE,
+  type PlatformMemory,
+} from '../../data/memoryStore';
+import {
+  useMemorySessionVersion, allMemories, decisionFor,
+  approveMemory, rejectMemory, undoQueueDecision, renewMemory, forgetMemory,
+} from '../../data/memorySession';
+import { Brain, Undo2, CalendarClock } from 'lucide-react';
 
 interface Props {
   onOpenException: (engagementId: string, exceptionId: string) => void;
@@ -93,6 +102,202 @@ const CLASSIFY_TEMPLATES: { id: string; label: string; tone: string; icon: typeo
   { id: 't3', label: 'Process Gap — missing SOP step',       tone: 'border-mitigated-50 text-mitigated-700 hover:bg-mitigated-50', icon: Wand2 },
   { id: 't4', label: 'False Positive — tolerance match',     tone: 'border-evidence-50 text-evidence-700 hover:bg-evidence-50',    icon: Tag },
 ];
+
+// ─── Memory approvals & renewals ────────────────────────────────────────────
+// The governance inbox for the shared memory store (scope-follows-surface:
+// shared memory is approved HERE, not in the registry). Decisions run through
+// the shared session layer, so an approval instantly flips the row in Smart
+// Learn, the engagement Memory tab, and every surface that recalls it — and
+// every decision lands in the audit log's Memory module.
+
+/** Scope-adjust presets offered on approve (PRD: approval may narrow scope). */
+const APPROVE_PRESETS: { id: string; label: string }[] = [
+  { id: 'as-proposed', label: 'Approve as proposed' },
+  { id: 'engagement-only', label: 'Approve for this engagement only' },
+  { id: 'expiry-90', label: 'Approve with a 90-day expiry' },
+];
+
+function MemoryQueueCard({ memory, meName }: { memory: PlatformMemory; meName: string }) {
+  const { addToast } = useToast();
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const d = decisionFor(memory.id);
+
+  if (d?.approved) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-compliant-50 bg-compliant-50/60 px-4 py-2.5">
+        <Check size={14} strokeWidth={3} className="shrink-0 text-compliant-700" />
+        <span className="min-w-0 flex-1 truncate text-[0.75rem] text-compliant-700">
+          <span className="font-semibold">Approved{d.approved.note ? ` — ${d.approved.note}` : ''}.</span> Active everywhere the memory fires; logged to the audit trail.
+        </span>
+        <button onClick={() => undoQueueDecision(memory)}
+          className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer">
+          <Undo2 size={11} /> Undo
+        </button>
+      </div>
+    );
+  }
+  if (d?.rejected) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-border-light bg-surface-2 px-4 py-2.5">
+        <X size={13} className="shrink-0 text-text-muted" />
+        <span className="min-w-0 flex-1 truncate text-[0.75rem] text-text-secondary">
+          Rejected — the proposal is retired, not deleted. It may return if the signal strengthens.
+        </span>
+        <button onClick={() => undoQueueDecision(memory)}
+          className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer">
+          <Undo2 size={11} /> Undo
+        </button>
+      </div>
+    );
+  }
+
+  const approve = (note?: string) => {
+    approveMemory(memory, meName, note);
+    addToast({ type: 'success', message: 'Memory approved — active on every surface it fires in.' });
+  };
+
+  return (
+    <div className="rounded-xl border border-border-light bg-white px-4 py-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Brain size={15} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.8125rem] font-medium leading-snug text-text">{memory.statement}</p>
+          <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-secondary">
+            <span className="font-mono font-semibold text-primary">{KIND_META[memory.kind].label} · {SCOPE_META[memory.scope].label}</span>
+            <span className="text-text-muted"> · </span>
+            {memory.pendingNote ?? memory.source}
+            <span className="text-text-muted"> · {memory.evidence.length} evidence item{memory.evidence.length === 1 ? '' : 's'}</span>
+          </p>
+        </div>
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-11">
+        <button onClick={() => approve()}
+          className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[0.75rem] font-semibold text-white hover:opacity-90 transition-opacity cursor-pointer">
+          Approve
+        </button>
+        <div className="relative">
+          <button onClick={() => setAdjustOpen(o => !o)} aria-expanded={adjustOpen}
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-border-light bg-white px-3 text-[0.75rem] font-semibold text-text-secondary hover:border-primary/40 hover:text-primary transition-colors cursor-pointer">
+            Adjust scope <ChevronDown size={12} className={`transition-transform ${adjustOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <AnimatePresence>
+            {adjustOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setAdjustOpen(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute left-0 z-30 mt-1.5 w-[240px] rounded-lg border border-border-light bg-white p-1.5 shadow-xl"
+                >
+                  {APPROVE_PRESETS.map(p => (
+                    <button key={p.id}
+                      onClick={() => { setAdjustOpen(false); approve(p.id === 'as-proposed' ? undefined : p.label.replace('Approve ', '')); }}
+                      className="block w-full rounded-md px-2.5 py-1.5 text-left text-[0.75rem] font-medium text-text hover:bg-surface-2 transition-colors cursor-pointer">
+                      {p.label}
+                    </button>
+                  ))}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+        <button onClick={() => { rejectMemory(memory, meName); addToast({ type: 'info', message: 'Proposal rejected — retired with its audit trail, not deleted.' }); }}
+          className="inline-flex h-8 items-center rounded-md px-2 text-[0.75rem] font-semibold text-text-muted hover:text-risk-700 transition-colors cursor-pointer">
+          Reject
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MemoryRenewalCard({ memory }: { memory: PlatformMemory }) {
+  const { addToast } = useToast();
+  const d = decisionFor(memory.id);
+  if (d?.renewedTo) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-compliant-50 bg-compliant-50/60 px-4 py-2.5">
+        <Check size={14} strokeWidth={3} className="shrink-0 text-compliant-700" />
+        <span className="min-w-0 flex-1 truncate text-[0.75rem] font-semibold text-compliant-700">Renewed — next review {d.renewedTo}. Logged.</span>
+      </div>
+    );
+  }
+  if (d?.forgotten) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-border-light bg-surface-2 px-4 py-2.5">
+        <X size={13} className="shrink-0 text-text-muted" />
+        <span className="min-w-0 flex-1 truncate text-[0.75rem] text-text-secondary">Retired — removed from shared memory and logged.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-mitigated-50 bg-mitigated-50/40 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-mitigated-50 text-mitigated-700">
+          <CalendarClock size={15} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.8125rem] font-medium leading-snug text-text">{memory.statement}</p>
+          <p className="mt-1 text-[0.6875rem] text-text-secondary">
+            <span className="font-mono font-semibold text-mitigated-700">Review due {memory.reviewBy}</span>
+            <span className="text-text-muted"> · {KIND_META[memory.kind].label} · {SCOPE_META[memory.scope].label} · recalled {memory.recallCount}×</span>
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 pt-1">
+          <button onClick={() => { renewMemory(memory); addToast({ type: 'success', message: `Renewed until ${RENEWAL_TARGET}.` }); }}
+            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[0.75rem] font-semibold text-white hover:opacity-90 transition-opacity cursor-pointer">
+            Renew until {RENEWAL_TARGET}
+          </button>
+          <button onClick={() => { forgetMemory(memory); addToast({ type: 'info', message: 'Memory retired — logged to the audit trail.' }); }}
+            className="inline-flex h-8 items-center rounded-md px-2 text-[0.75rem] font-semibold text-text-muted hover:text-risk-700 transition-colors cursor-pointer">
+            Retire
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemoryQueueSection({ meName }: { meName: string }) {
+  useMemorySessionVersion();
+  const all = allMemories();
+  // Proposals: seed-proposed rows plus session captures, still shown after a
+  // decision (as undoable receipts) so the queue never "loses" an item mid-look.
+  const proposals = all.filter(m => {
+    const d = decisionFor(m.id);
+    return m.status === 'proposed' || d?.approved != null || d?.rejected === true;
+  });
+  const seedProposedIds = new Set(MEMORY_STORE.filter(m => m.status === 'proposed').map(m => m.id));
+  const orderedProposals = [
+    ...proposals.filter(m => seedProposedIds.has(m.id)),
+    ...proposals.filter(m => !seedProposedIds.has(m.id)),
+  ];
+  const renewals = all.filter(m => m.renewDue || decisionFor(m.id)?.renewedTo);
+  const openCount = orderedProposals.filter(m => m.status === 'proposed').length
+    + renewals.filter(m => m.renewDue).length;
+  if (orderedProposals.length === 0 && renewals.length === 0) return null;
+  return (
+    <section aria-label="Memory approvals and renewals" className="mb-6">
+      <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="flex items-center gap-1.5">
+          <Brain size={13} className="text-primary" />
+          <h2 className="text-[0.75rem] font-bold uppercase tracking-wider text-text">Memory approvals &amp; renewals</h2>
+          {openCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-1.5 py-px text-[0.625rem] font-bold tabular-nums text-primary">{openCount}</span>
+          )}
+        </span>
+        <span className="text-[0.6875rem] text-text-muted">
+          Proposals from the shared store — nothing becomes team, engagement or org memory without a yes here.
+        </span>
+      </div>
+      <div className="space-y-2">
+        {orderedProposals.map(m => <MemoryQueueCard key={m.id} memory={m} meName={meName} />)}
+        {renewals.map(m => <MemoryRenewalCard key={m.id} memory={m} />)}
+      </div>
+    </section>
+  );
+}
 
 export default function MyQueueView({ onOpenException }: Props): JSX.Element {
   const { addToast } = useToast();
@@ -210,6 +415,10 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
             tint="bg-compliant-50 border-compliant-50" valueCls="text-compliant-700" iconCls="text-compliant-700"
             sub="Across all engagements" />
         </div>
+
+        {/* Memory governance inbox — sits above the exception queue because it
+            is different work (approve/renew shared memory) with its own SLA. */}
+        <MemoryQueueSection meName={me.name} />
 
         <div className="flex items-center gap-4 mb-4 flex-wrap text-[0.6875rem]">
           <div className="flex items-center gap-2">
