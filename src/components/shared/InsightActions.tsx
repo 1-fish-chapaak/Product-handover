@@ -27,6 +27,7 @@ const TARGET_TONE: Record<EntityKind, string> = {
   sop:        'bg-brand-50 text-brand-700',
   engagement: 'bg-paper-100 text-ink-600',
   workflow:   'bg-evidence-50 text-evidence-700',
+  exception:  'bg-high-50 text-high-700',
 };
 
 // ─── Recommended-action tile (grid cell) ────────────────────────────────────

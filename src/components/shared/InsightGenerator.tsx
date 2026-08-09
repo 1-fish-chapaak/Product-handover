@@ -61,6 +61,7 @@ const PIPELINE: Record<InsightLayer, string[]> = {
   sop: ['Reading this SOP’s risks and controls', 'Finding the shared root cause', 'Locating the coverage gap', 'Writing the explanation'],
   engagement: ['Reading every risk and control', 'Collapsing findings that share a driver', 'Weighing the total against readiness', 'Writing the escalation'],
   portfolio: ['Reading every engagement’s findings', 'Correlating drivers across engagements', 'Collapsing findings that share a driver', 'Writing the escalation'],
+  exception: ['Reading every exception in this scope', 'Grouping cases that share a root cause', 'Checking owners and due dates against the clock', 'Writing the explanation'],
 };
 
 export const stackSteps = (n: number | null): string[] => [

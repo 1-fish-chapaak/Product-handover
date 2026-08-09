@@ -83,10 +83,11 @@ const EVIDENCE_LABEL: Record<LayeredInsight['layer'], string> = {
   sop: 'Evidence · risks and controls under this SOP',
   engagement: 'Evidence · risks and controls',
   portfolio: 'Evidence · engagements in the pattern',
+  exception: 'Evidence · linked cases',
 };
 
 const LAYER_WORD: Record<LayeredInsight['layer'], string> = {
-  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement', portfolio: 'Portfolio',
+  control: 'Control', risk: 'Risk', sop: 'SOP', engagement: 'Engagement', portfolio: 'Portfolio', exception: 'Pattern',
 };
 
 // ─── Entity navigation — "which risk/control, and take me there" ────────────

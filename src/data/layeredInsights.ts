@@ -21,7 +21,7 @@ import type { ConfidenceFactors, InsightSeverity, DetectionMethod, KpiFormat } f
 
 // ─── The altitudes ─────────────────────────────────────────────────────────
 
-export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement' | 'portfolio';
+export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement' | 'portfolio' | 'exception';
 
 // ─── Anchors, spans and targets — the B+C surfacing model ──────────────────
 // Two rules govern where AI content appears across SOP → risk → control:
@@ -39,7 +39,7 @@ export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement' | 'portfoli
 //      insight for context. A rec without a target belongs to its own card's
 //      surface and never travels.
 
-export type EntityKind = 'control' | 'risk' | 'sop' | 'engagement' | 'workflow';
+export type EntityKind = 'control' | 'risk' | 'sop' | 'engagement' | 'workflow' | 'exception';
 
 export interface EntityRef {
   kind: EntityKind;
@@ -1263,6 +1263,13 @@ export const LAYER_META: Record<InsightLayer, { label: string; scan: string; den
   portfolio: {
     label: 'this portfolio',
     scan: 'Correlates findings across every engagement in the library',
+    density: 'light',
+  },
+  // The exceptions surface: the anchor is the exception SET (a pattern across
+  // cases), never a single case — one case alone has nothing to correlate.
+  exception: {
+    label: 'this exception set',
+    scan: 'Groups the exceptions in this scope that share a root cause',
     density: 'light',
   },
 };
