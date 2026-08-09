@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
+import { MemoryChip, SinceYouLeft } from '../shared/memory/MemoryKit';
+import { MEMORY_STORE } from '../../data/memoryStore';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
@@ -3954,6 +3956,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const { openShare } = useShare();
   const { can } = useCan();
   const [loading, setLoading] = useState(true);
+  // Memory defaults applied on open (Preference · Personal) — visible,
+  // removable chips, never hidden (Memory PRD §5). Removal is per-session;
+  // removing the same default 3× is the signal that retires it.
+  const [removedMemoryDefaults, setRemovedMemoryDefaults] = useState<Set<string>>(() => new Set());
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
   const [activeId, setActiveId] = useState<DashboardId>(
     !isCustomInitial && (initialDashboardId as DashboardId) && DASHBOARDS.some(d => d.id === initialDashboardId)
@@ -4480,6 +4486,55 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 </div>
               </div>
             </div>
+
+            {/* Since-you-last-looked digest + the memory defaults this board
+                opened with (Memory PRD §5 — a dashboard is looked at, not
+                asked, so memory is the only way it can be personal). */}
+            {!isCustomDashboard && !isExcelDashboard && (
+              <>
+                <SinceYouLeft
+                  className="mb-4"
+                  kicker="Since Friday"
+                  headline={<>14 new exceptions · 3 above your ₹5&nbsp;L floor · vendor <span className="font-semibold">ABC</span> is new to this list.</>}
+                />
+                {(() => {
+                  const defaults = [
+                    { key: 'range', memId: 'mem-usr-007', label: 'Last 90 days' },
+                    { key: 'test-entities', memId: 'mem-usr-007', label: 'Excl. test entities' },
+                    { key: 'carve-out', memId: 'mem-eng-007', label: 'Excl. Subsidiary XYZ · FY26 carve-out' },
+                  ].filter(d => !removedMemoryDefaults.has(d.key));
+                  const defMemory = MEMORY_STORE.find(m => m.id === 'mem-org-005');
+                  if (defaults.length === 0 && !defMemory) return null;
+                  return (
+                    <div className="mb-5 flex flex-wrap items-center gap-2">
+                      <span className="text-[0.625rem] font-bold uppercase tracking-[0.08em] text-ink-400">Opened with your defaults</span>
+                      {defaults.map(d => {
+                        const mem = MEMORY_STORE.find(m => m.id === d.memId);
+                        return mem ? (
+                          <MemoryChip
+                            key={d.key}
+                            memory={mem}
+                            form="filter"
+                            label={d.label}
+                            onRemove={() => {
+                              setRemovedMemoryDefaults(prev => new Set([...prev, d.key]));
+                              addToast({ type: 'info', message: 'Removed for this session — remove it three times and IRA retires the default.' });
+                            }}
+                          />
+                        ) : null;
+                      })}
+                      {defMemory && (
+                        <MemoryChip
+                          memory={defMemory}
+                          form="definition"
+                          label="on-time % counts from invoice date — org definition"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
 
             {/* AI Summary — Generate / View / Edit */}
             {/* Alerts & Daily Digest */}

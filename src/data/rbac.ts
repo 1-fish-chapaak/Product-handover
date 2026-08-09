@@ -48,6 +48,7 @@ export type ModuleId =
   | 'exceptions'
   | 'planning'
   | 'concierge'
+  | 'memory'
   | 'admin';
 
 export type PermissionKey =
@@ -76,6 +77,9 @@ export type PermissionKey =
   | 'plan_view' | 'plan_edit'
   // AI Concierge (new) — Ask IRA chat is free for everyone, so it has no key
   | 'concierge_use'
+  // Memory (Memory-across-platform PRD): view the registry, approve shared
+  // proposals in My Queue, administer org rules & policy in Admin
+  | 'mem_view' | 'mem_approve' | 'mem_admin'
   // Admin (existing 2 + new 4 + usage)
   | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_export';
 
@@ -166,6 +170,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   ]},
   { group: 'AI Concierge', module: 'concierge', perms: [
     { key: 'concierge_use', name: 'Use AI Concierge', desc: 'Use the AI Concierge tools' },
+  ]},
+  { group: 'Memory', module: 'memory', perms: [
+    { key: 'mem_view',    name: 'View Registry',     desc: 'Browse the Smart Learn memory registry and provenance' },
+    { key: 'mem_approve', name: 'Approve Proposals', desc: 'Approve, adjust or reject shared-memory proposals in My Queue' },
+    { key: 'mem_admin',   name: 'Manage Org Rules',  desc: 'Create and retire organization-wide memory rules and policy' },
   ]},
   { group: 'Admin', module: 'admin', perms: [
     { key: 'ad_logs',         name: 'Compliance Logs',  desc: 'View compliance-related logs and audit trails' },

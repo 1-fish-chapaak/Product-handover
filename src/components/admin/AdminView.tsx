@@ -15,7 +15,12 @@ import {
   Users, User, Shield, ScrollText,
   UserPlus, Plus, Download, ArrowRight,
   ChevronDown, Pencil, Trash2, X, Check, Crown, Send, UserCheck, UserX, Gauge, UserMinus,
+  Brain, Lock, CircleSlash, Undo2,
 } from 'lucide-react';
+import { MEMORY_STORE, KIND_META, SCOPE_META } from '../../data/memoryStore';
+import {
+  useMemorySessionVersion, allMemories, decisionFor, forgetMemory, undoForget,
+} from '../../data/memorySession';
 import { PERMISSION_GROUPS } from '../../data/rbac';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useAdminData, useAuditLog, type AuditLog, type AdminTeam, type AdminUser, type UserStatus } from '../../context/AdminDataContext';
@@ -43,7 +48,7 @@ interface Props {
  *  (search left · filters/CTA right) → content. People & Teams are two views of
  *  one "Members" tab, toggled by a segmented switch above the (unchanged) People
  *  / Teams screens. */
-type SectionId = 'members' | 'roles' | 'logs';
+type SectionId = 'members' | 'roles' | 'memory' | 'logs';
 type MembersView = 'people' | 'teams';
 
 const STATUS_MAP: Record<UserStatus, string> = {
@@ -2057,6 +2062,135 @@ function MembersSwitch({ view, onSelect }: { view: MembersView; onSelect: (v: Me
  * Page shell
  * ════════════════════════════════════════════════════════════════════════ */
 
+// ─── Memory governance — org rules, learning policy, audit trail ────────────
+// The Admin home for organization-wide memory (scope-follows-surface: Rule ·
+// Organization and Rule · Source are written HERE and nowhere else). Rules are
+// enforced with no override anywhere they fire; retiring one is an admin
+// action that lands in the audit log's Memory module.
+
+function MemoryGovernanceSection({ onOpenLogs }: { onOpenLogs: () => void }) {
+  useMemorySessionVersion();
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  // Learning kill-switches (session policy, per memory family). Off = IRA
+  // stops proposing that family tenant-wide; existing memories keep firing.
+  const [policy, setPolicy] = useState({ behavioral: true, shared: true, source: true });
+  const rules = allMemories().filter(m => m.kind === 'rule');
+
+  const togglePolicy = (key: keyof typeof policy, label: string) => {
+    setPolicy(p => {
+      const next = { ...p, [key]: !p[key] };
+      logEvent({
+        action: 'Update',
+        description: `Memory learning policy — ${label} ${next[key] ? 'enabled' : 'paused'} tenant-wide`,
+        module: 'Memory', entity: 'learning-policy',
+      });
+      return next;
+    });
+  };
+
+  const POLICIES: { key: keyof typeof policy; label: string; desc: string }[] = [
+    { key: 'behavioral', label: 'Behavioral learning', desc: 'Personal defaults inferred from repeated choices (chart types, formats, routines). Learned after 2–3 consistent signals, always undoable.' },
+    { key: 'shared', label: 'Shared proposals', desc: 'Team and engagement memory proposed from recurring edits and clarifications. Nothing activates without a My Queue approval.' },
+    { key: 'source', label: 'Source capture', desc: 'Column meanings, mappings and grain captured from clarifications and validated runs.' },
+  ];
+
+  return (
+    <div className="max-w-4xl">
+      <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[1.0625rem] font-bold text-ink-900">Memory governance</h2>
+          <p className="mt-1 text-[0.8125rem] text-ink-500 max-w-2xl">
+            Organization rules are enforced everywhere memory fires — no surface offers an override. Every change here, and every learn/approve/forget anywhere, lands in the audit log’s <span className="font-semibold text-ink-700">Memory</span> module.
+          </p>
+        </div>
+        <button onClick={onOpenLogs} className={BTN_CTA_OUTLINE}>
+          <ScrollText size={14} /> Memory audit trail
+        </button>
+      </div>
+
+      {/* Org + source rules — the only place Rule-kind memory is administered */}
+      <div className="mb-6">
+        <div className="mb-2 flex items-center gap-1.5">
+          <Lock size={13} className="text-evidence-700" />
+          <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-800">Enforced rules</h3>
+          <span className="rounded-full border border-canvas-border bg-canvas-elevated px-1.5 py-px text-[0.625rem] font-bold tabular-nums text-ink-500">{rules.filter(r => !decisionFor(r.id)?.forgotten).length}</span>
+        </div>
+        <div className="space-y-2">
+          {rules.map(m => {
+            const d = decisionFor(m.id);
+            if (d?.forgotten) {
+              return (
+                <div key={m.id} className="flex items-center gap-2 rounded-xl border border-canvas-border bg-canvas px-4 py-2.5">
+                  <CircleSlash size={13} className="shrink-0 text-ink-400" />
+                  <span className="min-w-0 flex-1 truncate text-[0.75rem] text-ink-500">Rule retired — no longer enforced. Logged.</span>
+                  <button onClick={() => undoForget(m)} className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
+                    <Undo2 size={11} /> Undo
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div key={m.id} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-evidence-50 text-evidence-700">
+                    <Lock size={14} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[0.8125rem] font-medium leading-snug text-ink-900">{m.statement}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[0.6875rem] text-ink-400">
+                      <span className="font-mono font-semibold text-evidence-700">{KIND_META[m.kind].label} · {SCOPE_META[m.scope].label}</span>
+                      {m.entity && <><span>·</span><span className="font-mono">{m.entity.label}</span></>}
+                      <span>·</span><span>set by {m.approvedBy ?? 'Admin'}</span>
+                      <span>·</span><span className="tabular-nums">enforced {m.recallCount}× </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { forgetMemory(m); addToast({ type: 'info', message: 'Rule retired — enforcement stops, trail kept.' }); }}
+                    className="shrink-0 text-[0.6875rem] font-semibold text-ink-400 hover:text-risk transition-colors cursor-pointer"
+                  >
+                    Retire
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Learning policy — tenant-wide kill switches per memory family */}
+      <div>
+        <div className="mb-2 flex items-center gap-1.5">
+          <Brain size={13} className="text-brand-600" />
+          <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-800">Learning policy</h3>
+        </div>
+        <div className="space-y-2">
+          {POLICIES.map(p => (
+            <div key={p.key} className="flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.8125rem] font-semibold text-ink-900">{p.label}</p>
+                <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-ink-500">{p.desc}</p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={policy[p.key]}
+                onClick={() => togglePolicy(p.key, p.label)}
+                className={`relative h-5.5 w-10 shrink-0 rounded-full transition-colors cursor-pointer ${policy[p.key] ? 'bg-brand-600' : 'bg-ink-300'}`}
+                style={{ height: '1.375rem' }}
+              >
+                <span className={`absolute top-0.5 size-[1.125rem] rounded-full bg-white shadow transition-all ${policy[p.key] ? 'left-[1.25rem]' : 'left-0.5'}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[0.6875rem] text-ink-400">
+          Pausing a family stops new proposals tenant-wide; memories already approved keep firing until retired. {MEMORY_STORE.length} memories are registered in Smart Learn.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminView({ activeTab }: Props) {
   // Map sidebar view ids onto the flat three-tab shell. People & Teams both land
   // on the Members tab; a 'teams' deep-link opens Members on the Teams view.
@@ -2089,6 +2223,7 @@ export default function AdminView({ activeTab }: Props) {
   const sections: SectionDef[] = [
     { id: 'members', label: 'Users & Teams', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
+    { id: 'memory', label: 'Memory', icon: Brain },
     { id: 'logs', label: 'Audit Log', icon: ScrollText },
   ];
 
@@ -2188,6 +2323,17 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
           >
             <RolesWorkspace key={`roles-${roleFocusNonce}`} initialRoleId={roleFocusId} onCreateRole={openCreateRole} />
+          </motion.div>
+        ) : section === 'memory' ? (
+          <motion.div
+            key="memory"
+            className="pt-4"
+            initial={prefersReduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReduced ? undefined : { opacity: 0 }}
+            transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <MemoryGovernanceSection onOpenLogs={() => setSection('logs')} />
           </motion.div>
         ) : (
           <motion.div

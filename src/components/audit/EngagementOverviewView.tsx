@@ -6,8 +6,10 @@ import {
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
-  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2, Brain,
 } from 'lucide-react';
+import EngagementMemoryTab from './EngagementMemoryTab';
+import { SinceYouLeft } from '../shared/memory/MemoryKit';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
@@ -59,7 +61,7 @@ import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
+type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'memory' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
@@ -90,6 +92,7 @@ const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
   evidence:        { icon: FolderOpen,      chip: 'bg-amber-50 text-amber-600' },
   exceptions:      { icon: AlertTriangle,   chip: 'bg-rose-50 text-rose-600' },
   'working-paper': { icon: BookOpen,        chip: 'bg-teal-50 text-teal-600' },
+  memory:          { icon: Brain,           chip: 'bg-indigo-50 text-indigo-600' },
   trail:           { icon: Activity,        chip: 'bg-fuchsia-50 text-fuchsia-600' },
   config:          { icon: Settings,        chip: 'bg-slate-100 text-slate-600' },
 };
@@ -119,14 +122,14 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
   const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('memory', 'Memory'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
     case 'SOX / ICFR':
       // SOX/ICFR opens its own dedicated experience; this fallback keeps the type exhaustive.
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('memory', 'Memory'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('memory', 'Memory'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
 }
 
@@ -642,17 +645,31 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           >
             {/* ═══ OVERVIEW — Health dashboard for all three engagement types ═══ */}
             {activeTab === 'overview' && (
-              <HealthOverviewTab
-                eng={eng}
-                onDrillToExceptions={goToExceptionsTab}
-                onGoToWorkflows={goToWorkflowsTab}
-                onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
-                onOpenWorkflow={onOpenWorkflow}
-                hideWorkflowConfig={eng.type === 'Automation'}
-                // Insights moved to engagement chrome: generated from the
-                // header, read in the right-side drawer — not on this tab.
-                hideInsightGenerator
-              />
+              <>
+                {/* Where-you-left-off (memory kit §03): the saved position from
+                    the last visit, resumable in one click. Flagship world only —
+                    the seed row is scoped to the chargeback engagement. */}
+                {/p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`) && eng.type !== 'Automation' && (
+                  <SinceYouLeft
+                    className="mb-4"
+                    kicker="Since Friday"
+                    headline={<>2 new exceptions on the MCKESSON queue · the vendor-master drift you flagged is still open.</>}
+                    resume="You left off: 12 of 40 samples reviewed on P2P-07"
+                    onResume={() => { setFocusControlId('P2P-C-07'); setActiveTab('controls'); }}
+                  />
+                )}
+                <HealthOverviewTab
+                  eng={eng}
+                  onDrillToExceptions={goToExceptionsTab}
+                  onGoToWorkflows={goToWorkflowsTab}
+                  onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
+                  onOpenWorkflow={onOpenWorkflow}
+                  hideWorkflowConfig={eng.type === 'Automation'}
+                  // Insights moved to engagement chrome: generated from the
+                  // header, read in the right-side drawer — not on this tab.
+                  hideInsightGenerator
+                />
+              </>
             )}
             {/* ═══ RACM (Compliance / IA) ═══ */}
             {activeTab === 'racm' && (
@@ -696,6 +713,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {/* ═══ WORKING PAPER (Compliance) / AUDIT REPORT (IA) ═══ */}
             {activeTab === 'working-paper' && (
               <WorkingPaperTab engagement={eng} />
+            )}
+
+            {/* ═══ MEMORY (all types) — the engagement's shared brain (D3) ═══ */}
+            {activeTab === 'memory' && (
+              <EngagementMemoryTab eng={eng} />
             )}
 
             {/* ═══ ACTION TRAIL (all types) ═══ */}

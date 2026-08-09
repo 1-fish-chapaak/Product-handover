@@ -75,9 +75,15 @@ function UnderlinedTabs({
 // gradient, no animated overlay — same calm chrome the rest of the platform's
 // list pages use.
 
-export default function KnowledgeHubView() {
+export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = null }: {
+  /** Deep-link support (?view=knowledge-hub&tab=learn, or app:navigate-view
+   *  with a tab) — Smart Learn finally has an address. */
+  initialTab?: TabId;
+  /** Focus one registry row (chips' "Manage →"): opens its drawer on land. */
+  focusMemoryId?: string | null;
+}) {
   const dataSourcesRef = useRef<DataSourcesViewHandle>(null);
-  const [tab, setTab] = useState<TabId>('data');
+  const [tab, setTab] = useState<TabId>(initialTab);
   // When a source detail is open it takes over the page from the top, so the
   // title / subhead / tabs header is hidden (the detail's own breadcrumb leads
   // back).
@@ -248,7 +254,7 @@ export default function KnowledgeHubView() {
               // The registry scrolls as one region under the pinned page header.
               className="flex-1 min-h-0 overflow-y-auto"
             >
-              <SmartLearnView />
+              <SmartLearnView focusMemoryId={focusMemoryId} />
             </motion.div>
           )}
         </AnimatePresence>
