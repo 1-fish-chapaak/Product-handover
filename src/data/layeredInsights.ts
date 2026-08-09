@@ -393,12 +393,13 @@ const CONTROL_PRICING: LayeredInsight = {
     'Sample line paid $4.69 against a revised $40.97 — −$36.28 on one line alone.',
     'The same feed priced June’s run; left unfixed it re-breaks next period.',
   ],
-  // A′ stat band — 78% is a legal share (population 90); the materiality tile
-  // stays visibly estimated until the total is sized.
+  // A′ stat band — three wider tiles (review call Aug 7) so each consequence
+  // line breathes. 78% is a legal share (population 90); the materiality tile
+  // stays visibly estimated until the total is sized. The sampled −$36.28/line
+  // gap lives on in the stakes and the HPG12 evidence row.
   kpis: [
-    { value: '70', unit: '/ 90', label: 'MCKESSON lines', sub: '78% of exceptions — hold before settlement' },
-    { value: '↑ 12', label: 'New since June', sub: '2 cleared — growing, not clearing', tone: 'bad' },
-    { value: '−$36.28', label: 'Sampled gap / line', sub: '$4.69 vs $40.97 due — unrecoverable once paid' },
+    { value: '70', unit: '/ 90', label: 'MCKESSON lines', sub: '78% of exceptions — hold them before settlement' },
+    { value: '↑ 12', label: 'New since June', sub: 'only 2 cleared — the break is growing, not clearing', tone: 'bad' },
     { value: '≈ 3.4%', label: 'Of materiality', sub: 'est. $2.5k across 70 held lines · size before sign-off' },
   ],
   riskType: 'financial',
@@ -456,10 +457,11 @@ const RISK_PRICING: LayeredInsight = {
     'Combined underpayment across the three controls is not yet a firm total — size it before grading the deficiency.',
     'Every downstream pass inherits the untested feed, so the assurance is weaker than it reads.',
   ],
+  // Three tiles (Aug 7) — the coverage-gap tile folded away: the cause block
+  // already says nothing tests the feed at its source.
   kpis: [
     { value: '3', unit: '/ 3', label: 'Controls exposed', sub: 'all flag the same feed — one exposure, counted once' },
     { value: '2', label: 'Periods unresolved', sub: 'recurring since June — assurance weaker than it reads', tone: 'bad' },
-    { value: '1', label: 'Coverage gap', sub: 'nothing tests the feed at its source' },
     { value: 'Unsized', label: 'Combined underpayment', sub: 'size it before grading the deficiency' },
   ],
   riskType: 'financial',
@@ -1309,8 +1311,10 @@ export function riskTypeOf(i: LayeredInsight): InsightRiskType {
  *  authored tiles: trajectory (the anchor metric + its real delta), rollup
  *  breadth, runs analysed. Never fabricates a figure — a card with thin data
  *  gets a thin band, which is itself the honest reading. */
+// The band holds at most 3 tiles (review call Aug 7) — wider tiles give each
+// consequence sub-line room to say something instead of truncating.
 export function insightKpis(i: LayeredInsight): InsightKpi[] {
-  if (i.kpis && i.kpis.length > 0) return i.kpis;
+  if (i.kpis && i.kpis.length > 0) return i.kpis.slice(0, 3);
   const out: InsightKpi[] = [];
   if (i.trajectory && i.trajectory.points.length > 0) {
     const r = readTrajectory(i.trajectory);
@@ -1340,5 +1344,5 @@ export function insightKpis(i: LayeredInsight): InsightKpi[] {
       sub: 'behind this finding',
     });
   }
-  return out.slice(0, 4);
+  return out.slice(0, 3);
 }

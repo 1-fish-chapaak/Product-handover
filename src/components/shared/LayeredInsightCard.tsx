@@ -179,9 +179,10 @@ function ActionRow({ text, onOpen }: { text: string; onOpen: () => void }) {
 
 function KpiBand({ kpis }: { kpis: InsightKpi[] }) {
   if (kpis.length === 0) return null;
+  // Never more than 3-up (insightKpis caps the band) — wider tiles give the
+  // consequence sub-lines room to wrap instead of truncating.
   const cols =
-    kpis.length >= 4 ? 'grid-cols-2 lg:grid-cols-4'
-    : kpis.length === 3 ? 'max-sm:grid-cols-1 grid-cols-3'
+    kpis.length >= 3 ? 'max-sm:grid-cols-1 grid-cols-3'
     : kpis.length === 2 ? 'grid-cols-2'
     : 'grid-cols-1';
   return (
