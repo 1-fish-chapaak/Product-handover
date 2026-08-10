@@ -216,6 +216,13 @@ const getInitialView = (): View => {
   if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
   if (v === 'engagement-detail') return 'engagement-detail';
   if (v === 'workflow-executor') return 'workflow-executor';
+  // New-tab deep link from an insight's "Edit workflow" action — lands straight
+  // in the edit-in-chat journey; the insight context rides in via ?wfedit=.
+  if (v === 'workflow-edit-in-chat' && params.get('workflowId')) return 'workflow-edit-in-chat';
+  // New-tab deep link from an insight's "Run frequency" action — lands on the
+  // workflow details page; ?tab=config opens straight onto Configuration where
+  // the cadence is actually set.
+  if (v === 'workflow-detail' && params.get('workflowId')) return 'workflow-detail';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
   // New-tab deep link from the engagement insights drawer's "go to control"
   // chips — lands on the engagement workspace (EngagementOverviewView), which
@@ -247,8 +254,18 @@ export const getInitialMemoryFocus = (): string | null => {
 const getInitialWorkflowId = (): string | null => {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
-  if (params.get('view') !== 'workflow-executor') return null;
+  const v = params.get('view');
+  if (v !== 'workflow-executor' && v !== 'workflow-edit-in-chat' && v !== 'workflow-detail') return null;
   return params.get('workflowId');
+};
+
+/** ?view=workflow-detail&tab=config lands on the Configuration tab. */
+const getInitialWorkflowDetailTab = (): 'overview' | 'runs' | 'config' => {
+  if (typeof window === 'undefined') return 'runs';
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'workflow-detail') return 'runs';
+  const tab = params.get('tab');
+  return tab === 'config' || tab === 'overview' || tab === 'runs' ? tab : 'runs';
 };
 
 const getInitialEngagementId = (): string | null => {
@@ -284,7 +301,7 @@ const INITIAL_STATE: AppState = {
   showArtifacts: false,
   showChatHistory: false,
   selectedWorkflowId: getInitialWorkflowId(),
-  workflowDetailInitialTab: 'runs',
+  workflowDetailInitialTab: getInitialWorkflowDetailTab(),
   workflowExecutorBackView: null,
   selectedBPId: getInitialBPId(),
   userProcesses: [],

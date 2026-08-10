@@ -752,7 +752,13 @@ function AppInner() {
               }
             }}
             onOpenExecutor={() => openWorkflowExecutor(state.selectedWorkflowId!)}
-            onEditInChat={() => enterWorkflowMode({ workflowId: state.selectedWorkflowId! })}
+            // Same journey the insight card's "Edit workflow" tile opens — the
+            // edit-in-chat landing in a NEW tab, so the details page stays put.
+            onEditInChat={() => {
+              try {
+                window.open(`?view=workflow-edit-in-chat&workflowId=${encodeURIComponent(state.selectedWorkflowId!)}`, '_blank', 'noopener,noreferrer');
+              } catch { /* popup blocked */ }
+            }}
             initialTab={state.workflowDetailInitialTab}
           />
         );
