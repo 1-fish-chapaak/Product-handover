@@ -65,8 +65,8 @@ const activityOf = (owner: string, subProcess: string, frequency: Frequency, nat
 };
 
 let _p = 0;
-const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
-  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
+const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check', stepId?: string): DesignPoint =>
+  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
@@ -1804,10 +1804,6 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
         doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
       ];
-      const points: DesignPoint[] = [
-        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
-        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
-      ];
       // How many attributes this control carries, and how many of them a
       // workflow evidences. An automated control is fully instrumented; a manual
       // one is mapped partially or not at all, which is what makes "3 of 4
@@ -1829,6 +1825,24 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           ? wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined)
           : {},
       ));
+      // Design checks: the control-level pair FIRST, then one per attribute
+      // (dev call, Aug 2026 — every attribute carries its own design check).
+      //
+      // Order is load-bearing twice over. The control-level ones lead because
+      // that is how the step reads — does this control address the risk at all,
+      // then is each thing it has to do designed to happen. And alturaDeficiencies
+      // fails points[0] to seed its design failure, so anything prepended here
+      // would silently move which check that finding is against.
+      const points: DesignPoint[] = [
+        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
+        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
+        ...opSteps.map(s => point(
+          `${s.description.replace(/\.$/, '')} — designed to happen, at ${s.precision.toLowerCase()}.`,
+          designDone ? 'Pass' : 'Not tested',
+          'Design walkthrough check',
+          s.id,
+        )),
+      ];
       const frequency: Frequency = nature === 'Automated' ? 'Recurring' : c.frequency;
       return {
         ...c,

@@ -151,6 +151,21 @@ export interface AuditorProof {
 export interface DesignPoint {
   id: string;
   text: string;
+  /** THE ATTRIBUTE THIS CHECK IS ABOUT — an `OperatingStep.id`.
+   *
+   *  Set on an attribute-level check (dev call, Aug 2026: "हर एट्रिब्यूट का अपना
+   *  चेक होगा"), absent on a control-level one. Both live in the same
+   *  `design.points` array on purpose: a check is a check, and everything that
+   *  already acts on one — pass/fail, evidence links, the auditor's own proof,
+   *  validation, override, and the rule that sinks TOD when any check fails —
+   *  keeps working without knowing which kind it is holding.
+   *
+   *  The two kinds ask different questions and both are worth asking. Control
+   *  level: does this control address the risk at all, and at what precision.
+   *  Attribute level: is THIS thing the control has to do actually designed to
+   *  happen. Dropping either would leave a design test that cannot fail for a
+   *  reason the other one covers. */
+  stepId?: string;
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;

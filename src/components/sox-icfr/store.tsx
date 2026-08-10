@@ -204,7 +204,9 @@ interface IcfrCtx {
   startWalkthrough: (controlId: string) => void;
   setWalkthroughAttribute: (controlId: string, stepId: string, result: TestResult) => void;
   setWalkthroughMeta: (controlId: string, patch: Partial<Pick<Walkthrough, 'date' | 'tester' | 'attendees' | 'notes'>>) => void;
-  addDesignPoint: (controlId: string, text: string) => void;
+  /** `stepId` files the check under one attribute; omit it for a control-level
+   *  check. See DesignPoint.stepId — both kinds share the one array. */
+  addDesignPoint: (controlId: string, text: string, stepId?: string) => void;
   removeDesignPoint: (controlId: string, pointId: string) => void;
   validateDesignPoint: (controlId: string, pointId: string) => void;
   overrideDesignPoint: (controlId: string, pointId: string, override: Override | null) => void;
@@ -712,9 +714,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       ? { ...c, design: { ...c.design, walkthrough: { ...c.design.walkthrough, ...patch } } }
       : c);
   }, [patchControl, role]);
-  const addDesignPoint = useCallback<IcfrCtx['addDesignPoint']>((controlId, text) => {
+  const addDesignPoint = useCallback<IcfrCtx['addDesignPoint']>((controlId, text, stepId) => {
     if (role !== 'auditor') return;
-    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: [...c.design.points, { id: uid('dp'), text, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check' } as DesignPoint] } }));
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: [...c.design.points, { id: uid('dp'), text, stepId, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check' } as DesignPoint] } }));
   }, [patchControl, role]);
   const removeDesignPoint = useCallback<IcfrCtx['removeDesignPoint']>((controlId, pointId) => {
     if (role !== 'auditor') return;

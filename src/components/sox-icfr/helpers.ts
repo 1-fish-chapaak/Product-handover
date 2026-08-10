@@ -1210,7 +1210,14 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
     if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
     const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
     if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
-    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(failed.map(p => p.text))}.`;
+    // A failed check is named WITH the attribute it belongs to. The rationale is
+    // what the paper carries as the reason, and "exceptions handled per policy
+    // failed" does not say which of the five things the control has to do.
+    const named = failed.map(p => {
+      const on = p.stepId ? c.operating.steps.find(s => s.id === p.stepId) : undefined;
+      return on ? `${p.text} (${on.code})` : p.text;
+    });
+    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(named)}.`;
   }
   const { passed, failed, total } = operatingProgress(c);
   const n = c.operating.sampling?.size;
@@ -1384,7 +1391,13 @@ export function suggestPopulationFile(
 }
 
 export function suggestedDesignChecks(c: Control): string[] {
-  const existing = c.design.points.map(p => keyWords(p.text));
+  // Control-level checks only, deliberately. The library offers control-level
+  // considerations, and it decides "already covered" on keyword overlap — so
+  // letting attribute checks into the corpus would suppress real suggestions on
+  // a coincidence of wording. An attribute check reading "…exceptions handled
+  // per policy…" would silently retire the library's own exceptions check, which
+  // is a different question about a different thing.
+  const existing = c.design.points.filter(p => !p.stepId).map(p => keyWords(p.text));
   return CHECK_LIBRARY
     .filter(x => x.when(c))
     .map(x => x.text)

@@ -212,15 +212,23 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     // the client's documents and one the auditor reperformed both tick the same
     // box, and a paper that prints only the tick invites the reader to assume
     // the stronger of the two.
-    headers: ['', 'Design consideration', 'Evidenced by (client)', "Auditor's own proof", 'Tick'],
-    rows: c.design.points.map((p, i) => [
-      String(i + 1),
-      p.text,
-      c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind)).join('; ') || '—',
-      p.auditorProof ? `${p.auditorProof.kind} — ${p.auditorProof.file.name}` : '—',
-      tick(p.override?.result ?? p.result),
-    ]),
-    tickFrom: 4,
+    // "About" names the attribute a check belongs to, the same way the
+    // walkthrough table below labels its rows. Without it an attribute-level
+    // check prints as an undifferentiated numbered row, and a reader cannot tell
+    // which of five things the control has to do it actually tested.
+    headers: ['', 'About', 'Design consideration', 'Evidenced by (client)', "Auditor's own proof", 'Tick'],
+    rows: c.design.points.map((p, i) => {
+      const on = p.stepId ? c.operating.steps.find(s => s.id === p.stepId) : undefined;
+      return [
+        String(i + 1),
+        on ? `${on.description} (${on.code})` : 'The control',
+        p.text,
+        c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind)).join('; ') || '—',
+        p.auditorProof ? `${p.auditorProof.kind} — ${p.auditorProof.file.name}` : '—',
+        tick(p.override?.result ?? p.result),
+      ];
+    }),
+    tickFrom: 5,
   });
 
   // Every design element with what backs it — and, where nothing does, the reason

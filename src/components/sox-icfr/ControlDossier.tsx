@@ -1127,6 +1127,9 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const [waiving, setWaiving] = useState<string | null>(null);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
+  /** Which attribute the check being added belongs to. '' means the control as a
+   *  whole — the kind of check that has no single attribute to sit under. */
+  const [newPointStep, setNewPointStep] = useState('');
   const [validatingAll, setValidatingAll] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   // custom element — named by the auditor, same inline-form shape as Add check
@@ -1201,6 +1204,21 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
     : missing.length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
   const empty = d.documents.length === 0 && d.points.length === 0;
+
+  // ── the checks, filed under what they are about (dev call, Aug 2026) ────────
+  // Design and operating already test the SAME attributes — see Walkthrough in
+  // types.ts, where the attributes are defined once and proven twice. The checks
+  // were the one part of TOD that sat outside them, so they are grouped here:
+  // the control-level ones first (does it address the risk, at what precision),
+  // then one group per attribute (is THIS thing designed to happen).
+  //
+  // A check whose stepId names an attribute that no longer exists falls to the
+  // control-level group rather than disappearing — a check nobody can see is a
+  // check nobody can answer, and the conclusion still counts it.
+  const steps = control.operating.steps;
+  const stepIds = new Set(steps.map(s => s.id));
+  const controlChecks = d.points.filter(p => !p.stepId || !stepIds.has(p.stepId));
+  const stepChecks = steps.map(s => ({ step: s, points: d.points.filter(p => p.stepId === s.id) })).filter(g => g.points.length > 0);
 
   return (
     <div className="p-5">
@@ -1327,17 +1345,59 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                 <button onClick={() => markAll('Fail')} title="Mark every check failed"
                   className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button>
               </>)}
-              {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
+              {/* Named, because "Add" is not unique on this screen — the element
+                  menu and every Ira suggestion carry one too, and three buttons
+                  reading the same word is three buttons nobody can tell apart. */}
+              {canEdit && <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
             </div>
           </div>
-          {addingPoint && (
-            <div className="flex items-center gap-2 mb-2.5">
-              <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPoint.trim()) { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); } }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              <button disabled={!newPoint.trim()} onClick={() => { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
-            </div>
-          )}
+          {addingPoint && (() => {
+            const submit = () => {
+              if (!newPoint.trim()) return;
+              addDesignPoint(control.id, newPoint.trim(), newPointStep || undefined);
+              const where = steps.find(s => s.id === newPointStep);
+              logEvent({ action: 'Create', description: `Added design consideration to ${control.id}${where ? ` — attribute ${where.code}` : ''}`, module: 'SOX ICFR', entity: 'Control' });
+              setNewPoint(''); setNewPointStep(''); setAddingPoint(false);
+            };
+            return (
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 min-w-[16rem] h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                {/* What the check is ABOUT, asked at the point of writing it. Filed
+                    afterwards it never gets filed — and a check under the wrong
+                    heading reads as a check of something it never tested. */}
+                {steps.length > 0 && (
+                  <select value={newPointStep} onChange={e => setNewPointStep(e.target.value)} aria-label="What this check is about"
+                    className="h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-700 max-w-[16rem] focus:outline-none focus:ring-2 focus:ring-brand-200 cursor-pointer">
+                    <option value="">The control as a whole</option>
+                    {steps.map(s => <option key={s.id} value={s.id}>{s.code} · {s.description}</option>)}
+                  </select>
+                )}
+                <button disabled={!newPoint.trim()} onClick={submit} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+              </div>
+            );
+          })()}
           {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
-            <div className="space-y-2 mb-5">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
+            <div className="space-y-4 mb-5">
+              {controlChecks.length > 0 && (
+                <div className="space-y-2">
+                  {/* Only labelled when there is something to tell it apart FROM.
+                      One heading over one list names nothing. */}
+                  {stepChecks.length > 0 && (
+                    <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">The control as a whole</p>
+                  )}
+                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                </div>
+              )}
+              {stepChecks.map(g => (
+                <div key={g.step.id} className="space-y-2">
+                  <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 flex items-baseline gap-1.5 min-w-0">
+                    <span className="font-mono normal-case text-ink-500 shrink-0">{g.step.code}</span>
+                    <span className="truncate normal-case font-medium text-ink-500">{g.step.description}</span>
+                  </p>
+                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                </div>
+              ))}
+            </div>
           )}
 
           {/* the walkthrough — the design proved on one live transaction.
