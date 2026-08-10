@@ -102,10 +102,10 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     // filterFrom / filterTo / version are stamped by stampPopulationWindows once
     // the audits exist — a population belongs to ONE round and carries that
     // round's window, which cannot be known from in here.
-    // What the auditor said to expect before pulling it. Rounded to the nearest
-    // fifty because a stated expectation is an estimate, not a readback — it
-    // lands just inside tolerance, which is what a healthy extract looks like.
-    expectedCount: Math.round(popCount / 50) * 50,
+    // expectedCount went with the "Expected instances" field (dev call, Aug
+    // 2026). sourceCount above is the reference number now — the population is
+    // a seventh of the file it was filtered out of, which is what a filter
+    // that filtered looks like.
     // Where it came from. Not derivable from the file, so it was recorded.
     provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair', extractedOn: '2026-04-12' },
     checks: { countMatches: true, dateRangeFull: true, productionSource: true },

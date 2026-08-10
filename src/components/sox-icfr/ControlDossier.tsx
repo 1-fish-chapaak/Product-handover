@@ -16,7 +16,7 @@ import {
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay, EXTRACT_WOBBLE,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
@@ -25,7 +25,6 @@ import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
-import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import { DeficiencyCard } from './extraViews';
@@ -1973,12 +1972,12 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
  *  The file lands in the audit's registry rather than on this control, so the
  *  next control that needs the same vendor master or access review picks it out
  *  of the list and is never asked the question again. */
-/** `preset` arrives when the file was already chosen in the data picker. The
- *  modal then has exactly one question left — where it came from — and asking
- *  for the file a second time would be asking for something already given. */
-function ControlUploadModal({ onClose, onAdd, preset }: { onClose: () => void; onAdd: (name: string, rows: number, origin: FileOrigin) => void; preset?: { name: string; rows: number } }) {
-  const [name, setName] = useState(preset?.name ?? '');
-  const [rows, setRows] = useState(preset?.rows ?? 0);
+/*  `preset` went with the data picker (dev call, Aug 2026) — it existed so a
+ *  file already chosen there was not asked for twice. Upload is the only door
+ *  now, so the modal always starts empty and always asks both questions. */
+function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string, rows: number, origin: FileOrigin) => void }) {
+  const [name, setName] = useState('');
+  const [rows, setRows] = useState(0);
   const [origin, setOrigin] = useState<FileOrigin | undefined>();
   const [reading, setReading] = useState(false);
   const pick = () => {
@@ -2013,12 +2012,8 @@ function ControlUploadModal({ onClose, onAdd, preset }: { onClose: () => void; o
               <FileText size={13} className="text-brand-600 shrink-0" />
               <span className="text-[0.78125rem] font-semibold text-ink-900 truncate min-w-0">{name}</span>
               <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{rows.toLocaleString()} rows</span>
-              {/* No "choose a different file" when the picker already chose it —
-                  that road leads back to the picker, not to this modal. */}
-              {!preset && (
-                <button onClick={() => { setName(''); setOrigin(undefined); }} aria-label="Choose a different file"
-                  className="p-1 rounded text-ink-400 hover:text-risk-700 cursor-pointer shrink-0"><X size={12} /></button>
-              )}
+              <button onClick={() => { setName(''); setOrigin(undefined); }} aria-label="Choose a different file"
+                className="p-1 rounded text-ink-400 hover:text-risk-700 cursor-pointer shrink-0"><X size={12} /></button>
             </div>
           ) : (
             <button onClick={pick} disabled={reading}
@@ -2082,16 +2077,11 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   const [withdrawing, setWithdrawing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sourcePicker, setSourcePicker] = useState(false);
-  const [uploadPreset, setUploadPreset] = useState<{ name: string; rows: number } | undefined>();
-  // What the auditor expects the filter to return, stated BEFORE it runs. An
-  // expectation recorded afterwards is an expectation fitted to the answer, so
-  // it is asked for here and the extract will not run without it.
-  const [expected, setExpected] = useState('');
   const chosen = files.find(f => f.name === picked);
-  // What the application can offer towards that number: how many times the
-  // control itself runs over the window. Not the same thing as how many
-  // instances it touches, so it is a hint beside the field, never the value.
+  // How many times the control itself runs over the window. Stated beside the
+  // extract as context, never asked for: the auditor no longer types a figure
+  // (dev call, Aug 2026 — "वो तो दिख जाएगा ऐसे ही जितना सोर्स हुआ है"), so what
+  // the application knows for itself is all that is offered.
   const runsInWindow = derivedRunCount(control, from, to);
 
   // Drafted the moment a source is picked, then the auditor's to edit. Reseeded
@@ -2104,26 +2094,23 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); setCriteria(drafted); }
 
   const extract = () => {
-    if (!chosen || !Number(expected)) return;
+    if (!chosen) return;
     setExtracting(true);
     window.setTimeout(() => {
-      // The filter narrows the file to this control's instances, and it lands on
-      // the figure written down before the run. A number invented from the file
-      // size would disagree with any expectation typed above it, so every extract
-      // would open on a variance nobody asked to see.
+      // The filter narrows the file to this control's instances. It used to land
+      // on a figure the auditor typed first; that field is gone, so the count now
+      // comes off the SOURCE — which is the only number anybody has before the
+      // run, and the one the call said was already visible.
       //
-      // It is not made to agree exactly — a filter that returns the estimate to
-      // the row is its own kind of unreal. The wobble sits on the OVER side and
-      // inside the 5% band, because a shortfall is a completeness gate now: an
-      // extract that undershot by chance would open every demo on a block that
-      // has nothing to do with what is being shown. Deterministic from the
-      // control id: the same extract twice running to a different number is not
+      // A filtered subset, never the whole file: a population the same size as
+      // its source is a file that was copied rather than filtered, and the
+      // `unfiltered` flag below calls that out. Deterministic from the control
+      // id — the same extract twice running to a different number is not
       // something a working paper can carry.
-      const want = Number(expected);
-      const slack = Math.floor(want * EXTRACT_WOBBLE);
       const seed = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
-      const wobble = slack === 0 ? 0 : seed % (slack + 1);
-      const narrowed = Math.max(1, Math.min(chosen.rows, want + wobble));
+      // Between a fifth and a half of the file, so the filter visibly did work.
+      const share = 0.2 + (seed % 30) / 100;
+      const narrowed = Math.max(1, Math.min(chosen.rows - 1, Math.round(chosen.rows * share)));
       setPopulation(control.id, {
         version,
         source: `${chosen.name} · ${chosen.from}`,
@@ -2135,7 +2122,6 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
         // sub-process is what the old Transaction-type box defaulted to, so this
         // is the same answer it always gave — just no longer typed by hand.
         filterType: control.subProcess !== 'General' ? control.subProcess : undefined,
-        expectedCount: Number(expected),
         count: narrowed,
         // The person signed in is the person who just ran the extract, so that
         // one fact is filled in rather than asked for. The system fills itself in
@@ -2146,7 +2132,7 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
         evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
       });
       setExtracting(false);
-      logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}, against ${Number(expected).toLocaleString()} expected`, module: 'SOX ICFR', entity: 'Evidence' });
+      logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}`, module: 'SOX ICFR', entity: 'Evidence' });
     }, 1500);
   };
 
@@ -2162,10 +2148,9 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
     if (pop.criteria && pop.criteria !== 'No filter applied') { setCriteriaSeed(pop.criteria); setCriteria(pop.criteria); }
     if (pop.filterFrom) setFrom(pop.filterFrom);
     if (pop.filterTo) setTo(pop.filterTo);
-    setExpected(pop.expectedCount != null ? String(pop.expectedCount) : '');
     if (control.operating.sampling) { setWithdrawing(true); return; }
     clearPopulation(control.id);
-    logEvent({ action: 'Update', description: `Refiltering the population for ${control.id} — the extract did not agree with the expected count`, module: 'SOX ICFR', entity: 'Evidence' });
+    logEvent({ action: 'Update', description: `Refiltering the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
 
   const locked = !!pop?.locked;
@@ -2215,15 +2200,18 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h4 className="text-[0.8125rem] font-bold text-ink-900">Select the source</h4>
-                <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">A file the client sent, or a pull straight from the system of record. Then say what to take out of it: the source is the raw data; the population is what this control actually operated on.</p>
+                <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">The files this control's evidence comes from. Then say what to take out of them: the source is the raw data; the population is what this control actually operated on.</p>
               </div>
-              {/* A source this control needs that the audit hasn't got. Answered
-                  once here, then reusable by every other control. Hidden while
-                  the list is empty — the empty state below carries the same
-                  action, and two buttons for one job is one button too many. */}
+              {/* Upload, not "Add a source" (dev call, Aug 2026). The picker it
+                  replaced offered the platform's whole data catalogue and a
+                  connect-a-database tab — neither of which is where a control's
+                  evidence comes from. A file the owner sends is, so that is the
+                  one door. Hidden while the list is empty: the empty state below
+                  carries the same action, and two buttons for one job is one
+                  button too many. */}
               {files.length > 0 && (
-                <button onClick={() => setSourcePicker(true)}
-                  className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><Database size={12} /> Add a source</button>
+                <button onClick={() => setUploading(true)}
+                  className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={12} /> Upload file</button>
               )}
             </div>
             {/* ── which one it would take, and why ─────────────────────────────
@@ -2251,10 +2239,10 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                   <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center"><FileUp size={17} /></span>
                   <p className="text-[0.78125rem] font-semibold text-ink-800 mt-2">No source data on this audit yet</p>
                   <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[26rem] mx-auto">
-                    No trial balance or general ledger was attached when this audit was created. Upload what this control operates on, or connect the system it lives in, and it joins the audit's sources — every other control can then draw on it without being asked where it came from again.
+                    No trial balance or general ledger was attached when this audit was created. Upload what this control operates on and it joins the audit's sources — every other control can then draw on it without being asked where it came from again.
                   </p>
-                  <button onClick={() => setSourcePicker(true)}
-                    className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Database size={14} /> Add a source</button>
+                  <button onClick={() => setUploading(true)}
+                    className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><FileUp size={14} /> Upload file</button>
                 </div>
               ) : files.map(f => {
                 const on = picked === f.name;
@@ -2332,34 +2320,25 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               The IPE check on this report is what confirms it was run over that period.
             </p>
 
-            {/* ── the expectation, before the answer ──────────────────────────
-                The only way to tell whether the right number of rows came back
-                is to have said what the right number was first. Written down
-                afterwards it is not a check, it is a caption. */}
-            <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
-              <div className="flex items-start gap-3 flex-wrap">
-                <label className="block shrink-0">
-                  <span className="block text-[0.65625rem] text-ink-400 mb-1">Expected instances</span>
-                  <input type="number" min={1} value={expected} onChange={e => setExpected(e.target.value)} placeholder="e.g. 1,400"
-                    className="w-32 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                </label>
-                <p className="text-[0.65625rem] text-ink-400 leading-relaxed flex-1 min-w-[15rem] sm:mt-5">
-                  {runsInWindow != null
-                    ? <>This control runs <span className="tabular-nums font-semibold text-ink-600">{runsInWindow.toLocaleString()}</span> times over the window you have set. If each run covers many transactions, expect a larger number than that.</>
-                    : <>A {control.frequency.toLowerCase()} control has no fixed rhythm, so there is nothing to work this out from — the figure has to come from you.</>}
-                </p>
-              </div>
-              <p className="text-[0.625rem] text-ink-400 mt-2 leading-relaxed">Say it before extracting. Once the extract has run, the two numbers are compared for you — a figure written down afterwards would only ever agree with itself.</p>
-            </div>
+            {/* PARKED (dev call, Aug 2026) — "Expected instances" used to sit
+                here, typed before the extract ran so the two numbers could be
+                compared afterwards. The call cut it: the reference number is
+                already visible on the source, so asking for it by hand was
+                asking twice. What the application can work out for itself is
+                stated instead, and it is context rather than a gate. */}
+            {runsInWindow != null && (
+              <p className="mt-3 text-[0.65625rem] text-ink-400 leading-relaxed">
+                This control runs <span className="tabular-nums font-semibold text-ink-600">{runsInWindow.toLocaleString()}</span> times over the window. If each run covers many transactions, the population will be larger than that.
+              </p>
+            )}
 
             <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
               <p className="text-[0.65625rem] text-ink-400 min-w-0">
                 {!chosen ? 'Pick the source file first.'
-                  : !Number(expected) ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows — say how many instances you expect before extracting.</>
-                    : <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'} · expecting <span className="tabular-nums font-semibold text-ink-600">{Number(expected).toLocaleString()}</span></>}
+                  : <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>}
               </p>
-              <button disabled={!chosen || !Number(expected) || extracting} onClick={extract}
-                title={!chosen ? 'Pick a source file first' : !Number(expected) ? 'Record how many instances you expect first' : undefined}
+              <button disabled={!chosen || extracting} onClick={extract}
+                title={!chosen ? 'Pick a source file first' : undefined}
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                 {extracting ? <><Loader2 size={14} className="animate-spin" /> Extracting…</> : <><Database size={14} /> Extract population</>}
               </button>
@@ -2530,52 +2509,18 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
       {previewing && pop && createPortal(<PopulationPreviewModal control={control} onClose={() => setPreviewing(false)} />, document.body)}
 
-      {/* The platform's own data picker, the same one chat and the workflow
-          builder use — files already on the platform, folders, and live database
-          connections in one place. A file picked here still has to say where it
-          came from, so it hands off to the upload modal that asks; a system pull
-          does not, because the fetch is the answer. */}
-      <DataPickerModal
-        open={sourcePicker}
-        onClose={() => setSourcePicker(false)}
-        title="Add a population source"
-        confirmLabel="Use this source"
-        attachHint="Pick the file or table this control's population comes out of."
-        // The chat tabs PLUS Connect. A population legitimately comes from either
-        // side — a file the client sent, or a pull the audit team makes itself
-        // from the system of record — and until this was passed the Connect tab
-        // was unreachable here, which left the connect-db branch below as code
-        // that could never run. The default tab list is untouched everywhere else.
-        tabs={['favourites', 'upload', 'all', 'file', 'integrated', 'connect']}
-        onConfirm={(selections: AttachmentSelection[]) => {
-          setSourcePicker(false);
-          const sel = selections[0];
-          if (!sel) return;
-          // A file still has to say where it came from — but not which file it
-          // is, twice. It carries straight through to the provenance question.
-          if (sel.kind === 'upload') {
-            setUploadPreset({ name: sel.name, rows: 400 + (sel.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000) });
-            setUploading(true);
-            return;
-          }
-          // Deterministic from the name so the same table never reports two
-          // different sizes — the prototype holds no rows to count.
-          const rows = 800 + (sel.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 24000);
-          const system = sel.kind === 'connect-db' ? `${sel.name} — ${sel.database}` : sel.subtype || sel.name;
-          registerFile({
-            name: sel.name, kind: 'System extract', rows,
-            from: `Pulled on ${control.id}`, uploadedBy: me, uploadedAt: 'just now',
-            // No origin question: systemFetched IS the provenance. See fileUsable.
-            systemFetched: true, system, originBy: me, originAt: 'just now',
-          });
-          logEvent({ action: 'Run', description: `Connected "${sel.name}" from ${system} as a population source on ${control.id} — ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-          addToast({ type: 'success', title: 'Source connected', message: `${sel.name} — fetched from ${system}. Every control on this audit can use it now.` });
-          setPicked(sel.name);
-        }}
-      />
+      {/* PARKED (dev call, Aug 2026) — the platform's data picker used to open
+          here as "Add a source", offering the whole catalogue plus a
+          connect-a-database tab. Both are gone with it: a control's population
+          comes from the file its evidence came from, not from browsing the
+          platform. The connect path also carried the one way to skip the
+          provenance question (systemFetched IS the answer — see fileUsable), so
+          every source now arrives through the upload modal and every source is
+          asked where it came from. Restoring it is putting this block back and
+          pointing the two buttons above at setSourcePicker again. */}
 
       {uploading && (
-        <ControlUploadModal preset={uploadPreset} onClose={() => { setUploading(false); setUploadPreset(undefined); }}
+        <ControlUploadModal onClose={() => setUploading(false)}
           onAdd={(name, rows, origin) => {
             // A trial balance uploaded here is a trial balance, not a nameless
             // "source file" — the registry on Configuration lists it beside the
@@ -2585,7 +2530,6 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
             addToast({ type: 'success', title: 'File added', message: `${name} — ${origin.toLowerCase()}. Every control on this audit can use it now.` });
             setPicked(name);
             setUploading(false);
-            setUploadPreset(undefined);
           }} />
       )}
 
@@ -3530,7 +3474,12 @@ export default function ControlDossier() {
             <ShortFormNote control={control} />
           ) : (
           <>
-          <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
+          {/* The count / period / source trio this line used to name was parked on
+              2 Aug — three rows that worked out their own answer and then asked a
+              person to tick that they agreed. What gates the lock now is the IPE
+              conclusion: four checks somebody actually performs on the report the
+              population came out of. */}
+          <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked ? 'Effective' : 'Not tested'}
             right={popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>

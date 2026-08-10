@@ -232,7 +232,7 @@ interface IcfrCtx {
   /** Record what the application cannot derive: where the extract came from, the
    *  expected count where the frequency gives none, and the reason a computed
    *  check was overridden. */
-  setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'countConfirmed' | 'expectedCount' | 'countNote' | 'coverageNote'>>) => void;
+  setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'countConfirmed' | 'countNote' | 'coverageNote'>>) => void;
   /** Put a file into the audit's registry — name, size, who brought it in and
    *  where it came from. Answered once here; every population inherits it. */
   registerFile: (rec: AuditFileRecord) => void;

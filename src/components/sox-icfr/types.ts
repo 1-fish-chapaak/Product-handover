@@ -454,9 +454,12 @@ export interface Population {
    *  that was filtered on, and prose cannot be grouped by. */
   filterType?: string;
   filterAccount?: string;
-  /** What the count should have been, for controls whose frequency gives no
-   *  answer. Asked only in that case; derived everywhere else. */
-  expectedCount?: number;
+  /* PARKED (dev call, Aug 2026) — `expectedCount?: number` sat here: what the
+     auditor said the count should be, typed before the extract ran so the two
+     could be compared afterwards. The call cut the field on the grounds that the
+     reference number is already visible on the source. NOTE this is NOT
+     PopulationDefinition.expectedCount, which is a different field on a
+     different type and is still live. */
   /** NOTE — there is no provenance field here on purpose. Where the data came
    *  from belongs to the FILE (see AuditFileRecord), is answered once when the
    *  file enters the audit, and is inherited by every population drawn off it.

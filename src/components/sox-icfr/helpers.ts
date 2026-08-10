@@ -532,32 +532,17 @@ const dayGap = (a?: string, b?: string) => {
   return Math.round((y.getTime() - x.getTime()) / 86_400_000);
 };
 
-/** An overshoot inside this band is noise on an estimate, not a finding. The
- *  expected figure is a judgement made before the data was seen, and holding it
- *  to the row is false precision. */
-const OVER_BAND = 0.05;
-/** How far the demo extract is allowed to drift off the expectation. Kept on the
- *  OVER side and inside the band above: a shortfall is a completeness gate now,
- *  so an extract that undershot by chance would open every demo on a block. */
-export const EXTRACT_WOBBLE = 0.04;
+/* PARKED (dev call, Aug 2026) — all three below served the extracted-vs-expected
+   comparison, and went with the "Expected instances" field that fed it:
 
-/** Where the surplus rows sit — broken down along the dimension that was
- *  filtered on.
- *
- *  The question an over-inclusive filter raises is "what did I sweep in", and
- *  the fastest answer is the filtered dimension itself: `type Banking 1,180 ·
- *  type Other 238` says the filter let something through in one line. Falls back
- *  to the account when the filter named one instead, and to nothing at all when
- *  the filter named neither — a breakdown of an unnamed dimension explains
- *  nothing. */
-function overBreakdown(pop: Population, excess: number): { label: string; n: number }[] {
-  const dim = pop.filterType ? { key: 'type', value: pop.filterType } : pop.filterAccount ? { key: 'account', value: pop.filterAccount } : null;
-  if (!dim || excess < 1) return [];
-  return [
-    { label: `${dim.key} ${dim.value}`, n: Math.max(0, pop.count - excess) },
-    { label: `${dim.key} Other`, n: excess },
-  ];
-}
+     OVER_BAND       the 5% band an overshoot was forgiven inside
+     EXTRACT_WOBBLE  how far the demo extract drifted off the typed figure
+     overBreakdown   where the surplus rows sat, along the filtered dimension
+
+   overBreakdown is the one worth restoring first if a comparison ever comes
+   back: it answered "what did the filter sweep in" in one line, which no other
+   surface does. It read pop.filterType, falling back to pop.filterAccount, and
+   returned [{filtered dimension, count}, {Other, excess}]. */
 
 // ─── The shape of the extract, month by month ────────────────────────────────────
 /** One month of the population. */
@@ -698,41 +683,38 @@ export function countVerdict(c: Control): PopVerdict | null {
   const span = `${months} month${months === 1 ? '' : 's'}`;
   const runNote = runs != null ? ` The control itself runs ${runs.toLocaleString()} times over ${span}.` : '';
 
-  if (pop.expectedCount != null) {
-    const exp = pop.expectedCount;
-    const diff = pop.count - exp;
-    const off = Math.abs(diff) / Math.max(1, exp);
-    const pct = Math.round(off * 100);
-    const headline = `${pop.count.toLocaleString()} extracted against ${exp.toLocaleString()} expected`;
+  // PARKED (dev call, Aug 2026) — this used to open on "N extracted against M
+  // expected", where M was a figure the auditor typed before running the
+  // extract. That field is gone: the reference number is already visible on the
+  // source, so asking for it by hand was asking twice. What remains is what the
+  // application can work out for itself, and it says nothing it cannot support.
+  const src = pop.sourceCount;
 
-    if (diff === 0) return { level: 'pass', blocks: false, headline, detail: `Exactly the figure recorded before the extract ran.${runNote}` };
-
-    if (diff > 0) {
-      if (off <= OVER_BAND) {
-        return { level: 'pass', blocks: false, headline, detail: `${diff.toLocaleString()} over, ${pct}% — inside the 5% band. Variance on an estimate, not a finding.${runNote}` };
-      }
-      return {
-        level: 'warn', blocks: true, headline,
-        detail: `${diff.toLocaleString()} more than expected, ${pct}% over. Extra rows are not a hole in the test — the risk is sampling an item this control never touched, which turns up later as an exception that was never real. Refilter, or accept it with a reason.`,
-        breakdown: overBreakdown(pop, diff),
-        causes: 'Commonly duplicates, reversals, a transaction type outside the scope, one month too many in the window, or a second entity sitting in the same file.',
-      };
-    }
-
-    // Short. A shortfall is the harder case whatever its size: the rows that
-    // aren't there cannot be diagnosed, cannot be sampled, and cannot be seen
-    // by anyone reading the population afterwards. So every shortfall carries a
-    // recorded reason, and a small one is not waved through on percentage.
+  // A filter that returned the whole file did not filter. This is the one thing
+  // the source count CAN settle on its own — it is not a size comparison, which
+  // would be meaningless (a population is meant to be a subset), it is the
+  // absence of a subset at all.
+  if (src != null && pop.count === src) {
     return {
-      level: 'fail', blocks: true, headline,
-      detail: `${Math.abs(diff).toLocaleString()} fewer than expected, ${pct}% short. An instance that is not in the population can never be sampled, so this is a completeness gap rather than a filter that swept too wide — which is why every shortfall needs an answer, however small.`,
-      causes: 'Commonly a month missing from the window, a transaction type the filter excluded, or an extract taken before the period closed.',
+      level: 'warn', blocks: true,
+      headline: `${pop.count.toLocaleString()} instances from ${src.toLocaleString()} rows`,
+      detail: `Every row in the source came through, so nothing was filtered out. Either the file holds only this control's instances — say so — or the filter did not apply.${runNote}`,
+      causes: 'Commonly a filter that was drafted but never run, or a source already cut to this control before it was sent.',
     };
   }
 
   if (runs == null) {
-    // Recurring / Ad-hoc, and nothing was recorded up front.
-    return { level: 'fail', blocks: true, headline: 'How many should there have been?', detail: `A ${c.frequency.toLowerCase()} control has no fixed rhythm, so the number cannot be worked out from the frequency. It has to come from you.` };
+    // Recurring / Ad-hoc — the frequency gives no rhythm to measure against, and
+    // there is no longer a typed figure standing in for one. So the row states
+    // the two facts it has rather than failing for want of a number nobody is
+    // asked for any more.
+    return {
+      level: 'pass', blocks: false,
+      headline: src != null
+        ? `${pop.count.toLocaleString()} instances from ${src.toLocaleString()} rows`
+        : `${pop.count.toLocaleString()} instances`,
+      detail: `A ${c.frequency.toLowerCase()} control has no fixed rhythm, so there is no run count to measure this against. The filter and the source it came from are what a reviewer reperforms.`,
+    };
   }
   if (pop.count < runs) {
     return { level: 'fail', blocks: true, headline: `${pop.count.toLocaleString()} instances for ${runs.toLocaleString()} runs`, detail: `A ${c.frequency.toLowerCase()} control runs ${runs.toLocaleString()} times over ${span}, but the filter returned fewer instances than that — some runs are not in here.` };
