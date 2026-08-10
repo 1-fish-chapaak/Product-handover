@@ -1012,6 +1012,17 @@ export function controlsUsingFile(eng: IcfrEngagement, name: string): Control[] 
   return eng.controls.filter(c => populationSources(c).some(s => s.file === name));
 }
 
+/** Whether a file has a row count worth stating.
+ *
+ *  A spreadsheet or an extract does; a PDF does not — "अगर PDF है तो नहीं
+ *  दिखेगी रो सीधी बात है". A number printed beside a PDF is a number somebody
+ *  counted for it, not one the file has, and the population is drawn off
+ *  structured sources anyway: the ground truth an audit tests against lives in
+ *  a spreadsheet, and the PDF is the proof beside it. */
+export function hasRowCount(name?: string): boolean {
+  return !!name && !/\.pdf$/i.test(name.trim());
+}
+
 /** A file's kind read back off its name, for files nobody registered. */
 export function guessFileKind(name: string): string {
   const n = name.toLowerCase();

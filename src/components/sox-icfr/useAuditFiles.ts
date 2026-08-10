@@ -73,6 +73,30 @@ export function useAuditFiles(): AuditFile[] {
       });
     });
 
+    // Files an ATTRIBUTE's workflow reads. They are files the audit holds by any
+    // reading — a workflow runs on them and a validation is recorded against
+    // them — and leaving them out meant the population step could not offer the
+    // very files the call says it should ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स
+    // हैं, वो सारी फाइल्स की लिस्ट").
+    eng.controls.forEach(c => {
+      c.operating.steps.forEach(s => {
+        if (!s.inputFile?.name) return;
+        const name = s.inputFile.name;
+        // A PDF has no rows to count, so it is given none — the row count is
+        // suppressed downstream by name, and a fabricated number here would be
+        // a number somebody has to explain. Structured files get a stable one.
+        const rows = /\.pdf$/i.test(name)
+          ? 0
+          : 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4200);
+        derived.push({
+          name, kind: guessFileKind(name), rows,
+          from: `${s.workflowName ?? 'Workflow'} · ${c.id}`,
+          uploadedBy: s.inputFile.uploadedBy || eng.preparer, uploadedAt: s.inputFile.uploadedAt || 'at scoping',
+          origin: fileOriginOf(eng, name).origin,
+        });
+      });
+    });
+
     const registry = eng.fileRegistry ?? [];
     const out: AuditFile[] = [];
     const seen = new Set<string>();

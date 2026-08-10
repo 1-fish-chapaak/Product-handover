@@ -81,6 +81,12 @@ test('the population is a list of files, each with its own proof', async ({ page
  *  untouched (and therefore has no files) — neither can show the marks. */
 const MID_FLIGHT = 'FX deals confirmed independently of dealing.';
 
+/** The one control nothing has happened to yet — the only one whose population
+ *  step is still open, so the file picker can be looked at at all. Its three
+ *  attributes cover the three states a workflow input can be in: a structured
+ *  file, a PDF, and one still waiting to be uploaded. */
+const UNTOUCHED = 'Customer master changes are independently reviewed.';
+
 test('every file gets its own draw, in its own accordion', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1600, height: 1100 });
@@ -213,7 +219,7 @@ test('the files offered are the ones the attributes read', async ({ page }) => {
   await page.waitForTimeout(1300);
   await page.getByText('Control Library', { exact: true }).first().click();
   await page.waitForTimeout(1000);
-  await page.getByText('Customer master changes are independently reviewed.').first().click();
+  await page.getByText(UNTOUCHED).first().click();
   await page.waitForTimeout(1300);
   const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
@@ -241,4 +247,74 @@ test('the files offered are the ones the attributes read', async ({ page }) => {
   // An attribute wired to a workflow with no file attached is a thing somebody
   // owes, and the step says so rather than looking complete.
   await expect(page.getByText(/with no input file attached/).first()).toBeVisible();
+});
+
+test('the owner derives the population; the auditor tests it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/');
+  await openAuditControl(page, UNTOUCHED);
+
+  // ── the auditor can chase the missing file ────────────────────────────────
+  // "आपको RO को रिमाइंडर भी देना पड़ेगा ईमेल पे कि भाई यहाँ आओ और फाइल अपलोड
+  // करो." The data is the owner's, so a missing file is chased rather than
+  // worked around. It lands on the same task list the design documents use.
+  const ask = page.getByRole('button', { name: 'Ask the owner to upload' });
+  await ask.first().scrollIntoViewIfNeeded();
+  await expect(ask.first()).toBeVisible({ timeout: 15_000 });
+  await ask.first().click();
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${SHOTS}/10-owner-asked.png`, fullPage: true });
+
+  // ── the owner's half of the step ──────────────────────────────────────────
+  // "पापुलेशन को डिराइव करने का काम ओनर करेगा" — they hold the data, so they
+  // upload it and filter it. Everything past the extract stays the audit's:
+  // the report's proof, the lock, the sample and the results are ABSENT for
+  // this hat, because the whole reason the lines are separate is that the
+  // first line must not learn what will be tested or at what threshold.
+  // The hat is changed on the engagement, not inside a control — the drilled-in
+  // page trades the tab bar for a breadcrumb.
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(900);
+  await page.getByRole('tab', { name: /All Engagements/ }).click();
+  await page.waitForTimeout(800);
+  await page.getByText('FY26 ICFR — Altura Infra Group').first().click();
+  await page.waitForTimeout(1300);
+  await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
+  await page.waitForTimeout(1000);
+  await page.getByText('Control Library', { exact: true }).first().click();
+  await page.waitForTimeout(1000);
+  // Whichever control this owner actually holds — their library is scoped to
+  // their own, so naming one here would be naming somebody else's.
+  await page.locator('tr.reg-row').first().click();
+  await page.waitForTimeout(1300);
+  const ownerRun = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
+  if (await ownerRun.count() > 0) { await ownerRun.first().click(); await page.waitForTimeout(1500); }
+  await expect(page.getByText('Population', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/the auditor tests what you produce here/).first()).toBeVisible();
+  // The auditor's half is not shown to them, and not greyed either.
+  await expect(page.getByText('IPE test')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Lock the population/ })).toHaveCount(0);
+  await expect(page.getByText('Sample', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: `${SHOTS}/11-owner-population.png`, fullPage: true });
+});
+
+test('a PDF is never given a row count', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/');
+  await openAuditControl(page, UNTOUCHED);
+
+  // "अगर PDF है तो नहीं दिखेगी रो सीधी बात है." The population is drawn off
+  // structured sources; a number printed beside a PDF is one somebody counted
+  // for it, not one the file has.
+  // One attribute of this control reads a scanned PDF, so the picker offers it
+  // like any other file — with no row count beside it.
+  await expect(page.getByText(/signed_approvals_.*\.pdf/).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/^no row count$/).first()).toBeVisible();
+  // Every non-PDF still states its rows — the rule is about PDFs, not about
+  // hiding counts generally.
+  await expect(page.getByText(/^[\d,]+ rows$/).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/12-pdf-no-rows.png`, fullPage: true });
 });

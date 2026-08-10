@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -150,7 +150,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // names one of four extracts describes a population nobody can reperform,
       // and the reviewer has no way of telling that three files are missing.
       ['Filtered from', sources.length
-        ? sources.map(s => `${s.file} · ${s.rows.toLocaleString()} rows → ${s.count.toLocaleString()}`).join('; ')
+        ? sources.map(s => (hasRowCount(s.file)
+          ? `${s.file} · ${s.rows.toLocaleString()} rows → ${s.count.toLocaleString()}`
+          : `${s.file} · no row count (PDF) → ${s.count.toLocaleString()}`)).join('; ')
         : '—'],
       ['Population locked', c.operating.population?.locked ? `${c.operating.population.locked.by}, ${c.operating.population.locked.at}` : 'Not locked'],
       // What the population IS. The on-screen definition form was dropped, so

@@ -1901,14 +1901,18 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
       // workflow evidences. An automated control is fully instrumented; a manual
       // one is mapped partially or not at all, which is what makes "3 of 4
       // workflows mapped" a fact worth putting on a card.
-      const attrCount = rich ? 2 + (i % 4) : 2;
+      // The untouched control carries three attributes rather than two, so the
+      // population step can show all three states a file can be in at once: one
+      // structured input, one PDF (offered, never given a row count) and one
+      // attribute still waiting for its file.
+      const attrCount = rich && last ? 3 : rich ? 2 + (i % 4) : 2;
       const mapped = nature === 'Automated' ? attrCount
         // The untouched control is the only one an auditor can actually start
         // from, so it is the only place the population step's file list can be
         // seen being built. Two wired attributes rather than one: the first
         // names its input file, the second has none — which is what makes the
         // list and the thing still owed both visible at once.
-        : rich && last ? Math.min(2, attrCount)
+        : rich && last ? Math.min(3, attrCount)
         : rich ? (i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : attrCount - 1)
         : 0;
       const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
@@ -1931,9 +1935,16 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
             // one — an attribute wired to a workflow with no file attached is
             // the ordinary half-finished state, and the step has to be able to
             // say so rather than look complete.
-            ...(k < mapped - 1
-              ? { inputFile: file(k === 0 ? 'population_full_period.xlsx' : `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 'R. Nair', 'XLSX') }
-              : {}),
+            // The untouched control's second attribute reads a PDF — signed
+            // approvals, scanned. A real case ("PDF अपलोड किया है वर्कफ्लो
+            // बनाते समय"), and the only one that shows the rule: a PDF is
+            // offered like any other file and is never given a row count,
+            // because it has none.
+            ...(rich && last && k === 1
+              ? { inputFile: file(`signed_approvals_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.pdf`, 'R. Nair', 'PDF') }
+              : k < mapped - 1
+                ? { inputFile: file(k === 0 ? 'population_full_period.xlsx' : `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 'R. Nair', 'XLSX') }
+                : {}),
           }
           : {},
       ));

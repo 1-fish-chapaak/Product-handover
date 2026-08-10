@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -2223,7 +2223,8 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
   submitLabel: string;
   onSubmit: (file: AuditFile, criteria: string, count: number) => void;
 }) {
-  const { eng, openAuditId, me, registerFile } = useIcfr();
+  const { eng, openAuditId, me, role, registerFile, remindOwnerForFiles } = useIcfr();
+  const isAuditor = role === 'auditor';
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const all = useAuditFiles();
@@ -2326,9 +2327,24 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
                 no file attached is a thing somebody owes, and hiding it here
                 would make the list look complete when it is not. */}
             {awaiting.length > 0 && (
-              <p className="text-[0.65625rem] text-mitigated-800 mt-1 leading-relaxed">
-                {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
-              </p>
+              <div className="mt-1">
+                <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
+                  {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
+                </p>
+                {/* The data is the owner's, so a missing file is a thing to
+                    chase rather than a thing to work around. The ask lands on
+                    the same task list the design documents use — one place the
+                    owner looks, not a second inbox for the same kind of ask. */}
+                {isAuditor && (
+                  <button onClick={() => {
+                    const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} need the source data their workflow reads. Upload it on the control's Population step.`;
+                    remindOwnerForFiles(control.id, what);
+                    logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
+                    addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
+                  }}
+                    className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -2391,7 +2407,8 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
                   !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                   {originLabel(f)}
                 </span>
-                <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{f.rows.toLocaleString()} rows</span>
+                {/* A PDF has no rows to count, so none is claimed for it. */}
+                <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{hasRowCount(f.name) ? `${f.rows.toLocaleString()} rows` : 'no row count'}</span>
                 <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
               </button>
             </div>
@@ -2422,7 +2439,9 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
       <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-[0.65625rem] text-ink-400 min-w-0">
           {!chosen ? 'Pick the source file first.'
-            : <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>}
+            : hasRowCount(chosen.name)
+              ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>
+              : <>Filtering {chosen.name} by: {criteria || 'nothing yet'} — a PDF has no rows to count.</>}
         </p>
         <button disabled={!chosen || busy} onClick={submit}
           title={!chosen ? 'Pick a source file first' : undefined}
@@ -2458,6 +2477,11 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   const version = `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`;
   const canWrite = canEdit && !isControlLocked(control);
   const isAuditor = role === 'auditor' && canWrite;
+  // The first line stops at the extract. Everything past it — proving the
+  // report, locking, and every step the lock opens — is the audit's own work,
+  // and the owner seeing it is the independence problem the whole page is
+  // arranged around.
+  const isOwnerView = role === 'risk-owner';
   // The window the audit actually tests, as real dates. The coverage check
   // measures the filter against this, and prose like 'Jan 2026' cannot be
   // measured — so the filter asks for dates rather than a label.
@@ -2564,7 +2588,10 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               </div>
               <p className="text-[1.0625rem] font-bold text-ink-900 tabular-nums leading-none">
                 {pop.count.toLocaleString()} <span className="text-[0.75rem] font-medium text-ink-500">instances</span>
-                {pop.sourceCount != null && <span className="text-[0.75rem] font-medium text-ink-400"> from {pop.sourceCount.toLocaleString()} rows</span>}
+                {/* Only where every file actually has rows to count. A total
+                    that silently skipped a PDF would be a total nobody can
+                    reconcile to the files listed under it. */}
+                {pop.sourceCount != null && sources.every(s => hasRowCount(s.file)) && <span className="text-[0.75rem] font-medium text-ink-400"> from {pop.sourceCount.toLocaleString()} rows</span>}
               </p>
               {/* The source line used to name one file and one filter. It names
                   the count of them now — the files themselves are listed below,
@@ -2625,7 +2652,8 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                         </span>
                       )}
                       <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-500 tabular-nums">
-                        <span className="font-semibold text-ink-700">{s.count.toLocaleString()}</span> of {s.rows.toLocaleString()} rows
+                        <span className="font-semibold text-ink-700">{s.count.toLocaleString()}</span>
+                        {hasRowCount(s.file) ? ` of ${s.rows.toLocaleString()} rows` : ' instances'}
                       </span>
                       {/* Dropping the LAST file is a withdrawal, and Withdraw is
                           already the button for that — so this one only appears
@@ -2755,9 +2783,11 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               Last thing before the lock, because it is the last thing that has
               to be true: the count and the period check what the FILTER did,
               this checks whether the thing filtered was worth filtering. */}
-          <div className="mt-4">
-            <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
-          </div>
+          {!isOwnerView && (
+            <div className="mt-4">
+              <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
+            </div>
+          )}
 
           {/* Where the data came from is NOT asked here. It was answered when
               the file entered the audit, it is shown read-only on the source
@@ -2766,9 +2796,16 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.65625rem] text-ink-400 min-w-0">
-              {locked ? 'Every later step draws off this version. A later round re-versions rather than editing it.'
-                : ready ? 'Nothing downstream runs until the population is locked.'
-                  : missing}
+              {/* The owner is told what happens next without being told what is
+                  being looked for. "Locked" is a fact about their data; the
+                  checks behind it are not theirs to read. */}
+              {isOwnerView
+                ? locked
+                  ? 'The auditor has locked this. It is the version their testing draws on — a later round re-versions rather than editing it.'
+                  : 'The auditor tests the report this came out of, then locks it. Nothing here is final until they do.'
+                : locked ? 'Every later step draws off this version. A later round re-versions rather than editing it.'
+                  : ready ? 'Nothing downstream runs until the population is locked.'
+                    : missing}
             </p>
             {!locked && isAuditor && (
               <button disabled={!ready} title={ready ? undefined : missing}
@@ -3952,7 +3989,24 @@ export default function ControlDossier() {
               knowing what will be tested, and at what threshold, is the whole
               reason the three lines are separate. The owner's page ends at the
               documents they supply and the exception they have to fix. */}
-          {isOwner ? null : !opApplies ? (
+          {/* ── the owner's half of step ② ────────────────────────────────────
+              Deriving the population is the FIRST LINE's job — "पापुलेशन को
+              डिराइव करने का काम ओनर करेगा" — and the data is theirs: they hold
+              it, they upload it, they say what to take out of it. Testing it is
+              the auditor's, and everything after the extract stays with them.
+              So the owner gets the files and the extract, and the report's
+              proof, the lock, the sample and the results are absent, not
+              greyed: the whole reason the lines are separate is that the first
+              line must not learn what will be tested or at what threshold. */}
+          {isOwner ? (opApplies && (
+            <VStep n={2} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
+              status={control.operating.population ? 'Effective' : 'Not tested'}
+              right={control.operating.population
+                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.population.count.toLocaleString()} instances</span>
+                : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
+              <PopulationSection control={control} canEdit={canEdit} />
+            </VStep>
+          )) : !opApplies ? (
             <ShortFormNote control={control} />
           ) : (
           <>
