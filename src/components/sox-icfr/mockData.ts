@@ -879,7 +879,10 @@ const DEFICIENCIES: Deficiency[] = [
   //   gapType: 'TG',
   //   exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
   { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
-    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation' },
+    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation',
+    // Past the reviewer's rating gate, so it carries their agreement to the grade —
+    // every finding passes that rung now, whatever it is rated.
+    ratingConfirm: { grade: 'Significant Deficiency', by: REVIEWER, at: '20 Apr' } },
   // DEF-002 was found in the walkthrough, on a manual control — the review sits
   // after the posting it is meant to stop. Nothing has gone wrong yet; the number
   // is what could pass unchecked in a month of manual journals.
@@ -1217,6 +1220,38 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
  * engagement record. Change those and these grades move, which is the point.
  */
+/**
+ * The reviewer's notes on Altura's papers — one at each stage, so every hat
+ * arrives on a move it can actually make: an OPEN note for the auditor to answer,
+ * a RESOLVED one for the reviewer to verify, and a CLOSED one showing the whole
+ * exchange as it reads afterwards.
+ *
+ * They ride papers the preparer has signed but the reviewer has not, because that
+ * is the only moment a note means anything: before the signature there is nothing
+ * to question, and after it the paper is closed.
+ */
+function alturaReviewNotes(controls: Control[]): ReviewNote[] {
+  const awaiting = controls.filter(c => !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer);
+  const notes: ReviewNote[] = [];
+  const [a, b, c] = awaiting;
+  if (a) notes.push({
+    id: 'rn-a1', controlId: a.id, status: 'Open', raisedBy: 'J. Fernandes', raisedAt: '2d',
+    text: `The conclusion on ${a.wpRef} rests on the sample passing, but the paper doesn't show which items were drawn from the second half of the period — attach the selection so the coverage can be read off it.`,
+  });
+  if (b) notes.push({
+    id: 'rn-a2', controlId: b.id, status: 'Resolved', raisedBy: 'J. Fernandes', raisedAt: '4d',
+    text: `${b.wpRef} records the reviewer's name but not the date each review happened, so timeliness can't be tested from the paper.`,
+    resolution: { text: 'Added the approval timestamps from the workflow export — every item was reviewed within two working days of posting.', by: 'A. Mehta', at: '1d' },
+  });
+  if (c) notes.push({
+    id: 'rn-a3', controlId: c.id, status: 'Closed', raisedBy: 'J. Fernandes', raisedAt: '9d',
+    text: `Confirm the population for ${c.wpRef} covers the entities added mid-period, not only those in scope at the start.`,
+    resolution: { text: 'Re-pulled against the period-end entity list — the two added in May are in the extract and in the sample frame.', by: 'A. Mehta', at: '8d' },
+    verified: { by: 'J. Fernandes', at: '7d' },
+  });
+  return notes;
+}
+
 function alturaDeficiencies(controls: Control[]): Deficiency[] {
   /** The nth control of a process, in RACM order. Undefined when the process
    *  was never scoped — the caller skips rather than inventing a control id. */
@@ -1434,8 +1469,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       failedSamples: ['FA-DSP-0119', 'FA-DSP-0126'],
       likelihood: 'Reasonably possible', magnitude: 4_500_000, mwIndicators: [],
       aggregationGroup: 'Fixed Assets',
-      // No ratingConfirm, and none is owed: ₹45 L is under Altura's ₹60 L floor,
-      // so it grades clearly trivial and never reached the reviewer's rating gate.
+      // Confirmed even at clearly trivial — ₹45 L is under Altura's ₹60 L floor,
+      // and the reviewer still agreed that reading before any fix was planned.
+      // Calling a finding small is a judgement like any other.
+      ratingConfirm: { grade: 'Clearly Trivial', by: REVIEWER, at: '08 Jun 2026' },
       remediation: {
         action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
         date: '30 Jun', owner: 'S. Iyer', status: 'Done',
@@ -1660,7 +1697,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     deficiencies,
     tasks: [],
     discussions: [],
-    reviewNotes: [],
+    reviewNotes: rich ? alturaReviewNotes(controls) : [],
     executions: [],
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit
@@ -1977,6 +2014,16 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         // 'General' is the placeholder sub-process on generated rows — naming the
         // process reads better than "over general records".
         controlActivity: activityOf(c.owner, c.subProcess === 'General' ? name : c.subProcess, frequency, nature),
+        // A concluded paper is signed by the auditor and then waits for the
+        // reviewer. Without a few of those the reviewer's queue is empty of
+        // papers, the countersign is never exercised, and a review note has
+        // nothing to ride — a note only means something between the two
+        // signatures. Every second concluded row is left waiting.
+        wpSignoff: designDone && opDone
+          ? (i % 2 === 0
+            ? { preparer: { by: 'A. Mehta', at: '12 Jun 2026' } }
+            : { preparer: { by: 'A. Mehta', at: '12 Jun 2026' }, reviewer: { by: 'J. Fernandes', at: '14 Jun 2026' } })
+          : undefined,
         design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
         operating: nature === 'Automated'
           ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)

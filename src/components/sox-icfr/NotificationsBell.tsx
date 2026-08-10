@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { conclusionOf, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { isOwnerOf } from './auditScope';
 import { cn } from '../../lib/cn';
 
 /**
@@ -155,7 +156,7 @@ export default function NotificationsBell() {
     // ── the auditor's remarks on my rows ────────────────────────────────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
-        if (c.owner !== meOwner || c.racmReview?.status !== 'Remark') continue;
+        if (!isOwnerOf(c, meOwner) || c.racmReview?.status !== 'Remark') continue;
         out.push({
           id: `rem-${c.id}`, kind: 'remark',
           title: `Auditor remark on ${c.wpRef}`,

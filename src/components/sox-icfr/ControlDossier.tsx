@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning,
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -2708,16 +2708,23 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                         </span>
                       )}
                       <span className="text-[0.65625rem] text-ink-400 min-w-0 truncate">{s.criteria ?? 'No filter applied'}</span>
-                      <span className="text-[0.65625rem] text-ink-400">·</span>
-                      <span className={cn('text-[0.65625rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
-                        {checks.length ? `${proven}/${checks.length} checks proven` : 'not registered yet'}
-                      </span>
+                      {/* How the testing of this file is going — how much of it was
+                          drawn, how far its IPE checks have got — is the auditor's
+                          read, not the owner's. They supplied the file; how much of
+                          it is being looked at tells them how closely to expect to
+                          be examined, which is the thing independence turns on. */}
+                      {!isOwnerView && <>
+                        <span className="text-[0.65625rem] text-ink-400">·</span>
+                        <span className={cn('text-[0.65625rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
+                          {checks.length ? `${proven}/${checks.length} checks proven` : 'not registered yet'}
+                        </span>
+                      </>}
                       {/* An assisting table is proven and then left alone. Said
                           once, here, so its blank sample column reads as correct
                           rather than as work nobody got to. */}
                       {isAssisting(s)
                         ? <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] text-ink-500">joined by the workflow, never sampled</span></>
-                        : drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
+                        : !isOwnerView && drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
                     </div>
                   </div>
                 );
@@ -3429,6 +3436,114 @@ function ReturnForm({ onCancel, onReturn }: { onCancel: () => void; onReturn: (r
   );
 }
 
+/**
+ * The reviewer's challenge, and its life.
+ *
+ * The store has carried the whole cycle since the review gate landed — raise
+ * (reviewer) → resolve (auditor) → verify or reopen (reviewer), each stage
+ * stamping its own actor, with the countersign held while any note is open — but
+ * the rail that drove it was lost in a merge, so for a while a reviewer could be
+ * blocked by a note they had no way to raise, answer or close. This is that rail,
+ * rebuilt where the block is felt: inside the sign-off step, above the signatures.
+ *
+ * Each hat sees only its own move. The raiser never resolves, the resolver never
+ * verifies — the four-eyes here is the role gate, not a checkbox.
+ */
+function ReviewNotesBlock({ control }: { control: Control }) {
+  const { eng, role, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote } = useIcfr();
+  const notes = reviewNotesFor(eng, control.id);
+  const isReviewer = role === 'reviewer';
+  const isAuditor = role === 'auditor';
+  const [raising, setRaising] = useState('');
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [response, setResponse] = useState('');
+  const so = control.wpSignoff;
+  const canRaise = isReviewer && isControlLocked(control) && !so?.reviewer;
+
+  if (!notes.length && !canRaise) return null;
+
+  const ORDER = { Open: 0, Resolved: 1, Closed: 2 } as const;
+  const sorted = [...notes].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+
+  return (
+    <div className="mt-3 rounded-xl border border-canvas-border overflow-hidden">
+      <div className="px-3.5 py-2 bg-paper-50/60 border-b border-canvas-border flex items-center gap-2">
+        <StickyNote size={13} className="text-ink-500" />
+        <span className="text-[0.71875rem] font-bold text-ink-700">Review notes</span>
+        <span className="text-[0.65625rem] text-ink-400">
+          {notes.length === 0 ? 'None raised on this paper' : `${notes.filter(n => n.status !== 'Closed').length} open of ${notes.length}`}
+        </span>
+      </div>
+
+      {sorted.map(n => (
+        <div key={n.id} className="px-3.5 py-3 border-b border-canvas-border last:border-b-0">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[0.75rem] text-ink-800 leading-relaxed min-w-0">{n.text}</p>
+            <span className="shrink-0">
+              {n.status === 'Open' ? <Pill tone="risk">Open</Pill>
+                : n.status === 'Resolved' ? <Pill tone="evidence">Awaiting verification</Pill>
+                : <Pill tone="compliant">Verified &amp; closed</Pill>}
+            </span>
+          </div>
+          <p className="text-[0.65625rem] text-ink-400 mt-1">Raised by {n.raisedBy} · {n.raisedAt}</p>
+
+          {n.resolution && (
+            <div className="mt-2 pl-3 border-l-2 border-canvas-border">
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">{n.resolution.text}</p>
+              <p className="text-[0.65625rem] text-ink-400 mt-0.5">
+                {n.resolution.by} · {n.resolution.at}{n.verified && <> — verified by {n.verified.by} · {n.verified.at}</>}
+              </p>
+            </div>
+          )}
+
+          {/* The auditor answers an open note. No verify pen here: agreeing that
+              your own answer settles it is not a second pair of eyes. */}
+          {isAuditor && n.status === 'Open' && (
+            respondingTo === n.id ? (
+              <div className="mt-2.5">
+                <textarea autoFocus value={response} onChange={e => setResponse(e.target.value)} rows={2}
+                  placeholder="What was done about this — the reviewer verifies against it"
+                  className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                <div className="mt-2 flex items-center gap-2">
+                  <button disabled={!response.trim()}
+                    onClick={() => { resolveReviewNote(n.id, response.trim()); setRespondingTo(null); setResponse(''); }}
+                    className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Resolve</button>
+                  <button onClick={() => { setRespondingTo(null); setResponse(''); }}
+                    className="h-8 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setRespondingTo(n.id); setResponse(''); }}
+                className="mt-2 h-8 px-3 rounded-lg border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Resolve with response</button>
+            )
+          )}
+
+          {/* The reviewer's two answers to an attempt: it settles the point, or it
+              does not and the note goes back open. */}
+          {isReviewer && n.status === 'Resolved' && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <button onClick={() => verifyReviewNote(n.id)}
+                className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.71875rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Verify &amp; close</button>
+              <button onClick={() => reopenReviewNote(n.id)}
+                className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.71875rem] font-semibold hover:bg-high-50 cursor-pointer">Reopen</button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {canRaise && (
+        <div className="px-3.5 py-3 bg-paper-50/40">
+          <textarea value={raising} onChange={e => setRaising(e.target.value)} rows={2}
+            placeholder="Raise a review note — the auditor answers it, you verify, and it holds the countersign until it closes"
+            className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+          <button disabled={!raising.trim()} onClick={() => { raiseReviewNote(control.id, raising.trim()); setRaising(''); }}
+            className="mt-2 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Raise review note</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SignOffSection({ control }: { control: Control }) {
   const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
   const logEvent = useAuditLog();
@@ -3437,6 +3552,12 @@ function SignOffSection({ control }: { control: Control }) {
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
+  // Returning is NOT held by an open note. The two used to share one gate, which
+  // dead-ended the reviewer: a paper they had questioned could be neither signed
+  // nor sent back. A note says "answer this"; a return says "this needs rework" —
+  // and the second is exactly what a reviewer reaches for when the first was not
+  // enough. This mirrors what returnControl itself permits.
+  const canReturn = role === 'reviewer' && !!so?.preparer && !so?.reviewer;
   const done = !!so?.preparer && !!so?.reviewer;
   // ── the reviewer's OTHER answer ─────────────────────────────────────────────
   // Restored Aug 2026. returnControl has done the whole job since 9402d19 —
@@ -3474,12 +3595,16 @@ function SignOffSection({ control }: { control: Control }) {
             </div>
           </div>
 
+          {/* The notes sit with the signatures because they are the reason one of
+              them is being withheld. */}
+          <ReviewNotesBlock control={control} />
+
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.6875rem] text-ink-400 leading-relaxed min-w-0">
               {done ? 'Control done — the working paper is locked and downloadable.'
                 : canSign ? 'Signing states that the testing above is complete and the conclusions are yours.'
                 : role === 'reviewer' && !so?.preparer ? 'Waits for the preparer’s signature.'
-                : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign.`
+                : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign — you can still return the paper.`
                 : so?.preparer?.by === me ? 'You prepared this paper, so you can’t countersign it — four-eyes.'
                 : 'Waits for the reviewer.'}
             </p>
@@ -3487,17 +3612,21 @@ function SignOffSection({ control }: { control: Control }) {
               <button onClick={() => { signOffControlWp(control.id, 'preparer'); logEvent({ action: 'Update', description: `Signed off the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
             )}
-            {canCounter && (
+            {(canReturn || canCounter) && (
               <span className="shrink-0 flex items-center gap-2">
-                <button onClick={() => setReturning(r => !r)}
-                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
-                <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                {canReturn && (
+                  <button onClick={() => setReturning(r => !r)}
+                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
+                )}
+                {canCounter && (
+                  <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                )}
               </span>
             )}
           </div>
 
-          {returning && canCounter && (
+          {returning && canReturn && (
             <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
               <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework?</span>
               <ReturnForm onCancel={() => setReturning(false)} onReturn={reason => {
@@ -3906,18 +4035,23 @@ export default function ControlDossier() {
   // buttons that the store then silently dropped on the floor.
   const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
-  // The evidence lane stays theirs — attaching documents, answering a request,
-  // self-attesting. That is the whole reason they are on this page.
-  const canEdit = isAuditor || isOwner;
-  // The testing pen does not. Conclusions, overrides, the draw, attribute
-  // results and the sign-off are the auditor's alone.
-  const canTest = isAuditor;
-  const headOwners = ownersOf(control);
   // Automated + ITGCs holding = the design test IS the test. Everything on this
   // page that asked "have both tracks concluded?" now asks the narrower question.
   const opApplies = operatingApplies(eng, control);
   const concl = controlConclusion(control, opApplies);
   const controlLocked = isControlLocked(control, opApplies);
+  // The evidence lane stays theirs — attaching documents, answering a request,
+  // self-attesting. That is the whole reason they are on this page.
+  //
+  // …until the control concludes. A concluded paper is frozen for everyone, and
+  // the store has always refused to write to one; the design and TOE sections
+  // used not to carry the lock term, so they went on rendering pens that landed
+  // nowhere. Reopening is the way back in, and it says so on the header.
+  const canEdit = (isAuditor || isOwner) && !controlLocked;
+  // The testing pen does not. Conclusions, overrides, the draw, attribute
+  // results and the sign-off are the auditor's alone.
+  const canTest = isAuditor && !controlLocked;
+  const headOwners = ownersOf(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
   const toeLocked = designResult !== 'Effective';
@@ -4083,6 +4217,22 @@ export default function ControlDossier() {
             <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{control.reviewReturn.reason}</p>
             <p className="text-[0.6875rem] text-ink-400 mt-1.5">
               {control.reviewReturn.by} · {control.reviewReturn.at} — both conclusions were cleared, and the paper is open for testing again.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Same reasoning, the auditor's own way back in: a reopened control is
+          open because somebody said why, and that sentence belongs where the
+          work restarts rather than only in the history rail. */}
+      {control.reopened && !isOwner && !controlLocked && (
+        <div className="rounded-xl border border-canvas-border bg-paper-50/60 p-4 mb-4 flex items-start gap-3">
+          <RotateCcw size={16} className="text-ink-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <h3 className="text-[0.8125rem] font-bold text-ink-800">Reopened by the auditor</h3>
+            {control.reopened.reason && <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{control.reopened.reason}</p>}
+            <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+              {control.reopened.by} · {control.reopened.at} — both conclusions were cleared, and any signature on the paper went with them.
             </p>
           </div>
         </div>

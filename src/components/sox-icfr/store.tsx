@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, needsRatingConfirmation, parseLooseDate, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -44,6 +44,7 @@ function untested(c: Control): Control {
     // stand over results that no longer exist.
     wpSignoff: undefined,
     reviewReturn: undefined,
+    reopened: undefined,
     design: {
       ...c.design,
       conclusion: 'Not tested',
@@ -89,6 +90,8 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
 import { isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
+import { useToast } from '../shared/Toast';
+import { defWord } from './flow';
 
 // ─── You cannot audit what you own ──────────────────────────────────────────────
 // The one prohibition that cannot be expressed as a role: the person who runs a
@@ -425,6 +428,10 @@ export function useIcfr(): IcfrCtx {
 }
 
 export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { children: ReactNode; initialRole?: Role; seedMeta?: SeedMeta }) {
+  // Navigation refused for a reason has to SAY the reason — a click that quietly
+  // does nothing reads as a broken page. The app's toast provider sits above this
+  // one, so the store can speak without owning a notice surface of its own.
+  const { addToast } = useToast();
   const [eng, setEng] = useState<IcfrEngagement>(() => seedIcfrEngagement(seedMeta));
   const [role, setRole] = useState<Role>(initialRole);
   const [tab, setTabState] = useState<SoxTab>('overview');
@@ -509,6 +516,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [focusStep, setFocusStep] = useState<FocusStep | null>(null);
   const clearFocusStep = useCallback(() => setFocusStep(null), []);
   const openControl = useCallback((id: string, focus?: FocusStep) => {
+    // The owner's lane is their own controls, and a link is not an exception to
+    // that. Their lists already filter, so this only bites on a route that skips
+    // them — a task row, a notification, a deep link — which is exactly where a
+    // silent open would be worst.
+    if (role === 'risk-owner') {
+      const c = eng.controls.find(x => x.id === id);
+      if (c && !isOwnerOf(c, meOwner)) {
+        addToast({
+          type: 'info', title: 'This control is not yours to open',
+          message: `${c.wpRef} sits with ${ownersOf(c).controlOwner}. Your Control Library lists the ones you answer for.`,
+        });
+        setTabState('controls'); setView('register'); setSelectedControlId(null); setReturnView(null);
+        return;
+      }
+    }
     setReturnView(RETURNABLE.includes(view) ? view : null);
     setFocusStep(focus ?? null);
     // A focus names a STEP, and the steps only exist on the audit-level control
@@ -522,7 +544,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (owning) { setOpenAuditId(owning.id); setTabState('overview'); }
     }
     setSelectedControlId(id); setView('dossier');
-  }, [view, openAuditId, eng.controls, eng.audits]);
+  }, [view, openAuditId, eng.controls, eng.audits, role, meOwner, addToast]);
   // A counted click on the Overview lands on the register showing exactly the
   // counted set — the register consumes the preset once, then owns its filters.
   const [registerPreset, setRegisterPreset] = useState<{ view?: string; process?: string } | null>(null);
@@ -1597,12 +1619,25 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // is set AFTER it rather than alongside — otherwise the reset wins and the
   // reader arrives on the audit dashboard wondering what they clicked.
   const openDeficiency = useCallback<IcfrCtx['openDeficiency']>((defId) => {
-    setFocusDefId(defId);
     const target = eng.deficiencies.find(d => d.id === defId);
+    // Same wall as openControl: a finding belongs to a control, and the owner
+    // only sees findings on controls they answer for.
+    if (role === 'risk-owner' && target) {
+      const c = eng.controls.find(x => x.id === target.controlId);
+      if (c && !isOwnerOf(c, meOwner)) {
+        const W = defWord(eng.id);
+        addToast({
+          type: 'info', title: `This ${W.one} is not yours to open`,
+          message: `${target.id} sits on ${c.wpRef}, which ${ownersOf(c).controlOwner} answers for.`,
+        });
+        return;
+      }
+    }
+    setFocusDefId(defId);
     const owning = target && eng.audits.find(a => a.controlIds?.includes(target.controlId));
     if (owning && owning.id !== openAuditId) { openAudit(owning.id); setTabState('deficiencies'); return; }
     if (openAuditId) setTabState('deficiencies'); else setView('deficiencies');
-  }, [eng.deficiencies, eng.audits, openAuditId, openAudit]);
+  }, [eng.id, eng.controls, eng.deficiencies, eng.audits, openAuditId, openAudit, role, meOwner, addToast]);
   // Leaving an audit lands on the engagement's own Overview. Without the reset,
   // closing from the audit's Configuration or Deficiency management tab — neither
   // of which the engagement level has — left the tab bar with nothing active and
@@ -1662,22 +1697,24 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchStep(controlId, stepId, s => ({ ...s, inputFile: { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : fileName.endsWith('.csv') ? 'CSV' : 'PDF', uploadedBy: me, uploadedAt: 'just now' } }));
   }, [patchStep, me, role]);
 
-  // Attributes are structure, not testing — the control's owner knows its shape
-  // as well as the auditor does, so both roles can define one and map its
-  // evidence workflow. Only a reviewer, who signs off rather than builds, is shut out.
+  // An attribute is what the control will be TESTED against, so it is the
+  // auditor's to write — the owner running the control cannot set the questions
+  // their own work is marked on, however well they know its shape. (This used to
+  // admit the owner too. It is the one place the first line could quietly shape
+  // the test, which is exactly what independence means here.)
   const addAttribute = useCallback<IcfrCtx['addAttribute']>((controlId, description) => {
-    if (role === 'reviewer') return;
+    if (role !== 'auditor') return;
     patchControl(controlId, c => {
       const step: OperatingStep = { id: uid('os'), code: `${c.wpRef}.${c.operating.steps.length + 1}`, description, assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection'], result: 'Not tested' };
       return { ...c, operating: { ...c.operating, steps: [...c.operating.steps, step] } };
     });
   }, [patchControl, role]);
   const removeAttribute = useCallback<IcfrCtx['removeAttribute']>((controlId, stepId) => {
-    if (role === 'reviewer') return;
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.filter(s => s.id !== stepId) } }));
   }, [patchControl, role]);
   const mapStepWorkflow = useCallback<IcfrCtx['mapStepWorkflow']>((controlId, stepId, name) => {
-    if (role === 'reviewer') return;
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, evidenceMode: 'workflow', workflowId: uid('wf'), workflowName: name, workflowRunRef: undefined }));
   }, [patchStep, role]);
   const setStepEvidenceMode = useCallback<IcfrCtx['setStepEvidenceMode']>((controlId, stepId, mode) => {
@@ -1755,23 +1792,25 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // open — the same two checks every other mutation in this store makes. They
   // matter more here than most: these rows feed a reported completeness figure,
   // and a countersigned engagement's matrix must not move under the signature.
+  // A concluded control's row is skipped as well as a sealed audit's: the matrix
+  // describes what was tested, so it must not move under a signed conclusion.
   const approveRacmRows = useCallback<IcfrCtx['approveRacmRows']>((controlIds) => {
     if (role !== 'auditor') return;
     const ids = new Set(controlIds);
     setEng(prev => isEngagementLocked(prev) ? prev
-      : { ...prev, controls: prev.controls.map(c => ids.has(c.id) ? { ...c, racmReview: { status: 'Approved', by: me, at: 'just now' } as RacmReview } : c) });
+      : { ...prev, controls: prev.controls.map(c => ids.has(c.id) && !isControlLocked(c) ? { ...c, racmReview: { status: 'Approved', by: me, at: 'just now' } as RacmReview } : c) });
   }, [me, role]);
 
   const remarkRacmRow = useCallback<IcfrCtx['remarkRacmRow']>((controlId, remark) => {
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev
-      : { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: { status: 'Remark', remark, by: me, at: 'just now' } as RacmReview } : c) });
+      : { ...prev, controls: prev.controls.map(c => c.id === controlId && !isControlLocked(c) ? { ...c, racmReview: { status: 'Remark', remark, by: me, at: 'just now' } as RacmReview } : c) });
   }, [me, role]);
 
   const clearRacmReview = useCallback<IcfrCtx['clearRacmReview']>((controlId) => {
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev
-      : { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, racmReview: undefined } : c) });
+      : { ...prev, controls: prev.controls.map(c => c.id === controlId && !isControlLocked(c) ? { ...c, racmReview: undefined } : c) });
   }, [role]);
 
   // Bulk test — for each selected control, validate every design consideration and
@@ -1893,11 +1932,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // ── handoffs ──────────────────────────────────────────────────────────────────
   const submitTask = useCallback<IcfrCtx['submitTask']>((taskId) => {
     setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
       const task = prev.tasks.find(t => t.id === taskId);
       let controls = prev.controls;
-      // a submitted PBC marks the requested design documents received
+      // a submitted PBC marks the requested design documents received — unless the
+      // control has since concluded, in which case its paper is frozen. The task
+      // still clears: the owner did what was asked, and leaving it open would chase
+      // them for a control nobody is testing any more.
       if (task && task.type === 'pbc') {
-        controls = prev.controls.map(c => c.id === task.controlId
+        controls = prev.controls.map(c => c.id === task.controlId && !isControlLocked(c)
           ? { ...c, design: { ...c.design, documents: c.design.documents.map(d => d.status === 'Requested' ? { ...d, status: 'Received' as DocStatus, uploadedBy: task.assignee, at: 'just now' } : d) } }
           : c);
       }
@@ -1916,11 +1959,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const requestDesignDocs = useCallback<IcfrCtx['requestDesignDocs']>((controlIds) => {
     if (role !== 'auditor') return;
     setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
       const ids = new Set(controlIds);
       const newTasks: HandoffTask[] = [];
       const newExecs: ExecutionEvent[] = [];
       const controls = prev.controls.map(c => {
-        if (!ids.has(c.id)) return c;
+        // A concluded control is not chased for documents — its testing is done,
+        // and a request would reopen a conversation the paper has closed.
+        if (!ids.has(c.id) || isControlLocked(c)) return c;
         // A waived element is not chased: the audit team wrote it, the client
         // holds it, or there is nothing to hold. Asking for it anyway is noise.
         const missing = c.design.documents.filter(d => d.status === 'Missing' && !d.waiver);
@@ -1957,8 +2003,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         verb: `re-graded ${id}`, from: g0, to: g1, by: me, role, at: 'just now',
         rationale: 'Severity inputs changed — the engine recomputed.',
       };
-      // A grade that has moved is no longer the one the reviewer confirmed.
-      const cleared = before.ratingConfirm && needsRatingConfirmation(g1)
+      // A grade that has moved is no longer the one the reviewer confirmed —
+      // whichever WAY it moved. Clearing only on the way up let a confirmed
+      // material weakness be walked down past the reviewer with their stamp
+      // still attached, which is the one thing this rung exists to stop.
+      const cleared = before.ratingConfirm
         ? next.deficiencies.map(d => (d.id === id ? { ...d, ratingConfirm: undefined, status: 'Rating review' as const } : d))
         : next.deficiencies;
       return { ...next, deficiencies: cleared, executions: [event, ...next.executions] };
@@ -1966,10 +2015,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me, role]);
 
   // ─── Step 2 → 3 · the rating leaves the auditor's hands ───────────────────────
-  // Below significant it goes straight to the owner to plan. Significant or worse
-  // parks for the reviewer first: a wrong material weakness must not set weeks of
-  // remediation running, and it is cheaper to argue about the grade than to undo
-  // a fix built on it.
+  // Every grade parks for the reviewer before the owner is asked to plan anything:
+  // a wrong rating must not set weeks of remediation running, and it is cheaper to
+  // argue about the grade than to undo a fix built on it. A finding called small is
+  // as much a judgement as one called a material weakness — the reviewer sees both.
   const completeSizing = useCallback<IcfrCtx['completeSizing']>((id) => {
     if (role !== 'auditor') return;
     setEng(prev => {
@@ -1979,7 +2028,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (ownsIt(prev, target.controlId, me)) return prev;
       if (!target.rootCause.trim()) return prev;               // step 1 is not done
       const grade = gradeException(target, prev).grade;
-      const next: ExceptionStatus = needsRatingConfirmation(grade) && !target.ratingConfirm ? 'Rating review' : 'Planning';
+      // A confirmation already standing (a re-size after the reviewer sent it
+      // back on something other than the grade) is not asked for twice.
+      const next: ExceptionStatus = !target.ratingConfirm ? 'Rating review' : 'Planning';
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: next === 'Rating review' ? `sent ${id} for rating confirmation` : `handed ${id} to ${target.remediation.owner} to plan`,
@@ -2048,6 +2099,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Planning') return prev;
+      if (!ownsIt(prev, target.controlId, meOwner)) return prev;         // your control, your commitment
       const r = target.remediation;
       if (!r.action.trim() || !r.owner.trim() || !r.date) return prev;   // all three, or it is not a plan
       const event: ExecutionEvent = {
@@ -2178,38 +2230,39 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role]);
-  // Lifecycle moves: reviewer only closes (below); submitting the fix for retest
-  // is the owner's declaration — the auditor can't call the owner's fix done.
-  // Starting remediation marks the plan in progress; submitting marks it done.
+  // The one lifecycle move that is not somebody's named act elsewhere: the owner
+  // declaring their fix done and ready to be tested. Everything else on the ladder
+  // has its own gated mutator, so this stays narrow — a generic status setter with
+  // no legal-move check is a back door around every rung the ladder describes.
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
-    if (role === 'reviewer') return;
-    if (status === 'Retest' && role !== 'risk-owner') return;
+    if (status !== 'Retest' || role !== 'risk-owner') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
-      if (!target || target.status === status) return prev;
+      if (!target || target.status !== 'Remediation') return prev;   // only the fixing step submits
+      // Same by-name ownership question ownsIt asks, read the other way round:
+      // there it forbids auditing your own control, here it is the thing that
+      // makes this yours to declare. One owner persona cannot submit another's fix.
+      if (!ownsIt(prev, target.controlId, meOwner)) return prev;
+      if (!target.remediation.evidence?.length) return prev;         // "done" needs proof
       // every lifecycle move carries its actor + time into the shared trail
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
-        verb: status === 'Remediation' ? `started remediation on ${id}` : status === 'Retest' ? `submitted the fix for retest (${id})` : `moved ${id} to ${status.toLowerCase()}`,
+        verb: `submitted the fix for retest (${id})`,
         by: me, role, at: 'just now',
       };
       return {
         ...prev,
-        deficiencies: prev.deficiencies.map(d => {
-          if (d.id !== id) return d;
-          const remStatus = status === 'Remediation' ? 'In progress' as const : status === 'Retest' ? 'Done' as const : d.remediation.status;
-          return { ...d, status, remediation: { ...d.remediation, status: remStatus } };
-        }),
+        deficiencies: prev.deficiencies.map(d => (
+          d.id === id ? { ...d, status, remediation: { ...d.remediation, status: 'Done' as const } } : d
+        )),
         // submitting the fix also clears the owner's remediation reminder — one
         // declaration, both surfaces agree (portal checklist ↔ exceptions page)
-        tasks: status === 'Retest'
-          ? prev.tasks.map(t => t.type === 'remediation' && t.controlId === target.controlId && t.status === 'open' ? { ...t, status: 'cleared' as const } : t)
-          : prev.tasks,
+        tasks: prev.tasks.map(t => t.type === 'remediation' && t.controlId === target.controlId && t.status === 'open' ? { ...t, status: 'cleared' as const } : t),
         executions: [event, ...prev.executions],
       };
     });
-  }, [me, role]);
+  }, [me, role, meOwner]);
   // ─── Step 5 · the retest ──────────────────────────────────────────────────────
   // The control is tested AGAIN, not re-read. A fresh sample comes off the period
   // SINCE THE FIX LANDED — items from before it prove nothing about the repair —
@@ -2274,8 +2327,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
   // the auditor records retest results; the owner never tests their own fix. A
-  // failure sends the plan back to step 3 with the auditor's rationale attached,
-  // where the owner can read it, and bumps the loop counter.
+  // failure reopens the WORK, not the plan: it lands back on the owner's fixing
+  // step with the auditor's rationale attached, the accepted plan still standing,
+  // and the loop counter bumped. Rewriting a plan the auditor already approved is
+  // a separate judgement — when the plan is the problem, two failures put it in
+  // front of the reviewer, who can send it back for a new one.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, rationale) => {
     if (role !== 'auditor') return;
     setEng(prev => {
@@ -2289,7 +2345,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const result: 'Pass' | 'Fail' = marks.includes('Fail') ? 'Fail' : 'Pass';
       if (result === 'Fail' && !rationale?.trim()) return prev;         // the owner has to be told why
       const round: RetestRound = { ...draft, result, rationale: rationale?.trim(), by: me, at: 'just now' };
-      const to: ExceptionStatus = result === 'Pass' ? 'Awaiting reviewer' : 'Planning';
+      const to: ExceptionStatus = result === 'Pass' ? 'Awaiting reviewer' : 'Remediation';
       const rounds = [...(target.retests ?? []), round];
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -2304,11 +2360,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           retestDraft: undefined,
           retest: { result, at: 'just now', by: me },
           status: to,
-          // A failure reopens the plan, and the plan's own verdict goes with it —
-          // the owner is writing a new one, not resubmitting the rejected one.
-          planReview: result === 'Pass' ? d.planReview : undefined,
-          planSubmitted: result === 'Pass' ? d.planSubmitted : undefined,
-          remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'Open' },
+          // The plan and its acceptance survive a failed retest — the owner is
+          // doing the agreed work again, not writing a new commitment.
+          remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'In progress' },
         } : d),
         executions: [event, ...prev.executions],
       };
@@ -2326,17 +2380,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // review, and step 4 while the fix is being done. Once it is with the
       // auditor — for the plan or for the retest — it is frozen.
       if (d.status !== 'Planning' && d.status !== 'Remediation') return d;
+      // And it has to be YOUR control: the hat says risk owner, the name says
+      // which one. Writing somebody else's commitment is not a plan.
+      if (!ownsIt(prev, d.controlId, meOwner)) return d;
       return { ...d, remediation: { ...d.remediation, ...patch } };
     }) }));
-  }, [role]);
+  }, [role, meOwner]);
   const addRemediationEvidence = useCallback<IcfrCtx['addRemediationEvidence']>((id, fileName) => {
     if (role !== 'risk-owner') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
       if (d.id !== id) return d;
+      if (!ownsIt(prev, d.controlId, meOwner)) return d;
       const file: EvidenceFile = { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: me, uploadedAt: 'just now' };
       return { ...d, remediation: { ...d.remediation, evidence: [...(d.remediation.evidence ?? []), file] } };
     }) }));
-  }, [me, role]);
+  }, [me, role, meOwner]);
 
   // ─── The owner argues with the grading, on the record ─────────────────────────
   // Scoped to their OWN controls, not merely to the risk-owner hat: the point of a
@@ -2426,10 +2484,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
-  // A closed exception can come back — auditor or reviewer, reason required. It
+  // A closed exception can come back, and only the reviewer can bring it — they
+  // signed it closed, so undoing that signature is theirs. Reason required. It
   // returns to Remediation (the fix must be re-proven); the stale retest clears.
   const reopenException = useCallback<IcfrCtx['reopenException']>((id, reason) => {
-    if (role === 'risk-owner') return;
+    if (role !== 'reviewer') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
@@ -2459,7 +2518,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const c = prev.controls.find(x => x.id === controlId);
-      if (!c || c.unableToTest) return prev;
+      // A concluded control cannot also be blocked — it was tested, and the
+      // paper says what it concluded. Reopening is the way to say otherwise.
+      if (!c || c.unableToTest || isControlLocked(c)) return prev;
       const block: UnableToTest = { track, reason: reason.trim(), needed: needed.trim(), raisedBy: me, raisedAt: 'just now' };
       const task: HandoffTask = {
         id: `UTT-${prev.tasks.length + 1}`, type: 'pbc', controlId,
@@ -2512,7 +2573,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const c = prev.controls.find(x => x.id === controlId);
-      if (!c?.unableToTest || c.unableToTest.convertedTo) return prev;
+      // This writes a track conclusion, so it is a testing act and obeys the lock.
+      if (!c?.unableToTest || c.unableToTest.convertedTo || isControlLocked(c)) return prev;
       const block = c.unableToTest;
       const next = Math.max(0, ...prev.deficiencies.map(d => parseInt(d.id.replace(/\D/g, ''), 10) || 0)) + 1;
       const defId = `DEF-${String(next).padStart(3, '0')}`;
@@ -2566,6 +2628,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           design: { ...c.design, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
           operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
           wpSignoff: undefined, // a reopened control's paper is no longer the signed one
+          // In full, on the control — the trail's line is clipped at 80 characters,
+          // and a reader asking why a signed conclusion was undone needs the answer
+          // on the paper, not only in the history rail.
+          reopened: { reason: reason?.trim() ?? '', by: me, at: 'just now' },
+          reviewReturn: undefined,   // a reopen supersedes the reviewer's send-back
         } : c),
         executions: [event, ...prev.executions],
       };
@@ -2625,6 +2692,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
           wpSignoff: undefined,
           reviewReturn: { reason, by: me, at: 'just now' },
+          reopened: undefined,       // and a send-back supersedes an earlier reopen
         } : c),
         executions: [event, ...prev.executions],
       };
@@ -2718,13 +2786,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
    * eyes still applies — the same person cannot do both.
    */
   const signOffAudit = useCallback<IcfrCtx['signOffAudit']>((step) => {
+    // The hat must match the signature — the store backs what the UI hides.
+    if (step === 'preparer' && role !== 'auditor') return;
+    if (step === 'reviewer' && role !== 'reviewer') return;
     setEng(prev => {
       if (step === 'reviewer' && prev.reviewer === prev.preparer) return prev;
       const idx = prev.audits.findIndex(a => a.id === openAuditId);
       if (idx < 0) return prev;
       const a = prev.audits[idx]!;
-      // A concluded audit's archive is history; it cannot be re-signed.
-      if (a.archive) return prev;
+      // Only the live cycle can be signed. An archived audit is history, and a
+      // planned round has tested nothing — a signature there would stamp the live
+      // cycle's numbers onto an empty record.
+      if (prev.audits.find(x => !x.archive)?.id !== a.id) return prev;
+      // The countersign follows the preparer, and each signature lands once.
+      if (step === 'preparer' && a.signoff?.preparer) return prev;
+      if (step === 'reviewer' && (!a.signoff?.preparer || a.signoff.reviewer)) return prev;
       const signoff = {
         ...a.signoff,
         ...(step === 'preparer'
@@ -2734,7 +2810,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
       return { ...prev, audits: prev.audits.map((x, i) => (i === idx ? { ...x, signoff } : x)) };
     });
-  }, [openAuditId]);
+  }, [openAuditId, role]);
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,

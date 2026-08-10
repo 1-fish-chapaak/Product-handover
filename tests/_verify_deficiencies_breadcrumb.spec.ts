@@ -38,7 +38,7 @@ test('Exceptions page carries a breadcrumb instead of the engagement header', as
   // back returns to where it was opened from (the Overview), header restored
   await crumbs.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(800);
-  await expect(page.getByText('Engagement sign-off')).toBeVisible();
+  await expect(page.getByText('Audit sign-off')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to Engagements' })).toBeVisible();
 
   // the owner's copy is titled for them, and the crumb follows. Their route in is

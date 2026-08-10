@@ -82,9 +82,14 @@ const COURT: Record<Court, { tone: Tone; label: string; Icon: typeof Gavel }> = 
   reviewer: { tone: 'evidence', label: 'Reviewer', Icon: ShieldCheck },
   none: { tone: 'compliant', label: 'Closed', Icon: CheckCircle2 },
 };
-export function CourtBadge({ court, fromRole }: { court: Court; fromRole?: Role }) {
+/** `who` names the PERSON holding it. A register saying "Risk owner" tells the
+ *  reader a role and leaves them to work out which human that is; the whole point
+ *  of a custody column is that someone can be chased by name. Passed where the
+ *  caller can resolve it (the deficiency register does), role label otherwise. */
+export function CourtBadge({ court, fromRole, who }: { court: Court; fromRole?: Role; who?: string }) {
   const c = COURT[court];
-  const label = court === 'auditor' && fromRole && fromRole !== 'auditor' ? 'Auditor'
+  const label = who ? who
+    : court === 'auditor' && fromRole && fromRole !== 'auditor' ? 'Auditor'
     : court === 'risk-owner' && fromRole === 'risk-owner' ? 'You'
     : court === 'reviewer' && fromRole === 'reviewer' ? 'Your court'
     : c.label;

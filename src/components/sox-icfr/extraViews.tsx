@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp,
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, needsRatingConfirmation, previewRegrades, retestReadiness, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
+import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
 import { CourtBadge, SeverityPill, Toggle } from './parts';
 import { FormSelect, HeaderFilter } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
@@ -15,6 +15,7 @@ import { cn } from '../../lib/cn';
 // Exposure / GapType types — priced impact and the gap taxonomy are off the card.
 // `gapNature` replaces the latter, derived read-only from the track and the nature.
 import RemediationBriefModal from './RemediationBriefModal';
+import { isOwnerOf } from './auditScope';
 import { CHALLENGED_INPUT_LABEL, EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -991,8 +992,13 @@ export function DeficienciesView() {
   // a countersigned engagement is a sealed record — the store already drops
   // every write, so the page must say so and put its pens away
   const locked = isEngagementLocked(eng);
-  // person-lane: the owner sees only exceptions riding their own controls
-  const all = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
+  // person-lane: the owner sees only exceptions riding their own controls. Owning
+  // is either capacity — the control's own owner or the process's — the same
+  // question the control register and the remediation brief ask, so a process
+  // owner does not see a control in one place and lose its finding in another.
+  const all = isOwner
+    ? eng.deficiencies.filter(d => { const c = eng.controls.find(x => x.id === d.controlId); return !!c && isOwnerOf(c, meOwner); })
+    : eng.deficiencies;
 
   // ── Column filters ────────────────────────────────────────────────────────────
   // In the headers, like the control register's — the column IS the trigger, so a
@@ -1036,7 +1042,7 @@ export function DeficienciesView() {
       {locked && (
         <p className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500 bg-paper-100 border border-canvas-border rounded-lg px-2.5 py-1.5">
           <Lock size={12} className="text-ink-400 shrink-0" />
-          The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.
+          The audit is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.
         </p>
       )}
 
@@ -1546,7 +1552,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             isAuditor ? (
               d.rootCause.trim()
                 ? <button onClick={() => completeSizing(d.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5">
-                    <Scale size={13} /> {needsRatingConfirmation(grade) ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
+                    <Scale size={13} /> {!d.ratingConfirm ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
                   </button>
                 : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> Write the root cause first — the grade and the plan both hang off it.</span>
             ) : null
@@ -1641,8 +1647,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             <button onClick={() => setBriefOpen(true)}
               className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={13} /> Remediation brief</button>
           )}
-          {/* the way back in: audit-side only, never one-click — the reason is the record */}
-          {!locked && !isOwner && d.status === 'Closed' && (
+          {/* the way back in: the reviewer's alone — they signed it closed, so
+              undoing that is theirs — and never one-click; the reason is the record */}
+          {!locked && isReviewer && d.status === 'Closed' && (
             <button onClick={() => { setReopening(true); setReopenReason(''); }}
               className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
           )}
@@ -1735,7 +1742,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         </td>
         <td><SeverityPill s={grade} /></td>
         <td><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill></td>
-        <td><CourtBadge court={courtForException(d)} fromRole={role} /></td>
+        {/* By name: a register that says which ROLE holds a finding still leaves
+            the reader asking who to chase. */}
+        <td><CourtBadge court={courtForException(d)} fromRole={role} who={exceptionCourtDetail(d, eng).who} /></td>
       </tr>
       {open && <tr className="def-detail"><td colSpan={DEF_COLS}>{detail}</td></tr>}
       {modals}

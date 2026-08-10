@@ -227,11 +227,11 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGra
   return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
 }
 
-/** Significant or worse has to be confirmed by the reviewer before the owner is
- *  sent off to plan a fix — a wrong rating must not drive weeks of remediation. */
-export function needsRatingConfirmation(grade: ExceptionGrade): boolean {
-  return GRADE_RANK[grade] >= GRADE_RANK['Significant Deficiency'];
-}
+// Every rating is confirmed by the reviewer before the owner is sent off to plan
+// a fix — a wrong rating must not drive weeks of remediation, and a grade only
+// looks small once someone has agreed it is small. (This used to fire above
+// Significant Deficiency alone; the rung is the reviewer's on every finding now,
+// so the threshold helper it needed is gone.)
 
 // ─── Baton — whose court an exception is in ──────────────────────────────────────
 // The same question `courtFor` answers for a control, answered for an exception.
@@ -1227,9 +1227,14 @@ export function isControlLocked(c: Control, opApplies = true): boolean {
 export function isControlLockedIn(eng: IcfrEngagement, c: Control): boolean {
   return isControlLocked(c, operatingApplies(eng, c));
 }
-// A countersigned engagement is locked for good — no edits, no reopen.
+// A countersigned audit seals its cycle — no edits, no reopen. The seal reads the
+// LIVE audit (newest unarchived record — auditPortfolio's liveAuditId, inlined
+// because auditPortfolio imports from this file): that is the only record whose
+// results are on the controls, so both of its signatures freeze the engagement's
+// working state. Starting the next cycle archives it, which is the only release.
 export function isEngagementLocked(eng: IcfrEngagement): boolean {
-  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+  const live = eng.audits.find(a => !a.archive);
+  return !!(live?.signoff?.preparer && live?.signoff?.reviewer);
 }
 
 // ─── Review gate — concluded is not final until the reviewer countersigns ────────

@@ -808,6 +808,10 @@ export interface Control {
   /** The reviewer sent the concluded paper back instead of countersigning —
    *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
   reviewReturn?: { reason: string; by: string; at: string };
+  /** The auditor unlocked a concluded control to test it again. The reason is
+   *  kept in full here — the trail only carries a truncated line — because
+   *  "why was a signed conclusion undone" is a working-paper question. */
+  reopened?: { reason: string; by: string; at: string };
   /** The auditor could not test at all. Deliberately NOT an exception: nothing
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
