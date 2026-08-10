@@ -1903,6 +1903,12 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
       // workflows mapped" a fact worth putting on a card.
       const attrCount = rich ? 2 + (i % 4) : 2;
       const mapped = nature === 'Automated' ? attrCount
+        // The untouched control is the only one an auditor can actually start
+        // from, so it is the only place the population step's file list can be
+        // seen being built. Two wired attributes rather than one: the first
+        // names its input file, the second has none — which is what makes the
+        // list and the thing still owed both visible at once.
+        : rich && last ? Math.min(2, attrCount)
         : rich ? (i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : attrCount - 1)
         : 0;
       const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
@@ -1915,7 +1921,20 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         nature === 'Automated' && k === 0 ? ['Reperformance'] : a.procedures,
         opDone ? 'Pass' : 'Not tested',
         k < mapped
-          ? wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined)
+          ? {
+            ...wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined),
+            // The file the linked workflow reads. It is one of the files this
+            // control's population stands on, because that is what the call
+            // settled: the population's sources ARE the workflows' inputs
+            // ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स की
+            // लिस्ट"). The last mapped attribute is deliberately left without
+            // one — an attribute wired to a workflow with no file attached is
+            // the ordinary half-finished state, and the step has to be able to
+            // say so rather than look complete.
+            ...(k < mapped - 1
+              ? { inputFile: file(k === 0 ? 'population_full_period.xlsx' : `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 'R. Nair', 'XLSX') }
+              : {}),
+          }
           : {},
       ));
       // Design checks: the control-level pair FIRST, then one per attribute

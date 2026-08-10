@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -2241,8 +2241,25 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
   const [criteriaSeed, setCriteriaSeed] = useState(drafted);
   if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); setCriteria(drafted); }
 
-  // Stated above the list, never applied to it. See suggestPopulationFile.
-  const hint = useMemo(() => suggestPopulationFile(eng, control, files, requiredDatasetsFor(control).map(r => r.name)), [eng, control, files]);
+  // What the attributes' workflows actually read. This is the answer to "which
+  // files", and it beats any heuristic: a linked workflow naming its input is a
+  // fact, not a guess.
+  const { inputs, awaiting } = useMemo(() => expectedInputsFor(control), [control]);
+  const expected = new Map(inputs.map(i => [i.name, i]));
+  // Files the workflows name come first. The rest of the audit's files stay
+  // selectable — a manual control links no workflow at all, and a step that
+  // could offer it nothing would be a step it could never finish — but they are
+  // visibly not what anything here reads.
+  const ordered = useMemo(
+    () => [...files].sort((a, b) => Number(expected.has(b.name)) - Number(expected.has(a.name))),
+    [files, inputs],
+  );
+  const firstOther = ordered.findIndex(f => !expected.has(f.name));
+  // The heuristic only runs where there is nothing better. See suggestPopulationFile.
+  const hint = useMemo(
+    () => (inputs.length ? null : suggestPopulationFile(eng, control, files, requiredDatasetsFor(control).map(r => r.name))),
+    [eng, control, files, inputs],
+  );
 
   const submit = () => {
     if (!chosen) return;
@@ -2294,6 +2311,28 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
           </p>
         </div>
       )}
+      {/* ── where the list comes from ────────────────────────────────────────
+          Said out loud, because otherwise the ordering is a mystery: these are
+          the files the control's own attributes are wired to read, and picking
+          anything else is picking a file no workflow here will run on. */}
+      {inputs.length > 0 && (
+        <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
+          <WorkflowIcon size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+              <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'One file is' : `${inputs.length} files are`} what this control reads</span> — the input{inputs.length === 1 ? '' : 's'} of the workflows linked to its attributes. {inputs.length === 1 ? 'It is' : 'They are'} first in the list.
+            </p>
+            {/* The other half of the truth. An attribute wired to a workflow with
+                no file attached is a thing somebody owes, and hiding it here
+                would make the list look complete when it is not. */}
+            {awaiting.length > 0 && (
+              <p className="text-[0.65625rem] text-mitigated-800 mt-1 leading-relaxed">
+                {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="rounded-xl border border-canvas-border overflow-hidden mb-4">
         {files.length === 0 ? (
           /* Nothing left to draw on — either the audit arrived without a trial
@@ -2312,33 +2351,50 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
             <button onClick={() => setUploading(true)}
               className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><FileUp size={14} /> Upload file</button>
           </div>
-        ) : files.map(f => {
+        ) : ordered.map((f, idx) => {
           const on = picked === f.name;
           // No answer, no population. Removing "unknown" means a file nobody
           // can place is not a source you can build a test on.
           const usable = fileUsable(f);
+          const wanted = expected.get(f.name);
           return (
-            <button key={f.name} onClick={() => usable && setPicked(f.name)} disabled={!usable}
-              title={usable ? undefined : 'Say where this file came from on its file record before drawing a population off it'}
-              className={cn('w-full text-left flex items-center gap-2.5 px-3 py-2.5 border-b border-canvas-border last:border-b-0 transition-colors',
-                !usable ? 'opacity-55 cursor-not-allowed' : on ? 'bg-brand-50 cursor-pointer' : 'hover:bg-paper-50 cursor-pointer')}>
-              <span className={cn('w-3.5 h-3.5 rounded-full border-[3px] shrink-0', on ? 'border-brand-600' : 'border-ink-300')} />
-              {/* a pull from a system reads differently from a file somebody
-                  sent, and the icon is the fastest way to say which */}
-              {f.systemFetched
-                ? <Database size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
-                : <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />}
-              <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
-              {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden md:inline">{f.system}</span>}
-              {/* provenance, inherited — stated on every file so the choice of
-                  source is made knowing what it is */}
-              <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
-                !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
-                {originLabel(f)}
-              </span>
-              <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{f.rows.toLocaleString()} rows</span>
-              <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
-            </button>
+            <div key={f.name}>
+              {/* The line between what the workflows read and everything else.
+                  Only drawn when there is something on both sides of it. */}
+              {inputs.length > 0 && idx === firstOther && idx > 0 && (
+                <div className="px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                  Not read by any of this control's workflows
+                </div>
+              )}
+              <button onClick={() => usable && setPicked(f.name)} disabled={!usable}
+                title={usable ? undefined : 'Say where this file came from on its file record before drawing a population off it'}
+                className={cn('w-full text-left flex items-center gap-2.5 px-3 py-2.5 border-b border-canvas-border last:border-b-0 transition-colors',
+                  !usable ? 'opacity-55 cursor-not-allowed' : on ? 'bg-brand-50 cursor-pointer' : 'hover:bg-paper-50 cursor-pointer')}>
+                <span className={cn('w-3.5 h-3.5 rounded-full border-[3px] shrink-0', on ? 'border-brand-600' : 'border-ink-300')} />
+                {/* a pull from a system reads differently from a file somebody
+                    sent, and the icon is the fastest way to say which */}
+                {f.systemFetched
+                  ? <Database size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
+                  : <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />}
+                <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
+                {/* Which attributes read it. The reason a file is at the top of
+                    the list belongs on the row, not in a paragraph above it. */}
+                {wanted && (
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold whitespace-nowrap">
+                    <WorkflowIcon size={9} /> {wanted.attributes.join(', ')}
+                  </span>
+                )}
+                {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
+                {/* provenance, inherited — stated on every file so the choice of
+                    source is made knowing what it is */}
+                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                  !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
+                  {originLabel(f)}
+                </span>
+                <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{f.rows.toLocaleString()} rows</span>
+                <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
+              </button>
+            </div>
           );
         })}
       </div>

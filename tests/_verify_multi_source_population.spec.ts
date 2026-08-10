@@ -195,3 +195,50 @@ test('the proof accordion carries the same mark', async ({ page }) => {
   expect(await page.getByText('Source & parameters').count()).toBe(1);
   await page.screenshot({ path: `${SHOTS}/05-ipe-accordion.png`, fullPage: true });
 });
+
+test('the files offered are the ones the attributes read', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/');
+
+  // The untouched control is the one an auditor can actually start from: no
+  // population drawn yet, so the picker is open and its list is the thing under
+  // test. Every finished control is locked and shows no picker at all. "फाइल्स वही आ रही है जो एट्रिब्यूट के अंदर वर्कफ्लो लिंक्ड है
+  // और वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स की लिस्ट."
+  await page.getByRole('navigation').getByRole('button', { name: 'Engagements', exact: true }).click();
+  await page.waitForTimeout(900);
+  await page.getByRole('tab', { name: /All Engagements/ }).click();
+  await page.waitForTimeout(800);
+  await page.getByText('FY26 ICFR — Altura Infra Group').first().click();
+  await page.waitForTimeout(1300);
+  await page.getByText('Control Library', { exact: true }).first().click();
+  await page.waitForTimeout(1000);
+  await page.getByText('Customer master changes are independently reviewed.').first().click();
+  await page.waitForTimeout(1300);
+  const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
+  await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
+  await runCard.first().click();
+  await page.waitForTimeout(1500);
+
+  // The list is explained by the workflows, not by a heuristic guess.
+  const why = page.getByText(/what this control reads/);
+  await why.first().scrollIntoViewIfNeeded();
+  await expect(why.first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/the inputs? of the workflows linked to its attributes/).first()).toBeVisible();
+  // The old heuristic hint stands down when there is something better to say.
+  await expect(page.getByText(/^Likely /)).toHaveCount(0);
+
+  // Each expected file wears the attributes that read it, on its own row —
+  // the reason a file is at the top belongs on the row, not in a paragraph.
+  const badge = page.locator('span').filter({ hasText: /^\d+\.\d+$/ });
+  expect(await badge.count()).toBeGreaterThan(0);
+  // And everything else on the audit is still there, under a line that says
+  // what it is: a manual control links no workflow at all, and a step that
+  // could offer it nothing would be a step it could never finish.
+  await expect(page.getByText("Not read by any of this control's workflows").first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/09-files-from-workflows.png`, fullPage: true });
+
+  // An attribute wired to a workflow with no file attached is a thing somebody
+  // owes, and the step says so rather than looking complete.
+  await expect(page.getByText(/with no input file attached/).first()).toBeVisible();
+});

@@ -505,6 +505,47 @@ export function sourceTotals(sources: PopulationSource[]): { count: number; rows
   return sources.reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
 }
 
+// ─── Where the population's files come from ──────────────────────────────────────
+// Not from browsing the platform. "फाइल्स वही आ रही है जो एट्रिब्यूट के अंदर
+// वर्कफ्लो लिंक्ड है और वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स
+// की लिस्ट" — the control's attributes each link a workflow, each workflow reads
+// an input file, and those files ARE the population's sources. Picking anything
+// else is picking a file no workflow will run on ("ऐड सोर्स नहीं होगा ना,
+// वर्कफ्लो ही नहीं चलेगा").
+
+/** One file the attributes' workflows read, and which attributes read it. */
+export interface ExpectedInput {
+  name: string;
+  /** Attribute codes, so the reason the file is offered is on the screen rather
+   *  than in someone's head. */
+  attributes: string[];
+  workflow?: string;
+}
+
+/** What this control's attributes expect, and what they are still waiting for.
+ *
+ *  `awaiting` is the honest other half: an attribute can have a workflow linked
+ *  and no input file attached yet, and that is a thing somebody owes rather than
+ *  a thing to hide. It is what the reminder to the owner is built on. */
+export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiting: { code: string; workflow?: string }[] } {
+  const byName = new Map<string, ExpectedInput>();
+  const awaiting: { code: string; workflow?: string }[] = [];
+  for (const s of c.operating.steps) {
+    // An attribute with no workflow and no validation reads nothing — it is
+    // evidenced by inspection or attestation, and it expects no file.
+    const linked = !!s.workflowName || s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.aiValidation;
+    if (!linked) continue;
+    if (s.inputFile?.name) {
+      const hit = byName.get(s.inputFile.name);
+      if (hit) { hit.attributes.push(s.code); hit.workflow = hit.workflow ?? s.workflowName; }
+      else byName.set(s.inputFile.name, { name: s.inputFile.name, attributes: [s.code], workflow: s.workflowName });
+    } else {
+      awaiting.push({ code: s.code, workflow: s.workflowName });
+    }
+  }
+  return { inputs: [...byName.values()], awaiting };
+}
+
 // ─── Asking for a sample in words ────────────────────────────────────────────────
 // A number could not carry what a draw actually needs. "क्या 25 निकालना है, किस
 // महीने का निकालना है, सब डिपेंड करता है उसपे" — testing whether every onboarded
