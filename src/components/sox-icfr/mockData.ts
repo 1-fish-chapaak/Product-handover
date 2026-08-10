@@ -85,7 +85,15 @@ const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points
     testedAt: conclusion !== 'Not tested' ? '14 Apr' : null,
   });
 
-const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx'): OperatingTrack => ({
+/** A second source file behind a seeded population.
+ *
+ *  Most controls stand on one file, so this is the exception rather than the
+ *  shape — but "one control, several files" has to be reachable without anyone
+ *  building it by hand, or the per-file proof and the per-file draw are features
+ *  nobody ever sees. See PopulationSource. */
+const secondSource = (file: string, rows: number, count: number, criteria: string) => ({ file, rows, count, criteria });
+
+const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx', extra?: ReturnType<typeof secondSource>): OperatingTrack => ({
   method: 'Manual',
   // What the population IS, recorded before it was pulled in — the row count on
   // its own never says whether it counted the right things.
@@ -96,9 +104,26 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     by: 'A. Mehta', at: '12 Apr',
   } : undefined,
   population: popCount ? {
-    source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
-    sourceFile: popFile, sourceCount: popCount * 7,
+    source: popSource, count: popCount + (extra?.count ?? 0), tieOut: 'Agreed to GL control account',
+    sourceFile: popFile, sourceCount: popCount * 7 + (extra?.rows ?? 0),
     criteria: `type ${popSource.split('—')[0].trim()}`,
+    // The files it stands on. Written out even for the single-file case so the
+    // seeds and the application agree on one shape — populationSources() would
+    // synthesise the same entry, but a seed that leaves it to a shim is a seed
+    // that reads differently from anything the app itself produces.
+    sources: [
+      {
+        id: 'src-1', file: popFile, rows: popCount * 7, count: popCount, criteria: `type ${popSource.split('—')[0].trim()}`,
+        ...(sampling ? { draw: { size: extra ? Math.ceil(sampling.size / 2) : sampling.size, method: sampling.method, seed: sampling.seed ?? 40817 } } : {}),
+      },
+      ...(extra ? [{
+        id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria,
+        // A different file is a different draw, so it is a different seed. The
+        // whole point of storing one is that the reviewer can reperform THIS
+        // selection, and one seed shared by two draws reperforms one of them.
+        ...(sampling ? { draw: { size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923 } } : {}),
+      }] : []),
+    ],
     // filterFrom / filterTo / version are stamped by stampPopulationWindows once
     // the audits exist — a population belongs to ONE round and carries that
     // round's window, which cannot be known from in here.
@@ -112,9 +137,39 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     locked: { by: 'A. Mehta', at: '13 Apr' }, version: 'POP-YE',
     evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
   } : undefined,
+  // ── the report behind each file, proven ────────────────────────────────────
+  // Seeded only where there are several files. A single-source control registers
+  // its report the moment an auditor opens the step, so seeding one would be
+  // seeding work the application already does — but a control that has already
+  // CONCLUDED never opens that path, and its per-file proof would be a thing the
+  // feature supports and nobody can look at.
+  //
+  // Four dimensions per file, all passed, one verdict for the lot: that is the
+  // shape the call settled on ("सेंट्रलाइज्ड कर दो ना").
+  ipe: popCount && extra ? {
+    reportName: popFile, system: `${popSource.split('—')[0].trim()} — Production`,
+    reportRef: 'FBL3N / MK03', parameters: `Company code · full period · ${popSource.split('—')[0].trim()}`,
+    generatedBy: 'R. Nair — client finance', generatedAt: '12 Apr',
+    recordCount: popCount * 7 + extra.rows, controlTotal: 'Agreed to the GL control account',
+    checks: [
+      ...ipeChecklist(popFile).map((k, i) => ({ ...k, id: `ipe-s1-${i}`, sourceId: 'src-1', result: 'Pass' as TestResult })),
+      ...ipeChecklist(extra.file).map((k, i) => ({ ...k, id: `ipe-s2-${i}`, sourceId: 'src-2', result: 'Pass' as TestResult })),
+    ],
+    conclusion: 'Reliable', testedBy: 'A. Mehta', testedAt: '13 Apr',
+  } : undefined,
   // A draw nobody can reperform is not a procedure — every seeded sample carries
   // the method and the seed that produced it.
-  sampling: sampling ? { ...sampling, seed: sampling.seed ?? 40817 } : undefined,
+  // Every drawn item says which file it came out of, because a control standing
+  // on two files that drew from one has tested one — and a paper that cannot
+  // show the split cannot show that either. Split down the middle: the seeds are
+  // an illustration, not an inference about how many rows each file holds.
+  sampling: sampling ? {
+    ...sampling,
+    seed: sampling.seed ?? 40817,
+    samples: extra
+      ? sampling.samples.map((s, i) => ({ ...s, sourceId: i % 2 === 0 ? 'src-1' : 'src-2' }))
+      : sampling.samples,
+  } : undefined,
   steps,
   conclusion,
   testedBy: conclusion !== 'Not tested' ? 'A. Mehta' : null,
@@ -1625,6 +1680,10 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
     pop.filterTo = audit.windowTo;
     pop.version = `POP-${ROUND_TAG[audit.round]}`;
     pop.criteria = `${pop.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}`;
+    // Each file's own filter carries the round too — the per-file rows print
+    // these rather than the population-level line, so stamping only the latter
+    // would leave the round visible in one place and missing in the other.
+    pop.sources = pop.sources?.map(s => ({ ...s, criteria: `${s.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}` }));
   }
 }
 
@@ -1856,7 +1915,22 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
         operating: nature === 'Automated'
           ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
-          : manualTrack(opDone ? 'Effective' : 'Not tested', opSteps, opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, opDone ? 2000 + i * 7 : 0),
+          // The first tested control of every process stands on TWO source files
+          // (dev call, Aug 2026 — "मल्टीपल फाइल्स वो डाल सकता है"). Seeded rather
+          // than left to be built by hand: the per-file IPE proof, the per-file
+          // draw and the Source column on the paper are all invisible until a
+          // control actually has more than one file, and a feature nobody can
+          // reach on arrival is a feature nobody reviews. One control, not all
+          // of them — several files is the exception, and a register where every
+          // control had two would misrepresent the ordinary case.
+          : manualTrack(
+            opDone ? 'Effective' : 'Not tested', opSteps,
+            opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined,
+            opDone ? 2000 + i * 7 : 0, undefined, undefined,
+            opDone && i === 0
+              ? secondSource(`vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265, 'Active vendors with a payment in the period')
+              : undefined,
+          ),
       };
     });
   });

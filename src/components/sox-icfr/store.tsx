@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, needsRatingConfirmation, parseLooseDate, previewRegrades, sampleSizeGuide, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, needsRatingConfirmation, parseLooseDate, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
-  Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, Sample, Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -235,6 +235,18 @@ interface IcfrCtx {
    *  expected count where the frequency gives none, and the reason a computed
    *  check was overridden. */
   setPopulationFacts: (controlId: string, patch: Partial<Pick<Population, 'provenance' | 'countConfirmed' | 'countNote' | 'coverageNote'>>) => void;
+  /** Add one more source file to a population that already has one — a control
+   *  standing on a general ledger and a vendor master, or on four quarterly
+   *  extracts. The file arrives with its own four IPE checks, unproven. */
+  addPopulationSource: (controlId: string, src: Omit<PopulationSource, 'id' | 'draw'>) => void;
+  /** Drop ONE source file. Its checks and the items drawn off it go with it, and
+   *  nothing else does — the other files' proof and testing were never in
+   *  question. Dropping the last one withdraws the population outright. */
+  removePopulationSource: (controlId: string, sourceId: string) => void;
+  /** Record the draw made off ONE file: how many, how, and the items it landed
+   *  on. They join the control's one list of sampled items, tagged with the file
+   *  they came out of. */
+  drawSourceSample: (controlId: string, sourceId: string, draw: { size: number; method: Sampling['method']; seed: number }, refs: string[]) => void;
   /** Put a file into the audit's registry — name, size, who brought it in and
    *  where it came from. Answered once here; every population inherits it. */
   registerFile: (rec: AuditFileRecord) => void;
@@ -866,6 +878,139 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       : c));
   }, [patchControl, role]);
 
+  // ── The files a population stands on ──────────────────────────────────────
+  // A control rarely stands on one file (dev call, Aug 2026). The population
+  // record keeps the totals so nothing downstream has to add anything up, and
+  // they are RECOMPUTED from the list on every move rather than incremented —
+  // an add, a drop and a re-filter then all land on the same arithmetic, and
+  // the headline count cannot drift from the files underneath it.
+  const rebuiltPopulation = (pop: Population, sources: PopulationSource[]): Population => {
+    const t = sourceTotals(sources);
+    return { ...pop, sources, count: t.count, sourceCount: t.rows, sourceFile: sources[0]?.file ?? pop.sourceFile };
+  };
+  // A report proved reliable on the files it had is not proved reliable on a
+  // file that just arrived, and dropping a file that failed does not leave the
+  // remaining ones concluded either. Both ways round, the verdict goes back to
+  // the auditor — it is one verdict for all the files (the call: "सेंट्रलाइज्ड
+  // कर दो ना"), so it can only be reached once they are all in.
+  const reopenIpe = (ipe: IpeTest | undefined, checks: IpeTest['checks']): IpeTest | undefined =>
+    ipe ? { ...ipe, checks, conclusion: 'Not tested', testedBy: null, testedAt: null } : ipe;
+
+  const addPopulationSource = useCallback<IcfrCtx['addPopulationSource']>((controlId, src) => {
+    if (role === 'reviewer') return;
+    patchControl(controlId, c => {
+      const pop = c.operating.population;
+      // Locked means locked: "सिर्फ खोल के आप देख सकते हो". A file added after
+      // the lock would be a file every downstream conclusion never saw.
+      if (!pop || pop.locked) return c;
+      const existing = populationSources(c);
+      // The same file twice is the same rows twice, and every count downstream
+      // would double. Nothing is added rather than a second entry appearing.
+      if (existing.some(s => s.file === src.file)) return c;
+      const entry: PopulationSource = { ...src, id: uid('src') };
+      const ipe = c.operating.ipe;
+      return {
+        ...c,
+        operating: {
+          ...c.operating,
+          population: rebuiltPopulation(pop, [...existing, entry]),
+          // The checks written before there was a list to belong to are stamped
+          // with the first file as they go past — otherwise the moment a second
+          // file arrives, four proven checks would read as belonging to nothing.
+          ipe: reopenIpe(ipe, ipe ? [
+            ...ipe.checks.map(k => ({ ...k, sourceId: k.sourceId ?? existing[0]?.id ?? LEGACY_SOURCE_ID })),
+            ...ipeChecklist(src.file).map(k => ({ ...k, id: uid('ipe'), sourceId: entry.id })),
+          ] : []),
+        },
+      };
+    });
+    pushExec(() => ({ controlId, track: 'operating', kind: 'sample',
+      verb: `added ${src.file} to the population — ${src.count.toLocaleString()} instances from ${src.rows.toLocaleString()} rows`, target: src.criteria }));
+  }, [patchControl, pushExec, role]);
+
+  // Dropping ONE file takes its proof and its items with it and touches nothing
+  // else (user decision, Aug 2026). The other files were extracted, proven and
+  // tested on their own; a wrong fourth file is no reason to make somebody redo
+  // the first three. Dropping the last one is a withdrawal, and is handled as
+  // one — a population of no files is not a population.
+  const removePopulationSource = useCallback<IcfrCtx['removePopulationSource']>((controlId, sourceId) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => {
+      const pop = c.operating.population;
+      if (!pop || pop.locked) return c;
+      const existing = populationSources(c);
+      const sources = existing.filter(s => s.id !== sourceId);
+      if (sources.length === existing.length) return c;
+      if (!sources.length) {
+        return { ...c, operating: { ...c.operating, population: undefined, ipe: undefined, sampling: undefined, extractionConfirmed: undefined, exceptions: undefined,
+          steps: c.operating.steps.map(s => (s.sampleResults ? { ...s, sampleResults: undefined, result: 'Not tested' as TestResult } : s)) } };
+      }
+      // Everything drawn out of this one file, and only this one file.
+      const gone = new Set(samplesFor(c, sourceId).map(s => s.id));
+      const samp = c.operating.sampling;
+      const samples = (samp?.samples ?? []).filter(s => !gone.has(s.id));
+      // Results keyed to items nobody can find any more are the thing withdrawal
+      // exists to prevent — so each attribute keeps the results for the items
+      // that survived, and its own verdict is re-derived off what is left.
+      const steps = c.operating.steps.map(st => {
+        if (!st.sampleResults) return st;
+        const kept = Object.fromEntries(Object.entries(st.sampleResults).filter(([id]) => !gone.has(id)));
+        const vals = samples.map(it => kept[it.id] ?? 'Not tested');
+        const derived: TestResult = vals.includes('Fail') ? 'Fail' : vals.length > 0 && vals.every(v => v === 'Pass') ? 'Pass' : 'Not tested';
+        return { ...st, sampleResults: Object.keys(kept).length ? kept : undefined, result: st.override ? st.result : derived };
+      });
+      const ipe = c.operating.ipe;
+      return {
+        ...c,
+        operating: {
+          ...c.operating,
+          population: rebuiltPopulation(pop, sources),
+          ipe: reopenIpe(ipe, (ipe?.checks ?? []).filter(k => (k.sourceId ?? existing[0]?.id ?? LEGACY_SOURCE_ID) !== sourceId)),
+          sampling: samp && samples.length ? { ...samp, size: samples.length, samples } : undefined,
+          exceptions: (c.operating.exceptions ?? []).filter(x => !gone.has(x.sampleId)),
+          steps,
+        },
+      };
+    });
+    pushExec(prev => {
+      const file = prev.controls.find(c => c.id === controlId)?.operating.population?.sources?.find(s => s.id === sourceId)?.file;
+      return { controlId, track: 'operating', kind: 'sample', verb: 'dropped a source file — its proof and the items drawn off it went with it', target: file };
+    });
+  }, [patchControl, pushExec, role]);
+
+  // One file's draw. The items join the control's single list, tagged with the
+  // file they came out of, so TOE keeps testing one list and the paper can still
+  // say which file each item is from. Re-drawing the same file replaces its own
+  // items and leaves every other file's alone.
+  const drawSourceSample = useCallback<IcfrCtx['drawSourceSample']>((controlId, sourceId, draw, refs) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => {
+      const existing = populationSources(c);
+      if (!existing.some(s => s.id === sourceId)) return c;
+      const samp = c.operating.sampling;
+      const added: Sample[] = refs.map((ref, i) => ({ id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId }));
+      const samples = [...(samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId), ...added];
+      const sources = existing.map(s => (s.id === sourceId ? { ...s, draw } : s));
+      const drawn = sources.filter(s => s.draw);
+      const pop = c.operating.population;
+      return {
+        ...c,
+        operating: {
+          ...c.operating,
+          population: pop ? { ...pop, sources } : pop,
+          sampling: {
+            basis: `${samples.length} items drawn from ${drawn.length} of ${sources.length} source file${sources.length === 1 ? '' : 's'} · ${draw.method.toLowerCase()}, one seed per file · spread across the period`,
+            method: draw.method, size: samples.length, seed: draw.seed, samples,
+          },
+        },
+      };
+    });
+    pushExec(prev => {
+      const file = prev.controls.find(c => c.id === controlId)?.operating.population?.sources?.find(s => s.id === sourceId)?.file;
+      return { controlId, track: 'operating', kind: 'sample', verb: `drew ${draw.size} items from ${file ?? 'a source file'} — ${draw.method.toLowerCase()}, seed ${draw.seed}`, target: file };
+    });
+  }, [patchControl, pushExec, role]);
+
   // ── The file registry ─────────────────────────────────────────────────────
   // Provenance is a property of the FILE, settled once when it enters the audit.
   // Registering is how a file a control uploaded becomes reusable by every other
@@ -904,7 +1049,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // reached yet, so it will be reached on the corrected basis.
       const affected = prev.controls.filter(c => {
         const concl = controlConclusion(c);
-        return c.operating.population?.sourceFile === name && (concl === 'Effective' || concl === 'Ineffective');
+        // Any of the files the population stands on — a correction to the second
+        // file is as much a change under a concluded paper as one to the first.
+        return populationSources(c).some(s => s.file === name) && (concl === 'Effective' || concl === 'Ineffective');
       });
       const notes = affected.map(c => ({
         id: uid('rn'),
@@ -999,7 +1146,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         ...c.operating,
         ipe: {
           ...meta,
-          checks: ipeChecklist(meta.reportName).map(k => ({ ...k, id: uid('ipe') })),
+          // One set of four per source file. A population standing on three
+          // files needs each of them proven — four checks covering "the report"
+          // would be four checks covering whichever file happened to be first.
+          // The tag is left off entirely when there is one file, so a
+          // single-source control keeps reading exactly as it always has.
+          checks: (() => {
+            const srcs = populationSources(c);
+            if (srcs.length <= 1) return ipeChecklist(meta.reportName).map(k => ({ ...k, id: uid('ipe') }));
+            return srcs.flatMap(s => ipeChecklist(s.file).map(k => ({ ...k, id: uid('ipe'), sourceId: s.id })));
+          })(),
           conclusion: 'Not tested',
           testedBy: null,
           testedAt: null,
@@ -1074,7 +1230,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (!s) return c;
       // Tagged as the extension round: appended to the one list the results are
       // keyed against, but distinguishable on the paper from the original draw.
-      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true }));
+      // Also tagged with a source file, because an untagged item on a control
+      // standing on several belongs to none of them — it would disappear from
+      // every per-file row while still being tested and still being counted.
+      // The failure that triggered the extension is not attributed to a file, so
+      // the first one is used; the exception's own file is what a later round of
+      // this work will read (see PopulationSource).
+      const src = populationSources(c)[0]?.id;
+      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src }));
       return { ...c, operating: { ...c.operating, sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
@@ -2406,7 +2569,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
-    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
+    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, drawSourceSample, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
     registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
@@ -2417,7 +2580,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, drawSourceSample, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

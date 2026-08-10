@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useIcfr } from './store';
 import { programmeFor } from './auditScope';
-import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind } from './helpers';
+import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources } from './helpers';
 import type { AuditFileRecord, Control } from './types';
 
 /** A file record as everything downstream reads it: the file's own facts, its
@@ -59,11 +59,17 @@ export function useAuditFiles(): AuditFile[] {
     // the question, so it lands answered rather than blocking work that is done.
     eng.controls.forEach(c => {
       const p = c.operating.population;
-      if (!p?.sourceFile) return;
-      derived.push({
-        name: p.sourceFile, kind: guessFileKind(p.sourceFile), rows: p.sourceCount ?? p.count,
-        from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
-        origin: fileOriginOf(eng, p.sourceFile, p.provenance?.system).origin,
+      if (!p) return;
+      // Every file the population stands on. A control drawing off a ledger and
+      // a vendor master names two, and leaving the second out of the registry
+      // would hide a file the audit is demonstrably reading.
+      populationSources(c).forEach(s => {
+        if (!s.file) return;
+        derived.push({
+          name: s.file, kind: guessFileKind(s.file), rows: s.rows || s.count,
+          from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
+          origin: fileOriginOf(eng, s.file, p.provenance?.system).origin,
+        });
       });
     });
 

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, sampleSizeGuide, trackResult, designProgress } from './helpers';
+import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -80,6 +80,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const pop = c.operating.population;
+  // Every file the population stands on. A single-file population reads as a
+  // one-entry list, so nothing below has to know which kind it is holding.
+  const sources = populationSources(c);
   const ipe = c.operating.ipe;
   const def = eng.deficiencies.find(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
@@ -126,12 +129,22 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
       // The two facts that make a draw reperformable. A reviewer who cannot
-      // re-run the selection cannot check that it was not steered.
-      ['Selection method / seed', c.operating.sampling
-        ? `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`
-        : '—'],
+      // re-run the selection cannot check that it was not steered — and each
+      // file is drawn separately, so each file's own seed is printed. One seed
+      // standing for four draws reperforms exactly one of them.
+      ['Selection method / seed', (() => {
+        const drawn = sources.filter(s => s.draw);
+        if (drawn.length) return drawn.map(s => `${s.file} · ${s.draw!.method} · seed ${s.draw!.seed} · ${s.draw!.size} items`).join('; ');
+        if (!c.operating.sampling) return '—';
+        return `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`;
+      })()],
       ['Population filter', c.operating.population?.criteria ?? '—'],
-      ['Filtered from', c.operating.population?.sourceFile ? `${c.operating.population.sourceFile}${c.operating.population.sourceCount != null ? ` · ${c.operating.population.sourceCount.toLocaleString()} rows` : ''}` : '—'],
+      // Every file the population stands on, not the first one. A paper that
+      // names one of four extracts describes a population nobody can reperform,
+      // and the reviewer has no way of telling that three files are missing.
+      ['Filtered from', sources.length
+        ? sources.map(s => `${s.file} · ${s.rows.toLocaleString()} rows → ${s.count.toLocaleString()}`).join('; ')
+        : '—'],
       ['Population locked', c.operating.population?.locked ? `${c.operating.population.locked.by}, ${c.operating.population.locked.at}` : 'Not locked'],
       // What the population IS. The on-screen definition form was dropped, so
       // this only prints where a definition actually exists — an always-"Not
@@ -146,11 +159,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // it, which is the point of holding it in one place.
       ['File origin', (() => {
         const p = c.operating.population;
-        if (!p?.sourceFile) return '—';
-        const o = fileOriginOf(eng, p.sourceFile, p.provenance?.system);
-        if (o.systemFetched) return 'Fetched by the system';
-        if (!o.origin) return 'Not answered';
-        return `${o.origin}${o.by ? ` · recorded by ${o.by}, ${o.at}` : ' · recorded at upload'}`;
+        if (!p || !sources.length) return '—';
+        const one = (name: string) => {
+          const o = fileOriginOf(eng, name, p.provenance?.system);
+          if (o.systemFetched) return 'Fetched by the system';
+          if (!o.origin) return 'Not answered';
+          return `${o.origin}${o.by ? ` · recorded by ${o.by}, ${o.at}` : ' · recorded at upload'}`;
+        };
+        // Asked of every file. Provenance is the file's, so four files can have
+        // four different answers — and a client-prepared one hiding behind a
+        // system-fetched one is exactly what this row exists to surface.
+        if (sources.length === 1) return one(sources[0].file);
+        return sources.map(s => `${s.file} · ${one(s.file)}`).join('; ');
       })()],
       ['Source system', c.operating.population?.provenance?.system ?? '—'],
       // Either half can be blank — the extract stamps whoever ran it and nothing
@@ -375,10 +395,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // The extension round is marked rather than merged silently: the combined
       // evaluation is what the conclusion rests on, and the reader has to be able
       // to see which items were the second bite.
-      note: `${c.operating.sampling!.method}${c.operating.sampling!.seed ? ` (seed ${c.operating.sampling!.seed})` : ''} sample of ${samples.length}${tally.ext ? ` — ${tally.orig} original + ${tally.ext} drawn after an exception` : ''} — each item tested against every attribute`,
-      headers: ['S.No', 'Sample', 'Round', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
-      rows: samples.map((smp, i) => [String(i + 1), smp.ref, smp.extension ? 'Extension' : 'Original', ...steps.map(s => tick(s.sampleResults?.[smp.id]))]),
-      tickFrom: 3,
+      note: `${c.operating.sampling!.method}${c.operating.sampling!.seed ? ` (seed ${c.operating.sampling!.seed})` : ''} sample of ${samples.length}${tally.ext ? ` — ${tally.orig} original + ${tally.ext} drawn after an exception` : ''}${sources.length > 1 ? ` across ${sources.length} source files` : ''} — each item tested against every attribute`,
+      // The Source column appears only where there is more than one — a column
+      // repeating the same filename down every row is noise on a paper, and the
+      // single-file table has read the same way for as long as it has existed.
+      headers: ['S.No', 'Sample', ...(sources.length > 1 ? ['Source'] : []), 'Round', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
+      rows: samples.map((smp, i) => [
+        String(i + 1), smp.ref,
+        ...(sources.length > 1 ? [sources.find(s => s.id === (smp.sourceId ?? LEGACY_SOURCE_ID))?.file ?? '—'] : []),
+        smp.extension ? 'Extension' : 'Original',
+        ...steps.map(s => tick(s.sampleResults?.[smp.id])),
+      ]),
+      tickFrom: sources.length > 1 ? 4 : 3,
     });
   } else {
     blocks.push({ kind: 'note', label: 'Samples', text: 'No samples drawn — evidence is attribute-level (automated / full-population / attestation).', tone: 'neutral' });

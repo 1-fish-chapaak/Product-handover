@@ -1,7 +1,8 @@
 import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
   AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
-  FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
+  FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
+  Sample, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -452,6 +453,58 @@ export function populationLocked(c: Control): boolean {
   return !!c.operating.population?.locked;
 }
 
+// ─── The files a population stands on ────────────────────────────────────────────
+/** Every source file behind this control's population, oldest first.
+ *
+ *  A control may stand on several (dev call, Aug 2026 — "मल्टीपल फाइल्स वो डाल
+ *  सकता है"), and everything downstream reads them through here rather than off
+ *  `population.sources` directly. A population drawn before that was possible
+ *  has no `sources` array at all, and is presented as the one file it always
+ *  was — so a seeded control, a control extracted last week and a control built
+ *  out of four quarterly files all read the same way, and no caller has to ask
+ *  which kind it is holding.
+ *
+ *  The synthesised id is stable (`src-legacy`) rather than generated: checks and
+ *  drawn items are tagged with it, and an id that changed on every render would
+ *  untag them. */
+export function populationSources(c: Control): PopulationSource[] {
+  const pop = c.operating.population;
+  if (!pop) return [];
+  if (pop.sources?.length) return pop.sources;
+  return [{
+    id: LEGACY_SOURCE_ID,
+    file: pop.sourceFile ?? pop.source,
+    rows: pop.sourceCount ?? pop.count,
+    count: pop.count,
+    criteria: pop.criteria,
+    draw: c.operating.sampling
+      ? { size: c.operating.sampling.size, method: c.operating.sampling.method, seed: c.operating.sampling.seed ?? 0 }
+      : undefined,
+  }];
+}
+export const LEGACY_SOURCE_ID = 'src-legacy';
+
+/** The checks proving one file. An untagged check belongs to the one file a
+ *  single-source population has — which is what every check written before this
+ *  existed is. */
+export function ipeChecksFor(c: Control, sourceId: string): IpeCheck[] {
+  const checks = c.operating.ipe?.checks ?? [];
+  return checks.filter(k => (k.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+}
+
+/** The items drawn out of one file. Tagged the same way, for the same reason. */
+export function samplesFor(c: Control, sourceId: string): Sample[] {
+  const samples = c.operating.sampling?.samples ?? [];
+  return samples.filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+}
+
+/** The totals the control-level record carries — recomputed from the files
+ *  rather than incremented, so adding, re-filtering and withdrawing a file all
+ *  land on the same arithmetic and none of them can drift. */
+export function sourceTotals(sources: PopulationSource[]): { count: number; rows: number } {
+  return sources.reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
+}
+
 // ─── What the application can work out for itself ────────────────────────────────
 /** How seriously the application disagrees with the population.
  *
@@ -845,7 +898,10 @@ export function defaultFileOrigin(kind: string): FileOrigin | undefined {
  *  a list kept in two places is a list that disagrees with itself, and the
  *  populations already name their source. */
 export function controlsUsingFile(eng: IcfrEngagement, name: string): Control[] {
-  return eng.controls.filter(c => c.operating.population?.sourceFile === name);
+  // Every file the population stands on, not just the first — a control drawing
+  // off four quarterly extracts uses all four, and a file that only ever showed
+  // up second would read as used by nobody.
+  return eng.controls.filter(c => populationSources(c).some(s => s.file === name));
 }
 
 /** A file's kind read back off its name, for files nobody registered. */
@@ -1352,8 +1408,8 @@ export function suggestPopulationFile(
     // 1. What this same control drew off before. The strongest signal there is,
     //    and it was sitting unused: a control's population comes out of the same
     //    place round after round unless something changed.
-    const mine = eng.controls.find(x => x.id === c.id)?.operating.population?.sourceFile;
-    if (mine === f.name) { score += 60; why.push('this control drew off it last round'); }
+    const mine = eng.controls.find(x => x.id === c.id);
+    if (mine && populationSources(mine).some(s => s.file === f.name)) { score += 60; why.push('this control drew off it last round'); }
 
     // 2. What the rest of the process uses. Controls in one process read the
     //    same ledgers; a file 30 of them share is not a coincidence.

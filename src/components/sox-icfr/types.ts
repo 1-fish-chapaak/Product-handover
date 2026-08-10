@@ -325,7 +325,18 @@ export interface OperatingStep {
 /** One sampled item. `extension` marks an item drawn in the extension round that
  *  followed an exception, so the paper can show the original draw and what was
  *  added to it without holding two lists. */
-export interface Sample { id: string; ref: string; result: TestResult; extension?: boolean; }
+export interface Sample {
+  id: string; ref: string; result: TestResult; extension?: boolean;
+  /** Which source file this item was drawn out of — see PopulationSource. Absent
+   *  on a control standing on a single file, which is every control seeded before
+   *  a control could stand on several. */
+  sourceId?: string;
+}
+/** The control's sample — every item drawn, across every source file it stands
+ *  on. `size` and `samples` are the totals; which file each item came out of is
+ *  on the item (`Sample.sourceId`), and how each file's own draw was made is on
+ *  the file (`PopulationSource.draw`). TOE reads this one list and never has to
+ *  ask how many files fed it. */
 export interface Sampling {
   basis: string;
   method: 'Random' | 'Systematic' | 'Statistical' | 'Targeted' | 'Full population';
@@ -444,8 +455,45 @@ export interface AuditFileRecord {
   originAt?: string;
 }
 
+/** One source file a control's population stands on.
+ *
+ *  A control rarely stands on one file. A three-way match reads the purchase
+ *  order, the goods receipt and the invoice; a quarterly review is four
+ *  extracts, one per quarter. Each file is proven on its own — its own four IPE
+ *  dimensions — and sampled on its own, because a file nobody proved is a file
+ *  nobody may sample from, and proving one file says nothing about the next.
+ *
+ *  What is NOT here, on purpose:
+ *  - provenance. It belongs to the file record and is inherited, exactly as it
+ *    was when a control had one source. `file` is the join back to it.
+ *  - the four checks. They live in `IpeTest.checks`, tagged with `sourceId`, so
+ *    the single centralised Reliable / Not reliable verdict still reads one flat
+ *    list and one failure anywhere still sinks the report.
+ *  - the drawn items. They live in `Sampling.samples`, tagged the same way, so
+ *    TOE tests one list of items and does not have to know how many files they
+ *    came out of. */
+export interface PopulationSource {
+  id: string;
+  /** The file record's name. */
+  file: string;
+  /** What the file held, and what this control's filter left of it. */
+  rows: number;
+  count: number;
+  criteria?: string;
+  /** The draw made off THIS file — how many, how, and the seed that makes it
+   *  reperformable. The items themselves are in `Sampling.samples`. Absent until
+   *  this file is sampled; a control can have three files sampled and a fourth
+   *  still waiting. */
+  draw?: { size: number; method: Sampling['method']; seed: number };
+}
+
 export interface Population {
   source: string;
+  /** The files this population was built out of, in the order they were added.
+   *  Absent on a population drawn before a control could stand on more than one
+   *  — read it through `populationSources`, which presents the single-file case
+   *  as a one-entry list so nothing downstream has to branch. */
+  sources?: PopulationSource[];
   /** Instances of THIS control — what the filter produced, not what the file held. */
   count: number;
   tieOut: string;
@@ -538,6 +586,11 @@ export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Period co
 /** One dimension's proof — what is claimed, how it was proven, what was found. */
 export interface IpeCheck {
   id: string;
+  /** Which source file this dimension was proven on — see PopulationSource. A
+   *  control standing on three files has three sets of four checks, and the
+   *  verdict they roll up to is still one (dev call, Aug 2026: "सेंट्रलाइज्ड कर
+   *  दो ना"). Absent on a control standing on a single file. */
+  sourceId?: string;
   dimension: IpeDimension;
   description: string;          // the assertion being proven
   method: string;               // how it was proven — the procedure
