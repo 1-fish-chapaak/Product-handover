@@ -15,7 +15,14 @@ export const rectFromEvent = (e: MouseEvent<HTMLElement>): ShareAnchorRect => {
 
 export interface ShareApi {
   /** Open the single platform Share modal, anchored to the trigger. */
-  openShare: (opts: { type: ShareKind; id?: string; anchor?: ShareAnchorRect }) => void;
+  openShare: (opts: {
+    type: ShareKind;
+    id?: string;
+    /** What the thing is called. Shown in the popover header so a share opened
+     *  from a long list says which row it is about. */
+    name?: string;
+    anchor?: ShareAnchorRect;
+  }) => void;
 }
 
 const ShareContext = createContext<ShareApi | null>(null);

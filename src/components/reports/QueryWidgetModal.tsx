@@ -186,10 +186,14 @@ export default function QueryWidgetModal({
                         <div key={k.label} className="relative">
                           {/* The dashboard's own KpiTile — label + big bold value,
                               brand-outline when selected. */}
+                          {/* `instant` so the picker shows the same number the
+                              card behind it shows. A count-up here had the two
+                              surfaces reading different values at once. */}
                           <KpiTile
                             label={k.label}
                             value={k.value}
                             index={i}
+                            instant
                             selected={picked}
                             onClick={() => toggleIn(selKpis, k.label, setSelKpis)}
                           />

@@ -46,7 +46,10 @@ export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boole
               {stat.value}
             </p>
             <span className={`mt-3.5 mb-3 block h-[2px] w-8 rounded-full bg-current ${toneText}`} aria-hidden="true" />
-            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug whitespace-nowrap">
+            {/* Labels wrap rather than clip. A six-tile row leaves each cell
+                narrow, and an explicit label ("Observations Closed") has to be
+                readable in full or it stops disambiguating anything. */}
+            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug min-h-[1.8em]">
               {stat.label}
             </p>
           </div>

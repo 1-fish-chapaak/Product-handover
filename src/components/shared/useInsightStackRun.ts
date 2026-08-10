@@ -30,13 +30,19 @@ export interface InsightStackRun {
   run: () => void;
 }
 
-export function useInsightStackRun({ layer, subjectId, subjects, onSettled }: {
+export function useInsightStackRun({ layer, subjectId, subjects, onSettled, buildOne, steps: stepsOverride }: {
   layer: InsightLayer;
   subjectId: string;
   subjects: BuildInsightInput[];
   /** Fires when a run finishes (never on a cache restore) — open the results
    *  surface here. Errors fire too, so the caller can choose not to. */
   onSettled?: (phase: 'generated' | 'empty' | 'error') => void;
+  /** Per-subject builder override — hosts with hand-authored stacks (the
+   *  portfolio scan) supply their own; defaults to buildLayeredInsight. */
+  buildOne?: (s: BuildInsightInput) => LayeredInsight;
+  /** Pipeline wording override, when the generic "risk and control" steps
+   *  name the wrong altitude for this scope. */
+  steps?: string[];
 }): InsightStackRun {
   const key = `${cacheKey(layer, subjectId)}:stack:${subjects.length}`;
   const cached = MULTI_CACHE.get(key) ?? null;
@@ -53,7 +59,7 @@ export function useInsightStackRun({ layer, subjectId, subjects, onSettled }: {
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
-  const steps = stackSteps(subjects.length);
+  const steps = stepsOverride ?? stackSteps(subjects.length);
 
   const run = () => {
     timers.current.forEach(clearTimeout);
@@ -95,7 +101,7 @@ export function useInsightStackRun({ layer, subjectId, subjects, onSettled }: {
       }
       EMPTY_CACHE.delete(key);
       const stamp = Date.now(); // drives each card header's "N min ago"
-      const built = subjects.map(s => ({ ...buildLayeredInsight(s), generatedAt: stamp }));
+      const built = subjects.map(s => ({ ...(buildOne ?? buildLayeredInsight)(s), generatedAt: stamp }));
       MULTI_CACHE.set(key, built);
       // Seed each subject's single-card cache too, so row-level surfaces
       // (control rows, workflow rows) reveal their insight without a second

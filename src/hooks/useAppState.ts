@@ -134,7 +134,7 @@ export interface AppState {
   showEmailPreviewModal: boolean;
   showShareModal: boolean;
   showPowerBIWizard: boolean;
-  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process' | 'risk' | 'control' | 'engagement' | 'racm'; id: string } | null;
+  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process' | 'risk' | 'control' | 'engagement' | 'racm'; id: string; name?: string } | null;
   /** Bounding rect of the element that opened the share popover, so it can
    *  anchor itself next to the trigger (Notion-style). Null → falls back to a
    *  top-right viewport position. */
@@ -221,8 +221,27 @@ const getInitialView = (): View => {
   // chips — lands on the engagement workspace (EngagementOverviewView), which
   // consumes the optional ?tab= and ?focusControl= params itself.
   if (v === 'engagement-overview' && params.get('eng')) return 'engagement-overview';
+  // Smart Learn / Data Sources deep link — ?view=knowledge-hub&tab=learn
+  // (+ optional &memory=<id> to open one registry row's drawer).
+  if (v === 'knowledge-hub') return 'knowledge-hub';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
+};
+
+/** ?view=knowledge-hub&tab=learn lands on the Smart Learn tab. */
+export const getInitialKnowledgeHubTab = (): 'data' | 'learn' => {
+  if (typeof window === 'undefined') return 'data';
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'knowledge-hub') return 'data';
+  return params.get('tab') === 'learn' ? 'learn' : 'data';
+};
+
+/** ?view=knowledge-hub&tab=learn&memory=<id> focuses one registry row. */
+export const getInitialMemoryFocus = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'knowledge-hub') return null;
+  return params.get('memory');
 };
 
 const getInitialWorkflowId = (): string | null => {

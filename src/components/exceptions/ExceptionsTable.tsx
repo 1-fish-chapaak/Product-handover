@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { Fragment, useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Pin,
   PinOff,
   Search,
+  Sparkles,
   Tag,
   X,
   Check,
@@ -45,6 +46,10 @@ import { useWorkflow } from './workflow/WorkflowContext';
 import { canAct, currentLevel, primaryAssignment } from './workflow/workflowEngine';
 import { userName } from './workflow/workflowData';
 import type { Assignment } from './workflow/workflowTypes';
+// ─── AI (B+C) row affordances — pure session-cache reads, no generation ───
+import { InsightReflection, TargetedActionList } from '../shared/TargetedActions';
+import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
+import type { LayeredInsight } from '../../data/layeredInsights';
 
 // Plain-language approval state for the table's Approval column. `yourTurn`
 // flags when the acting user (header "Acting as") is the one who must act now.
@@ -1023,6 +1028,13 @@ export interface ExceptionsTableProps {
   extraColumns?: { columns: string[]; rows: string[][] };
   /** Fired when a row's Exception ID is clicked — opens the detail drawer. */
   onOpenDetail?: (ex: GrcException) => void;
+  /** AI actions targeting a row open the host's act-in-place drawer. */
+  onOpenAiAction?: (a: TargetedAction) => void;
+  /** A row reflection's "View full insight" opens the host's insight slide-over. */
+  onViewAiInsight?: (i: LayeredInsight) => void;
+  /** Drawer→row navigation: page to this row, open its AI strip, flash it. */
+  focusExceptionId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 type VisibilityMap = Record<ColumnKey, boolean>;
@@ -1050,7 +1062,13 @@ export default function ExceptionsTable({
   extraColumns,
   onOpenDetail,
   onChangeSheet,
+  onOpenAiAction,
+  onViewAiInsight,
+  focusExceptionId,
+  onFocusHandled,
 }: ExceptionsTableProps) {
+  // Re-render when an insight run lands so the rows' AI chips light up live.
+  useInsightCacheVersion();
   const riskCategories = useMemo(
     () => Array.from(new Set(exceptions.map(e => e.riskCategory))).sort(),
     [exceptions],
@@ -1233,6 +1251,28 @@ export default function ExceptionsTable({
     return filteredExceptions.slice(start, start + pageSize);
   }, [filteredExceptions, currentPage, pageSize]);
   const pagedIds = useMemo(() => pagedExceptions.map(e => e.id), [pagedExceptions]);
+
+  // ── AI row state — which row's insight strip is open, and the drawer→row
+  //    focus flash. The strip's content comes from the session cache per row. ──
+  const [aiOpenId, setAiOpenId] = useState<string | null>(null);
+  const [flashExceptionId, setFlashExceptionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusExceptionId) return;
+    const idx = filteredExceptions.findIndex(e => e.id === focusExceptionId);
+    if (idx === -1) return; // hidden by a table-local filter — leave the request pending
+    setCurrentPage(Math.floor(idx / pageSize) + 1);
+    setAiOpenId(focusExceptionId);
+    setFlashExceptionId(focusExceptionId);
+    const scrollT = window.setTimeout(() => {
+      document.getElementById(`exc-row-${focusExceptionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    const doneT = window.setTimeout(() => {
+      setFlashExceptionId(null);
+      onFocusHandled?.();
+    }, 2600);
+    return () => { window.clearTimeout(scrollT); window.clearTimeout(doneT); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusExceptionId, filteredExceptions]);
 
   const pageSelected = pagedIds.length > 0 && pagedIds.every(id => selected.has(id));
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
@@ -1679,19 +1719,28 @@ export default function ExceptionsTable({
             ) : (
               pagedExceptions.map((ex, rowIndex) => {
                 const sel = selected.has(ex.id);
+                const flashed = flashExceptionId === ex.id;
                 // Selection wins over the overdue tint — selection is the
                 // user's active UI state and needs to read first; the
                 // Overdue pill in the ID cell still carries that signal.
-                const rowBg = sel ? 'bg-brand-50' : 'hover:bg-[#FAFAFB]';
-                const rowBgForPin = sel ? '#F7F0FF' : '#FFFFFF';
+                const rowBg = flashed || sel ? 'bg-brand-50' : 'hover:bg-[#FAFAFB]';
+                const rowBgForPin = flashed || sel ? '#F7F0FF' : '#FFFFFF';
                 // Data-row lookup: prefer Case-ID match; fall back to row
                 // index so mock data without a real ID link still renders.
                 const dataRow = dataRowByCaseId.get(ex.id)
                   ?? (extraColumns?.rows.length
                     ? extraColumns.rows[rowIndex % extraColumns.rows.length]
                     : undefined);
+                // B+C cache reads: a reflection when a generated pattern spans
+                // this case, chips when an action explicitly targets it.
+                const aiReflections = getReflectionsFor('exception', ex.id);
+                const aiTargeted = getActionsForTarget('exception', ex.id);
+                const hasAiRow = aiReflections.length > 0 || aiTargeted.length > 0;
+                const aiOpen = hasAiRow && aiOpenId === ex.id;
+                const aiDoNow = aiTargeted.filter(t => t.rec.priority === 'do-now').length;
                 return (
-                  <tr key={ex.id} className={`border-b border-canvas-border last:border-b-0 transition-colors ${rowBg}`}>
+                  <Fragment key={ex.id}>
+                  <tr id={`exc-row-${ex.id}`} className={`border-b border-canvas-border last:border-b-0 transition-colors ${rowBg}`}>
                     {renderOrder.map((key) => {
                       const def = defByKey[key];
                       if (!def) return null;
@@ -1735,10 +1784,59 @@ export default function ExceptionsTable({
                             currentUserId,
                             auditorRoutes[ex.id]?.name,
                           )}
+                          {/* AI marker rides in the identity cell: chips when
+                              actions target this case, an insight mark when a
+                              pattern spans it. Click toggles the strip below. */}
+                          {key === 'id' && hasAiRow && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setAiOpenId(prev => (prev === ex.id ? null : ex.id)); }}
+                              aria-expanded={aiOpen}
+                              title={aiTargeted.length > 0
+                                ? 'AI actions from a generated insight target this exception — click to view'
+                                : 'Part of a generated cross-exception insight — click to view'}
+                              className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 h-5 text-[0.625rem] font-bold border cursor-pointer transition-colors ${
+                                aiDoNow > 0
+                                  ? 'bg-risk-50 text-risk border-risk/20 hover:bg-risk-50/70'
+                                  : 'bg-brand-50 text-brand-700 border-brand-100 hover:bg-brand-100'
+                              }`}
+                            >
+                              <Sparkles size={9} />
+                              {aiTargeted.length > 0 ? `${aiTargeted.length} action${aiTargeted.length === 1 ? '' : 's'}` : 'AI insight'}
+                              {aiDoNow > 0 && ` · ${aiDoNow} do now`}
+                            </button>
+                          )}
                         </td>
                       );
                     })}
                   </tr>
+                  {/* The row's AI strip: its slice of the anchored pattern
+                      (reflection) + the actions that travelled to it. Sticky
+                      so it stays readable while the table scrolls sideways. */}
+                  {aiOpen && (
+                    <tr className="border-b border-canvas-border bg-brand-50/20">
+                      <td colSpan={renderOrder.length} className="px-4 py-3">
+                        <div className="sticky left-0 max-w-[860px] space-y-2.5 px-1">
+                          {aiReflections.map(r => (
+                            <InsightReflection
+                              key={`${r.source.id}:${ex.id}`}
+                              reflection={r}
+                              onViewAnchor={onViewAiInsight ? () => onViewAiInsight(r.source) : undefined}
+                            />
+                          ))}
+                          {aiTargeted.length > 0 && (
+                            <TargetedActionList
+                              actions={aiTargeted}
+                              onOpen={(a) => onOpenAiAction?.(a)}
+                              bare={aiReflections.length > 0}
+                              heading="AI actions targeting this exception"
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })
             )}

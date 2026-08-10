@@ -19,6 +19,13 @@ import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useInsightStackRun } from '../shared/useInsightStackRun';
+import InsightLauncherPill from '../shared/InsightLauncherPill';
+import InsightStackDrawer from '../shared/InsightStackDrawer';
+import type { StackRowNav } from '../shared/InsightStack';
+import { ActionDrawer, InsightReflection, TargetedActionList } from '../shared/TargetedActions';
+import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
+import { makePortfolioBuilder, portfolioInsightSubjects, portfolioStackSteps, PORTFOLIO_SUBJECT_ID } from '../../data/portfolioInsights';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
@@ -90,6 +97,9 @@ const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'SOX / ICFR', 'Compliance', 'I
 const STATUS_FILTERS: ('All' | EngStatus)[] = ['All', 'Active', 'In Progress', 'Planned', 'Review', 'Draft', 'Closed'];
 const PROCESS_FILTERS: ('All' | ProcessCode)[] = ['All', 'P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
 
+/** Severity order for picking which portfolio reflection leads a row. */
+const INSIGHT_SEV_RANK: Record<'high' | 'med' | 'low', number> = { high: 0, med: 1, low: 2 };
+
 /** Pick a colour for the health bar by tier. */
 function healthTier(pct: number): { bar: string; text: string } {
   if (pct >= 85) return { bar: 'bg-compliant', text: 'text-compliant-700' };
@@ -147,6 +157,49 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const [assignFor, setAssignFor] = useState<string | null>(null);
   /** Row pending delete confirmation. */
   const [deleteTarget, setDeleteTarget] = useState<Engagement | null>(null);
+
+  // Portfolio-wide AI insights — the cross-engagement altitude. These are
+  // correlations no single engagement can see (a shared driver behind three
+  // books' exceptions, ITGC undermining SOX reliance, colliding milestones),
+  // so their anchor is the portfolio and the trigger lives in library chrome,
+  // visible from every tab. Same launcher grammar, drawer and session cache
+  // as the engagement header; row reflections below are pure cache reads.
+  const portfolioSubjects = useMemo(() => portfolioInsightSubjects(all), [all]);
+  const portfolioBuild = useMemo(() => makePortfolioBuilder(all), [all]);
+  const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const insightRun = useInsightStackRun({
+    layer: 'portfolio',
+    subjectId: PORTFOLIO_SUBJECT_ID,
+    subjects: portfolioSubjects,
+    buildOne: portfolioBuild,
+    steps: portfolioStackSteps(all.length, portfolioSubjects.length),
+    // A finished run opens the drawer — a clean scan is a result, not an
+    // absence. Errors stay in the header pill with retry.
+    onSettled: (p) => { if (p === 'generated' || p === 'empty') setInsightsPanelOpen(true); },
+  });
+  // Re-render when any Generate lands (here or in another tab), so the row
+  // reflections and action chips light up without a remount.
+  useInsightCacheVersion();
+  /** Targeted action open in the act-in-place drawer. */
+  const [openAction, setOpenAction] = useState<TargetedAction | null>(null);
+  // Drawer → engagement redirect: an insight card's engagement chip opens that
+  // workspace in a NEW browser tab (the reader keeps the portfolio report open
+  // here; the cross-tab cache sync carries the insight along). Only engagement
+  // types that route to the classic overview are deep-linkable — SOX and
+  // Compliance refs stay informative chips.
+  const insightRowNav = useMemo<StackRowNav>(() => ({
+    canOpen: (ref) => {
+      if (ref.kind !== 'engagement') return false;
+      const eng = all.find(e => e.id === ref.id);
+      return !!eng && eng.type !== 'SOX / ICFR' && eng.type !== 'Compliance';
+    },
+    open: (ref) => {
+      const params = new URLSearchParams();
+      params.set('view', 'engagement-overview');
+      params.set('eng', ref.id);
+      window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+    },
+  }), [all]);
 
   /** Patch one engagement in the session list (and the runtime registry so detail views agree). */
   const patchEngagement = (id: string, patch: Partial<Engagement>) => {
@@ -258,6 +311,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Portfolio AI insights — library chrome, because the roll-up
+                spans every engagement, not any one tab. */}
+            <InsightLauncherPill
+              run={insightRun}
+              onOpen={() => setInsightsPanelOpen(true)}
+              idleTitle="Correlates findings across every engagement in the library — shared root causes, reliance dependencies, colliding milestones. Won’t run automatically; you trigger it so it only bills when you need it."
+            />
+            <div className="h-9 w-px bg-border-light mx-1" aria-hidden="true" />
             <button
               onClick={onOpenAuditPlanning}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
@@ -288,6 +349,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             engagements={all}
             onOpenEngagement={onOpenEngagement}
             onGoToList={goToList}
+            onOpenPortfolioInsights={() => setInsightsPanelOpen(true)}
           />
         )}
 
@@ -339,6 +401,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               const health = healthTier(eng.health);
               const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
               const effective = Math.round((eng.controls * eng.health) / 100);
+              // B+C surfacing: a portfolio insight that spans this engagement
+              // reflects its slice here (top-severity one; the rest stay one
+              // honest line away), and explicitly-targeted actions land as
+              // chips. Pure reads over the session cache — nothing generates.
+              const reflections = getReflectionsFor('engagement', eng.id)
+                .sort((a, b) => INSIGHT_SEV_RANK[a.source.severity] - INSIGHT_SEV_RANK[b.source.severity]);
+              const rowActions = getActionsForTarget('engagement', eng.id);
               return (
                 <motion.div
                   key={eng.id}
@@ -505,6 +574,40 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       </IconAction>
                     )}
                   </div>
+
+                  {/* Portfolio-insight reflection + travelled actions — the
+                      row's slice of a cross-engagement finding. Clicks here
+                      must not open the engagement (the row's own action). */}
+                  {(reflections.length > 0 || rowActions.length > 0) && (
+                    <div
+                      className="col-span-full flex flex-col gap-2 pt-3 mt-1 border-t border-border-light/70 cursor-default"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {reflections[0] && (
+                        <InsightReflection
+                          reflection={reflections[0]}
+                          onViewAnchor={() => setInsightsPanelOpen(true)}
+                        />
+                      )}
+                      {reflections.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setInsightsPanelOpen(true)}
+                          className="self-start inline-flex items-center gap-1 px-1 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+                        >
+                          <Sparkles size={10} aria-hidden="true" />
+                          Part of {reflections.length - 1} more portfolio insight{reflections.length - 1 === 1 ? '' : 's'} — view all
+                        </button>
+                      )}
+                      {rowActions.length > 0 && (
+                        <TargetedActionList
+                          actions={rowActions}
+                          onOpen={setOpenAction}
+                          heading="AI actions for this engagement"
+                        />
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               );
             })}
@@ -598,6 +701,24 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           </FlowModal>
         )}
       </AnimatePresence>
+
+      {/* Portfolio AI insights drawer — results of the header-gated run. */}
+      <InsightStackDrawer
+        open={insightsPanelOpen}
+        onClose={() => setInsightsPanelOpen(false)}
+        subjectLabel="Engagement portfolio"
+        scopeLabel="across your portfolio"
+        preamble="Only patterns no single engagement can tell you qualify at this level — single-engagement findings stay in their own engagement’s run."
+        run={insightRun}
+        rowNav={insightRowNav}
+      />
+
+      {/* Act-in-place drawer for a travelled action chip. */}
+      <ActionDrawer
+        action={openAction}
+        onClose={() => setOpenAction(null)}
+        onViewAnchor={() => setInsightsPanelOpen(true)}
+      />
 
       <ConfirmationModal
         open={deleteTarget !== null}

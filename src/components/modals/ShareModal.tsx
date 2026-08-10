@@ -15,6 +15,9 @@ interface Props {
   onShare?: (recipients: string[]) => void;
   /** What is being shared, e.g. "workspace", "report". Drives placeholder copy. */
   scope?: string;
+  /** The name of the specific thing being shared. Printed in the header so a
+   *  popover opened from a row in a long list says which row it is about. */
+  subjectName?: string;
   /** Rect of the element that opened the popover, so it anchors next to it.
    *  Null → top-right of the viewport. */
   anchor?: Anchor | null;
@@ -243,7 +246,7 @@ function MemberRowSkeleton({ pulse, widths }: { pulse: boolean; widths: [string,
   );
 }
 
-export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
+export default function ShareModal({ onClose, onShare, scope, subjectName, anchor }: Props) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const reduce = useReducedMotion();
@@ -251,7 +254,13 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
   const [chips, setChips] = useState<{ label: string; value: string; invalid?: boolean }[]>([]);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [inviteAccess, setInviteAccess] = useState('Can view');
-  const [audience, setAudience] = useState<Audience>('Everyone at Irame');
+  // Audit work starts closed. A report, a RACM, a risk or a control opens with
+  // general access off, so it reaches exactly the people invited to it and
+  // opening it up is a deliberate act. The workspace itself is the one thing
+  // everybody is already in, so it keeps the workspace-wide default.
+  const [audience, setAudience] = useState<Audience>(
+    scope && scope !== 'workspace' ? 'Only invited users' : 'Everyone at Irame',
+  );
   const [generalPerm, setGeneralPerm] = useState('Can view');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -516,12 +525,28 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
         transition={{ type: 'spring', stiffness: 460, damping: 34, mass: 0.7 }}
         role="dialog"
         aria-modal="true"
-        aria-label={scopeLabel ? `Share this ${scopeLabel}` : 'Share'}
+        aria-label={
+          subjectName
+            ? `Share ${scopeLabel ?? 'item'} ${subjectName}`
+            : scopeLabel ? `Share this ${scopeLabel}` : 'Share'
+        }
         onClick={e => e.stopPropagation()}
         style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
         className="fixed z-[61] origin-top-left bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg flex flex-col max-h-[82vh] overflow-hidden"
       >
         <div style={{ width: POPOVER_W }} className="flex flex-col min-h-0 flex-1">
+          {/* What is being shared. On a registry the popover opens from one row
+              among many, and without this line nothing on screen said which. */}
+          {subjectName && (
+            <div className="px-4 pt-3.5 pb-0">
+              <div className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                Share {scopeLabel ?? 'this'}
+              </div>
+              <div className="text-[0.8125rem] font-semibold text-ink-900 truncate" title={subjectName}>
+                {subjectName}
+              </div>
+            </div>
+          )}
           {/* Invite row */}
           <div className="px-4 pt-4 pb-2">
             <div className="flex items-start gap-2">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Download, Save, FileText } from 'lucide-react';
+import { X, Printer, Save, FileText } from 'lucide-react';
 import AtrDocument from '../reports/AtrDocument';
 import { SAMPLE_OBSERVATIONS, SAMPLE_INSIGHTS } from '../reports/atrTemplate';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -99,7 +99,18 @@ export default function GenerateATRModal({
             <div className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               <FileText size={14} />
             </div>
-            <p className="text-[0.8125rem] font-medium text-ink-600 truncate">Live preview · read-only</p>
+            {/* Says where the document came from and that it is not saved yet.
+                "Live preview · read-only" sat above a Save button, which read
+                as a contradiction and told nobody whether an ATR now exists. */}
+            <p className="text-[0.8125rem] font-medium text-ink-600 truncate">
+              {/* Always a draft while this is on screen: saving closes the
+                  modal (the reader unmounts on onSaveVersion) and the toast
+                  confirms it, so there is no state where a saved ATR is still
+                  being looked at here. */}
+              <span className="text-ink-800 font-semibold">Draft, not saved yet</span>
+              {meta.auditTitle ? <span> · built from “{meta.auditTitle}”</span> : null}
+              <span> · {observations.length} observation{observations.length === 1 ? '' : 's'}</span>
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -136,7 +147,7 @@ export default function GenerateATRModal({
                     />
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => setShowSavePrompt(false)} className="h-8 px-3 text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 cursor-pointer">Discard</button>
-                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer">Save to ATR tab</button>
+                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer">Save to ATR reports</button>
                     </div>
                   </div>
                 </>
@@ -146,16 +157,18 @@ export default function GenerateATRModal({
                 className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 cursor-pointer transition-colors"
               >
                 <Save size={14} />
-                Save Version
+                Save to ATR reports
               </button>
             </div>
           )}
+          {/* Download hands off to the browser print view, so the button says
+              so rather than promising a file that never lands. */}
           <button
             onClick={handleDownload}
             className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer transition-colors"
           >
-            <Download size={14} />
-            Download
+            <Printer size={14} />
+            Print / Save as PDF
           </button>
         </footer>
       </motion.div>

@@ -129,6 +129,20 @@ export default function Step2bReportUpload({ onExtract }: {
   const detailsComplete = !!(auditTitle.trim() && auditEntity.trim() && periodStart && periodEnd && preparedBy.trim());
   const ready = report.length > 0 && detailsComplete;
 
+  // Everything still standing between here and Extract, named. The footer used
+  // to mention the file alone, so someone who had uploaded one was told to
+  // "fill every required detail" without being told which.
+  const outstanding: string[] = [
+    report.length === 0 ? 'the audit report' : null,
+    !auditTitle.trim() ? 'Audit Title' : null,
+    !auditEntity.trim() ? 'Audit Entity' : null,
+    !(periodStart && periodEnd) ? 'Audit Period' : null,
+    !preparedBy.trim() ? 'Prepared By' : null,
+  ].filter((x): x is string => x !== null);
+  const outstandingLine = outstanding.length === 1
+    ? `Add ${outstanding[0]} to continue.`
+    : `Still needed: ${outstanding.slice(0, -1).join(', ')} and ${outstanding[outstanding.length - 1]}.`;
+
   const submit = () => {
     if (!report[0] || !detailsComplete) return;
     onExtract(report[0], annexures, {
@@ -142,15 +156,52 @@ export default function Step2bReportUpload({ onExtract }: {
 
   return (
     <div className="w-full">
-      {/* Report details first — fill these, then upload the file(s) below */}
+      {/* Upload targets — two cards in the platform's format-card style.
+          items-start so the empty card keeps its natural (short) height instead
+          of stretching to match a file-filled sibling. */}
+      <div className="grid sm:grid-cols-2 gap-4 items-start">
+        <UploadCard
+          icon={FileText}
+          tint="bg-brand-50 text-brand-700"
+          title="Audit report"
+          blurb="PDF, Word, Excel or CSV · max 25 MB"
+          cta="Upload audit report"
+          badge="Required"
+          badgeCls="bg-risk-50 text-risk-700"
+          files={report}
+          onAdd={() => reportInputRef.current?.click()}
+          onRemove={i => setReport(prev => prev.filter((_, idx) => idx !== i))}
+          recommended
+          single
+          delay={0.04}
+        />
+        <UploadCard
+          icon={FileSpreadsheet}
+          tint="bg-evidence-50 text-evidence-700"
+          title="Annexures"
+          blurb="Excel or CSV · power Manage Exceptions"
+          cta="Upload annexures"
+          badge="Optional"
+          badgeCls="bg-paper-100 text-ink-500"
+          files={annexures}
+          onAdd={() => annexInputRef.current?.click()}
+          onRemove={i => setAnnexures(prev => prev.filter((_, idx) => idx !== i))}
+          delay={0.08}
+        />
+      </div>
+
+      {/* Report details — confirmed after the upload. Step 1 promises the
+          report is read automatically, so the file comes first and these fields
+          confirm the cover rather than gating the upload behind five inputs. */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: EASE, delay: 0.04 }}
-        className="text-left"
+        transition={{ duration: 0.4, ease: EASE, delay: 0.2 }}
+        className="text-left mt-4"
       >
         <div className="mb-3.5">
           <h3 className="text-[0.8125rem] font-semibold text-ink-900">Report details</h3>
+          <p className="text-[0.75rem] text-ink-500 mt-0.5">These print on the ATR cover. We cannot read them off the file reliably, so confirm them here.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
@@ -178,40 +229,6 @@ export default function Step2bReportUpload({ onExtract }: {
         </div>
       </motion.div>
 
-      {/* Upload targets — two cards in the platform's format-card style.
-          items-start so the empty card keeps its natural (short) height instead
-          of stretching to match a file-filled sibling. */}
-      <div className="grid sm:grid-cols-2 gap-4 items-start mt-4">
-        <UploadCard
-          icon={FileText}
-          tint="bg-brand-50 text-brand-700"
-          title="Audit report"
-          blurb="PDF, Word, Excel or CSV · max 25 MB"
-          cta="Upload audit report"
-          badge="Required"
-          badgeCls="bg-risk-50 text-risk-700"
-          files={report}
-          onAdd={() => reportInputRef.current?.click()}
-          onRemove={i => setReport(prev => prev.filter((_, idx) => idx !== i))}
-          recommended
-          single
-          delay={0.16}
-        />
-        <UploadCard
-          icon={FileSpreadsheet}
-          tint="bg-evidence-50 text-evidence-700"
-          title="Annexures"
-          blurb=".xlsx workbooks · power Manage Exceptions"
-          cta="Upload annexures"
-          badge="Optional"
-          badgeCls="bg-paper-100 text-ink-500"
-          files={annexures}
-          onAdd={() => annexInputRef.current?.click()}
-          onRemove={i => setAnnexures(prev => prev.filter((_, idx) => idx !== i))}
-          delay={0.2}
-        />
-      </div>
-
       {/* Escalation matrix — the report's follow-up cadence, set up here at the
           initial state alongside the required details. Preset + fully editable. */}
       <motion.div
@@ -228,14 +245,14 @@ export default function Step2bReportUpload({ onExtract }: {
           <p className="text-[0.75rem] text-ink-500">
             {ready
               ? <span className="text-compliant-700 font-medium">Ready to extract.</span>
-              : report.length === 0 ? 'Upload an audit report to continue.' : 'Fill every required detail to continue.'}
+              : outstandingLine}
           </p>
           <Button
             variant="primary"
             rightIcon={<ArrowRight size={15} />}
             disabled={!ready}
             onClick={submit}
-            title={ready ? undefined : 'Upload a report and complete every required detail to continue.'}
+            title={ready ? undefined : outstandingLine}
           >
             Extract from report
           </Button>

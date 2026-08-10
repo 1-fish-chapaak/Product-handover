@@ -1,0 +1,885 @@
+<title>Memory across the platform — design plan</title>
+<style>
+  :root {
+    --paper: #FBF9F5;
+    --card: #FFFFFF;
+    --card-soft: #F7F4EE;
+    --ink: #1F1433;
+    --ink-mut: #6B5D82;
+    --ink-faint: #9A8FAE;
+    --line: #E8E2D6;
+    --line-soft: #F0EBE1;
+    --brand: #6A12CD;
+    --brand-soft: #F3EAFD;
+    --brand-line: #DCBBFD;
+    --risk-fg: #B42318;    --risk-bg: #FEF3F2;   --risk-ln: #FECDCA;
+    --mit-fg: #B45309;     --mit-bg: #FFFBEB;    --mit-ln: #FEDF89;
+    --comp-fg: #15803D;    --comp-bg: #F0FDF4;   --comp-ln: #BBF7D0;
+    --evid-fg: #0369A1;    --evid-bg: #F0F9FF;   --evid-ln: #BAE6FD;
+    --wire-bg: #FAFAF8;
+    --wire-line: #C9C2B4;
+    --serif: 'Source Serif 4', 'Iowan Old Style', Georgia, ui-serif, serif;
+    --sans: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #141020; --card: #1D1730; --card-soft: #241D3A;
+      --ink: #EAE6F2; --ink-mut: #A99DBE; --ink-faint: #7A6E92;
+      --line: #322A45; --line-soft: #2A2340;
+      --brand: #C393FA; --brand-soft: #2C1D4A; --brand-line: #4A2F78;
+      --risk-fg: #F97066; --risk-bg: #2E1513; --risk-ln: #5C231E;
+      --mit-fg: #FDB022; --mit-bg: #2B2008; --mit-ln: #5C4409;
+      --comp-fg: #4ADE80; --comp-bg: #0E2617; --comp-ln: #1C4A2C;
+      --evid-fg: #38BDF8; --evid-bg: #0B2233; --evid-ln: #164963;
+      --wire-bg: #191331; --wire-line: #4A4162;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #141020; --card: #1D1730; --card-soft: #241D3A;
+    --ink: #EAE6F2; --ink-mut: #A99DBE; --ink-faint: #7A6E92;
+    --line: #322A45; --line-soft: #2A2340;
+    --brand: #C393FA; --brand-soft: #2C1D4A; --brand-line: #4A2F78;
+    --risk-fg: #F97066; --risk-bg: #2E1513; --risk-ln: #5C231E;
+    --mit-fg: #FDB022; --mit-bg: #2B2008; --mit-ln: #5C4409;
+    --comp-fg: #4ADE80; --comp-bg: #0E2617; --comp-ln: #1C4A2C;
+    --evid-fg: #38BDF8; --evid-bg: #0B2233; --evid-ln: #164963;
+    --wire-bg: #191331; --wire-line: #4A4162;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 0.9375rem; line-height: 1.62;
+    margin: 0; -webkit-font-smoothing: antialiased;
+  }
+  .shell { display: flex; max-width: 76rem; margin: 0 auto; gap: 2.5rem; padding: 0 1.5rem; }
+  nav.toc {
+    width: 12.5rem; flex-shrink: 0; position: sticky; top: 0; align-self: flex-start;
+    max-height: 100vh; overflow-y: auto; padding: 2.5rem 0 2rem;
+    font-size: 0.75rem;
+  }
+  nav.toc .toc-eyebrow { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.75rem; }
+  nav.toc a { display: block; color: var(--ink-mut); text-decoration: none; padding: 0.28rem 0.6rem; border-left: 2px solid var(--line); line-height: 1.35; }
+  nav.toc a:hover { color: var(--brand); border-left-color: var(--brand-line); }
+  nav.toc a .n { font-family: var(--mono); font-size: 0.625rem; color: var(--ink-faint); margin-right: 0.35rem; }
+  nav.toc a.sub { padding-left: 1.4rem; font-size: 0.7rem; }
+  main { flex: 1; min-width: 0; padding: 2.5rem 0 6rem; max-width: 55rem; }
+  @media (max-width: 64rem) { nav.toc { display: none; } }
+
+  header.doc { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
+  .eyebrow { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand); margin-bottom: 0.9rem; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 2.5rem; line-height: 1.12; margin: 0 0 1rem; letter-spacing: -0.01em; text-wrap: balance; }
+  .standfirst { font-size: 1.0625rem; color: var(--ink-mut); max-width: 42rem; margin: 0 0 1.4rem; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; font-size: 0.75rem; color: var(--ink-faint); align-items: center; }
+  .meta .mono { font-family: var(--mono); font-size: 0.6875rem; }
+  .status-pill { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--mit-bg); color: var(--mit-fg); border: 1px solid var(--mit-ln); border-radius: 999px; padding: 0.15rem 0.65rem; font-size: 0.6875rem; font-weight: 600; }
+  .status-pill::before { content: ''; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor; }
+
+  section { margin-bottom: 3.5rem; }
+  .sec-eyebrow { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.5rem; }
+  .sec-eyebrow b { color: var(--brand); font-weight: 600; }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 1.75rem; line-height: 1.2; margin: 0 0 0.9rem; letter-spacing: -0.005em; text-wrap: balance; }
+  h3 { font-size: 1.0625rem; font-weight: 650; margin: 2rem 0 0.6rem; letter-spacing: -0.005em; }
+  h4 { font-size: 0.9375rem; font-weight: 650; margin: 1.4rem 0 0.4rem; }
+  p { margin: 0 0 0.9rem; max-width: 46rem; }
+  section > p, .prose p { color: var(--ink); }
+  p.mut, .mut { color: var(--ink-mut); }
+  a { color: var(--brand); }
+  code { font-family: var(--mono); font-size: 0.8125em; background: var(--card-soft); border: 1px solid var(--line-soft); border-radius: 0.25rem; padding: 0.05rem 0.3rem; }
+  ul { padding-left: 1.2rem; margin: 0 0 1rem; max-width: 46rem; }
+  li { margin-bottom: 0.35rem; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.8125rem; }
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--card); margin: 1rem 0 1.5rem; }
+  th { text-align: left; font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); background: var(--card-soft); white-space: nowrap; }
+  td { padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td .uc { font-weight: 600; display: block; }
+  td .fw { color: var(--ink-mut); font-size: 0.75rem; display: block; margin-top: 0.1rem; }
+  .chip { display: inline-block; font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.02em; border-radius: 0.25rem; padding: 0.1rem 0.4rem; white-space: nowrap; border: 1px solid var(--line); background: var(--card-soft); color: var(--ink-mut); }
+  .chip.kind { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand); }
+  .ph { display: inline-block; font-family: var(--mono); font-size: 0.625rem; font-weight: 700; border-radius: 999px; padding: 0.08rem 0.5rem; white-space: nowrap; }
+  .ph.p0 { background: var(--evid-bg); color: var(--evid-fg); border: 1px solid var(--evid-ln); }
+  .ph.p1 { background: var(--comp-bg); color: var(--comp-fg); border: 1px solid var(--comp-ln); }
+  .ph.p2 { background: var(--card-soft); color: var(--ink-mut); border: 1px solid var(--line); }
+  .ph.p3 { background: var(--card-soft); color: var(--ink-faint); border: 1px dashed var(--line); }
+
+  .callout { border: 1px solid var(--line); border-left: 3px solid var(--brand); background: var(--card); border-radius: 0 0.5rem 0.5rem 0; padding: 0.9rem 1.1rem; margin: 1.2rem 0; font-size: 0.875rem; max-width: 46rem; }
+  .callout.warn { border-left-color: var(--mit-fg); }
+  .callout .co-label { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); display: block; margin-bottom: 0.3rem; font-weight: 600; }
+  .callout.warn .co-label { color: var(--mit-fg); }
+
+  .swing { border: 1px solid var(--brand-line); background: var(--brand-soft); border-radius: 0.5rem; padding: 0.9rem 1.1rem; margin: 1.2rem 0; font-size: 0.875rem; max-width: 46rem; }
+  .swing .co-label { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); display: block; margin-bottom: 0.3rem; font-weight: 700; }
+
+  /* ---------- wireframe spec cards ---------- */
+  .spec { border: 1px solid var(--line); border-radius: 0.625rem; background: var(--card); margin: 1.4rem 0; overflow: hidden; }
+  .spec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.8rem 1.1rem; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+  .spec-head .nm { font-weight: 700; font-size: 0.9375rem; }
+  .spec-head .nm code { font-size: 0.8125rem; background: none; border: none; padding: 0; color: var(--brand); }
+  .spec-head .role { font-size: 0.75rem; color: var(--ink-mut); }
+  .spec-body { padding: 1.1rem; background: var(--wire-bg); }
+  .spec-notes { padding: 0.8rem 1.1rem; border-top: 1px solid var(--line-soft); font-size: 0.75rem; color: var(--ink-mut); display: grid; gap: 0.3rem; }
+  .spec-notes b { color: var(--ink); font-weight: 600; }
+  .wire { border: 1.5px dashed var(--wire-line); border-radius: 0.5rem; background: var(--card); padding: 0.8rem 0.9rem; font-size: 0.78rem; max-width: 30rem; }
+  .wire + .wire { margin-top: 0.7rem; }
+  .wire .w-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .wire .w-row + .w-row { margin-top: 0.5rem; }
+  .wire .w-stmt { font-weight: 600; }
+  .wire .w-mut { color: var(--ink-mut); font-size: 0.72rem; }
+  .wire .w-chip { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--wire-line); border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.68rem; color: var(--ink-mut); background: var(--card-soft); }
+  .wire .w-chip.on { border-color: var(--brand-line); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .wire .w-chip .x { font-weight: 700; opacity: 0.6; }
+  .wire .w-btn { border: 1px solid var(--wire-line); border-radius: 0.375rem; padding: 0.22rem 0.7rem; font-size: 0.72rem; font-weight: 600; color: var(--ink); background: var(--card); }
+  .wire .w-btn.pri { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .wire .w-btn.ghost { border-style: dashed; color: var(--ink-mut); font-weight: 500; }
+  .wire .w-kicker { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+  .wire .w-hr { border: none; border-top: 1px dashed var(--wire-line); margin: 0.55rem 0; }
+  .wire.tone-warn { border-color: var(--mit-ln); background: var(--mit-bg); }
+  .wire.tone-warn .w-kicker { color: var(--mit-fg); }
+  .wire.tone-hard { border-color: var(--risk-ln); background: var(--risk-bg); }
+  .wire.tone-hard .w-kicker { color: var(--risk-fg); }
+  .wire.tone-learn { border-color: var(--comp-ln); background: var(--comp-bg); }
+  .wire.tone-learn .w-kicker { color: var(--comp-fg); }
+  .ann { font-family: var(--mono); font-size: 0.65rem; color: var(--brand); }
+  .ann-dot { display: inline-flex; width: 0.95rem; height: 0.95rem; border-radius: 50%; background: var(--brand); color: #fff; font-family: var(--mono); font-size: 0.6rem; font-weight: 700; align-items: center; justify-content: center; vertical-align: 0.05rem; }
+  :root[data-theme="dark"] .ann-dot, .ann-dot { color: var(--paper); }
+  .ann-list { list-style: none; padding: 0; margin: 0.9rem 0 0; display: grid; gap: 0.35rem; font-size: 0.75rem; color: var(--ink-mut); max-width: none; }
+  .ann-list li { display: flex; gap: 0.5rem; align-items: baseline; margin: 0; }
+  .ann-list b { color: var(--ink); font-weight: 600; }
+
+  /* journeys */
+  .journey { display: flex; gap: 0.7rem; overflow-x: auto; padding: 0.4rem 0.1rem 0.8rem; }
+  .j-step { flex: 0 0 13.5rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--card); padding: 0.75rem 0.85rem; font-size: 0.78rem; position: relative; }
+  .j-step .j-n { font-family: var(--mono); font-size: 0.625rem; color: var(--brand); font-weight: 700; display: block; margin-bottom: 0.3rem; }
+  .j-step .j-t { font-weight: 650; display: block; margin-bottom: 0.25rem; }
+  .j-step .j-d { color: var(--ink-mut); font-size: 0.72rem; }
+  .j-step .j-s { margin-top: 0.45rem; font-family: var(--mono); font-size: 0.6rem; color: var(--ink-faint); }
+
+  /* decisions */
+  .decision { border: 1px solid var(--line); border-radius: 0.625rem; background: var(--card); padding: 1rem 1.2rem; margin: 1rem 0; }
+  .decision .d-id { font-family: var(--mono); font-size: 0.6875rem; font-weight: 700; color: var(--brand); margin-right: 0.5rem; }
+  .decision .d-q { font-weight: 650; font-size: 0.9375rem; }
+  .decision .d-body { font-size: 0.8125rem; color: var(--ink-mut); margin-top: 0.45rem; }
+  .decision .d-rec { display: inline-block; margin-top: 0.6rem; font-size: 0.75rem; background: var(--comp-bg); color: var(--comp-fg); border: 1px solid var(--comp-ln); border-radius: 0.375rem; padding: 0.3rem 0.6rem; }
+  .decision .d-rec b { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 0.4rem; }
+
+  .kbd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.7rem; margin: 1rem 0 1.4rem; }
+  .kg-card { border: 1px solid var(--line); border-radius: 0.5rem; background: var(--card); padding: 0.8rem 0.95rem; font-size: 0.78rem; }
+  .kg-card .t { font-weight: 650; display: block; margin-bottom: 0.2rem; }
+  .kg-card .d { color: var(--ink-mut); font-size: 0.73rem; }
+  .kg-card .m { font-family: var(--mono); font-size: 0.62rem; color: var(--brand); display: block; margin-top: 0.4rem; }
+
+  .rulebook { counter-reset: rule; list-style: none; padding: 0; max-width: 46rem; }
+  .rulebook li { counter-increment: rule; display: flex; gap: 0.8rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line-soft); margin: 0; }
+  .rulebook li::before { content: counter(rule, decimal-leading-zero); font-family: var(--mono); font-size: 0.6875rem; color: var(--brand); font-weight: 700; padding-top: 0.15rem; }
+  .rulebook b { font-weight: 650; }
+  .rulebook .why { color: var(--ink-mut); font-size: 0.8125rem; }
+
+  .matrix td, .matrix th { text-align: center; }
+  .matrix td:first-child, .matrix th:first-child { text-align: left; }
+  .matrix .dot { color: var(--brand); font-weight: 700; }
+  .matrix .dim { color: var(--line); }
+  .new-tag { font-family: var(--mono); font-size: 0.55rem; font-weight: 700; color: var(--comp-fg); background: var(--comp-bg); border: 1px solid var(--comp-ln); border-radius: 0.2rem; padding: 0.02rem 0.25rem; vertical-align: 0.1rem; margin-left: 0.25rem; letter-spacing: 0.05em; }
+
+  footer.doc { border-top: 1px solid var(--line); padding-top: 1.5rem; font-size: 0.8125rem; color: var(--ink-mut); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 0.2rem; }
+</style>
+
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-eyebrow">Contents</div>
+  <a href="#s00"><span class="n">00</span>How to read this</a>
+  <a href="#s01"><span class="n">01</span>Where the platform stands</a>
+  <a href="#s02"><span class="n">02</span>One store, one grammar</a>
+  <a href="#s03"><span class="n">03</span>The component kit</a>
+  <a href="#s04"><span class="n">04</span>Surface by surface</a>
+  <a class="sub" href="#s04a">Chat</a>
+  <a class="sub" href="#s04b">Workflow executor</a>
+  <a class="sub" href="#s04c">Engagement</a>
+  <a class="sub" href="#s04d">Reports</a>
+  <a class="sub" href="#s04e">Dashboard</a>
+  <a class="sub" href="#s04f">Knowledge Hub</a>
+  <a href="#s05"><span class="n">05</span>Governance &amp; lifecycle</a>
+  <a href="#s06"><span class="n">06</span>Measurement</a>
+  <a href="#s07"><span class="n">07</span>Build order &amp; demo</a>
+  <a href="#s08"><span class="n">08</span>Decisions needed</a>
+  <a href="#s09"><span class="n">09</span>The build list · Rev 2</a>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="eyebrow">IRA · Product design plan · Round 1</div>
+  <h1>Memory across the platform</h1>
+  <p class="standfirst">The PRD lists 57 things IRA should remember across six surfaces. This plan turns them into one memory grammar — nine components, four lifecycle journeys, and a build order — and maps every use case onto the code we have today.</p>
+  <div class="meta">
+    <span class="status-pill">Awaiting approval — no designs until §08 lands</span>
+    <span>9 Aug 2026 · Rev 2 — §09 final build list added, D2 resolved</span>
+    <span class="mono">sources: Notion “Memory across platform” + parent Smart Learn PRD + PRD-AI-MEMORY.md</span>
+  </div>
+</header>
+
+<!-- ================================================================ -->
+<section id="s00">
+  <div class="sec-eyebrow"><b>00</b> — Orientation</div>
+  <h2>How to read this</h2>
+  <p>The PRD says <em>what</em> to remember, surface by surface. It deliberately stops short of the components themselves — the closing “design scope” section was never written, and Knowledge Hub has no metrics block. This plan fills both gaps and makes three arguments:</p>
+  <ul>
+    <li><b>Memory is one product, not six features.</b> The same five or six UI moments repeat in every surface’s use cases. Design them once as a kit (§03), and every surface becomes an arrangement of known parts.</li>
+    <li><b>Trust is the design constraint.</b> This is an audit product: a silently-applied memory that’s wrong produces a confident wrong number. Every treatment below follows one constitution (§02) — visible, attributed, human-gated, undoable, logged.</li>
+    <li><b>The plumbing is the first deliverable.</b> Today the registry has no readers, the governance surfaces named in our own copy don’t exist, and two disconnected stores hold the same facts (§01). Phase 0 fixes the spine before any surface gets its moments.</li>
+  </ul>
+  <p class="mut">Each §04 table covers <em>every</em> use case in the PRD for that surface — nothing is dropped; a few are pushed back on, marked <span class="chip" style="color:var(--mit-fg); border-color:var(--mit-ln); background:var(--mit-bg)">PB-n</span> and argued in §08. Phase pills: <span class="ph p0">P0 spine</span> <span class="ph p1">P1 flagship</span> <span class="ph p2">P2 behavioral</span> <span class="ph p3">P3 polish</span>. <b>Rev 2:</b> §09 is the authoritative build list — it re-sorts everything here into four tiers, including the use cases that need <em>no</em> new UI at all.</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s01">
+  <div class="sec-eyebrow"><b>01</b> — Current state</div>
+  <h2>Where the platform stands</h2>
+  <p>We audited the branch before designing. The honest summary: we have a <b>registry with nothing to register</b> — a well-built Smart Learn UI over a seed store that no surface reads or writes — and an older, wider <b>Insight Memory engine</b> that actually renders in product (executor drift banner, golden record, chat assumptions, Process Insights approval gate) but doesn’t talk to the registry.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Layer</th><th>Exists today</th><th>Promised in our own copy, not built</th></tr></thead>
+    <tbody>
+      <tr><td><b>Store</b><span class="fw"><code>memoryStore.ts</code> · <code>insightMemory.ts</code></span></td><td>14-row <code>PlatformMemory</code> seed (4 scopes, 6 kinds, active/pending); separate <code>ENTERPRISE_CONTEXT</code> with the same 3 team facts in a different shape</td><td>One store. No lifecycle beyond pending/active, no <code>workspaceId</code>, no conflict model, no recall write-path — “Recalled 12×” is decoration</td></tr>
+      <tr><td><b>Registry</b><span class="fw">Smart Learn</span></td><td>Scope/status filters, row → drawer with evidence, forget/renew/undo, “forget everything about me”</td><td>No URL (<code>knowledge-hub</code> isn’t deep-linkable, tab defaults to Data Sources); no way to link to a row</td></tr>
+      <tr><td><b>Governance</b><span class="fw">My Queue · Admin · avatar</span></td><td>My Queue renders exceptions only; Admin = users/roles/logs</td><td>Memory items in My Queue (two seeds point there today and dead-end); Admin guardrails surface; <code>Memory</code> audit-log module; “What IRA knows about me” on the avatar; any <code>mem_*</code> RBAC key</td></tr>
+      <tr><td><b>Consumption</b><span class="fw">chat · runs · reports</span></td><td>Executor: drift banner, golden-record card, on-watch markers. Chat: memory-backed assumptions with “saved you 2 clarifications”</td><td><code>readBy</code> chips are a claim, not a wiring; no “why am I seeing this” affordance anywhere; report writer’s “Remember for future reports” writes template state, invisible to the store</td></tr>
+      <tr><td><b>Capture</b></td><td>Process Insights approval gate promotes insights → Enterprise Context (local state)</td><td>No other write path exists. Nothing learned from clarifications, corrections, or behavior</td></tr>
+    </tbody>
+  </table></div>
+  <p class="mut">Full 21-item gap list lives in the working notes; the five rows above are the ones that shape this plan.</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s02">
+  <div class="sec-eyebrow"><b>02</b> — The spine</div>
+  <h2>One store, one grammar</h2>
+
+  <h3>Taxonomy: adopt the PRD’s 7 kinds × 5 scopes</h3>
+  <p>Every “Stored as” label in the PRD resolves to this matrix. Our current store is close but not aligned — the migration is small and worth doing before anything visible is built <span class="chip">D1</span>:</p>
+  <div class="tbl-wrap"><table class="matrix">
+    <thead><tr><th>Kind ↓ · Scope →</th><th>Personal</th><th>Team</th><th>Engagement</th><th>Organization<span class="new-tag">was “tenant”</span></th><th>Source<span class="new-tag">new</span></th></tr></thead>
+    <tbody>
+      <tr><td><b>Preference</b> <span class="fw">how you like output shaped</span></td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td><td class="dim">—</td></tr>
+      <tr><td><b>Fact</b> <span class="fw">governed truth</span></td><td class="dim">—</td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td></tr>
+      <tr><td><b>Correction</b> <span class="fw">never repeat this mistake</span></td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td><td class="dim">—</td><td class="dim">—</td></tr>
+      <tr><td><b>Decision</b><span class="new-tag">new</span> <span class="fw">a resolved question (mappings, joins, fixes)</span></td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dot">●</td></tr>
+      <tr><td><b>Routine</b><span class="new-tag">new</span> <span class="fw">a job that repeats on a rhythm</span></td><td class="dot">●</td><td class="dot">●</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+      <tr><td><b>Vocabulary</b> <span class="fw">what words mean here</span></td><td class="dot">●</td><td class="dot">●</td><td class="dot">●</td><td class="dim">—</td><td class="dot">●</td></tr>
+      <tr><td><b>Rule</b><span class="new-tag">was “guardrail”</span> <span class="fw">enforced, no override</span></td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dot">●</td><td class="dot">●</td></tr>
+    </tbody>
+  </table></div>
+  <p class="mut">Retired: <code>convention</code> (its rows become Preference·Team). The badge grammar everywhere is <b>Kind · Scope</b> — e.g. <span class="chip kind">Decision · Source</span> — the same two words the PRD uses, so the doc and the product speak one language.</p>
+
+  <h3>Lifecycle: five states, not two</h3>
+  <p><code>proposed → active → (retired | expired | superseded)</code>. “Proposed” replaces today’s <code>pending</code> and is the state My Queue works. Personal memories skip the queue — they activate instantly with a visible undo (that’s what the PRD’s “undo rate on just-learned rows” metric measures). Source memories carry the <b>schema fingerprint</b> they were written against; a fingerprint mismatch moves them to a <code>drifted</code> flag that §04f’s drift review works through. Nothing is ever hard-deleted: retired rows keep their audit trail and can re-surface if the signal strengthens (consistent with edge case M4 in the engine PRD).</p>
+
+  <h3>The rule of 2–3: when learning fires</h3>
+  <p>The PRD is remarkably consistent about thresholds. Codify it once so every surface behaves identically:</p>
+  <div class="kbd-grid">
+    <div class="kg-card"><span class="t">1 occurrence</span><span class="d">Never learn from a single event — except an explicit answer the user gives (a clarification, a correction, “match my March report”). Explicit teaching is always instant.</span><span class="m">capture, not inference</span></div>
+    <div class="kg-card"><span class="t">2nd occurrence</span><span class="d">Recognize and offer: run shape recognized → replay offer; mapping confirmed twice → memory updates; word corrected twice → offer the vocabulary rule.</span><span class="m">offer, don’t assume</span></div>
+    <div class="kg-card"><span class="t">3 consistent signals</span><span class="d">Behavioral defaults flip: chart type, %-vs-counts, export format, drill path, recurring report, rhythm. Three dismissals demote a widget.</span><span class="m">default, with a visible badge</span></div>
+  </div>
+
+  <h3>The constitution</h3>
+  <p>Eight rules, carried forward from the engine PRD’s UI rules and extended. Every §03 component and §04 treatment obeys them; anything that can’t is redesigned until it does.</p>
+  <ol class="rulebook">
+    <li><div><b>Always attributed.</b> <span class="why">Every recalled value names its source and age. No unsourced “AI knows.”</span></div></li>
+    <li><div><b>Applied is visible.</b> <span class="why">A memory that acted leaves a mark — a chip, a badge, a report line. “Applied silently” exists nowhere; even the PRD’s “silent” carve-outs are shown as removable chips.</span></div></li>
+    <li><div><b>Personal learns instantly, shared learns through a human.</b> <span class="why">Personal = act + undo. Team/Engagement/Organization/Source = proposed → My Queue. The gate is never skippable and never auto-approves.</span></div></li>
+    <li><div><b>Warnings, not errors.</b> <span class="why">Drift and conflicts are findings. They block <em>trust</em>, not the run — amber, with the evidence, never a red stack trace.</span></div></li>
+    <li><div><b>Rules have no override control.</b> <span class="why">Sensitivity masking and org content rules are enforced and reported. The UI shows that the rule fired; it offers no way around it.</span></div></li>
+    <li><div><b>Offer before assuming; 2–3 signals before defaulting.</b> <span class="why">Per the threshold table. Declining an offer is itself a signal — decay it, don’t re-ask weekly.</span></div></li>
+    <li><div><b>Demote, decay, never delete.</b> <span class="why">Undo on everything just-learned; retired ≠ erased; a dismissed insight may return if the signal strengthens.</span></div></li>
+    <li><div><b>Every change is logged.</b> <span class="why">Learn, apply-with-effect, approve, retire, renew, drift-update — all land in the audit log’s new Memory module with actor and evidence.</span></div></li>
+  </ol>
+</section>
+
+<!-- ================================================================ -->
+<section id="s03">
+  <div class="sec-eyebrow"><b>03</b> — Design scope</div>
+  <h2>The component kit</h2>
+  <p>This is the section the PRD reserved and never wrote. Nine components cover all 57 use cases. Wireframes below are <b>schematics, not designs</b> — anatomy and behavior only; visual design happens after §08 approval, in Editorial GRC.</p>
+
+  <!-- 1. MemoryChip -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">1 · <code>MemoryChip</code></span><span class="role">the mark a memory leaves when it acts — the workhorse</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row">
+          <span class="w-kicker">Applied to this view</span>
+        </div>
+        <div class="w-row">
+          <span class="w-chip on">Last 90 days <span class="x">×</span></span>
+          <span class="w-chip on">Excl. test entities <span class="x">×</span></span>
+          <span class="w-chip on">Excl. Subsidiary XYZ · FY26 carve-out <span class="x">×</span></span>
+          <span class="ann"><span class="ann-dot">1</span></span>
+        </div>
+      </div>
+      <div class="wire">
+        <div class="w-row"><span class="w-mut">Net exceptions value&nbsp;&nbsp;</span><span class="w-stmt">₹ 4.2 L</span>
+          <span class="w-chip">₹ lakhs · 2 dp · your default</span><span class="ann"><span class="ann-dot">2</span></span></div>
+      </div>
+      <div class="wire">
+        <div class="w-row"><span class="w-chip"><code style="background:none;border:none">amt_pd</code> — net amount paid, INR, excl. tax</span><span class="ann"><span class="ann-dot">3</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Filter form</b> — removable where the memory is a default (dashboard filters, scope carve-outs). Removing = this session only; removing 3× = offer to retire.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Badge form</b> — non-removable annotation on formatted output (number format, boilerplate tag, register).</span></li>
+        <li><span class="ann-dot">3</span><span><b>Definition form</b> — first appearance of a defined column/term in a session; disappears after first sighting.</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Opens</b> MemoryPeek on click — every chip is a door to provenance.</span><span><b>Used by</b> 21 of the 57 use cases; the single most-reused piece.</span></div>
+  </div>
+
+  <!-- 2. MemoryPeek -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">2 · <code>MemoryPeek</code></span><span class="role">one popover answers “why am I seeing this?” platform-wide</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-kicker">From memory</span><span class="ann" style="margin-left:auto"><span class="ann-dot">1</span></span></div>
+        <div class="w-row"><span class="w-stmt">Transaction date is “Posting Date”, not “Invoice Date”.</span></div>
+        <div class="w-row"><span class="w-chip on">Correction · Engagement</span><span class="w-chip">✓ still applies</span><span class="ann"><span class="ann-dot">2</span></span></div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-mut">Learned from your answer in the May AP run · 12 May 2026 · recalled 9× · approved by R. Mehta</span><span class="ann"><span class="ann-dot">3</span></span></div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-btn">Not right? Correct it</span><span class="w-btn ghost">Skip this time</span><span class="w-btn ghost">Manage →</span><span class="ann"><span class="ann-dot">4</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Kicker</b> forks: “From memory” / “Enterprise memory” (governed org fact) / “Rule — enforced” (no correct action, links to Admin).</span></li>
+        <li><span class="ann-dot">2</span><span><b>Badges</b>: Kind·Scope + freshness (“still applies” → confidence % on inferred rows, review-due amber when expiring).</span></li>
+        <li><span class="ann-dot">3</span><span><b>Provenance line</b> is mandatory (constitution #1): origin event, date, recall count, approver for shared scopes.</span></li>
+        <li><span class="ann-dot">4</span><span><b>Actions</b>: Correct seeds the composer with the exact question memory spared (engine PRD AM10). Skip = this run only. Manage deep-links to the row’s home (§05 addressability).</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Mechanics</b>: reuses <code>AIRecommendsPopover</code>’s portal/anchor/flip behavior.</span><span><b>Rule</b>: identical anatomy on every surface — users should learn it once.</span></div>
+  </div>
+
+  <!-- 3. MemoryOffer -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">3 · <code>MemoryOffer</code></span><span class="role">the ask-before-applying moment — where memory pays for itself out loud</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-kicker">IRA noticed</span></div>
+        <div class="w-row"><span class="w-stmt">This looks like your monthly AP ageing pack — 3 files, 6 steps, run 4th of the month.</span></div>
+        <div class="w-row"><span class="w-mut">Sources unchanged since last Monday. Replaying from memory skips the AI plan — ₹0 AI cost, ~40s.</span><span class="ann"><span class="ann-dot">1</span></span></div>
+        <div class="w-row"><span class="w-btn pri">Replay from memory</span><span class="w-btn">Run fresh</span><span class="w-btn ghost">Don’t offer this</span><span class="ann"><span class="ann-dot">2</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Stake line</b> — every offer quantifies its payoff (cost, time, questions spared). Offers without a stake don’t ship.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Three exits always</b>: accept / decline-once / never. “Never” decays the routine, it doesn’t delete it (constitution #7).</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Used by</b>: replay, “same test as last quarter?”, monthly memo, rhythm→inbox, drill-path shortcut.</span><span><b>Cap</b>: one offer per surface per session — offers compete, best stake wins; the rest wait.</span></div>
+  </div>
+
+  <!-- 4. JustLearned -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">4 · <code>JustLearned</code></span><span class="role">the receipt — what the undo-rate metric measures</span></div>
+    <div class="spec-body">
+      <div class="wire tone-learn">
+        <div class="w-row"><span class="w-kicker">Learned</span><span class="w-stmt" style="font-weight:500">Bar over pie for exception trends.</span><span class="w-btn ghost">Undo</span><span class="ann"><span class="ann-dot">1</span></span></div>
+      </div>
+      <div class="wire">
+        <div class="w-row"><span class="w-kicker">Proposed to engagement memory</span><span class="w-stmt" style="font-weight:500">“CB variances” = pricing-variation exceptions.</span><span class="w-chip">→ My Queue</span><span class="ann"><span class="ann-dot">2</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Personal</b>: acted immediately, undo inline, quiet toast-grade presence. Persists in the row’s home regardless.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Shared scopes</b>: nothing is applied yet — the receipt says where the proposal went (constitution #3).</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Never</b> a modal, never blocks work.</span><span><b>Writes</b> the audit log on both paths.</span></div>
+  </div>
+
+  <!-- 5. MemoryGuard -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">5 · <code>MemoryGuard</code></span><span class="role">interception — drift, wrong file, bad data, hard rules</span></div>
+    <div class="spec-body">
+      <div class="wire tone-warn">
+        <div class="w-row"><span class="w-kicker">Check before trusting</span></div>
+        <div class="w-row"><span class="w-stmt" style="font-weight:600">This isn’t the approved vendor master.</span></div>
+        <div class="w-row"><span class="w-mut">You picked <code style="background:none;border:none">vendor_master_OLD.xlsx</code>; this engagement approved <code style="background:none;border:none">vendor_master_v2</code> on 3 Jul. Two older copies sit in the same folder.</span></div>
+        <div class="w-row"><span class="w-btn pri">Use approved file</span><span class="w-btn">Proceed anyway — flag it</span><span class="ann"><span class="ann-dot">1</span></span></div>
+      </div>
+      <div class="wire tone-hard">
+        <div class="w-row"><span class="w-kicker">Rule applied — cannot override</span></div>
+        <div class="w-row"><span class="w-mut"><code style="background:none;border:none">pan_number</code> is PII: masked to last 4, excluded from export. Logged.</span><span class="ann"><span class="ann-dot">2</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Warn tone</b> (drift, file, quality, freshness): amber, evidence-first, blocks trust not the run; proceeding is allowed and flagged.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Rule tone</b>: states what was enforced; no override control exists (constitution #5). Fires at selection <em>and</em> again at export/send.</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Subsumes</b> today’s <code>SourceDriftBanner</code> — same grammar, more cases.</span></div>
+  </div>
+
+  <!-- 6. CaptureCard -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">6 · <code>CaptureCard</code></span><span class="role">documentation at the moment of confusion — the write path</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-mut">You answered:</span><span class="w-stmt" style="font-weight:500">“Payment amount is <code style="background:none;border:none">amt_pd</code>.”</span></div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-kicker">Keep this?</span><span class="w-chip on">Decision · Source</span><span class="ann"><span class="ann-dot">1</span></span></div>
+        <div class="w-row"><span class="w-btn pri">Save — never ask again</span><span class="w-btn ghost">Just this once</span><span class="ann"><span class="ann-dot">2</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Scope pre-resolved</b> from context (this file → Source; this client’s term → Engagement). Shown, not asked — one tap total.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Bundle variant</b> powers “Learn this table from my last analysis” and “Match my March report”: same card, N extracted rows with checkboxes, one save.</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Lives inside</b> clarification cards (chat + executor), report pickers, source pages.</span><span><b>Thesis</b>: the PRD’s best line — documentation written at the moment of confusion is the only documentation that gets written.</span></div>
+  </div>
+
+  <!-- 7. SinceYouLeft -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">7 · <code>SinceYouLeft</code></span><span class="role">re-entry digest + resume — memory of you, for you</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-kicker">Since Friday</span></div>
+        <div class="w-row"><span class="w-stmt" style="font-weight:500">14 new exceptions · 3 above your ₹5&nbsp;L floor · vendor ABC is new to this list.</span></div>
+        <div class="w-row"><span class="w-chip">You left off: 12 of 40 samples reviewed on P2P-07</span><span class="w-btn">Continue</span></div>
+      </div>
+    </div>
+    <div class="spec-notes"><span><b>Fires</b> after a gap (first open of the day / after a weekend); one strip, dismissible, never a takeover.</span><span><b>Personal scope</b> — reads your last-visit timestamp + saved position.</span></div>
+  </div>
+
+  <!-- 8. PreflightChecklist -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">8 · <code>Preflight</code></span><span class="role">the reviewer’s standing questions, run before submission</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-kicker">Before this goes to R. Mehta</span></div>
+        <div class="w-row"><span class="w-chip" style="border-color:var(--comp-ln);color:var(--comp-fg);background:var(--comp-bg)">✓ Duplicate invoice numbers — checked</span></div>
+        <div class="w-row"><span class="w-chip" style="border-color:var(--mit-ln);color:var(--mit-fg);background:var(--mit-bg)">! Sample size — 22 of minimum 25</span></div>
+        <div class="w-row"><span class="w-btn pri">Fix before submitting</span><span class="w-btn">Submit anyway</span></div>
+      </div>
+    </div>
+    <div class="spec-notes"><span><b>Source</b>: Fact·Team rows learned from repeated review comments. Runs the checks <em>before</em> submission, not after rejection — the PRD’s “review rounds 3 → 1.5” lever.</span></div>
+  </div>
+
+  <!-- 9. KnownIssuesFold -->
+  <div class="spec">
+    <div class="spec-head"><span class="nm">9 · <code>KnownIssuesFold</code></span><span class="role">false positives leave the findings, keep their receipts</span></div>
+    <div class="spec-body">
+      <div class="wire">
+        <div class="w-row"><span class="w-stmt" style="font-weight:600">Exceptions (26)</span></div>
+        <div class="w-row"><span class="w-mut">…main findings table…</span></div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-chip">▸ Known issues from memory (4) — incl. Vendor ABC date mismatch (client ERP timezone bug)</span></div>
+      </div>
+    </div>
+    <div class="spec-notes"><span><b>Behavior</b>: rows matching a Correction·Engagement pattern land folded, each with a MemoryPeek; re-promoted to findings automatically if the underlying facts change (dispositions rule).</span></div>
+  </div>
+
+  <p class="mut" style="margin-top:1.5rem">Registry homes (Smart Learn upgrades, Engagement Memory tab, Source memory panel, “What IRA knows about me”, My Queue items) are surfaces, not components — they’re specified in §04–05 and composed from the kit above plus existing shared chrome (<code>Drawer</code>, <code>UnderlinedTabs</code>, <code>StatusBadge</code>, <code>ConfirmationModal</code>).</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s04">
+  <div class="sec-eyebrow"><b>04</b> — The surfaces</div>
+  <h2>Surface by surface</h2>
+  <p>Every PRD use case, its firing moment, its treatment from the kit, and where it lands in today’s code. <b>Swings</b> — the PRD’s bigger bets — get callouts.</p>
+
+  <!-- ---------------- CHAT ---------------- -->
+  <h3 id="s04a">04a · Chat — memory felt as absence</h3>
+  <p>The PRD is right that chat memory is mostly invisible: the win is the four questions never asked. Our design job is to make the <em>absence</em> auditable — when memory shaped an answer, there’s a quiet door to why — and to make chat the platform’s main <b>write path</b> (every clarification answered is a CaptureCard).</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">Technical register</span><span class="fw">fires on any explanation; learned from how you write, never asked</span></td><td>Invisible by design. Inspectable: register row in “What IRA knows about me”; correctable: a <b>More detail / Less detail</b> control on answers — the correction channel that teaches it without ever asking <span class="chip" style="color:var(--mit-fg);border-color:var(--mit-ln);background:var(--mit-bg)">PB-6</span></td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Follow-up ranking, breadth vs depth</span><span class="fw">fires when an answer completes; ranked by the direction you actually take</span></td><td><code>followUpTracks</code> already exists on <code>ChatMessage</code> — rank by taken direction, top chip gets a “usually your next question” marker (MemoryChip badge form); never-clicked suggestions decay rather than vanish <span class="chip" style="color:var(--mit-fg);border-color:var(--mit-ln);background:var(--mit-bg)">PB-3</span></td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Recalled assumptions <i>(carried from engine PRD)</i></span><span class="fw">fires when a plan proceeds on a prior answer instead of asking</span></td><td>Finish what’s seeded: <b>“Not right? Correct it”</b> button + <b>Enterprise memory</b> chip on <code>AssumptionMemoryRow</code> (both defined, neither rendered — AM10). Assumptions strip stays in the Plan tab</td><td><span class="chip kind">varies</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Capture at the moment of confusion <i>(KH use case, lives here)</i></span><span class="fw">fires when a clarification exposes an undefined column/term</span></td><td><b>CaptureCard</b> appended to <code>ClarificationCard</code> / <code>QueryClarificationCard</code> after the user answers — one tap, scope pre-resolved, writes to the store and the source page</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Memory context in the composer</span><span class="fw">fires when engagement context gives a typed term a stored mapping</span></td><td>New <code>memory</code> kind of <code>ComposerContext</code> (the existing Perplexity-style chip slot): typing “requisition” inside the engagement shows “requisition → purchase order · client vocabulary”</td><td><span class="chip kind">Vocabulary · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Answer provenance</span><span class="fw">fires when ≥1 memory shaped an answer</span></td><td>Quiet footer affordance “Shaped by 3 memories” → MemoryPeek list. This is the platform’s “why am I seeing this” in chat form</td><td><span class="chip">read layer</span></td><td><span class="ph p1">P1</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="mut">Metrics served: intra-session re-ask → 0; clarifications per run halved; follow-up acceptance; undo rate &lt;10%.</p>
+
+  <!-- ---------------- EXECUTOR ---------------- -->
+  <h3 id="s04b">04b · Workflow executor — the cost lever, and the damage zone</h3>
+  <p>The executor already has the strongest memory UI in the product (drift banner, golden record, on-watch markers) — but it all fires <em>after</em> the run. The PRD’s economics live <em>before</em> the run: recognize the job, offer the replay, restore the mappings, pre-apply the corrections. We move memory to the front of the run and keep the existing pieces as the after-run layer.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">The recurring run</span><span class="fw">fires on 2nd recognition of the same shape, or calendar rhythm</span></td><td><b>MemoryOffer</b> at executor entry: “Your monthly AP ageing pack — sources unchanged. Replay from memory, ₹0 AI cost.” Golden-record card (exists, post-run) becomes the receipt of the accepted offer</td><td><span class="chip kind">Routine · Personal/Team</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Saved mappings</span><span class="fw">fires on matching source fingerprint; nothing re-asked</span></td><td>Plan step shows <b>MemoryChip</b> “12 mappings from memory” → Peek lists them; no clarification cards fire for resolved columns</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Source drift</span><span class="fw">fires when the fingerprint stops matching; 2 consecutive confirmations update the memory</span></td><td>Existing <code>SourceDriftBanner</code> regrammared as <b>MemoryGuard</b> (warn tone): before/after column, Re-confirm / Keep old; second consecutive confirmation silently updates the mapping memory + logs; “Review in Knowledge Hub → Drift” link</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Sampling parameters</span><span class="fw">fires when a sample is about to be drawn, by anyone on the engagement</span></td><td><b>MemoryChip</b> on the sampling step: “40 invoices &gt; ₹5 L, stratified — engagement standard” with Peek showing who set it; editing proposes a change to engagement memory (goes to My Queue), never a silent fork</td><td><span class="chip kind">Fact · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Step-level corrections</span><span class="fw">fires at plan generation; applied from the first draft</span></td><td>Corrected step carries a <b>JustLearned</b>-style inline marker “step 4 excludes credit notes — your usual edit · Undo”; learned after the 2nd identical manual edit (rule of 2–3)</td><td><span class="chip kind">Correction · Personal/Team</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Failure recovery</span><span class="fw">fires when the same failure code returns</span></td><td>Error state leads with the cure, not the trace: <b>MemoryGuard</b> “Last time: date column exported as text → coerce. Apply known fix?” Fix source + date attributed</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p2">P2</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="mut">Metrics served: golden-record hit &gt;80%; setup time −70%; drift detection 100%; stale application 0%. Existing on-watch / output-compare panels are untouched — they’re the insight layer, not this PRD.</p>
+
+  <!-- ---------------- ENGAGEMENT ---------------- -->
+  <h3 id="s04c">04c · Engagement — the shared brain gets a home</h3>
+  <p>Engagement memory is the PRD’s densest section (11 use cases) and the only one that names a new surface: the <b>Engagement Memory tab</b> <span class="chip">D3</span>. Design stance: the tab is the engagement’s <em>shared brain</em> — everything the team has taught IRA about this audit, grouped by what it governs, with pending proposals on top. Individual memories still fire in place (chips on samples, guards on files); the tab is where a new joiner reads the ground rules in five minutes.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">How a control is tested</span><span class="fw">fires on opening a control tested before</span></td><td><b>MemoryOffer</b> on the control row/detail: “Run the same test as last quarter? 40 invoices &gt; ₹5 L, PO–GRN–invoice match” — one click reruns the procedure</td><td><span class="chip kind">Preference · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Sampling rules</span><span class="fw">fires when any sample is drawn, incl. by a new joiner</span></td><td>Same chip as 04b sampling — engagement standard travels with the engagement, not the person; “never fewer than 25” renders as a floor in the sampling UI</td><td><span class="chip kind">Fact · Engagement/Team</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Fiscal calendar</span><span class="fw">fires on any period phrase — “Q3”, “YTD”, “month-end”</span></td><td><b>MemoryChip</b> definition form on first period mention per session: “Q3 = Oct–Dec (FY starts 1 Apr)”; applied to every date computation. Org-scope: one calendar, all surfaces</td><td><span class="chip kind">Fact · Organization</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Which files are the right files</span><span class="fw">fires at source-pick, or when an unapproved file is chosen</span></td><td><b>MemoryGuard</b> (warn): “This isn’t the approved vendor master” — §03 wireframe. Approving a new file is a proposal to engagement memory</td><td><span class="chip kind">Fact · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Column meanings</span><span class="fw">fires when a run touches the dataset</span></td><td>Resolved silently into the plan + listed in the mappings chip; the <em>learning</em> moment is chat/executor CaptureCard</td><td><span class="chip kind">Correction · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Known false positives</span><span class="fw">fires when the pattern reappears in a new run</span></td><td><b>KnownIssuesFold</b> in Manage Exceptions and run results — Vendor ABC’s timezone mismatch never pollutes findings again, but never disappears either</td><td><span class="chip kind">Correction · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Scope carve-outs</span><span class="fw">fires on any data pull touching the excluded entity</span></td><td><b>MemoryChip</b> filter form: “Excl. Subsidiary XYZ · FY26 carve-out ×” on results and dashboards — the PRD says applied silently <em>and</em> shown as a chip; the chip wins (constitution #2)</td><td><span class="chip kind">Fact · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Client vocabulary</span><span class="fw">fires on unrecognized terms, or terms with stored mappings</span></td><td>Composer memory-context chip (04a) + inline translation in answers: “requisition (client term for purchase order)” first-use per session</td><td><span class="chip kind">Vocabulary · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Where you left off</span><span class="fw">fires on reopening after a gap</span></td><td><b>SinceYouLeft</b> strip on Engagement Overview: “12 of 40 samples reviewed on P2P-07 → Continue” + what moved while you were away</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">The reviewer’s standing questions</span><span class="fw">fires when a workpaper is about to be submitted</span></td><td><b>Preflight</b> modal on submit — §03 wireframe. Checks run before submission, not after rejection</td><td><span class="chip kind">Fact · Team</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Prior-year comparison</span><span class="fw">fires when a tested control has a prior-year result</span></td><td>Pointer only — this is the AI Insights product’s trajectory band; memory contributes the habit flag, insights render it. No new UI here</td><td><span class="chip kind">Preference · Engagement</span></td><td><span class="ph p3">—</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="swing"><span class="co-label">New surface — Engagement Memory tab</span>
+  Tab on the engagement workspace (joins via <code>tabsForType</code>, all three engagement types). Anatomy: <b>header stats</b> (active · proposed · review-due for this engagement) → <b>pending strip</b> (proposals awaiting My Queue, with direct approve for engagement leads) → <b>grouped registry rows</b> by what they govern: Testing &amp; sampling · Files &amp; columns · Scope &amp; calendar · Vocabulary · Known issues · Review standards. Each row = statement + Kind·Scope chip + provenance + fire-count, opening the same drawer as Smart Learn. Capture CTA (“Teach this engagement…”) opens a scoped CaptureCard. Rows deep-link out to where they fire.</div>
+  <p class="mut">Metrics served: repeat-question rate → 0 after first occurrence; setup run 2 vs run 1 −70%; review rounds 3 → 1.5.</p>
+
+  <!-- ---------------- REPORTS ---------------- -->
+  <h3 id="s04d">04d · Reports — the shape never changes, stop re-teaching it</h3>
+  <p>Report memory is a bundle problem: style, structure, columns, formatting and boilerplate always travel together. So the design leads with the bundle: every draft opens with a <b>memory strip</b> — “this draft used 5 memories” — and the fastest teaching gesture is pointing at a past report, not filling settings.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">House writing style</span><span class="fw">fires on any drafted narrative; applied from first draft</span></td><td>Applied invisibly, attributed in the draft’s memory strip (“House style: past tense, third person, no adjectives”); violations self-correct before the user sees them</td><td><span class="chip kind">Preference · Organization</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Report structure</span><span class="fw">fires when a report of that type is generated</span></td><td>Section order from memory; strip entry with Peek showing which past reports set it</td><td><span class="chip kind">Preference · Team</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Exception table columns</span><span class="fw">fires when an exception table is built</span></td><td>Column set from memory; header affordance “columns: your team’s set” → Peek → edit proposes team change</td><td><span class="chip kind">Preference · Team</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Number formatting</span><span class="fw">fires on every rendered number</span></td><td><b>MemoryChip</b> badge exactly as the PRD writes it: “₹ lakhs, 2 dp (your default)”</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Standard boilerplate</span><span class="fw">fires at generation; word-for-word identical</span></td><td>Inserted blocks carry a <b>Boilerplate · unchanged since March</b> tag and render collapsed for reviewers — the tag is the point: don’t re-read this</td><td><span class="chip kind">Fact · Organization</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">What must never appear</span><span class="fw">fires at generation AND again before export/send</span></td><td><b>MemoryGuard</b> rule tone at the export gate: “2 content rules applied — employee names → IDs (14 replacements)”. Enforced, reported, logged, no override</td><td><span class="chip kind">Fact · Organization</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Recurring reports</span><span class="fw">fires on 3rd structural repeat, or calendar match</span></td><td><b>MemoryOffer</b>: “Looks like your monthly chargeback memo. Run it for July?” — accept generates with the full remembered bundle</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Exception dispositions</span><span class="fw">fires when the same exception pattern returns</span></td><td>Row state in the next run’s table: “Resolved May — not an exception, CFO-approved” with Peek; re-surfaced as open only if underlying facts changed</td><td><span class="chip kind">Correction · Engagement</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Learned word corrections</span><span class="fw">fires as the word is about to be written; learned after 2–3 corrections</span></td><td><b>JustLearned</b> offer after the repeat edit: “Always write ‘net revenue’? — proposes to team vocabulary”; then applied at draft time</td><td><span class="chip kind">Vocabulary · Team</span></td><td><span class="ph p2">P2</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="swing"><span class="co-label">Swing — “Match my last report”</span>
+  In report creation: <b>“Match a past report”</b> picker → choose the March memo → bundle CaptureCard shows what one gesture teaches: structure ✓ tone ✓ columns ✓ formatting ✓ (4 memories, each untickable) → one save. No settings screen, no wizard — pointing at something that worked is the entire interface. Also rewires the existing template “Remember for future reports” button to write real <code>PlatformMemory</code> rows instead of invisible template state.</div>
+  <p class="mut">Metrics served: edit distance falling report over report; generate→sent time; formatting re-asks → 0 after three consistent choices.</p>
+
+  <!-- ---------------- DASHBOARD ---------------- -->
+  <h3 id="s04e">04e · Dashboard — looked at, not asked</h3>
+  <p>No conversation carries context here, so memory is the only personalization channel — and it must all be legible at the surface: chips for defaults, badges for learned formats, one digest strip for re-entry. One pushback: the PRD wants silent card reordering; on a surface people navigate spatially, moving furniture quietly reads as breakage <span class="chip" style="color:var(--mit-fg);border-color:var(--mit-ln);background:var(--mit-bg)">PB-1</span>.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">Chart type</span><span class="fw">defaults after 2–3 consistent switches</span></td><td>Default flips + <b>JustLearned</b> receipt (“Bar over pie for exception trends · Undo”); toggle carries a “(your default)” badge thereafter</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Default dimensions</span><span class="fw">fires on load / new chart</span></td><td>Breakdown pickers pre-set to vendor + month; badge form chip</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Default date range &amp; filters</span><span class="fw">fires on load — “applied as visible, removable chips, never hidden”</span></td><td><b>MemoryChip</b> filter row, verbatim the PRD’s own spec — the §03 wireframe</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Percentages vs counts</span><span class="fw">learned from 3 consistent choices, never asked</span></td><td>Default + badge; every figure’s Peek shows the alternative form on hover</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Card order</span><span class="fw">most-used card “moves up quietly”</span></td><td><b>Redesigned</b>: after 3 sessions of consistent first-opens, offer “Pin Exceptions to the top?” — explicit, one tap, spatial stability preserved <span class="chip" style="color:var(--mit-fg);border-color:var(--mit-ln);background:var(--mit-bg)">PB-1</span></td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Metric definitions</span><span class="fw">fires wherever the metric is calculated — dashboard, report or chat</span></td><td><b>MemoryChip</b> definition form in the KPI tooltip: “on-time % counts from invoice date”. One governed definition, every surface — the flagship cross-platform fact</td><td><span class="chip kind">Fact · Organization</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Comparison baseline</span><span class="fw">fires when a trend/comparison is drawn</span></td><td>Baseline (vs last month / last year / budget) from team memory; caption names it</td><td><span class="chip kind">Preference · Team</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Alert thresholds</span><span class="fw">fires when the chart is drawn</span></td><td>Threshold line rendered from memory, breaches tinted; wired to the existing <code>ThresholdAlertModal</code> so the mental line and the alert line are the same memory</td><td><span class="chip kind">Fact · Engagement</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Drill-down path</span><span class="fw">fires on 3rd identical route</span></td><td><b>MemoryOffer</b> chip on the chart: “Take your usual path — region → vendor → invoice” as one jump</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Dismissed widgets</span><span class="fw">demote after 3 dismissals — demote, don’t delete</span></td><td>Quiet demotion to the board’s foot + “demoted” note in the layout menu with restore — this one <em>should</em> be quiet; PRD agreed</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Export habit</span><span class="fw">fires when the export control renders</span></td><td>Split-button defaults to their format (PNG for slides / CSV for Excel); other options one click deeper</td><td><span class="chip kind">Preference · Personal</span></td><td><span class="ph p2">P2</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="swing"><span class="co-label">Swings — the two the PRD flags, both P1</span>
+  <b>“What changed since you last looked”</b> — the SinceYouLeft strip (§03), keyed on last-visit timestamp + data state: “Since Friday: 14 new exceptions, 3 above your ₹5 L floor, vendor ABC is new.” Cheapest to build, most loved.<br><br>
+  <b>Rhythm detection</b> — after 3 confirmed Monday-9am visits, MemoryOffer: “Want this in your inbox Monday mornings instead?” — accept wires the existing email connector + digest. Consent is explicit, frequency-capped, and the subscription is a visible memory row that can be forgotten <span class="chip" style="color:var(--mit-fg);border-color:var(--mit-ln);background:var(--mit-bg)">PB-4</span>.</div>
+  <p class="mut">Metrics served: clicks-to-first-insight → 0; default acceptance rate; re-configuration rate (high = memory wrong, not user fickle).</p>
+
+  <!-- ---------------- KNOWLEDGE HUB ---------------- -->
+  <h3 id="s04f">04f · Knowledge Hub — where source memory lives</h3>
+  <p>The PRD is precise: <b>Knowledge Hub manages source memory, and only source memory</b>. Uploaded tables have a meaning problem (<code>amt_pd</code>, no docs); connections have a navigation problem (400 tables, 4 matter). The design: every data source page gains a <b>Source memory panel</b> — the living data dictionary, written by use, not by form-filling. Smart Learn’s role adjusts to match <span class="chip">D2</span>.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>Treatment</th><th>Stored as</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><span class="uc">Column meaning</span><span class="fw">fires when the column appears in query/clarification/report</span></td><td>Definition chip on first session appearance (§03); full list in the panel’s <b>Columns</b> group; captured via CaptureCard</td><td><span class="chip kind">Vocabulary · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Column role</span><span class="fw">fires when an operation needs a date/amount/key and multiple candidates exist — “the clarification we ask every month”</span></td><td>Role rows (“ageing uses <code>invoice_date</code>”) kill the recurring clarification; runs show it in the mappings chip</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Table reference <i>(connections)</i></span><span class="fw">fires when a question maps to a subject area with &gt;1 plausible table</span></td><td><b>Table map</b> group: “AP ageing ← <code>fin.ap_open_items</code>”; never-query tables (<code>stg.*</code>) render as rules</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Join path</span><span class="fw">fires when a question spans tables; expected orphan rate is part of the memory</span></td><td>Join rows show path + healthy-join signature (“LEFT, ~2% orphans expected”); a run whose orphans deviate trips a MemoryGuard — the orphan rate is how we notice the join broke</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Grain</span><span class="fw">fires when anything is counted/summed/deduped</span></td><td>Grain row (“one row per invoice <em>line</em>”) + auto-caveat in any aggregate answer — wrong grain is the classic plausible wrong number</td><td><span class="chip kind">Fact · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Always-filters</span><span class="fw">fires on any query — applied automatically and reported, never silently</span></td><td><b>MemoryChip</b> on results: “is_deleted = 0 · test vendors excluded” — reported per constitution #2</td><td><span class="chip kind">Rule · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Code &amp; value meanings</span><span class="fw">fires when a coded column is filtered/grouped/shown</span></td><td>Codes translate in output (“status A — active”); code table in the panel</td><td><span class="chip kind">Vocabulary · Source</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Units &amp; currency</span><span class="fw">fires on any monetary computation</span></td><td>Unit row (“amounts in paise; <code>amount_lcy</code> pairs with <code>currency_code</code>”) applied to every figure; conversions attributed</td><td><span class="chip kind">Fact · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Data quality facts</span><span class="fw">fires when the column enters an analysis — warned before, not explained after</span></td><td><b>MemoryGuard</b> (warn) at plan time: “vendor_address is 30% empty — unusable for completeness testing”</td><td><span class="chip kind">Fact · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Freshness &amp; load windows</span><span class="fw">fires when the asked period may not be loaded yet</span></td><td><b>MemoryGuard</b> (warn): “Month-end completes on working day 3 — this data may be partial”</td><td><span class="chip kind">Fact · Source</span></td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><span class="uc">Column sensitivity</span><span class="fw">fires at selection AND before export/send — no override control</span></td><td><b>MemoryGuard</b> rule tone (§03 wireframe): masked, excluded, logged. Managed by admins only</td><td><span class="chip kind">Rule · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><span class="uc">Upload shape <i>(files)</i></span><span class="fw">fires when a file with the same shape is uploaded again</span></td><td>Silent parse + receipt chip: “Read like last month — header row 3, Sheet2, totals row ignored”; monthly re-uploads stop asking</td><td><span class="chip kind">Decision · Source</span></td><td><span class="ph p1">P1</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="swing"><span class="co-label">Swings — all three are the write path</span>
+  <b>“Learn this table from my last analysis”</b> — on a source page, point at a workflow that used it → bundle CaptureCard extracts every definition, role, join and filter that run already resolved → checkbox review → one save. Documentation from validated work, not forms.<br><br>
+  <b>Drift review</b> — a <b>Drift</b> group at the top of the panel when fingerprints break: changed schema on the left, affected memories on the right, one-click “update mapping” per row, all logged. Same fingerprint that powers executor drift banners; this is its human-facing half. Surfaces here <em>before</em> anyone is hit mid-run.<br><br>
+  <b>Definitions at the moment of confusion</b> — the CaptureCard pipe from chat/executor clarifications (04a) writes here. The panel is the destination; the capture happens where the confusion happens.</div>
+  <p class="mut">The PRD has no KH metrics — proposed in §06: definition coverage, clarification deflection, drift caught pre-run, definitions captured per week.</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s05">
+  <div class="sec-eyebrow"><b>05</b> — Governance</div>
+  <h2>Lifecycle journeys &amp; governance surfaces</h2>
+  <p>Memory earns trust through four moments. Each is one cross-surface journey with no dead ends — today’s build dead-ends at three of the four.</p>
+
+  <h4>Journey 1 · A memory is born</h4>
+  <div class="journey">
+    <div class="j-step"><span class="j-n">1 · anywhere</span><span class="j-t">The moment</span><span class="j-d">A clarification answered, a correction made twice, a report pointed at.</span><span class="j-s">CaptureCard / JustLearned</span></div>
+    <div class="j-step"><span class="j-n">2 · fork on scope</span><span class="j-t">Personal → live now</span><span class="j-d">Applied instantly, undo inline, row appears in “What IRA knows about me”.</span><span class="j-s">constitution #3</span></div>
+    <div class="j-step"><span class="j-n">2′ · shared</span><span class="j-t">Proposed → My Queue</span><span class="j-d">Receipt says where it went; nothing applies until a human approves.</span><span class="j-s">badge on My Queue</span></div>
+    <div class="j-step"><span class="j-n">3 · My Queue</span><span class="j-t">The gate</span><span class="j-d">Statement, evidence, scope + expiry presets; Approve / Adjust scope / Reject.</span><span class="j-s">new item type</span></div>
+    <div class="j-step"><span class="j-n">4 · everywhere</span><span class="j-t">Active</span><span class="j-d">Fires on its surfaces; audit log records the birth.</span><span class="j-s">Memory module</span></div>
+  </div>
+
+  <h4>Journey 2 · A memory fires</h4>
+  <div class="journey">
+    <div class="j-step"><span class="j-n">1</span><span class="j-t">It acts</span><span class="j-d">Chip, badge, offer, guard or fold — always a visible mark.</span><span class="j-s">kit §03</span></div>
+    <div class="j-step"><span class="j-n">2</span><span class="j-t">The door</span><span class="j-d">Click → MemoryPeek: statement, kind·scope, provenance, freshness.</span><span class="j-s">one anatomy everywhere</span></div>
+    <div class="j-step"><span class="j-n">3</span><span class="j-t">The exits</span><span class="j-d">Correct it (seeds the spared question) · Skip this time · Manage →.</span><span class="j-s">AM10 honored</span></div>
+    <div class="j-step"><span class="j-n">4</span><span class="j-t">The count</span><span class="j-d">recallCount++ for real — “saved you 9 questions” stops being decoration.</span><span class="j-s">write path</span></div>
+  </div>
+
+  <h4>Journey 3 · A memory goes stale</h4>
+  <div class="journey">
+    <div class="j-step"><span class="j-n">1</span><span class="j-t">Fingerprint breaks</span><span class="j-d">Schema drift detected on ingest — before anyone runs anything.</span><span class="j-s">drifted flag</span></div>
+    <div class="j-step"><span class="j-n">2</span><span class="j-t">KH Drift review</span><span class="j-d">Affected memories listed with one-click updates; executor guard as backstop.</span><span class="j-s">§04f swing</span></div>
+    <div class="j-step"><span class="j-n">3</span><span class="j-t">Expiry path</span><span class="j-d">Review-due memories badge in My Queue as renewal items; renew or retire.</span><span class="j-s">replaces Smart-Learn-only renew</span></div>
+  </div>
+
+  <h4>Journey 4 · A memory is wrong</h4>
+  <div class="journey">
+    <div class="j-step"><span class="j-n">1</span><span class="j-t">Just learned?</span><span class="j-d">Undo right on the receipt — the &lt;10% undo-rate metric.</span><span class="j-s">JustLearned</span></div>
+    <div class="j-step"><span class="j-n">2</span><span class="j-t">Firing wrong?</span><span class="j-d">“Not right? Correct it” from any Peek — one turn, memory re-taught.</span><span class="j-s">MemoryPeek</span></div>
+    <div class="j-step"><span class="j-n">3</span><span class="j-t">Systemically wrong?</span><span class="j-d">Retire from its home; conflict with an approved fact = High-severity insight, human arbitrates.</span><span class="j-s">never silently overwritten</span></div>
+  </div>
+
+  <h3>What changes on each governance surface</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Surface</th><th>Change</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><b>My Queue</b></td><td>New item type: <b>memory approvals &amp; renewals</b> — sectioned above exceptions, badge joins the sidebar count. Card = statement + kind·scope + evidence + proposer, actions Approve / Adjust scope (presets + expiry) / Reject, all logged. This un-dead-ends Smart Learn’s two pending seeds</td><td><span class="ph p0">P0</span></td></tr>
+      <tr><td><b>Admin</b></td><td>New <b>Memory</b> section: org Rules editor (the only place Rule·Organization is written), retention &amp; scope policy, kill-switch per memory kind. Audit log gains a <b>Memory</b> module — every learn/apply/approve/retire/renew/drift event. New RBAC keys <code>mem_view / mem_propose / mem_approve / mem_admin</code></td><td><span class="ph p0">P0</span></td></tr>
+      <tr><td><b>Avatar menu</b></td><td><b>“What IRA knows about me”</b> — drawer over the personal scope: register, formats, rhythms, routines; per-row forget; “forget everything about me” moves here (from Smart Learn) with its confirmation + undo</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>Smart Learn</b></td><td>Becomes the <b>index over the homes</b> (D2): adds Source scope chip + lifecycle filters; rows deep-link to their home surface; keeps drawer, evidence, versions. Stats strip numbers become real</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>Notifications</b></td><td>New <code>memory</code> category: proposal awaiting you · renewal due · drift affects your workflow · rule fired on your export</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td><b>Addressability</b></td><td><code>?view=knowledge-hub&amp;tab=learn&amp;memory=&lt;id&gt;</code> joins the URL whitelist; <code>app:navigate-view</code> payload gains <code>tab</code>/<code>focusId</code> (copying the command-palette event’s richer shape). Every “Manage →” lands on a focused row, engagement tab included</td><td><span class="ph p0">P0</span></td></tr>
+      <tr><td><b>Store</b></td><td>One <code>PlatformMemory</code> store (D4): Enterprise Context becomes a view over Fact·Team/Organization rows; Process Insights’ approval gate writes real rows; <code>workspaceId</code>, fingerprint, conflict refs, recall write-path added</td><td><span class="ph p0">P0</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s06">
+  <div class="sec-eyebrow"><b>06</b> — Measurement</div>
+  <h2>Metrics, and what the prototype can honestly show</h2>
+  <p>The PRD’s per-surface metrics stand as written (re-ask → 0, setup −70%, golden-record &gt;80%, edit distance falling, default acceptance, undo &lt;10%). Two additions:</p>
+  <ul>
+    <li><b>Knowledge Hub metrics (filling the PRD gap):</b> definition coverage (% of active-source columns with meaning/role), clarification deflection (source questions answered from memory), drift caught before run (target 100% — the executor banner is the backstop, not the catch), and definitions captured per week (is the moment-of-confusion pipe actually writing?).</li>
+    <li><b>One health view, not six:</b> a “Memory health” band on Smart Learn — recalls this week, questions spared, undo rate, coverage — replacing today’s decorative counts with the real write-path numbers. Per-surface metrics stay in the PRD/analytics, not in product chrome.</li>
+  </ul>
+  <p class="mut">Prototype honesty: the demo seeds recall counts and coverage, but every counter shown is wired to the session’s real events (a capture increments, an undo decrements) so the demo behaves truthfully even where history is seeded — same determinism rule as the rest of the repo, no <code>Date.now()</code>.</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s07">
+  <div class="sec-eyebrow"><b>07</b> — Sequencing</div>
+  <h2>Build order, and the demo it buys</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Phase</th><th>Contents</th><th>What it unlocks</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ph p0">P0 · spine</span></td><td>Unified store + taxonomy (D1/D4) · lifecycle states · My Queue memory items · Admin Memory section + audit module + RBAC · URL/deep-link addressability</td><td>Every chip has a door, every door has a room. Governance story becomes demoable end-to-end</td></tr>
+      <tr><td><span class="ph p1">P1 · flagship</span></td><td>The kit (§03) + one hero journey per surface: chat capture + corrected assumption · executor replay offer + drift guard + sampling chip · Engagement Memory tab + same-test offer + file guard + known-issues fold + since-you-left · report memory strip + “match my March” + export gate · dashboard default chips + metric definition + since-you-last-looked · KH source panel + learn-from-analysis + drift review · avatar “What IRA knows about me”</td><td>The full PRD narrative — capture → govern → fire → correct — demoable on every surface</td></tr>
+      <tr><td><span class="ph p2">P2 · behavioral</span></td><td>Register · follow-up ranking · step corrections · failure recovery · preflight checklist · dispositions · word corrections · chart/format/export/dimension defaults · drill paths · pin offer · demotions · rhythm→inbox · freshness guards · code translations · notifications</td><td>The 2–3-signal learning layer — depth over breadth</td></tr>
+      <tr><td><span class="ph p3">P3 · polish</span></td><td>Memory health band · metrics instrumentation · empty states · cross-tab sync of memory state (BroadcastChannel, per the insight-cache precedent)</td><td>Credibility details</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The demo thread: one month with memory</h3>
+  <p class="mut">All P1 pieces chain into one story in the existing flagship world (Pharma Chargeback FY26 / MCKESSON / P2P-07): <b>Day 1</b> — analyst uploads the AP file; upload-shape recalled, replay offered, ₹0 AI cost. Mid-run, the vendor-master drift guard catches a moved column; one click updates the mapping, logged. <b>Day 8</b> — a new joiner draws a sample; the engagement’s 40-invoice rule fires for someone who never set it; Vendor ABC’s timezone mismatch folds into known issues. A clarification about <code>amt_pd</code> becomes a source definition in one tap. <b>Day 20</b> — “run July like the June memo”: memory strip shows the bundle, export gate masks employee names, logged. <b>Monday 9:02</b> — dashboard opens to “since Friday…”, then offers the inbox digest. Meanwhile two proposals sat in My Queue, were approved by the manager, and every event of the month is one filtered view in the audit log: <i>module = Memory</i>.</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s08">
+  <div class="sec-eyebrow"><b>08</b> — Approval gate</div>
+  <h2>Decisions needed before mockups</h2>
+
+  <div class="decision"><span class="d-id">D1</span><span class="d-q">Adopt the PRD taxonomy in the store?</span>
+    <div class="d-body">7 kinds × 5 scopes; rename tenant → Organization, guardrail → Rule; retire <code>convention</code>; add Source scope + Decision/Routine kinds. Small migration, done before visible work.</div>
+    <div class="d-rec"><b>Rec</b>Yes — every badge in this plan assumes it; deferring means relabeling every surface later.</div>
+  </div>
+
+  <div class="decision"><span class="d-id">D2</span><span class="d-q">What does Smart Learn become?</span>
+    <div class="d-body">The new PRD carves memory into homes (KH = source only; personal = avatar; shared = My Queue + engagement tab) — read literally, it disperses the registry entirely. Options were: (a) one browsable index over the homes; (b) disperse fully; (c) status quo.</div>
+    <div class="d-rec"><b>Resolved · 9 Aug</b>(a), by business call: every memory — engagement, report, dashboard, source, all of it — lists in Smart Learn alongside the rest. Homes remain as scoped working views. §09 specs the registry design that absorbs this without complicating the chrome.</div>
+  </div>
+
+  <div class="decision"><span class="d-id">D3</span><span class="d-q">Engagement Memory: full tab, or overview section?</span>
+    <div class="d-body">The PRD names a tab. A tab gives the shared brain a stable address for new joiners and deep links; a section keeps tab count down but buries the pending strip.</div>
+    <div class="d-rec"><b>Rec</b>Tab — PRD’s call is right; it’s also the natural landing for “Manage →” on engagement-scoped memories.</div>
+  </div>
+
+  <div class="decision"><span class="d-id">D4</span><span class="d-q">Merge the two stores?</span>
+    <div class="d-body">Fold <code>ENTERPRISE_CONTEXT</code> into <code>PlatformMemory</code> (Enterprise Context panel becomes a filtered view; Process Insights approvals write real rows) vs. keep both with a sync shim.</div>
+    <div class="d-rec"><b>Rec</b>Merge. “One shared store” is the product’s core claim; a shim makes the demo lie structurally.</div>
+  </div>
+
+  <div class="decision"><span class="d-id">D5</span><span class="d-q">Dashboard reordering: silent (PRD) or offered (this plan)?</span>
+    <div class="d-body">PB-1: the PRD wants the most-used card to move up quietly. Spatial surfaces punish silent rearrangement — users find things by place. Counter-proposal: quiet <em>demotion</em> stays (PRD’s dismissed-widgets rule), promotion becomes a one-tap pin offer after 3 consistent sessions.</div>
+    <div class="d-rec"><b>Rec</b>Offered. If business disagrees, the component is the same — only the trigger changes.</div>
+  </div>
+
+  <div class="decision"><span class="d-id">D6</span><span class="d-q">Approve the phase cut?</span>
+    <div class="d-body">P0 spine → P1 flagship set (per-surface heroes listed in §07) → P2 behavioral tail → P3 polish. The P1 list is the mockup scope for the next round.</div>
+    <div class="d-rec"><b>Rec</b>Approve P0+P1 as scoped; P2 items can be re-cut after the first demo.</div>
+  </div>
+
+  <h3>Pushback register</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>PRD position</th><th>This plan</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">PB-1</td><td>Card order “moves up quietly”</td><td>Offer a pin after 3 consistent sessions; silent reorder breaks spatial memory (→ D5)</td></tr>
+      <tr><td class="mono">PB-3</td><td>“Stop offering the follow-ups they never click”</td><td>Decay, don’t remove — consistent with the engine PRD’s “may re-surface if the signal strengthens”</td></tr>
+      <tr><td class="mono">PB-4</td><td>Rhythm detection → inbox push</td><td>Keep, with explicit consent, a frequency cap, and the subscription itself a visible, forgettable memory row</td></tr>
+      <tr><td class="mono">PB-5</td><td>Carve-outs “applied silently” (same sentence: “shown as a removable chip”)</td><td>The chip wins — constitution #2 permits no invisible application anywhere</td></tr>
+      <tr><td class="mono">PB-6</td><td>Register “never asked”</td><td>Never asked, but always correctable: More/Less-detail control is the teaching channel, and the row is inspectable in “What IRA knows about me”</td></tr>
+      <tr><td class="mono">PB-7</td><td>No KH metrics in the PRD</td><td>Proposed four in §06</td></tr>
+      <tr><td class="mono">PB-8</td><td>“Design scope at the end” never written</td><td>§03 is that section — nine components, one grammar</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s09">
+  <div class="sec-eyebrow"><b>09</b> — Rev 2 · The build list</div>
+  <h2>Final UI/UX change list</h2>
+  <p>Two calls from the 9 Aug review shape this section. <b>One registry:</b> every memory — engagement, report, dashboard, source, all of it — lists in Smart Learn with the rest (D2 resolved). <b>No ceremonial UI:</b> use cases where the interface already exists and memory only improves what it emits get no new components — follow-up suggestions already have chips; memory just makes the top suggestion the right one. What follows is the definitive list: the registry design first, then every change in four tiers. <b>9 kit components · 6 new surfaces/sections · 28 wiring points · 12 no-UI upgrades.</b></p>
+
+  <h3>Smart Learn: one registry, three axes, zero new chrome</h3>
+  <p>The complexity risk is real: 60-odd memories across 5 scopes × 7 kinds, firing on 6 surfaces, is three filter dimensions plus search — a faceted-search UI nobody asked for. The design principle that keeps it calm: <b>each axis gets exactly one job.</b></p>
+  <ul>
+    <li><b>Scope structures the page.</b> The existing scope sections (closest-to-you first) stay the only top-level organization, with <b>Source</b> joining as a fifth section. Scope is how people ask the question — “what does IRA know about <em>me / my team / this engagement / the org / this data</em>.”</li>
+    <li><b>Kind badges the row.</b> The kind icon + label lives on the row (as today), never as page structure. Nobody browses “all Corrections”; they recognize a row by its statement and confirm by its badge.</li>
+    <li><b>Surface filters.</b> “Fires in” (Chat · Runs · Engagements · Reports · Dashboards) becomes real row metadata — the existing <code>readBy</code> field, finally wired — shown as quiet mono chips on the meta line. Want only report memories? One pick in the filter menu.</li>
+    <li><b>One filter menu instead of three.</b> The existing status dropdown grows into a single <b>Filter</b> menu with three sections — Status · Kind · Fires in — each single-select with live counts. Net new controls on the toolbar: zero. Search already spans statement, source, and kind; it gains surface labels.</li>
+    <li><b>Entity sub-groups where scope has entities.</b> Engagement and Source sections group rows under their entity (“Pharma Chargeback FY26 · 8”, “vendor_master_v2 · 6 · 1 drifted”), collapsed by default with counts and attention badges. Personal, Team and Organization stay flat lists — they’re singular.</li>
+    <li><b>Deep links both ways.</b> Every row keeps the drawer and safe inline actions (forget / renew / undo) and gains “Open where it fires →”; every home surface (engagement tab, source panel, avatar drawer) gets a “View in Smart Learn” backlink. Registry answers <em>what and why</em>; homes stay <em>where the work happens</em>.</li>
+  </ul>
+
+  <div class="spec">
+    <div class="spec-head"><span class="nm">Registry anatomy</span><span class="role">schematic — Smart Learn absorbing all scopes without new chrome</span></div>
+    <div class="spec-body">
+      <div class="wire" style="max-width:36rem">
+        <div class="w-row">
+          <span class="w-chip on">All 62</span><span class="w-chip">Personal 14</span><span class="w-chip">Team 9</span><span class="w-chip">Engagement 18</span><span class="w-chip">Organization 7</span><span class="w-chip">Source 14</span>
+          <span class="w-chip" style="margin-left:auto">⌕ search</span><span class="w-chip">Filter ▾</span><span class="ann"><span class="ann-dot">1</span></span>
+        </div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-kicker">Source · what the data means</span><span class="ann" style="margin-left:auto"><span class="ann-dot">2</span></span></div>
+        <div class="w-row"><span class="w-chip">▸ vendor_master_v2 · 6 <span style="color:var(--mit-fg)">· 1 drifted</span></span></div>
+        <div class="w-row"><span class="w-chip">▾ fin.ap_open_items · 5</span></div>
+        <div class="w-row" style="padding-left:1rem">
+          <span class="w-stmt" style="font-weight:500"><code style="background:none;border:none">amt_pd</code> is the net amount paid, INR, excluding tax.</span>
+        </div>
+        <div class="w-row" style="padding-left:1rem">
+          <span class="w-mut">Vocabulary · fires in Runs, Chat · from your May clarification · recalled 9×</span><span class="ann"><span class="ann-dot">3</span></span>
+        </div>
+        <hr class="w-hr">
+        <div class="w-row"><span class="w-kicker">Engagement · shared ground rules</span></div>
+        <div class="w-row"><span class="w-chip">▸ Pharma Chargeback FY26 · 8 · 2 pending</span><span class="ann"><span class="ann-dot">4</span></span></div>
+      </div>
+      <ul class="ann-list">
+        <li><span class="ann-dot">1</span><span><b>Toolbar unchanged in weight</b> — scope chips + search + one Filter menu (Status · Kind · Fires in, with counts). The status dropdown that exists today becomes this menu; nothing else is added.</span></li>
+        <li><span class="ann-dot">2</span><span><b>Section = scope</b>, in <code>SCOPE_ORDER</code> + Source. Section note explains the scope in one clause, as today.</span></li>
+        <li><span class="ann-dot">3</span><span><b>Row meta line</b> gains the surface chips (“fires in Runs, Chat”) — the only visible addition per row. Kind icon, provenance, recall count, badges: unchanged grammar.</span></li>
+        <li><span class="ann-dot">4</span><span><b>Sub-groups carry the attention</b> — pending / drifted / review-due counts surface on the collapsed header, so a lead scans six headers, not sixty rows. Stats strip on top stays the global attention layer.</span></li>
+      </ul>
+    </div>
+    <div class="spec-notes"><span><b>Rule</b>: one axis structures (scope), one badges (kind), one filters (surface). Never two page-level groupings, never tabs within tabs.</span></div>
+  </div>
+
+  <h3>Tier A — the kit: 9 components, built once</h3>
+  <p class="mut">Specified in §03; listed here as the component budget. Everything in Tier C is a placement of these — no surface invents its own memory UI.</p>
+  <div class="kbd-grid">
+    <div class="kg-card"><span class="t">MemoryChip</span><span class="d">Applied-memory mark: filter / badge / definition forms</span><span class="m">~21 use cases</span></div>
+    <div class="kg-card"><span class="t">MemoryPeek</span><span class="d">The “why am I seeing this” popover, one anatomy everywhere</span><span class="m">every chip, strip &amp; fold</span></div>
+    <div class="kg-card"><span class="t">MemoryOffer</span><span class="d">Ask-before-applying, with a quantified stake</span><span class="m">replay · same-test · memo · rhythm · pin</span></div>
+    <div class="kg-card"><span class="t">JustLearned</span><span class="d">Receipt + undo (personal) / “proposed → My Queue” (shared)</span><span class="m">all learning moments</span></div>
+    <div class="kg-card"><span class="t">MemoryGuard</span><span class="d">Interception: warn tone (drift, file, quality) · rule tone (enforced)</span><span class="m">7 use cases</span></div>
+    <div class="kg-card"><span class="t">CaptureCard</span><span class="d">One-tap save at the moment of confusion; bundle variant for teach-by-example</span><span class="m">the write path</span></div>
+    <div class="kg-card"><span class="t">SinceYouLeft</span><span class="d">Re-entry digest + resume position</span><span class="m">dashboard · engagement</span></div>
+    <div class="kg-card"><span class="t">Preflight</span><span class="d">Reviewer’s standing checks, run before submit</span><span class="m">workpapers · P2</span></div>
+    <div class="kg-card"><span class="t">KnownIssuesFold</span><span class="d">False positives leave findings, keep receipts</span><span class="m">exception tables</span></div>
+  </div>
+
+  <h3>Tier B — new surfaces &amp; sections: 6</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Surface</th><th>What gets built</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td><b>Smart Learn upgrade</b></td><td>The registry above: Source section, entity sub-groups, surface chips on rows, unified Filter menu, real stats, deep links both ways, URL + row addressability</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>Engagement Memory tab</b></td><td>The engagement’s scoped working view (D3): pending strip, grouped ground rules, capture CTA — same rows Smart Learn lists, worked in place</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>Source memory panel</b></td><td>On each Data Source detail: Columns · Table map · Rules · Health groups + <b>Drift review</b> block with one-click updates; “Learn this table from my last analysis” bundle action</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>“What IRA knows about me”</b></td><td>Avatar-menu drawer over the personal scope; per-row forget; “forget everything” relocates here</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td><b>My Queue · Memory section</b></td><td>Approvals &amp; renewals item type: statement + evidence + scope/expiry presets, Approve / Adjust / Reject, sidebar badge</td><td><span class="ph p0">P0</span></td></tr>
+      <tr><td><b>Admin · Memory section</b></td><td>Org Rules editor, retention/kill-switch policy, <code>Memory</code> audit-log module, <code>mem_*</code> RBAC keys</td><td><span class="ph p0">P0</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Tier C — wiring the kit into existing screens: 28 points</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Screen</th><th>Change</th><th>Kit piece</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><b>Chat</b></td><td>Assumption rows: render “Not right? Correct it” + Enterprise-memory chip (both fields exist, unrendered — AM10)</td><td class="mono">Peek actions</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Composer: new <code>memory</code> context-chip kind (client vocabulary, active engagement facts)</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Answer footer: “Shaped by N memories” → peek list</td><td class="mono">MemoryPeek</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Clarification cards: one-tap save after the user answers</td><td class="mono">CaptureCard</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td rowspan="6"><b>Workflow executor</b></td><td>Entry: replay offer for recognized recurring runs (golden-record card stays as the post-run receipt)</td><td class="mono">MemoryOffer</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Plan: “N mappings from memory” chip listing restored column/file decisions</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Drift banner: regrammar to guard anatomy + “Review in Knowledge Hub” link + 2-confirmation auto-update</td><td class="mono">MemoryGuard</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Sampling step: engagement-standard chip with floor state</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Plan steps: “your usual edit” pre-applied marker + undo</td><td class="mono">JustLearned</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td>Error state: lead with the known fix from last time</td><td class="mono">MemoryGuard</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td rowspan="5"><b>Engagement</b></td><td>Control row/detail: “Run the same test as last quarter?”</td><td class="mono">MemoryOffer</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>File picker: approved-file interception with proceed-and-flag</td><td class="mono">MemoryGuard</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Manage Exceptions + run results: known-issues fold</td><td class="mono">KnownIssuesFold</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Overview: resume strip (“12 of 40 samples on P2P-07 → Continue”) + what moved</td><td class="mono">SinceYouLeft</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Workpaper submit: standing-questions check</td><td class="mono">Preflight</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td rowspan="7"><b>Reports</b></td><td>Draft header: memory strip — “this draft used 5 memories”, each removable via peek (the attribution home for style/structure/columns)</td><td class="mono">MemoryChip + Peek</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Numbers: “₹ lakhs, 2 dp (your default)” badge</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Boilerplate blocks: tag + collapsed for reviewers</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Export/send: content-rules gate (“employee names → IDs, 14 replacements”), enforced + logged</td><td class="mono">MemoryGuard</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Create flow: “Looks like your monthly chargeback memo — run it for July?”</td><td class="mono">MemoryOffer</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Create flow: “Match a past report” picker → bundle save; rewire the existing template-remember button to write real store rows</td><td class="mono">CaptureCard</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Exception rows: prior-disposition state (“Resolved May · CFO-approved”); word-correction offers after repeat edits</td><td class="mono">MemoryChip · JustLearned</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td rowspan="6"><b>Dashboard</b></td><td>Board header: default date/filter chips, removable</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>KPI tooltips: the governed metric definition line</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Charts: threshold line from memory, breaches tinted (wired to the existing alert modal)</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Board top: “Since Friday: 14 new exceptions…” digest</td><td class="mono">SinceYouLeft</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Chart-type toggle: learned default + receipt with undo (the undo-rate exemplar)</td><td class="mono">JustLearned</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Export split-button default; pin offer after 3 consistent sessions; drill-path shortcut; rhythm → inbox offer</td><td class="mono">MemoryOffer</td><td><span class="ph p2">P2</span></td></tr>
+      <tr><td rowspan="2"><b>Data sources</b></td><td>Re-upload: “Read like last month — header row 3, Sheet2” receipt chip</td><td class="mono">MemoryChip</td><td><span class="ph p1">P1</span></td></tr>
+      <tr><td>Plan-time data-quality &amp; freshness warnings sourced from source facts</td><td class="mono">MemoryGuard</td><td><span class="ph p1">P1</span> / <span class="ph p2">P2</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Tier D — no new UI: memory upgrades what’s already there</h3>
+  <p>These 12 use cases ship <b>zero new components</b>. The interface exists; memory changes what it emits. They’re still never invisible — each stays inspectable in Smart Learn (and the report strip covers the drafting bundle), which is what keeps Tier D honest against the constitution.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Use case</th><th>What improves, in the UI that already exists</th><th>Still visible via</th></tr></thead>
+    <tbody>
+      <tr><td><b>Follow-up suggestions</b></td><td>The existing chips get ranked by the direction this person actually takes; never-clicked ones decay down the list</td><td class="mono">Smart Learn row · acceptance metric</td></tr>
+      <tr><td><b>Technical register</b></td><td>Answers arrive at the right depth — SQL for the engineer, one sentence for the partner</td><td class="mono">“What IRA knows about me”</td></tr>
+      <tr><td><b>House writing style</b></td><td>First drafts read correctly — past tense, third person, no adjectives</td><td class="mono">report memory strip</td></tr>
+      <tr><td><b>Report structure</b></td><td>Sections generate in the remembered order</td><td class="mono">report memory strip</td></tr>
+      <tr><td><b>Exception table columns</b></td><td>Tables build with the team’s column set</td><td class="mono">report memory strip</td></tr>
+      <tr><td><b>Default dimensions</b></td><td>Breakdown pickers open pre-set to vendor + month</td><td class="mono">Smart Learn row</td></tr>
+      <tr><td><b>Percentages vs counts</b></td><td>Figures render in the form this person thinks in</td><td class="mono">Smart Learn row</td></tr>
+      <tr><td><b>Comparison baseline</b></td><td>Trend captions name the remembered baseline (“vs last year”)</td><td class="mono">existing chart caption</td></tr>
+      <tr><td><b>Column meanings in runs</b></td><td>Clarification cards simply don’t fire for resolved columns — the win is the absence</td><td class="mono">plan mappings chip</td></tr>
+      <tr><td><b>Client vocabulary in answers</b></td><td>Terms translate inline in prose (“requisition — client term for purchase order”)</td><td class="mono">Smart Learn row</td></tr>
+      <tr><td><b>Fiscal calendar in computation</b></td><td>“Q3” resolves to Oct–Dec everywhere, no asking</td><td class="mono">first-use definition chip</td></tr>
+      <tr><td><b>Dismissed-widget demotion</b></td><td>Ignored cards sink quietly; restore lives in the existing layout menu</td><td class="mono">layout menu</td></tr>
+    </tbody>
+  </table></div>
+  <p class="mut">Reconciliation note: prior-year comparison stays with the AI-Insights product (its trajectory band already exists); sampling-parameter recall appears once in Tier C though two PRD sections list it. Every one of the PRD’s 57 use cases lands in exactly one tier above.</p>
+</section>
+
+<footer class="doc">
+  <p><b>Next step:</b> approve or amend the remaining decisions (D1, D3–D6). Round 2 delivers product-fidelity mockups in Editorial GRC for the §09 list — Smart Learn registry, Tier B surfaces, and the P1 wiring — same review format as the AI-Insights round-2 page.</p>
+</footer>
+</main>
+</div>

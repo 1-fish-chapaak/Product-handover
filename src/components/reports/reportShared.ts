@@ -151,10 +151,30 @@ const SECTION_BLURBS: { match: RegExp; blurb: string }[] = [
   { match: /evidence/i, blurb: 'Supporting evidence and artefacts referenced by this report.' },
   { match: /due date|timeline|due/i, blurb: 'Target and actual dates for the actions being tracked.' },
   { match: /verification|auditor comment|management comment/i, blurb: 'Auditor verification notes and comments on the actions taken.' },
+  { match: /appendix|annexure|attachment|schedule/i, blurb: 'Supporting schedules, source query outputs, and workpapers retained with this report.' },
+  { match: /background|introduction|context/i, blurb: 'Why the audit was carried out and the context a reader needs before the findings.' },
+  { match: /distribution|circulation/i, blurb: 'Who this report goes to, and in what capacity each recipient receives it.' },
+  { match: /limitation|disclaimer|reliance/i, blurb: 'What this report does not cover, and the basis on which it may be relied upon.' },
 ];
 export function sectionBlurb(name: string): string {
   const hit = SECTION_BLURBS.find(b => b.match.test(name));
-  return hit ? hit.blurb : 'Describe what this section will cover in the generated report.';
+  return hit ? hit.blurb : GENERIC_SECTION_BLURB;
+}
+
+/** The blurb a section falls back to when its name matches nothing known.
+ *  Exported so the report reader can recognise a section that is still empty
+ *  and show it as an empty state rather than printing the guidance as prose. */
+export const GENERIC_SECTION_BLURB = 'Describe what this section will cover in the generated report.';
+
+/** True when the text under a section heading is the "what belongs here" line
+ *  rather than something written about this audit. Guidance is right in the
+ *  template preview, where the reader is designing the shape. In a generated
+ *  report it is a placeholder pretending to be a finding, so the reader shows
+ *  it as an empty state instead. */
+export function isSectionGuidance(name: string, text?: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return true;
+  return t === sectionBlurb(name).trim() || t === GENERIC_SECTION_BLURB;
 }
 
 export const SECTION_ICONS: Record<string, ElementType> = {
@@ -292,6 +312,14 @@ export function reportAccent(theme?: string, brandColor?: string): string {
 // actually produces — a preview that guesses differently is a preview of a
 // different report.
 export const LETTERHEAD_SOFT_MAX = 60;
+/** The characters a page strip is joined by. Ours is the middle dot, but a
+ *  line lifted off someone's pages arrives in whatever their document used: a
+ *  pipe, a bullet, a dash between two words with spaces around it. A dash with
+ *  no spaces is inside a word (Procure-to-Pay), so it is left alone. */
+const LETTERHEAD_SEPARATOR = /\s*[·|•]\s*|\s+[–—]\s+/;
+/** The parts of a stored letterhead line, whatever it was joined by. */
+export const splitLetterhead = (text: string): string[] =>
+  text.split(LETTERHEAD_SEPARATOR).map(p => p.trim()).filter(Boolean);
 /** A letterhead line out of the parts a read found running along the foot of
  *  their pages. Their document repeats those parts on every page, so the raw
  *  join comes back as "PwC · Section 1 · PwC · PwC Page 2 · …": the same firm
@@ -309,7 +337,7 @@ export const letterheadLine = (parts: string[]): string => {
       // Audit". Only counter shapes go; "Section 1" is their wording and stays.
       .replace(/\bpages?\s*\d+\b/gi, ' ')
       .replace(/\b\d+\s*of\s*\d+\b/gi, ' ')
-      .replace(/[·|]/g, ' ')
+      .replace(/[·|•]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     // A stray letter or digit left behind by a split is not a letterhead part.
@@ -336,11 +364,15 @@ const PAGE_COUNTER = /\bpages?\s*\d+\b|\b\d+\s*of\s*\d+\b/i;
  *  one the user typed. Length alone cannot tell them apart: a long footer
  *  somebody wrote by hand is theirs and must be left exactly as written. A raw
  *  join always carries the marks of the page strip it came from — several parts
- *  separated by the join character, and either the same part more than once or
- *  a page counter. Nothing else is rewritten. */
+ *  separated by a join character, and either the same part more than once or a
+ *  page counter. Nothing else is rewritten.
+ *
+ *  Splits through splitLetterhead rather than on the middot alone: their pages
+ *  join the strip with a pipe or a spaced dash just as often, and a line joined
+ *  that way is just as captured. */
 export const looksLikeCapturedLetterhead = (text: string): boolean => {
   if (text.length <= LETTERHEAD_SOFT_MAX) return false;
-  const parts = text.split(/\s*·\s*/).map(p => p.trim()).filter(Boolean);
+  const parts = splitLetterhead(text);
   if (parts.length < 2) return false;
   const seen = new Set<string>();
   for (const part of parts) {
@@ -350,6 +382,19 @@ export const looksLikeCapturedLetterhead = (text: string): boolean => {
     seen.add(key);
   }
   return false;
+};
+/** The one format internal audit reports are written in. More than one template
+ *  can carry the flag — two saved before the one-holder rule existed, or a blob
+ *  hand-edited — and then every one of them claims the slot. The newest wins,
+ *  which is the one saved last, and the rest keep everything except the flag. */
+export const oneDefaultOnly = <T extends { isDefault?: boolean }>(templates: T[]): T[] => {
+  let held = false;
+  return templates.map(t => {
+    if (!t.isDefault) return t;
+    if (held) return { ...t, isDefault: undefined };
+    held = true;
+    return t;
+  });
 };
 export const DEFAULT_TEMPLATE_BRAND = 'Irame';
 /* No platform letterhead line. A template prints the confidentiality line a
@@ -732,6 +777,56 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
+/** Query blocks a seeded demo report renders when it carries no generated
+ *  queries of its own. Mirrors ReportView's DEFAULT_QUERIES — keep in step. */
+export const DEMO_QUERY_COUNT = 2;
+
+/**
+ * How many query blocks this report actually renders when opened.
+ *
+ * The seed registry carries an advertised `queries` number that pre-dates the
+ * reader, so a card could promise five queries and the reader open with two.
+ * One rule, read by the list and the reader alike, so the count on the card is
+ * the count on the page.
+ */
+export function renderedQueryCount(report: {
+  generatedQueries?: unknown[];
+  workflowResults?: unknown[];
+  atrData?: unknown;
+  queries?: number;
+}): number {
+  if (report.generatedQueries?.length) return report.generatedQueries.length;
+  if (report.workflowResults?.length) return 0;
+  if (report.atrData) return 0;
+  return DEMO_QUERY_COUNT;
+}
+
+/**
+ * Sections the report opens with: the executive summary, then one per query or
+ * workflow run. This is the number the reader's outline shows, so the chip on
+ * the card is checkable against the page it opens.
+ *
+ * It replaced a page count. Pages are not knowable from the registry: a PDF or
+ * a Word file paginates on content, so a long results table quietly runs onto
+ * another page and any number stated up front is wrong. The download modal
+ * states pages only where they are exact, which is the PowerPoint deck.
+ */
+export function renderedSectionCount(report: {
+  generatedQueries?: unknown[];
+  workflowResults?: unknown[];
+  templateSections?: unknown[];
+  atrData?: unknown;
+  queries?: number;
+}): number {
+  // Template sections baked in at generate time render as blocks in the body,
+  // so they count. A report carrying them used to advertise fewer sections on
+  // its card than the reader opened with. When they are present they carry the
+  // summary themselves, so the standalone summary is not added on top.
+  const tmpl = report.templateSections?.length ?? 0;
+  const base = renderedQueryCount(report) + (report.workflowResults?.length ?? 0);
+  return tmpl > 0 ? tmpl + base : 1 + base;
+}
+
 export type QueryComment = { id: string; queryId: string; queryTitle: string; author: string; initials: string; timestamp: string; text: string; attachment?: string; attachments?: string[] };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
@@ -753,6 +848,39 @@ export function computeQueryKpis(query: QueryShape) {
     { label: 'Open',             value: open.toLocaleString(),   icon: Loader2,       color: 'text-mitigated-700 bg-mitigated-50' },
     { label: 'Closed',           value: closed.toLocaleString(), icon: CheckCircle2,  color: 'text-compliant-700 bg-compliant-50' },
     { label: 'Check Health',     value: `${healthPct}%`,         icon: TrendingUp,    color: 'text-evidence-700 bg-evidence-50' },
+  ];
+}
+
+/**
+ * Executive-summary tiles rolled up from the query cards printed below them.
+ *
+ * The row used to carry four fixed numbers that tied to nothing on the page, so
+ * a reader who added the query cards up got a different answer to the headline.
+ * Every tile here is a sum of what the sections actually show: exceptions and
+ * closures come off the same KPI sets the cards render, and the risk count is a
+ * count of the cards rated High. A query that reports something other than
+ * exceptions (a data-quality pass, say) contributes nothing to the exception
+ * total, which is the honest answer rather than a synthesised one.
+ */
+export function rollupReportStats(
+  queries: { id: string; severity?: string; kpis?: { label: string; value: string }[] }[],
+  kpisFor: (q: { id: string; severity?: string; kpis?: { label: string; value: string }[] }) => { label: string; value: string }[],
+) {
+  let total = 0;
+  let closed = 0;
+  for (const q of queries) {
+    const kpis = kpisFor(q);
+    const find = (label: string) => kpis.find(k => k.label.toLowerCase() === label)?.value;
+    total += parseNumeric(find('total exceptions') ?? '0');
+    closed += parseNumeric(find('closed') ?? '0');
+  }
+  const highRisk = queries.filter(q => q.severity === 'High').length;
+  const health = total > 0 ? Math.round((closed / total) * 100) : 0;
+  return [
+    { label: 'Total Exceptions', value: total.toLocaleString(), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+    { label: 'Closed',           value: closed.toLocaleString(), icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+    { label: 'High-Risk Queries', value: String(highRisk),       icon: Shield,       color: 'text-risk-700 bg-risk-50' },
+    { label: 'Closure Rate',     value: `${health}%`,            icon: TrendingUp,   color: 'text-evidence-700 bg-evidence-50' },
   ];
 }
 

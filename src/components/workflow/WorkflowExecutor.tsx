@@ -34,6 +34,8 @@ import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
+import { MemoryOffer, MemoryChip } from '../shared/memory/MemoryKit';
+import { MEMORY_STORE } from '../../data/memoryStore';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
 import InsightGenerator from '../shared/InsightGenerator';
 import { getGeneratedInsight, useInsightCacheVersion } from '../shared/insightCache';
@@ -1751,6 +1753,39 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
             {phase === 'idle' && (
               <>
+                {/* Recurring-run replay offer (memory kit §03) — the shape was
+                    recognized on its 2nd run; unchanged sources replay from the
+                    golden record instead of re-paying the AI plan. Accepting
+                    starts the run when files are staged; otherwise it arms the
+                    replay for when they are. */}
+                {/(ap|ageing|aging|invoice|match|duplicate|chargeback)/i.test(workflow.name) && (
+                  <MemoryOffer
+                    className="mb-4"
+                    memory={MEMORY_STORE.find(m => m.id === 'mem-rtn-001')}
+                    title={`This looks like your monthly ${workflow.name} run — same 3 sources, same 6 steps.`}
+                    stake="Sources unchanged since last month: replaying from the golden record skips the AI plan — ₹0 AI cost, ~40s, only changed steps run live."
+                    primaryLabel="Replay from memory"
+                    acceptedNote="Replaying from the golden record — mappings and plan restored, ₹0 AI cost. Only changed steps run live."
+                    onAccept={() => {
+                      if (hasRequired) startExecution();
+                      else addToast({ type: 'info', message: 'Golden record armed — the replay starts as soon as the required files are staged.' });
+                    }}
+                  />
+                )}
+                {/* Saved mappings restored — the re-asks that never fire. */}
+                {(() => {
+                  const mappingMemory = MEMORY_STORE.find(m => m.id === 'mem-src-002');
+                  return mappingMemory ? (
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <MemoryChip
+                        memory={mappingMemory}
+                        form="badge"
+                        label="12 column mappings restored from memory — nothing re-asked"
+                      />
+                    </div>
+                  ) : null;
+                })()}
+
                 {/* Required Files (collapsible) */}
                 <section className="rounded-xl border border-canvas-border bg-canvas-elevated mb-4">
                   <div className="flex items-center justify-between px-4 py-3">

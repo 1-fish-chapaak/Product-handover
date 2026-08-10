@@ -241,3 +241,137 @@ export function duplicateIds(obs: AtrWorkObs[]): Set<string> {
   byTitle.forEach(ids => { if (ids.length > 1) ids.forEach(id => dupes.add(id)); });
   return dupes;
 }
+
+// ─── ATR from the report it was launched from ───
+// "Generate ATR" on a report used to open a canned demo document, so the ATR a
+// reader saw named a different entity, a different author and a different set
+// of observations to the report underneath it. This composes the ATR out of the
+// report's own query cards, its own added observations and its own cover meta,
+// so the preview is that report restated in ATR form and nothing else.
+
+export interface AtrSourceQuery {
+  id: string;
+  title: string;
+  risk?: string;
+  severity?: string;
+  summary?: string;
+  findings?: string[];
+  observations?: string[];
+}
+
+export interface AtrSourceObservation {
+  obsId: string;
+  title: string;
+  description?: string;
+}
+
+export interface AtrSourceReport {
+  id?: string;
+  name: string;
+  generatedBy?: string;
+  generatedAt?: string;
+  reportPeriod?: string;
+  execSummary?: string;
+}
+
+const toRisk = (severity?: string): AtrObservation['risk'] =>
+  severity === 'Medium' ? 'Medium' : severity === 'Low' ? 'Low' : 'High';
+
+const classifyFrom = (risk?: string): AtrObservation['classification'] => {
+  const r = (risk ?? '').toLowerCase();
+  if (r.includes('compliance')) return 'Procedural Non-Compliance';
+  // "IT" has to match as a word. As a substring it also matched Audit Risk and
+  // Credit Risk, filing both of them as a system deficiency.
+  if (r.includes('operational') || r.includes('technology') || /\bit\b/.test(r)) return 'System Deficiency';
+  return 'Design Deficiency';
+};
+
+/** Reads a KPI value off a query's resolved KPI set. */
+const kpiNumber = (kpis: { label: string; value: string }[], label: string): number => {
+  const hit = kpis.find(k => k.label.toLowerCase() === label);
+  if (!hit) return 0;
+  const n = Number(String(hit.value).replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+
+export function atrFromReport(
+  report: AtrSourceReport,
+  queries: AtrSourceQuery[],
+  observations: AtrSourceObservation[],
+  kpisFor: (q: AtrSourceQuery) => { label: string; value: string }[],
+  execSummaryText?: string,
+): { meta: import('./atrTypes').AtrMeta; observations: AtrObservation[]; insights: AtrInsight[] } {
+  const queryObs: AtrObservation[] = queries.map(q => {
+    const kpis = kpisFor(q);
+    const total = kpiNumber(kpis, 'total exceptions');
+    const open = kpiNumber(kpis, 'open');
+    const closed = kpiNumber(kpis, 'closed');
+    // An observation with nothing left open reads as Closed; one with a closure
+    // already recorded is in flight; anything else is still Open.
+    const status: AtrObservation['status'] =
+      total > 0 && open === 0 ? 'Closed' : closed > 0 ? 'In Progress' : 'Open';
+    // The query's own recommendations become the management action plans. The
+    // findings stay as the evidence line beneath them, which is where they sit
+    // on the query card too.
+    const plans = (q.observations?.length ? q.observations : q.findings ?? []).map((text, i) => ({
+      title: `Action ${i + 1}`,
+      text,
+      status: (status === 'Closed' ? 'Implemented' : 'Pending') as 'Implemented' | 'Pending',
+      evidence: (q.findings ?? [])[i],
+    }));
+    return {
+      title: q.title,
+      process: q.risk,
+      description: q.summary,
+      querySummary: `${q.id} · ${q.title}`,
+      riskSummary: (q.observations ?? [])[0],
+      classification: classifyFrom(q.risk),
+      risk: toRisk(q.severity),
+      status,
+      exceptions: total || undefined,
+      actionPlans: plans,
+    };
+  });
+
+  // Observations the auditor added by hand on the report carry no query data,
+  // so they arrive with their description and no action plan rather than an
+  // invented one.
+  const manualObs: AtrObservation[] = observations.map(o => ({
+    title: o.title,
+    description: o.description,
+    querySummary: o.obsId,
+    risk: 'Medium' as const,
+    status: 'Open' as const,
+    actionPlans: [],
+  }));
+
+  const all = [...queryObs, ...manualObs];
+  const totalExceptions = all.reduce((n, o) => n + (o.exceptions ?? 0), 0);
+
+  const insights: AtrInsight[] = [];
+  const summary = execSummaryText ?? report.execSummary;
+  if (summary?.trim()) insights.push({ title: 'Executive summary', body: summary.trim() });
+  const openCount = all.filter(o => o.status !== 'Closed').length;
+  if (all.length > 0) {
+    insights.push({
+      title: openCount === 0 ? 'Every observation is closed' : `${openCount} of ${all.length} observations still need action`,
+      body: openCount === 0
+        ? 'Each observation in this report has been remediated and evidenced. A follow-up review can confirm the controls keep operating.'
+        : `This ATR carries ${all.length} observation${all.length === 1 ? '' : 's'} from “${report.name}”. ${openCount} ${openCount === 1 ? 'is' : 'are'} still open or in progress and ${openCount === 1 ? 'needs' : 'need'} a dated action plan from the risk owner.`,
+    });
+  }
+
+  return {
+    meta: {
+      reportId: report.id ? `ATR-${report.id.toUpperCase()}` : 'ATR-DRAFT',
+      auditTitle: report.name,
+      auditPeriod: report.reportPeriod ?? '',
+      preparedBy: report.generatedBy ?? 'You',
+      generatedOn: report.generatedAt ?? '',
+      auditEntity: report.name,
+      totalExceptions: totalExceptions || undefined,
+    },
+    observations: all,
+    insights,
+  };
+}

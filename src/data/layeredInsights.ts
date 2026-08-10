@@ -21,7 +21,7 @@ import type { ConfidenceFactors, InsightSeverity, DetectionMethod, KpiFormat } f
 
 // ─── The altitudes ─────────────────────────────────────────────────────────
 
-export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement';
+export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement' | 'portfolio' | 'exception';
 
 // ─── Anchors, spans and targets — the B+C surfacing model ──────────────────
 // Two rules govern where AI content appears across SOP → risk → control:
@@ -39,7 +39,7 @@ export type InsightLayer = 'control' | 'risk' | 'sop' | 'engagement';
 //      insight for context. A rec without a target belongs to its own card's
 //      surface and never travels.
 
-export type EntityKind = 'control' | 'risk' | 'sop' | 'engagement' | 'workflow';
+export type EntityKind = 'control' | 'risk' | 'sop' | 'engagement' | 'workflow' | 'exception';
 
 export interface EntityRef {
   kind: EntityKind;
@@ -104,6 +104,35 @@ export interface LayerEvidenceItem {
  *  determinism rule. `escalated` outranks `new` for attention: an old finding
  *  getting worse matters more than a fresh low one. */
 export type InsightFreshness = 'new' | 'escalated' | 'recurring' | 'resolved';
+
+// ─── KPI band — the stat-first card anatomy (A′) ────────────────────────────
+// A tile is a figure PLUS its consequence: the sub-line states what the number
+// costs ("unrecoverable once paid"), so the stake reads in the same glance as
+// the value and no separate "what's at stake" list is needed. Tile 1 is the
+// HERO — the teaser and the grid tile lead with it. Honesty rules ride along:
+// share phrasing only where the population supports it, unsized stakes stay
+// visibly unsized ("est.", "size before sign-off"), word-values are legal
+// ("Unsized", "Paused") — a state is a reading too.
+export interface InsightKpi {
+  /** Pre-formatted figure: "70", "≈ 3.4%", "−$36.28", "~9", "Unsized". */
+  value: string;
+  /** Small suffix beside the value: "/ 90", "weeks". */
+  unit?: string;
+  /** Tile label (rendered uppercase). */
+  label: string;
+  /** The consequence — what this number costs or buys. */
+  sub: string;
+  /** 'bad' paints the value in the risk colour (a delta that hurts). */
+  tone?: 'bad' | 'neutral';
+}
+
+/** Risk-type facet for the drawer's filter chips — the control's RACM
+ *  category, carried on the insight so filtering needs no lookup. */
+export type InsightRiskType = 'financial' | 'operational' | 'compliance' | 'it';
+
+export const RISK_TYPE_LABEL: Record<InsightRiskType, string> = {
+  financial: 'Financial', operational: 'Operational', compliance: 'Compliance', it: 'IT',
+};
 
 // ─── Run trajectory — the concrete trend behind a single-output insight ─────
 // The PRD's honesty ladder (§9 "no fake sparklines") decides what may render:
@@ -284,12 +313,19 @@ export interface LayeredInsight {
    *  is information). Single-output insights only: the cross-workflow card
    *  correlates entities, it doesn't trend a metric. */
   trajectory?: RunTrajectory;
-  /** Bulleted "what we found" — the observation, structured for scanning.
-   *  Cards without it fall back to [reasoning, atStake] as two bullets. */
+  /** Bulleted "what we found" — retained for the action-run prompt payload;
+   *  the card itself no longer renders this list (the KPI band carries it). */
   observations?: string[];
-  /** Bulleted "what's at stake" — the consequence narrative behind the
-   *  at-stake KPI tile. Cards without it fall back to [atStake]. */
+  /** Bulleted "what's at stake" — retained for the action-run prompt payload;
+   *  on the card each KPI tile's sub-line IS its stake (A′, review decision). */
   stakes?: string[];
+  /** The stat band (A′). Tile 1 is the hero the teaser/tile lead with; each
+   *  sub-line is that number's consequence. Absent → `insightKpis()` derives
+   *  an honest minimal band from trajectory/rollup/evidence. */
+  kpis?: InsightKpi[];
+  /** Filter facet — RACM category of the subject. Absent → `riskTypeOf()`
+   *  falls back to a label heuristic. */
+  riskType?: InsightRiskType;
 
   // ── Confidence (three axes, never one number) ──
   factors: ConfidenceFactors;
@@ -357,6 +393,16 @@ const CONTROL_PRICING: LayeredInsight = {
     'Sample line paid $4.69 against a revised $40.97 — −$36.28 on one line alone.',
     'The same feed priced June’s run; left unfixed it re-breaks next period.',
   ],
+  // A′ stat band — three wider tiles (review call Aug 7) so each consequence
+  // line breathes. 78% is a legal share (population 90); the materiality tile
+  // stays visibly estimated until the total is sized. The sampled −$36.28/line
+  // gap lives on in the stakes and the HPG12 evidence row.
+  kpis: [
+    { value: '70', unit: '/ 90', label: 'MCKESSON lines', sub: '78% of exceptions — hold them before settlement' },
+    { value: '↑ 12', label: 'New since June', sub: 'only 2 cleared — the break is growing, not clearing', tone: 'bad' },
+    { value: '≈ 3.4%', label: 'Of materiality', sub: 'est. $2.5k across 70 held lines · size before sign-off' },
+  ],
+  riskType: 'financial',
   factors: { frequency: 0.4, sourceDiversity: 0.72, recency: 0.99, businessImpact: 0.95 },
   confidenceOverride: 0.84,
   evidence: [
@@ -411,6 +457,14 @@ const RISK_PRICING: LayeredInsight = {
     'Combined underpayment across the three controls is not yet a firm total — size it before grading the deficiency.',
     'Every downstream pass inherits the untested feed, so the assurance is weaker than it reads.',
   ],
+  // Three tiles (Aug 7) — the coverage-gap tile folded away: the cause block
+  // already says nothing tests the feed at its source.
+  kpis: [
+    { value: '3', unit: '/ 3', label: 'Controls exposed', sub: 'all flag the same feed — one exposure, counted once' },
+    { value: '2', label: 'Periods unresolved', sub: 'recurring since June — assurance weaker than it reads', tone: 'bad' },
+    { value: 'Unsized', label: 'Combined underpayment', sub: 'size it before grading the deficiency' },
+  ],
+  riskType: 'financial',
   factors: { frequency: 0.5, sourceDiversity: 0.68, recency: 0.95, businessImpact: 0.9 },
   confidenceOverride: 0.79,
   evidence: [
@@ -471,6 +525,12 @@ const ENGAGEMENT_PRICING: LayeredInsight = {
     'Combined underpayment concentrated on MCKESSON is not yet weighed against materiality — that judgment gates sign-off.',
     'At the current pace the sign-off milestone slips about 9 weeks if the feed fix waits.',
   ],
+  kpis: [
+    { value: '3', label: 'Workflows, one driver', sub: 'rolled up as one escalation — counted once' },
+    { value: '~9', unit: 'weeks', label: 'Sign-off slip', sub: 'at the current pace, if the feed fix waits', tone: 'bad' },
+    { value: 'Unweighed', label: 'Vs materiality', sub: 'that judgment gates sign-off — weigh it first' },
+  ],
+  riskType: 'financial',
   factors: { frequency: 0.55, sourceDiversity: 0.8, recency: 0.95, businessImpact: 0.92 },
   confidenceOverride: 0.81,
   evidence: [
@@ -537,6 +597,11 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
       atStake: 'Not yet sized. Quantify the exposure on the failing attribute before concluding.',
       freshness: 'new',
       freshnessNote: 'First flagged this period',
+      kpis: [
+        { value: '1+', label: 'Attributes failed', sub: 'root cause not yet confirmed', tone: 'bad' },
+        { value: '1', label: 'Run analysed', sub: 'early signal — treat as directional' },
+        { value: 'Unsized', label: 'Exposure', sub: 'quantify before concluding' },
+      ],
       factors: { ...NEUTRAL_FACTORS, businessImpact: 0.6 }, confidenceOverride: 0.58,
       evidence: [{ ref: label, label: 'This control’s latest run', detail: 'At least one attribute failed', tone: 'caution' }],
       evidenceNote: '1 of 1 runs · early signal, treat as directional.',
@@ -559,6 +624,10 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
       likelyCause: { label: 'No violated baseline detected.', detail: 'The monitored baseline held this run. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.' },
       reasoning: 'One control, this period’s run. Nothing carried over, nothing new — a clean run, counted once.',
       atStake: 'Nothing at stake this period. Re-test next period to keep the assurance current.',
+      kpis: [
+        { value: '0', label: 'Material exceptions', sub: 'the monitored baseline held' },
+        { value: '1', label: 'Run analysed', sub: 'negative assurance, this period' },
+      ],
       factors: NEUTRAL_FACTORS,
       evidence: [{ ref: label, label: 'This control’s latest run', detail: 'No material exceptions', tone: 'positive' }],
       evidenceNote: 'Negative assurance · the baseline held this run.',
@@ -575,6 +644,10 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
     likelyCause: { label: 'No results to reason over.', detail: 'This control has no completed run this period, so there is nothing to correlate. The recommendation below is forward-looking.' },
     reasoning: 'No run analysed. The engine makes no claim until this control produces output.',
     atStake: 'Unknown until tested. If this is a key control, the cost of not testing is the real exposure.',
+    kpis: [
+      { value: '0', label: 'Runs this period', sub: 'nothing to analyse yet' },
+      { value: '—', label: 'Exposure', sub: 'unknown until tested' },
+    ],
     factors: { ...NEUTRAL_FACTORS, recency: 0.3, sourceDiversity: 0.2 },
     evidence: [{ ref: label, label: 'This control', detail: 'No completed run this period' }],
     evidenceNote: 'No runs yet · recommendation is forward-looking.',
@@ -599,6 +672,15 @@ function riskFallback(subjectId: string, label: string, priority: string): Layer
       : { label: 'No coverage gap detected.', detail: 'The mapped controls cover this risk’s assertions and are concluding clean. This is a signed pass, not silence.' },
     reasoning: 'Rolled up from this risk’s mapped controls; each shared finding is counted once, not per control.',
     atStake: hot ? 'Not yet sized — quantify across the mapped controls before grading residual severity.' : 'No material exposure this period.',
+    kpis: hot
+      ? [
+          { value: 'Partial', label: 'Coverage', sub: 'not every assertion concluded effective', tone: 'bad' },
+          { value: 'Unsized', label: 'Residual exposure', sub: 'quantify before grading severity' },
+        ]
+      : [
+          { value: 'Clean', label: 'Mapped controls', sub: 'concluding without material findings' },
+          { value: '0', label: 'Coverage gaps', sub: 'a signed pass, not silence' },
+        ],
     factors: hot ? { ...NEUTRAL_FACTORS, businessImpact: 0.6 } : NEUTRAL_FACTORS,
     confidenceOverride: hot ? 0.6 : undefined,
     evidence: [{ ref: label, label: 'Mapped controls', detail: hot ? 'Not all concluded effective' : 'Concluding without material findings', tone: hot ? 'caution' : 'positive' }],
@@ -628,6 +710,15 @@ function engagementFallback(subjectId: string, label: string, status: string): L
     likelyCause: { label: atRisk ? 'No single dominant driver identified yet.' : 'No systemic driver detected.', detail: atRisk ? 'Findings are spread across risks with no shared root cause standing out. Generate insights at the control level to find one.' : 'The engine sees no cross-risk pattern that would change sign-off this period.' },
     reasoning: 'Rolled up from this engagement’s risks and controls; shared findings are counted once.',
     atStake: atRisk ? 'Not yet sized at the engagement level — drill into the risks driving it.' : 'No material engagement-level exposure this period.',
+    kpis: atRisk
+      ? [
+          { value: 'Open', label: 'Findings', sub: 'spread across risks — no single driver yet' },
+          { value: 'Unsized', label: 'Engagement exposure', sub: 'drill into the risks driving it' },
+        ]
+      : [
+          { value: 'On plan', label: 'Delivery', sub: 'no engagement-level escalation this period' },
+          { value: '0', label: 'Systemic drivers', sub: 'no cross-risk pattern detected' },
+        ],
     factors: NEUTRAL_FACTORS,
     evidence: [{ ref: label, label: 'Risks and controls', detail: atRisk ? 'Some open findings' : 'Concluding to plan', tone: atRisk ? 'caution' : 'positive' }],
     evidenceNote: 'Rolled up from risks and controls.',
@@ -848,6 +939,9 @@ export function buildRecommendations(input: {
   // SOP-anchored insights are rare by construction (they need a cross-risk
   // pattern); the SOP surface receives targeted actions instead.
   if (layer === 'sop') return [];
+  // Portfolio insights are hand-authored cross-engagement stories that carry
+  // their own targeted recommendations — never generated from a status hint.
+  if (layer === 'portfolio') return [];
   return engagementRecs(status, flagship);
 }
 
@@ -1015,6 +1109,28 @@ export function buildWorkflowInsight(input: WorkflowInsightInput): LayeredInsigh
     atStake: stakes[0],
     observations,
     stakes,
+    kpis: [
+      ...(effectivePct != null ? [{
+        value: `${effectivePct}%`, label: 'True-positive rate',
+        sub: lowEff ? 'reliance not supportable until the logic is validated'
+          : modEff ? 'below the reliance band — tune the thresholds'
+          : 'supports reliance this period',
+        tone: (lowEff || modEff ? 'bad' : 'neutral') as InsightKpi['tone'],
+      }] : []),
+      {
+        value: String(openExceptions), label: openExceptions === 1 ? 'Open exception' : 'Open exceptions',
+        sub: openExceptions > 0 ? 'clear before they age past fieldwork close' : 'queue clear this period',
+        tone: (openExceptions > 0 ? 'bad' : 'neutral') as InsightKpi['tone'],
+      },
+      {
+        value: paused ? 'Paused' : (cadence || 'Ad-hoc'), label: 'Cadence',
+        sub: paused ? 'no coverage while it sleeps'
+          : adHocMonitor ? 'discontinuous coverage between runs'
+          : 'coverage continuous through the period',
+        tone: (paused ? 'bad' : 'neutral') as InsightKpi['tone'],
+      },
+    ],
+    riskType: /complian/i.test(category) ? 'compliance' : /reconcil|detect/i.test(category) ? 'financial' : 'operational',
     factors: { frequency: 0.5, sourceDiversity: 0.4, recency: 0.95, businessImpact: troubled ? 0.7 : watch ? 0.5 : 0.35 },
     confidenceOverride: troubled ? 0.72 : watch ? 0.62 : undefined,
     evidence,
@@ -1144,6 +1260,18 @@ export const LAYER_META: Record<InsightLayer, { label: string; scan: string; den
     scan: 'Rolls up every risk and control across the engagement',
     density: 'light',
   },
+  portfolio: {
+    label: 'this portfolio',
+    scan: 'Correlates findings across every engagement in the library',
+    density: 'light',
+  },
+  // The exceptions surface: the anchor is the exception SET (a pattern across
+  // cases), never a single case — one case alone has nothing to correlate.
+  exception: {
+    label: 'this exception set',
+    scan: 'Groups the exceptions in this scope that share a root cause',
+    density: 'light',
+  },
 };
 
 export const CHECK_MORE_ICON: Record<CheckMoreOption['kind'], string> = {
@@ -1152,3 +1280,76 @@ export const CHECK_MORE_ICON: Record<CheckMoreOption['kind'], string> = {
   trace: 'Crosshair',
   ask: 'MessageCircleQuestion',
 };
+
+// ─── Triage disposition — how the grid drawer sections a stack ──────────────
+// Failed-first (review decision): a broken finding or a High severity is
+// "needs action"; an at-risk caution is "watch"; a signed pass folds away into
+// "holding steady". The section IS the scan order — inside one, the stack's
+// severity sort ranks left→right.
+
+export type InsightDisposition = 'action' | 'watch' | 'holding';
+
+export const DISPOSITION_META: Record<InsightDisposition, { label: string; foldLabel: string }> = {
+  action: { label: 'Needs action', foldLabel: '' },
+  watch: { label: 'Watch', foldLabel: '' },
+  holding: { label: 'Holding steady', foldLabel: 'signed passes and not-yet-run tests; nothing here needs you this period' },
+};
+
+export function insightDisposition(i: LayeredInsight): InsightDisposition {
+  if (i.verdict.tone === 'negative' || i.severity === 'high') return 'action';
+  // Low severity folds whatever its tone: a signed pass AND a not-yet-run test
+  // are both "nothing needs you" — ten of them as tiles is the wall the fold
+  // exists to prevent. Medium is the watch band.
+  return i.severity === 'med' ? 'watch' : 'holding';
+}
+
+/** Risk-type facet with a label heuristic behind it, so filters work even for
+ *  derived insights that never set the field explicitly. */
+export function riskTypeOf(i: LayeredInsight): InsightRiskType {
+  if (i.riskType) return i.riskType;
+  const l = `${i.subjectLabel} ${i.takeaway}`.toLowerCase();
+  if (/itgc|access|change management|password|system|application control/.test(l)) return 'it';
+  if (/complian|regulat|sox|attest|sanction|kyc/.test(l)) return 'compliance';
+  if (/pric|invoice|payment|recon|chargeback|revenue|duplicate|vendor master|wac|settle|financ/.test(l)) return 'financial';
+  return 'operational';
+}
+
+/** The stat band, with an honest derived fallback for insights that carry no
+ *  authored tiles: trajectory (the anchor metric + its real delta), rollup
+ *  breadth, runs analysed. Never fabricates a figure — a card with thin data
+ *  gets a thin band, which is itself the honest reading. */
+// The band holds at most 3 tiles (review call Aug 7) — wider tiles give each
+// consequence sub-line room to say something instead of truncating.
+export function insightKpis(i: LayeredInsight): InsightKpi[] {
+  if (i.kpis && i.kpis.length > 0) return i.kpis.slice(0, 3);
+  const out: InsightKpi[] = [];
+  if (i.trajectory && i.trajectory.points.length > 0) {
+    const r = readTrajectory(i.trajectory);
+    out.push({
+      value: String(r.current),
+      label: i.trajectory.metricLabel,
+      sub: i.trajectory.points.length > 1
+        ? `${r.lastDelta > 0 ? '↑' : r.lastDelta < 0 ? '↓' : '·'} ${Math.abs(r.lastDelta)} vs previous run`
+        : i.trajectory.unitLabel,
+      tone: r.tone === 'bad' ? 'bad' : 'neutral',
+    });
+  }
+  if (i.rollupOf && i.rollupOf.count > 0) {
+    out.push({ value: String(i.rollupOf.count), label: i.rollupOf.label, sub: 'shared findings counted once' });
+  }
+  if (i.runsAnalysed != null && i.runsAnalysed > 0) {
+    out.push({
+      value: String(i.runsAnalysed),
+      label: i.runsAnalysed === 1 ? 'Run analysed' : 'Runs analysed',
+      sub: i.runsAnalysed <= 1 ? 'early signal — no recurrence claim' : 'cross-run evidence',
+    });
+  }
+  if (out.length === 0) {
+    out.push({
+      value: String(i.evidence.length),
+      label: i.evidence.length === 1 ? 'Evidence item' : 'Evidence items',
+      sub: 'behind this finding',
+    });
+  }
+  return out.slice(0, 3);
+}

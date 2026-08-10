@@ -59,6 +59,15 @@ import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
 import type { Assignment } from './workflow/workflowTypes';
 import { hasAtrDraft, requestAtrResume } from '../reports/atrDraft';
+// ─── AI insights across the exception set (B+C surfacing model) ───
+import { useInsightStackRun } from '../shared/useInsightStackRun';
+import InsightLauncherPill from '../shared/InsightLauncherPill';
+import InsightStackDrawer from '../shared/InsightStackDrawer';
+import type { StackRowNav } from '../shared/InsightStack';
+import { ActionDrawer, InsightDrawer, type ActionExecuteSpec } from '../shared/TargetedActions';
+import { setActionStatus, type TargetedAction } from '../shared/insightCache';
+import type { BuildInsightInput, LayeredInsight } from '../../data/layeredInsights';
+import { exceptionInsightSubjects, makeExceptionInsightBuilder, exceptionStackSteps, executePlanFor } from '../../data/exceptionInsights';
 
 // `scopeIds` is the set of cases the action applies to — always includes
 // `exceptionId` (the opened/primary case that drives the drawer's content).
@@ -736,6 +745,104 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   }, [sheetExceptions, kpiFilter]);
   const toggleKpiFilter = (k: Exclude<KpiFilter, null>) => setKpiFilter(prev => (prev === k ? null : k));
 
+  // ─── AI insights — patterns across this exception set ────────────────────
+  // Trigger-gated from the header pill (the engine bills per generation).
+  // Results read in the right-side drawer; rows light up through the session
+  // cache (reflections + targeted actions) once a run lands.
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [insightDetail, setInsightDetail] = useState<LayeredInsight | null>(null);
+  const [drawerAction, setDrawerAction] = useState<TargetedAction | null>(null);
+  const [focusExceptionId, setFocusExceptionId] = useState<string | null>(null);
+  // The AI action that launched the currently-open classify/assign flow —
+  // marked applied only when that flow completes, so "Applied" stays a
+  // statement of fact rather than intent.
+  const [pendingAiAction, setPendingAiAction] = useState<TargetedAction | null>(null);
+
+  // Scope id = the cache namespace: report drill-ins and engagement mounts
+  // each keep their own generated stack.
+  const insightScopeId = useMemo(() => {
+    if (sourceQuery) return `EXC-SCOPE-${sourceQuery.id.toUpperCase()}`;
+    if (contextLabel) return `EXC-SCOPE-${contextLabel.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toUpperCase()}`;
+    return 'EXC-SCOPE';
+  }, [sourceQuery, contextLabel]);
+  const insightSubjects = useMemo<BuildInsightInput[]>(
+    () => exceptionInsightSubjects(exceptions, insightScopeId),
+    [exceptions, insightScopeId],
+  );
+  const insightBuilder = useMemo(
+    () => makeExceptionInsightBuilder(exceptions, insightScopeId),
+    [exceptions, insightScopeId],
+  );
+  const insightRun = useInsightStackRun({
+    layer: 'exception',
+    subjectId: insightScopeId,
+    subjects: insightSubjects,
+    buildOne: insightBuilder,
+    steps: exceptionStackSteps(exceptions.length, insightSubjects.length),
+    // A finished run opens the drawer — including a clean scan (that's a
+    // result, not an absence). Errors stay in the header pill with retry.
+    onSettled: (p) => { if (p === 'generated' || p === 'empty') setInsightsOpen(true); },
+  });
+  const exceptionIdSet = useMemo(() => new Set(exceptions.map(e => e.id)), [exceptions]);
+  // Drawer → row: the rows are right behind the drawer, so navigation happens
+  // in place — close, clear narrowing filters, then page/scroll/flash the row.
+  const insightRowNav = useMemo<StackRowNav>(() => ({
+    canOpen: (ref) => ref.kind === 'exception' && exceptionIdSet.has(ref.id),
+    open: (ref) => {
+      if (!(ref.kind === 'exception' && exceptionIdSet.has(ref.id))) return;
+      setInsightsOpen(false);
+      setInsightDetail(null);
+      setActiveNav('exceptions');
+      setKpiFilter(null);
+      setActiveSheetId('all');
+      setFocusExceptionId(ref.id);
+    },
+  }), [exceptionIdSet]);
+
+  // Act-in-place upgrade: when an AI action maps onto a real flow this surface
+  // already has, the ActionDrawer's primary CTA opens THAT flow (classify
+  // drawer / assign drawer) with the scope preloaded — respecting persona
+  // permissions and the auditor-flow locks, exactly like the manual paths.
+  const aiExecute = (a: TargetedAction): ActionExecuteSpec | null => {
+    const plan = executePlanFor(a);
+    if (!plan) return null;
+    const ids = plan.ids.filter(id => exceptionIdSet.has(id));
+    if (ids.length === 0) return null;
+    if (plan.kind === 'classify') {
+      if (!(role === 'risk-owner' && can('exc_classify'))) return null;
+      const eligible = ids
+        .map(id => exceptions.find(e => e.id === id))
+        .filter((e): e is GrcException => !!e)
+        .filter(e => isMemberEligibleForDrawer(e, 'classify', persona));
+      if (eligible.length === 0) return null;
+      return {
+        label: eligible.length > 1 ? `Classify ${eligible.length} cases together` : `Classify ${eligible[0].id}`,
+        hint: 'Opens the classify drawer scoped to these cases — the call stays yours',
+        run: () => {
+          setPendingAiAction(a);
+          setDrawer({ type: 'classify', exceptionId: eligible[0].id, scopeIds: eligible.map(e => e.id) });
+        },
+      };
+    }
+    if (!can('exc_assign')) return null;
+    return {
+      label: ids.length > 1 ? `Assign ${ids.length} cases` : `Assign ${ids[0]}`,
+      hint: 'Opens the assign drawer with these cases preselected',
+      run: () => {
+        setPendingAiAction(a);
+        setSelected(new Set(ids));
+        setBulkAssignOpen(true);
+      },
+    };
+  };
+  // The launched flow completed for the AI action's scope → the action is
+  // genuinely applied; record it so its chips flip everywhere.
+  const settlePendingAiAction = () => {
+    if (!pendingAiAction) return;
+    setActionStatus(pendingAiAction, 'applied');
+    setPendingAiAction(null);
+  };
+
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -918,6 +1025,14 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* AI insights launcher — the cost gate lives in the chrome, the
+                  results in the right-side drawer (engagement-header pattern). */}
+              <InsightLauncherPill
+                run={insightRun}
+                onOpen={() => setInsightsOpen(true)}
+                idleTitle="Reads every exception in this scope, groups the ones that share a root cause, and prices the consequence — with recommended bulk actions. Won’t run automatically; you trigger it so it only bills when you need it."
+              />
+              <div className="h-6 w-px bg-canvas-border" aria-hidden="true" />
               <button
                 onClick={() => setActivityDrawerOpen(true)}
                 title="View activity timeline"
@@ -1109,6 +1224,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               }}
               extraColumns={undefined}
               onOpenDetail={(ex) => openDetail(ex.id)}
+              onOpenAiAction={setDrawerAction}
+              onViewAiInsight={setInsightDetail}
+              focusExceptionId={focusExceptionId}
+              onFocusHandled={() => setFocusExceptionId(null)}
               headerLeading={
                 <div className="flex items-center gap-2">
                   {/* Assign Approval Flow — shown only in the Engagements module
@@ -1242,7 +1361,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   .filter((e): e is GrcException => !!e)
                   .map(e => ({ id: e.id, title: e.title, classification: e.classification, statusLabel: statusLabelFor(e) }))
               : []}
-            onClose={() => setDrawer(null)}
+            onClose={() => { setDrawer(null); setPendingAiAction(null); }}
             onSave={(payload) => {
               const classification = payload.classification as GrcException['classification'];
               const nowIso = new Date().toISOString();
@@ -1338,6 +1457,9 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 : actionable
                   ? (isReclassify ? `Re-classified — action plan ${assignedActionableId} sent to the Auditor.` : `Classified — action plan ${assignedActionableId} sent to the Auditor for review.`)
                   : 'Classified — sent to the Auditor for review.' });
+              // If an AI action launched this classify, it just completed for
+              // real — flip its chips to Applied everywhere.
+              settlePendingAiAction();
               setDrawer(null);
             }}
           />
@@ -1721,7 +1843,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key={singleAssignCase ? `single-assign-${singleAssignCase.id}` : 'bulk-assign-drawer'}
             cases={singleAssignCase ? [singleAssignCase] : exceptions.filter(e => selected.has(e.id))}
             initialAssignees={singleAssignCase ? (singleAssignCase.assignees ?? (singleAssignCase.assignedTo ? [singleAssignCase.assignedTo] : [])) : undefined}
-            onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); }}
+            onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); setPendingAiAction(null); }}
             onApply={(payload: BulkAssignPayload) => {
               if (payload.assignees.length === 0) return;
               const today = new Date().toISOString().slice(0, 10);
@@ -1771,6 +1893,9 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               // Only clear the selection set when the bulk drawer was the one
               // that opened — single-row assigns don't touch the selection.
               if (!singleAssignCase) setSelected(new Set());
+              // If an AI action launched this assign, it just completed for
+              // real — flip its chips to Applied everywhere.
+              settlePendingAiAction();
               setBulkAssignOpen(false);
               setSingleAssignCase(null);
             }}
@@ -1857,6 +1982,33 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           </div>
         )}
       </AnimatePresence>
+
+      {/* ─── AI insights surfaces ───
+          Results drawer (the triaging grid), the full-card slide-over a row
+          reflection links up to, and the act-in-place action drawer. All read
+          the session insight cache; the execute hook upgrades an AI action's
+          Apply into the surface's real classify/assign flow. */}
+      <InsightStackDrawer
+        open={insightsOpen}
+        onClose={() => setInsightsOpen(false)}
+        subjectLabel={contextLabel ?? 'Exceptions & Cases'}
+        scopeLabel="across these exceptions"
+        run={insightRun}
+        rowNav={insightRowNav}
+        preamble="Patterns across this exception set — cases grouped where they share a root cause, so one decision can clear several cases. Grouping is a candidate until you confirm it."
+      />
+      <InsightDrawer
+        insight={insightDetail}
+        onClose={() => setInsightDetail(null)}
+        cardHeaderLabel="this exception set"
+        cardEvidenceLabel="Evidence · linked cases"
+      />
+      <ActionDrawer
+        action={drawerAction}
+        onClose={() => setDrawerAction(null)}
+        onViewAnchor={() => { if (drawerAction) setInsightDetail(drawerAction.source); }}
+        execute={aiExecute}
+      />
     </div>
     {/* Assignment modal — opened from the "Assign to Workflow" header button. */}
     <AssignmentModal />

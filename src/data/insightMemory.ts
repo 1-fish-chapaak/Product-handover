@@ -18,6 +18,8 @@
 // Determinism: this codebase avoids Date.now()/Math.random() in module and
 // render paths. All timestamps and ids are literals.
 
+import { MEMORY_STORE } from './memoryStore';
+
 // ─── Pattern taxonomy (the 10 detected types) ─────────────────────────────
 
 export type PatternType =
@@ -335,33 +337,31 @@ export interface EnterpriseContextEntry {
   expiry?: string;      // optional analyst-set expiry
 }
 
-export const ENTERPRISE_CONTEXT: EnterpriseContextEntry[] = [
-  {
-    id: 'ec-cb-formula',
-    fact: 'A chargeback equals (WAC − contract price) × units; never settle one on a null contract price.',
-    origin: 'Promoted from a Q1 chargeback reconciliation clarification',
-    approvedBy: 'R. Mehta',
-    approvedOn: '02 Jun 2026',
-    scope: 'All chargeback workflows',
-  },
-  {
-    id: 'ec-mck-watch',
-    fact: 'MCKESSON CORPORATION is on a standing pricing-control watch pending master-data remediation.',
-    origin: 'Promoted from a prior vendor pricing review',
-    approvedBy: 'S. Iyer',
-    approvedOn: '28 Jun 2026',
-    scope: 'All chargeback workflows',
-    expiry: 'Review by 30 Sep 2026',
-  },
-  {
-    id: 'ec-hpg12',
-    fact: 'Contract HPG12 requires WAC re-validation against the current master before chargeback processing.',
-    origin: 'Promoted after repeated WAC-mismatch flags',
-    approvedBy: 'R. Mehta',
-    approvedOn: '20 Jun 2026',
-    scope: 'Chargeback Pricing Validation',
-  },
-];
+// Derived from the ONE platform memory store (decision D4, 9 Aug 2026): the
+// governed team/organization Facts in `MEMORY_STORE` ARE the Enterprise
+// Context — this view maps them into the shape this engine's surfaces render.
+// Retiring a row in Smart Learn or approving one in My Queue changes what
+// every consumer of this list applies; there is no second copy to drift.
+const EC_SCOPE_LABEL: Record<string, string> = {
+  'mem-team-001': 'All chargeback workflows',
+  'mem-team-002': 'All chargeback workflows',
+  'mem-team-003': 'Chargeback Pricing Validation',
+  'mem-team-006': 'Workpaper review',
+};
+
+export const ENTERPRISE_CONTEXT: EnterpriseContextEntry[] = MEMORY_STORE
+  .filter(m =>
+    (m.scope === 'team' || m.scope === 'organization') &&
+    m.kind === 'fact' && m.status === 'active' && m.approvedBy)
+  .map(m => ({
+    id: `ec-${m.id}`,
+    fact: m.statement,
+    origin: m.source,
+    approvedBy: m.approvedBy!,
+    approvedOn: m.approvedOn ?? m.learnedOn,
+    scope: EC_SCOPE_LABEL[m.id] ?? (m.scope === 'organization' ? 'Organization-wide' : 'All workflows'),
+    expiry: m.reviewBy ? `Review by ${m.reviewBy}` : undefined,
+  }));
 
 // ─── Cross-workflow entity index (Workflow Executor surface) ───────────────
 // The Entity Resolver output: for a given vendor/entity in THIS run, what does

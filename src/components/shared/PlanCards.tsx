@@ -292,12 +292,15 @@ function AssumptionMemoryRow({ memory }: {
   );
 }
 
-export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, context = 'query' }: {
+export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, context = 'query', caption }: {
   assumptions: PlanAssumption[];
   onEdit?: () => void;
   /** Called when the user taps "Correct it" on a memory-backed assumption. */
   onCorrectAssumption?: (assumption: PlanAssumption) => void;
   context?: 'query' | 'workflow';
+  /** Replaces the "N defaults applied to this query" line. A run started from a
+   *  recommended action applied no defaults — it was handed its context. */
+  caption?: string;
 }) {
   const [open, setOpen] = useState(true);
   if (assumptions.length === 0) return null;
@@ -321,7 +324,7 @@ export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, cont
           <div className="flex-1 min-w-0 text-left">
             <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Assumptions</h3>
             <p className="text-[0.75rem] text-ink-500 mt-px leading-tight">
-              {assumptions.length} defaults applied to this {context}
+              {caption ?? `${assumptions.length} defaults applied to this ${context}`}
               {recalledCount > 0 && (
                 <span className="text-evidence-700 font-medium">
                   {' · '}saved you {recalledCount} clarification{recalledCount === 1 ? '' : 's'}

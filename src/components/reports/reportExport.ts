@@ -1,9 +1,10 @@
-// Real export composers for the report download modal — PDF, Word, PPT.
+// Export composers for the report download modal — Word, PPT, HTML.
 //
 // Follows the ATR exporter precedent (atrTemplate.ts): Word and PPT are
 // Office-HTML blobs (.doc / .ppt — the HTML-in-Office trick Word and
-// PowerPoint both import), PDF is a composed print window so the user saves
-// via the browser's "Save as PDF". No Excel export by design (PRD ruling).
+// PowerPoint both import), and the tab labels name the application rather than
+// claiming a .docx / .pptx these are not. PDF lives in reportPdf.ts, which
+// writes a real .pdf with pdfmake. No Excel export by design (PRD ruling).
 
 import * as XLSX from 'xlsx';
 import type { DownloadPreviewSection } from './ReportDownloadModal';
@@ -440,8 +441,10 @@ export function exportBulkAuditExcel(reportName: string, workflows: WorkflowResu
   XLSX.writeFile(wb, `${reportName}.xlsx`);
 }
 
-// ─── PDF — composed print window; user picks "Save as PDF" ───
-export function exportReportPdf(ctx: ReportExportContext): boolean {
+// ─── Print view — the composed document in a window, ready for Ctrl+P ───
+// Not the PDF export: reportPdf.ts writes a real .pdf file. This stays for the
+// browser-print route, which is still the way to print on paper.
+export function exportReportPrintView(ctx: ReportExportContext): boolean {
   const w = window.open('', '_blank', 'width=900,height=1100');
   if (!w) return false; // popup blocked — caller surfaces the message
   w.document.write(`${documentHtml(ctx)}
