@@ -32,5 +32,5 @@ test('Manage handoffs opens the Handoffs drill-in', async ({ page }) => {
   // breadcrumb ← returns to the Overview
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(600);
-  await expect(page.getByText('Engagement sign-off').first()).toBeVisible();
+  await expect(page.getByText('Audit sign-off').first()).toBeVisible();
 });

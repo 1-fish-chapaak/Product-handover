@@ -10,9 +10,9 @@ import type { Deficiency } from './types';
 // The reviewer's desk — everything waiting on the reviewer hat, and nothing else:
 // ratings to confirm before any fix can start, concluded papers to countersign,
 // resolved notes to verify, retest-passed exceptions to close, fixes that have
-// missed twice, and the engagement countersign. Reviewer role only.
+// missed twice, and the audit countersign. Reviewer role only.
 export default function ReviewerQueue() {
-  const { eng, me, setView, openControl, openDeficiency } = useIcfr();
+  const { eng, me, openAuditId, setView, openControl, openDeficiency } = useIcfr();
   const papers = eng.controls.filter(isAwaitingReview);
   const notesToVerify = eng.reviewNotes.filter(n => n.status === 'Resolved');
   const awaiting = eng.deficiencies.filter(d => d.status === 'Awaiting reviewer');
@@ -27,8 +27,11 @@ export default function ReviewerQueue() {
   const failedRetests = (d: Deficiency) => (d.retests ?? []).filter(r => r.result === 'Fail').length;
   const repeatFails = eng.deficiencies.filter(d =>
     d.status !== 'Closed' && d.status !== 'Awaiting reviewer' && failedRetests(d) >= 2);
-  const so = eng.signoff;
-  const readyToCountersign = !!so.preparer && !so.reviewer;
+  // The countersign that concludes a cycle lives on the OPEN audit's record —
+  // the engagement-level signoff field is never written. Outside an audit there
+  // is no opinion to sign, so the row simply doesn't come up.
+  const so = eng.audits.find(a => a.id === openAuditId)?.signoff;
+  const readyToCountersign = !!so?.preparer && !so.reviewer;
   const count = ratings.length + papers.length + notesToVerify.length + awaiting.length + repeatFails.length + (readyToCountersign ? 1 : 0);
   // Collapsible to save the scroll — the header keeps the count visible, so
   // nothing waiting on the reviewer is ever hidden without a number saying so.
@@ -51,7 +54,7 @@ export default function ReviewerQueue() {
       <div className="pt-3">
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
-          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded papers for countersign, resolved notes for verification, exceptions when a retest passes or when a fix has missed twice, and the engagement countersign once the preparer signs.
+          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded papers for countersign, resolved notes for verification, exceptions when a retest passes or when a fix has missed twice, and the audit countersign once the preparer signs.
         </div>
       ) : (
         <div className="space-y-2">
@@ -173,8 +176,8 @@ export default function ReviewerQueue() {
               className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
               <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><PenLine size={16} /></div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-ink-800">Engagement countersign</div>
-                <div className="text-[11.5px] text-ink-400 mt-0.5">Prepared by {so.preparer!.by} · {so.preparer!.at} — your signature concludes the engagement.</div>
+                <div className="text-[13px] font-semibold text-ink-800">Audit countersign</div>
+                <div className="text-[11.5px] text-ink-400 mt-0.5">Prepared by {so!.preparer!.by} · {so!.preparer!.at} — your signature concludes this audit.</div>
               </div>
               <ArrowRight size={15} className="text-ink-300 shrink-0" />
             </button>

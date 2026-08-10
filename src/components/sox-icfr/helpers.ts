@@ -227,10 +227,25 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGra
   return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
 }
 
-/** Significant or worse has to be confirmed by the reviewer before the owner is
- *  sent off to plan a fix — a wrong rating must not drive weeks of remediation. */
-export function needsRatingConfirmation(grade: ExceptionGrade): boolean {
-  return GRADE_RANK[grade] >= GRADE_RANK['Significant Deficiency'];
+// Every rating is confirmed by the reviewer before the owner is sent off to plan
+// a fix — a wrong rating must not drive weeks of remediation, and a grade only
+// looks small once someone has agreed it is small. (This used to fire above
+// Significant Deficiency alone; the rung is the reviewer's on every finding now,
+// so the threshold helper it needed is gone.)
+
+// ─── No two rungs in a row by the same hands ─────────────────────────────────────
+// A finding travels through eight steps, and at every handoff the point is that
+// somebody ELSE looks. Roles alone do not guarantee that: one person can hold two
+// hats, and on a small team usually does. So each rung stamps who did it, and the
+// next one is refused to that name — sized-then-confirmed, submitted-then-judged,
+// fixed-then-retested, retested-then-closed. Checked by NAME for the same reason
+// the own-control prohibition is: changing hats must not change the answer.
+//
+// An absent stamp (a finding seeded mid-ladder, or raised before the field
+// existed) reads as "no clash known" rather than blocking — a rule that fires on
+// missing history would freeze records nobody can unfreeze.
+export function samePerson(previous: { by: string } | undefined, actor: string): boolean {
+  return !!previous && previous.by === actor;
 }
 
 // ─── Baton — whose court an exception is in ──────────────────────────────────────
@@ -1227,9 +1242,14 @@ export function isControlLocked(c: Control, opApplies = true): boolean {
 export function isControlLockedIn(eng: IcfrEngagement, c: Control): boolean {
   return isControlLocked(c, operatingApplies(eng, c));
 }
-// A countersigned engagement is locked for good — no edits, no reopen.
+// A countersigned audit seals its cycle — no edits, no reopen. The seal reads the
+// LIVE audit (newest unarchived record — auditPortfolio's liveAuditId, inlined
+// because auditPortfolio imports from this file): that is the only record whose
+// results are on the controls, so both of its signatures freeze the engagement's
+// working state. Starting the next cycle archives it, which is the only release.
 export function isEngagementLocked(eng: IcfrEngagement): boolean {
-  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+  const live = eng.audits.find(a => !a.archive);
+  return !!(live?.signoff?.preparer && live?.signoff?.reviewer);
 }
 
 // ─── Review gate — concluded is not final until the reviewer countersigns ────────

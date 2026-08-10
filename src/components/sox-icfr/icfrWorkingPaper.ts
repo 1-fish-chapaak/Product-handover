@@ -227,6 +227,19 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
 
   blocks.push({ kind: 'kv', title: SIGNOFF_TITLE, rows: controlSignoffRows(eng, c) });
 
+  // Was this paper ever undone, and why? A reader arriving at the signatures asks
+  // that next, so the two ways a conclusion comes back — the reviewer sending it
+  // back, the auditor reopening it — are printed with them rather than left in
+  // the app's history rail, which the paper does not travel with.
+  if (c.reviewReturn) {
+    blocks.push({ kind: 'note', label: 'Returned by the reviewer', tone: 'neutral',
+      text: `${c.reviewReturn.reason} — ${c.reviewReturn.by}, ${c.reviewReturn.at}` });
+  }
+  if (c.reopened) {
+    blocks.push({ kind: 'note', label: 'Reopened by the auditor', tone: 'neutral',
+      text: `${c.reopened.reason || 'No reason recorded.'} — ${c.reopened.by}, ${c.reopened.at}` });
+  }
+
   // Test of design — documents received + each consideration ticked
   const docsIn = c.design.documents.filter(d => d.status === 'Received').length;
   const waived = c.design.documents.filter(d => d.waiver && d.status !== 'Received');
