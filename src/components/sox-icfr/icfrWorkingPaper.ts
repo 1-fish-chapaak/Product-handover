@@ -138,6 +138,13 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         if (!c.operating.sampling) return '—';
         return `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`;
       })()],
+      // What was asked for, per file, in the words it was asked in. The size and
+      // the method are the RESULT of the ask, and a reviewer reperforming the
+      // draw needs the ask itself: "25 items, random" cannot show that the
+      // auditor asked for two months tested end to end and got rows instead.
+      ...(sources.some(s => s.draw?.prompt)
+        ? [['Sample asked for', sources.filter(s => s.draw?.prompt).map(s => `${s.file} · "${s.draw!.prompt}"`).join('; ')]] as [string, string][]
+        : []),
       ['Population filter', c.operating.population?.criteria ?? '—'],
       // Every file the population stands on, not the first one. A paper that
       // names one of four extracts describes a population nobody can reperform,

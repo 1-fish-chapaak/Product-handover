@@ -505,6 +505,73 @@ export function sourceTotals(sources: PopulationSource[]): { count: number; rows
   return sources.reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
 }
 
+// ─── Asking for a sample in words ────────────────────────────────────────────────
+// A number could not carry what a draw actually needs. "क्या 25 निकालना है, किस
+// महीने का निकालना है, सब डिपेंड करता है उसपे" — testing whether every onboarded
+// vendor has a PAN on file is twenty-five vendors off the master; finding
+// duplicate invoices in a journal table is not something twenty-five rows can
+// find at all, and the answer there is two months tested end to end. The
+// selection unit itself changes, so the ask is written rather than picked, and
+// each file is asked for separately: "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़".
+
+/** What the application would ask for, before the auditor edits it. Drafted from
+ *  the sizing table and the file, so the ordinary case is one read and a click
+ *  and only the unusual one is typed. */
+export function draftSamplePrompt(c: Control, source: PopulationSource, suggested: number): string {
+  const what = c.frequency === 'Monthly' || c.frequency === 'Quarterly'
+    ? `Take ${suggested} of the ${source.count.toLocaleString()} instances in ${source.file}, one per period wherever the period has any, spread across the whole window.`
+    : `Take ${suggested} items at random from the ${source.count.toLocaleString()} instances in ${source.file}, spread across the whole window.`;
+  return what;
+}
+
+/** How the ask was read. Stated back on screen before the draw runs, because a
+ *  prompt nobody confirms the reading of is a prompt that quietly did something
+ *  else — and printed on the paper, because it is the method. */
+export interface SamplePlan {
+  size: number;
+  /** One line, in the same plain English the ask was written in. */
+  reading: string;
+  /** True when the ask narrowed by something other than a bare count — the draw
+   *  is then targeted rather than random, and the paper has to say so. */
+  targeted: boolean;
+}
+
+export function readSamplePrompt(prompt: string, source: PopulationSource, suggested: number, months: number): SamplePlan {
+  const p = prompt.trim();
+  if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items, at random.`, targeted: false };
+  const lower = p.toLowerCase();
+
+  // Time as the selection unit: "two months", "3 months". Every instance inside
+  // the chosen months is tested, so the size is the file's own run-rate over
+  // them — which is the whole reason this cannot be a count in a dropdown.
+  const byMonth = lower.match(/(\d+|one|two|three|four|six)\s*(?:calendar\s*)?months?/);
+  if (byMonth) {
+    const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, six: 6 };
+    const n = Math.max(1, Math.min(months, Number(byMonth[1]) || WORDS[byMonth[1]] || 1));
+    const perMonth = Math.max(1, Math.round(source.count / Math.max(1, months)));
+    return {
+      size: Math.max(1, n * perMonth),
+      reading: `${n} month${n === 1 ? '' : 's'} out of ${months}, every instance inside them — about ${(n * perMonth).toLocaleString()} items at this file's run rate.`,
+      targeted: true,
+    };
+  }
+
+  // A count, wherever it sits in the sentence.
+  const byCount = lower.match(/(\d[\d,]*)\s*(?:items?|rows?|instances?|vendors?|invoices?|entries|samples?)?/);
+  const n = byCount ? Number(byCount[1].replace(/,/g, '')) : NaN;
+  const size = Number.isFinite(n) && n > 0 ? Math.max(1, Math.min(source.count, n)) : suggested;
+  // Anything that names a slice of the population rather than just how many is a
+  // targeted draw, and calling it random on the paper would be untrue.
+  const targeted = /above|over|below|under|highest|largest|top |exceed|greater|only|where|month of|quarter|weekend|manual|duplicate|new |changed/.test(lower);
+  return {
+    size,
+    reading: targeted
+      ? `${size.toLocaleString()} items, chosen to fit the ask rather than at random — a targeted draw.`
+      : `${size.toLocaleString()} items at random, spread across the whole window.`,
+    targeted,
+  };
+}
+
 // ─── What the application can work out for itself ────────────────────────────────
 /** How seriously the application disagrees with the population.
  *

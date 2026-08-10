@@ -480,11 +480,18 @@ export interface PopulationSource {
   rows: number;
   count: number;
   criteria?: string;
-  /** The draw made off THIS file — how many, how, and the seed that makes it
-   *  reperformable. The items themselves are in `Sampling.samples`. Absent until
-   *  this file is sampled; a control can have three files sampled and a fourth
-   *  still waiting. */
-  draw?: { size: number; method: Sampling['method']; seed: number };
+  /** The draw made off THIS file — what was asked for, how many it came to, and
+   *  the seed that makes it reperformable. The items themselves are in
+   *  `Sampling.samples`. Absent until this file is sampled; a control can have
+   *  three files sampled and a fourth still waiting.
+   *
+   *  `prompt` is what the auditor actually asked for, in their own words. A
+   *  number could not carry it: the selection unit is not always a quantity
+   *  (dev call, Aug 2026 — "कभी क्वांटिटी हो रहा है X, तो कभी हो रहा है टाइम"),
+   *  and duplicate-invoice work over a journal table is not a thing 25 rows can
+   *  find at all. It is stored because with a prompt the prompt IS the method,
+   *  and a draw nobody can read back is not a procedure. */
+  draw?: { size: number; method: Sampling['method']; seed: number; prompt?: string };
   /** The tick on this file's accordion — "done with this one, on to the next".
    *
    *  Deliberately NOT a lock (dev call, Aug 2026: "लॉक ऐसे नहीं, बस अप्रूव मतलब

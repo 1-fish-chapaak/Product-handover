@@ -128,6 +128,46 @@ test('every file gets its own draw, in its own accordion', async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/05-both-sampled.png`, fullPage: true });
 });
 
+test('the sample is asked for in words, per file', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/');
+  await openAuditControl(page, MID_FLIGHT);
+
+  // ── the ask replaces the size dropdown ────────────────────────────────────
+  // "क्या 25 निकालना है, किस महीने का निकालना है, सब डिपेंड करता है उसपे" — the
+  // selection unit is not always a quantity, so a number in a dropdown cannot
+  // carry the question. The file still owing a draw opens on arrival.
+  const ask = page.getByLabel(/^What to draw from vendor_master/);
+  await ask.scrollIntoViewIfNeeded();
+  await expect(ask).toBeVisible({ timeout: 15_000 });
+  // Drafted, not blank — the ordinary case is still one read and a click.
+  expect((await ask.inputValue()).length).toBeGreaterThan(20);
+  // The sizing table has not gone; it is guidance beside the ask rather than
+  // the thing that decides.
+  await expect(page.getByText(/The sizing table says/).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/06-ask-in-words.png`, fullPage: true });
+
+  // ── time as the selection unit ────────────────────────────────────────────
+  // "मैं 12 महीने में ये दो महीने पे चेक करूँगा" — every instance inside the
+  // chosen months, which is a size no dropdown of counts could offer.
+  await ask.fill('Test two months end to end — every instance inside them.');
+  await page.waitForTimeout(500);
+  await expect(page.getByText(/Read as/).first()).toBeVisible();
+  await expect(page.getByText(/2 months out of \d+, every instance inside them/).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/07-read-as-months.png`, fullPage: true });
+
+  // ── and the ask is kept, not just its answer ──────────────────────────────
+  await page.getByRole('button', { name: /^Draw sample$/ }).first().click();
+  await page.waitForTimeout(3000);
+  // Approving the drawn items puts them on the paper and the file's card takes
+  // their place — with the ask still on it, in the words it was written in.
+  await page.getByRole('button', { name: 'Approve and continue' }).first().click();
+  await page.waitForTimeout(1200);
+  await expect(page.getByText('Test two months end to end — every instance inside them.').first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/08-ask-kept.png`, fullPage: true });
+});
+
 test('the proof accordion carries the same mark', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1600, height: 1100 });

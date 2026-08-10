@@ -17,7 +17,8 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
-  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor, type PopVerdict,
+  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
+  draftSamplePrompt, readSamplePrompt, windowMonths, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -2834,12 +2835,23 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
   type Stage = 'ready' | 'drawing' | 'review';
   const [stage, setStage] = useState<Stage>('ready');
-  const [rows, setRows] = useState(guide.suggested);
   const [drawn, setDrawn] = useState<string[]>([]);
   const [rejecting, setRejecting] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
   const ext = already.filter(x => x.extension).length;
-  const method: Sampling['method'] = 'Random';
+  // What to take out of THIS file, in words. Drafted from the sizing table and
+  // the file, then the auditor's to rewrite — "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़",
+  // one ask per file because each file's question is its own.
+  const drafted = draftSamplePrompt(control, source, guide.suggested);
+  const [prompt, setPrompt] = useState(drafted);
+  const [promptSeed, setPromptSeed] = useState(drafted);
+  if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const months = windowMonths(audit?.windowFrom, audit?.windowTo);
+  const plan = readSamplePrompt(prompt, source, guide.suggested, months);
+  // A draw that picked its items to fit an ask is not a random draw, and the
+  // paper has to say which it was.
+  const method: Sampling['method'] = plan.targeted ? 'Targeted' : 'Random';
   const seed = useMemo(
     () => 10000 + (`${control.id}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
     [control.id, source.id, openAuditId],
@@ -2847,19 +2859,25 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
   const draw = () => {
     setStage('drawing');
-    logEvent({ action: 'Run', description: `Drew ${rows} items from ${source.file} for ${control.id} — ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { setDrawn(sampleRefs(control.process, rows)); setStage('review'); }, 1800);
+    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'}`, module: 'SOX ICFR', entity: 'Test Result' });
+    window.setTimeout(() => { setDrawn(sampleRefs(control.process, plan.size)); setStage('review'); }, 1800);
   };
 
   const approve = () => {
-    drawSourceSample(control.id, source.id, { size: drawn.length, method, seed }, drawn);
+    // The ask travels with the draw. With a prompt the prompt IS the method, and
+    // a reviewer holding only "25 items, random" cannot tell whether the auditor
+    // asked for two months and got twenty-five rows instead.
+    drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined }, drawn);
     logEvent({ action: 'Update', description: `Approved the sample from ${source.file} for ${control.id} — ${drawn.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
     addToast({ type: 'success', title: 'Sample drawn', message: `${drawn.length} items from ${source.file} — test them against the attributes.` });
     setStage('ready'); setDrawn([]);
   };
   const restart = () => {
     setRejecting(false);
-    setStage('ready'); setRows(guide.suggested); setDrawn([]);
+    // The ask survives a rejected draw on purpose: the usual reason to reject is
+    // that the items came out wrong, not that the question was wrong, and
+    // retyping it every time would train people to accept whatever appeared.
+    setStage('ready'); setDrawn([]);
     logEvent({ action: 'Delete', description: `Rejected the drawn sample from ${source.file} for ${control.id} — draw restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
 
@@ -2898,6 +2916,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                 <p className="text-[0.71875rem] text-ink-700">
                   {already.length} item{already.length === 1 ? '' : 's'} drawn{ext > 0 && <span className="text-ink-500"> · {already.length - ext} original + {ext} extension</span>} — from {source.count.toLocaleString()} instances
                 </p>
+                {/* What was asked for, in the words it was asked in. A reviewer
+                    holding only "25 items, random" cannot tell whether the
+                    auditor asked for two months and got twenty-five rows. */}
+                {source.draw?.prompt && (
+                  <p className="text-[0.65625rem] text-ink-500 mt-1.5 leading-relaxed">
+                    <span className="text-ink-400">Asked for</span> · {source.draw.prompt}
+                  </p>
+                )}
                 {source.draw && (
                   <p className="text-[0.65625rem] text-ink-400 mt-1">
                     {source.draw.method.toLowerCase()}, seed <span className="tabular-nums">{source.draw.seed}</span> — reperform the draw with these and land on the same items.
@@ -2948,18 +2974,32 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
             <p className="text-[0.71875rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
           ) : (
             <>
-              {/* how many, then draw. That is the whole row. */}
-              <div className="flex items-end justify-between gap-3 flex-wrap">
-                <label className="block min-w-0">
-                  <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Sample size</span>
-                  <select value={rows} onChange={e => setRows(+e.target.value)} disabled={stage !== 'ready'}
-                    aria-label={`Sample size for ${source.file}`}
-                    className="w-44 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60">
-                    {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
-                      <option key={n} value={n}>{n} items{n === guide.suggested ? ' — suggested' : ''}</option>
-                    ))}
-                  </select>
-                </label>
+              {/* ── say what you want out of this file ─────────────────────
+                  A size dropdown could only ever ask "how many", and how many
+                  is not always the question: "क्या 25 निकालना है, किस महीने का
+                  निकालना है, सब डिपेंड करता है उसपे". Twenty-five vendors off a
+                  master answers whether every vendor has a PAN; twenty-five rows
+                  of a journal table will not find a duplicate invoice, and the
+                  real answer there is two months tested end to end. So the ask
+                  is written, drafted from the sizing table so the ordinary case
+                  is still one read and a click. */}
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">What to draw from this file</span>
+                <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
+              </div>
+              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} disabled={stage !== 'ready'}
+                aria-label={`What to draw from ${source.file}`}
+                placeholder="In plain English — how many, from where, over what period."
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:opacity-60" />
+              {/* How it was read, before it runs. A prompt nobody confirms the
+                  reading of is a prompt that quietly did something else. */}
+              <p className="mt-1.5 text-[0.65625rem] text-ink-500 leading-relaxed">
+                <span className="font-semibold text-ink-700">Read as</span> · {plan.reading}
+              </p>
+              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                  The sizing table says <span className="font-semibold text-ink-600 tabular-nums">{guide.suggested}</span> — band {guide.range}. Ask for something else and the paper records what you asked for.
+                </p>
                 <button disabled={stage !== 'ready'} onClick={draw}
                   className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                   {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
@@ -2969,14 +3009,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   stated once under the list rather than on every row. */}
               {single && (
                 <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
-                  {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
+                  {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
                 </p>
               )}
               <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
-                Random, seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — spread across the whole period. The seed comes off this control, this round and this file, and is stored on the paper, so the reviewer reperforms the draw and lands on these same items.
+                Seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — off this control, this round and this file, and stored on the paper with the ask, so the reviewer reperforms the draw and lands on these same items.
               </p>
               {stage === 'drawing' && (
-                <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
+                <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {plan.size} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
               )}
 
               {/* what came out — approve it onto the paper, or throw it back */}

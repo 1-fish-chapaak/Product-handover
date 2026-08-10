@@ -246,7 +246,7 @@ interface IcfrCtx {
   /** Record the draw made off ONE file: how many, how, and the items it landed
    *  on. They join the control's one list of sampled items, tagged with the file
    *  they came out of. */
-  drawSourceSample: (controlId: string, sourceId: string, draw: { size: number; method: Sampling['method']; seed: number }, refs: string[]) => void;
+  drawSourceSample: (controlId: string, sourceId: string, draw: NonNullable<PopulationSource['draw']>, refs: string[]) => void;
   /** Tick one file's accordion — its proof or its draw is done and the next file
    *  is next. A marker, not a lock: `on: false` takes it back off. */
   approveSource: (controlId: string, sourceId: string, which: 'ipe' | 'sample', on: boolean) => void;

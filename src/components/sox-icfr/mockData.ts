@@ -114,7 +114,14 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     sources: [
       {
         id: 'src-1', file: popFile, rows: popCount * 7, count: popCount, criteria: `type ${popSource.split('—')[0].trim()}`,
-        ...(sampling ? { draw: { size: extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size, method: sampling.method, seed: sampling.seed ?? 40817 } } : {}),
+        // The ask, not just the answer. Every seeded draw carries the words it
+        // was made in, because the paper prints them and a seed that skipped
+        // them would print a blank row on every control that was never touched.
+        ...(sampling ? { draw: {
+          size: extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size,
+          method: sampling.method, seed: sampling.seed ?? 40817,
+          prompt: `Take ${extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size} of the ${popCount.toLocaleString()} instances in ${popFile}, spread across the whole window.`,
+        } } : {}),
         // The first file is worked through and ticked. Something is always left
         // undone on the second — that is the state the call described a ten-file
         // control returning in ("चार का तुमने कर दिया था, दो बच रहा था"), and it
@@ -126,7 +133,13 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
         // A different file is a different draw, so it is a different seed. The
         // whole point of storing one is that the reviewer can reperform THIS
         // selection, and one seed shared by two draws reperforms one of them.
-        ...(sampling && extra.drawn ? { draw: { size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923 } } : {}),
+        // A different file is a different question. This one is a vendor master,
+        // so the ask is about vendors rather than about a spread of dates —
+        // which is the reason the ask is written per file at all.
+        ...(sampling && extra.drawn ? { draw: {
+          size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923,
+          prompt: `Take ${Math.floor(sampling.size / 2)} vendors from ${extra.file} that had a payment in the period.`,
+        } } : {}),
         // Proven, never marked. A file whose proof is done and whose draw is not
         // is the ordinary half-finished state, and the marks exist to show it.
         approvedIpe: { by: 'A. Mehta', at: '13 Apr' },
