@@ -31,6 +31,7 @@ import {
 import { FRESHNESS_META } from './insightFreshness';
 import { runActionInChat } from './insightChat';
 import { RecommendedActions, EvidenceDisclosure } from './InsightActions';
+import UniversalInsightActions from './UniversalInsightActions';
 import RunTrajectoryBand from './RunTrajectoryBand';
 import InsightEmailModal from './InsightEmailModal';
 import InsightFeedback from './InsightFeedback';
@@ -64,16 +65,9 @@ function FreshnessTag({ insight }: { insight: LayeredInsight }) {
   );
 }
 
-// Relative time for the header — ambient meta only (the audit trail keeps
-// absolute timestamps). Insights without a stamp were generated this render.
-function timeAgo(ts?: number): string {
-  if (!ts) return 'just now';
-  const m = Math.floor((Date.now() - ts) / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  return h < 24 ? `${h} hr ago` : `${Math.floor(h / 24)} d ago`;
-}
+// The header's relative timestamp ("18 min ago") was removed (review call
+// Aug 11 — card declutter): the audit trail keeps absolute timestamps, and
+// the stack footer already says when the set was generated.
 
 // ─── Evidence label per altitude ───────────────────────────────────────────
 
@@ -418,7 +412,6 @@ export default function LayeredInsightCard({
           ) : (
             <span className="text-[0.78125rem] font-bold text-ink-600">{scopeText}</span>
           )}
-          <span className="text-[0.71875rem] text-ink-400">· {timeAgo(insight.generatedAt)}</span>
           <div className="ml-auto flex items-center gap-2.5">
             {/* Severity, spelled out plain — label overrides like "Readiness: At
                 risk" stay on the hover title so the header reads one word. */}
@@ -509,25 +502,10 @@ export default function LayeredInsightCard({
                     One finding, counted once — open a row to make the change there.
                   </p>
                 </div>
-              ) : (insight.spans?.length ?? 0) > 0 && (
-                // Spans — the entities below this anchor the finding draws from.
-                // This card is their single record; each spanned row shows a
-                // one-line reflection pointing back here, never a copy.
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mr-0.5">Spans</span>
-                  {insight.spans!.map(s => (
-                    <span
-                      key={`${s.kind}:${s.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-evidence-100 bg-evidence-50 px-2 py-0.5 text-[0.65625rem] font-semibold text-evidence-700"
-                      title={s.note ?? s.label}
-                    >
-                      <span className="font-mono text-[0.59375rem]">{s.id}</span>
-                      <span className="max-w-[180px] truncate">{s.label}</span>
-                    </span>
-                  ))}
-                  <span className="text-[0.625rem] text-ink-400">· counted once — anchored on this card</span>
-                </div>
-              )}
+              ) : null}
+              {/* The expanded SPANS chip strip was removed (review call Aug 11 —
+                  card declutter): the collapsed row's "Spans N controls" tag and
+                  each spanned row's reflection already carry the relationship. */}
 
               {/* Evidence disclosure — collapsed-by-default toggle + check-more
                   chips + calm Source/Item/Detail table (shared surface). Short
@@ -552,6 +530,7 @@ export default function LayeredInsightCard({
                   recs={summary ? recs.slice(0, 2) : recs}
                   className={summary ? 'mt-3' : 'mt-2.5'}
                   onOpen={(r) => openRec(recs.find(x => x.id === r.id) ?? recs[0])}
+                  insight={insight}
                 />
               ) : (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-canvas-border p-3">
@@ -565,6 +544,7 @@ export default function LayeredInsightCard({
                       </li>
                     ))}
                   </ul>
+                  <UniversalInsightActions insight={insight} className="mt-1.5" />
                 </div>
               )}
 
