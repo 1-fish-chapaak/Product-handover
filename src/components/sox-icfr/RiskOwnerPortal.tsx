@@ -121,9 +121,13 @@ export default function RiskOwnerPortal() {
               // a remediation row says which of the owner's two steps it is on
               const cta = t.type === 'remediation' ? remediationCta(t) : { label: m.action, Icon: m.Icon };
               const urgent = dueNow(t);
+              // The task says which step answers it, so the row lands there rather
+              // than at the top of a five-step page. A request to upload source
+              // data that opens on the design documents is a row that made the
+              // reader do the finding themselves.
               return (
-                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId); } }}
+                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId, t.focus); } }}
                   className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400'} /></span>
                   <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">

@@ -73,6 +73,9 @@ const eyebrow = 'text-[0.625rem] font-semibold uppercase tracking-[0.1em]';
 const bandCls = '-mx-4 px-4 py-1.5 bg-paper-50 border-y border-canvas-border';
 const thCls = 'text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-ink-500';
 const inputCls = 'h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 tabular-nums focus:border-brand-300 outline-none cursor-pointer';
+/** Why New audit is dead on a matrix-less engagement. One sentence, and the same
+ *  one on both of this page's create buttons. */
+const RACM_FIRST = 'Add a RACM first — an audit with no controls has nothing to test.';
 
 /**
  * One panel of the board. The header lives INSIDE the card (user ask): KIND tag
@@ -404,6 +407,17 @@ export default function EngagementOverview() {
   const still = useReducedMotion();
 
   const canCreate = role !== 'risk-owner';
+  /**
+   * No matrix, no audit.
+   *
+   * An audit scopes itself from the RACM — by entity or by matrix, either path
+   * ends up covering a set of controls — so on an engagement with none there is
+   * nothing for it to test, and every route through the wizard produces an empty
+   * cycle. A RACM here IS a process's set of controls (the equivalence Racm.tsx
+   * and the wizard's own list both work from), so an empty control library is an
+   * empty matrix.
+   */
+  const noRacm = eng.controls.length === 0;
 
   /**
    * The widest range the engagement has anything in — the default, and what
@@ -508,12 +522,16 @@ export default function EngagementOverview() {
   );
 
   const newAuditBtn = canCreate ? (
-    <button
-      onClick={() => setCreating(true)}
-      className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
-    >
-      <Plus size={15} /> New audit
-    </button>
+    <div className="flex items-center gap-2.5 shrink-0">
+      {noRacm && <span className="text-[0.75rem] text-ink-400">{RACM_FIRST}</span>}
+      <button
+        onClick={() => setCreating(true)}
+        disabled={noRacm}
+        className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 enabled:hover:bg-brand-500 enabled:active:bg-brand-800 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-colors cursor-pointer"
+      >
+        <Plus size={15} /> New audit
+      </button>
+    </div>
   ) : null;
 
   // Nothing to show a portfolio of yet.
@@ -521,23 +539,29 @@ export default function EngagementOverview() {
     // Here — and only here — the RACM leads. An audit scopes itself from the
     // matrix, so on a blank engagement "New audit" is the second move, not the
     // first: it would open a wizard whose Scope step has nothing to offer.
-    // Both stay live; the ranking is the advice, not a gate. Once there are
-    // audits, New audit is the toolbar's one create action again.
+    // Until the matrix exists that ranking is a gate rather than advice — the
+    // wizard has no path that ends in a testable audit, so the second button
+    // waits. Once there are audits, New audit is the toolbar's one create
+    // action again.
     const firstActions = canCreate ? (
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        <button
-          onClick={openRacmCreate}
-          title="Import a matrix, or extract one from an SOP — the audit scopes itself from it"
-          className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
-        >
-          <UploadCloud size={15} /> Upload RACM
-        </button>
-        <button
-          onClick={() => setCreating(true)}
-          className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
-        >
-          <Plus size={15} /> New audit
-        </button>
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <button
+            onClick={openRacmCreate}
+            title="Import a matrix, or extract one from an SOP — the audit scopes itself from it"
+            className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
+          >
+            <UploadCloud size={15} /> Upload RACM
+          </button>
+          <button
+            onClick={() => setCreating(true)}
+            disabled={noRacm}
+            className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <Plus size={15} /> New audit
+          </button>
+        </div>
+        {noRacm && <p className="text-[0.75rem] text-ink-400">{RACM_FIRST}</p>}
       </div>
     ) : null;
     const steps = [

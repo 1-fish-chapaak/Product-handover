@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -149,10 +149,16 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // Every file the population stands on, not the first one. A paper that
       // names one of four extracts describes a population nobody can reperform,
       // and the reviewer has no way of telling that three files are missing.
+      // Assisting tables are named on the paper too, and named as what they are.
+      // A reviewer who sees a vendor master listed and no items drawn from it
+      // would otherwise be reading an unexplained hole in the testing.
       ['Filtered from', sources.length
-        ? sources.map(s => (hasRowCount(s.file)
-          ? `${s.file} · ${s.rows.toLocaleString()} rows → ${s.count.toLocaleString()}`
-          : `${s.file} · no row count (PDF) → ${s.count.toLocaleString()}`)).join('; ')
+        ? sources.map(s => {
+          const rows = hasRowCount(s.file) ? `${s.rows.toLocaleString()} rows` : 'no row count (PDF)';
+          return isAssisting(s)
+            ? `${s.file} · ${rows} · assisting table — joined by the workflow, not sampled`
+            : `${s.file} · ${rows} → ${s.count.toLocaleString()}`;
+        }).join('; ')
         : '—'],
       ['Population locked', c.operating.population?.locked ? `${c.operating.population.locked.by}, ${c.operating.population.locked.at}` : 'Not locked'],
       // What the population IS. The on-screen definition form was dropped, so

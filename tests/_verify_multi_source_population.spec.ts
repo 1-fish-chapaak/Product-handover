@@ -124,7 +124,7 @@ test('every file gets its own draw, in its own accordion', async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/04-approved-file.png`, fullPage: true });
 
   // ── drawing the second file, then marking it ──────────────────────────────
-  await page.getByRole('button', { name: /vendor_master/ }).first().click();
+  await page.getByRole('button', { name: /h2_extract/ }).first().click();
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: /^Draw sample$/ }).first().click();
   await page.waitForTimeout(3000);
@@ -144,7 +144,7 @@ test('the sample is asked for in words, per file', async ({ page }) => {
   // "क्या 25 निकालना है, किस महीने का निकालना है, सब डिपेंड करता है उसपे" — the
   // selection unit is not always a quantity, so a number in a dropdown cannot
   // carry the question. The file still owing a draw opens on arrival.
-  const ask = page.getByLabel(/^What to draw from vendor_master/);
+  const ask = page.getByLabel(/^What to draw from .*h2_extract/);
   await ask.scrollIntoViewIfNeeded();
   await expect(ask).toBeVisible({ timeout: 15_000 });
   // Drafted, not blank — the ordinary case is still one read and a click.

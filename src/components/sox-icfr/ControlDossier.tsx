@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -39,7 +39,7 @@ import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -2204,6 +2204,41 @@ function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (n
  *  does not narrow it further, which is the confusion the two steps used to
  *  share.
  */
+/** The attributes still owed a file, and the way to chase them.
+ *
+ *  One implementation, two homes: the picker (while the first file is being
+ *  chosen) and the source list (every time after that). A gap that only appeared
+ *  in the picker vanished the moment the first file landed, which is exactly
+ *  when somebody would come back to look for it.
+ *
+ *  The data is the owner's, so the ask goes to them rather than being worked
+ *  around — "आपको RO को रिमाइंडर भी देना पड़ेगा ईमेल पे कि भाई यहाँ आओ और फाइल
+ *  अपलोड करो". It lands on the same task list the design documents use.
+ */
+function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean }) {
+  const { remindOwnerForFiles } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const { awaiting } = useMemo(() => expectedInputsFor(control), [control]);
+  if (!awaiting.length) return null;
+  return (
+    <div className="mt-1.5">
+      <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
+        {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
+      </p>
+      {canAsk && (
+        <button onClick={() => {
+          const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} need the source data their workflow reads. Upload it on the control's Population step.`;
+          remindOwnerForFiles(control.id, what);
+          logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
+          addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
+        }}
+          className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
+      )}
+    </div>
+  );
+}
+
 /** Pick a file, say what to take out of it, extract.
  *
  *  One implementation, two callers: the first file — which creates the
@@ -2245,7 +2280,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
   // What the attributes' workflows actually read. This is the answer to "which
   // files", and it beats any heuristic: a linked workflow naming its input is a
   // fact, not a guess.
-  const { inputs, awaiting } = useMemo(() => expectedInputsFor(control), [control]);
+  const { inputs } = useMemo(() => expectedInputsFor(control), [control]);
   const expected = new Map(inputs.map(i => [i.name, i]));
   // Files the workflows name come first. The rest of the audit's files stay
   // selectable — a manual control links no workflow at all, and a step that
@@ -2326,26 +2361,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
             {/* The other half of the truth. An attribute wired to a workflow with
                 no file attached is a thing somebody owes, and hiding it here
                 would make the list look complete when it is not. */}
-            {awaiting.length > 0 && (
-              <div className="mt-1">
-                <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
-                  {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
-                </p>
-                {/* The data is the owner's, so a missing file is a thing to
-                    chase rather than a thing to work around. The ask lands on
-                    the same task list the design documents use — one place the
-                    owner looks, not a second inbox for the same kind of ask. */}
-                {isAuditor && (
-                  <button onClick={() => {
-                    const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} need the source data their workflow reads. Upload it on the control's Population step.`;
-                    remindOwnerForFiles(control.id, what);
-                    logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
-                    addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
-                  }}
-                    className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
-                )}
-              </div>
-            )}
+            <AwaitingInputs control={control} canAsk={isAuditor} />
           </div>
         </div>
       )}
@@ -2468,7 +2484,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
 }
 
 function PopulationSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { eng, openAuditId, role, me, setPopulation, clearPopulation, addPopulationSource, removePopulationSource, lockPopulation } = useIcfr();
+  const { eng, openAuditId, role, me, setPopulation, clearPopulation, addPopulationSource, removePopulationSource, setSourceRole, lockPopulation } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const files = useAuditFiles();
@@ -2495,6 +2511,10 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
   // a picker that is always there reads as work still owed.
   const [addingSource, setAddingSource] = useState(false);
   const [dropping, setDropping] = useState<PopulationSource | null>(null);
+  // Turning a sampled file into an assisting table throws its items away, so
+  // it is confirmed. Turning one back is not — an assisting table has nothing
+  // to lose.
+  const [roleChange, setRoleChange] = useState<{ source: PopulationSource; drawn: number } | null>(null);
   const sources = populationSources(control);
 
   // The extract itself lives in SourcePickerForm — the first file and every file
@@ -2664,12 +2684,40 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                       )}
                     </div>
                     <div className="mt-1 flex items-center gap-2.5 flex-wrap pl-[1.4375rem]">
+                      {/* Population or assisting table. Asked on the row because
+                          it is a fact about THIS file, and because it changes
+                          what the two numbers beside it mean: an assisting
+                          table's rows are not instances of the control and are
+                          never counted as any. */}
+                      {isAuditor && !locked ? (
+                        <select value={s.role ?? 'population'} aria-label={`What ${s.file} is to this control`}
+                          onChange={e => {
+                            const next = e.target.value as SourceRole;
+                            if (next === 'assisting' && drawn > 0) { setRoleChange({ source: s, drawn }); return; }
+                            setSourceRole(control.id, s.id, next);
+                          }}
+                          className={cn('h-6 pl-1.5 pr-5 rounded border text-[0.625rem] font-bold uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200',
+                            isAssisting(s) ? 'border-canvas-border bg-paper-50 text-ink-500' : 'border-brand-200 bg-brand-50 text-brand-700')}>
+                          <option value="population">Population</option>
+                          <option value="assisting">Assisting</option>
+                        </select>
+                      ) : (
+                        <span className={cn('px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide',
+                          isAssisting(s) ? 'bg-paper-100 text-ink-600' : 'bg-brand-50 text-brand-700')}>
+                          {isAssisting(s) ? 'Assisting' : 'Population'}
+                        </span>
+                      )}
                       <span className="text-[0.65625rem] text-ink-400 min-w-0 truncate">{s.criteria ?? 'No filter applied'}</span>
                       <span className="text-[0.65625rem] text-ink-400">·</span>
                       <span className={cn('text-[0.65625rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
                         {checks.length ? `${proven}/${checks.length} checks proven` : 'not registered yet'}
                       </span>
-                      {drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
+                      {/* An assisting table is proven and then left alone. Said
+                          once, here, so its blank sample column reads as correct
+                          rather than as work nobody got to. */}
+                      {isAssisting(s)
+                        ? <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] text-ink-500">joined by the workflow, never sampled</span></>
+                        : drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
                     </div>
                   </div>
                 );
@@ -2678,6 +2726,14 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
             <p className="mt-1.5 text-[0.65625rem] text-ink-400 leading-relaxed">
               Each file is proved on its own and sampled on its own. The verdict on the report is one for all of them — a check that fails on any file sinks the lot.
             </p>
+            {/* ── still owed ──────────────────────────────────────────────────
+                A control with a population can still be short a file: an
+                attribute wired to a workflow that has no input attached owes
+                one, and until this was said here the only place it appeared was
+                the picker — which is closed the moment the first file lands. A
+                gap you can only see while doing something else is a gap nobody
+                chases. */}
+            <AwaitingInputs control={control} canAsk={isAuditor} />
             {addingSource && (
               <div className="mt-3 rounded-xl border border-canvas-border bg-paper-50/50 p-3.5">
                 <SourcePickerForm control={control} exclude={sources.map(s => s.file)} submitLabel="Add to the population" onSubmit={addSource} />
@@ -2845,6 +2901,40 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
               <button onClick={() => { clearPopulation(control.id); setWithdrawing(false); logEvent({ action: 'Delete', description: `Withdrew the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+
+      {/* ── a sampled file becoming an assisting table ──────────────────────
+          Worth confirming, because the items go. An assisting table is joined
+          onto the population rather than tested, so items drawn from one were
+          testing the wrong thing — but somebody spent time on them, and a
+          dropdown that silently binned that work would not be trusted twice. */}
+      {roleChange && createPortal(
+        <div className="modal-backdrop" onClick={() => setRoleChange(null)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-mitigated-50 text-mitigated-800 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Make {roleChange.source.file} an assisting table?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">
+                    An assisting table is joined onto the population, not tested — so its {roleChange.drawn} drawn item{roleChange.drawn === 1 ? '' : 's'} go, along with every attribute result recorded against them, and its {roleChange.source.count.toLocaleString()} instances leave the population count.
+                  </p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">Its four checks stay. A join onto an unproven table produces an unproven answer, so it is still proven — just never sampled.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRoleChange(null)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it sampled</button>
+              <button onClick={() => {
+                setSourceRole(control.id, roleChange.source.id, 'assisting');
+                logEvent({ action: 'Update', description: `Marked ${roleChange.source.file} an assisting table on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+                addToast({ type: 'success', title: 'Assisting table', message: `${roleChange.source.file} — proven, joined, never sampled.` });
+                setRoleChange(null);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.78125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
             </div>
           </motion.div>
         </div>,
@@ -3211,7 +3301,11 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // else, so the journey is not offered to anyone else either.
   const canDraw = canEdit && role === 'auditor' && !isControlLocked(control);
   const o = control.operating;
-  const sources = populationSources(control);
+  // Only the files the control is tested ON. An assisting table is joined onto
+  // the population by the workflow and never drawn from, so offering it a Draw
+  // sample button would be offering to test the wrong thing.
+  const sources = sampledSources(populationSources(control));
+  const assisting = populationSources(control).filter(isAssisting);
   const holds = itgcHolds(eng, control);
   const guide = sampleSizeGuide(control, holds);
   // One file open at a time, starting on the first that still owes work. A
@@ -3265,6 +3359,13 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           <span className="text-[0.6875rem] text-ink-500">
             across {sources.length} files — <span className="font-semibold text-ink-700">{drawnFiles} of {sources.length} sampled</span>
             {doneFiles < sources.length && <span className="text-ink-400">, {doneFiles} marked done</span>}
+          </span>
+        )}
+        {/* Named, not omitted. A file that was in the population step and is not
+            here reads as something forgotten unless the step says why. */}
+        {assisting.length > 0 && (
+          <span className="text-[0.6875rem] text-ink-400">
+            {assisting.map(a => a.file).join(', ')} {assisting.length === 1 ? 'is an assisting table' : 'are assisting tables'} — joined, not sampled.
           </span>
         )}
       </div>
@@ -3498,7 +3599,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 // ── vertical stepper step ─────────────────────────────────────────────────────────
 // `hideStatus` suppresses the default pill/stamp + flash — used by the sample step,
 // whose status drives the node visual only (a "Sample approved" chip rides in `right`).
-function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean }) {
+function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
   const [open, setOpen] = useState(defaultOpen);
@@ -3514,8 +3615,11 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
     prev.current = status;
   }, [status]);
 
+  // `arrived` rings the step somebody was sent to. A page that scrolls somewhere
+  // without saying why looks like it loaded wrong — the ring is what makes the
+  // scroll read as an answer to the click, and it clears itself.
   return (
-    <motion.div id={id} className="vstep" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+    <motion.div id={id} className={cn('vstep transition-shadow duration-500', arrived && 'rounded-xl ring-2 ring-brand-500/60 shadow-lg shadow-brand-500/10')} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
       <div className="vstep-rail" />
       <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
       <div className={cn('panel relative', locked && 'panel-locked')}>
@@ -3745,7 +3849,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep } = useIcfr();
   const logEvent = useAuditLog();
   // preview-before-download for this control's working paper
   const [wpPreview, setWpPreview] = useState(false);
@@ -3757,6 +3861,35 @@ export default function ControlDossier() {
   // The deficiency this paper raised, graded here rather than somewhere else.
   const [defOpen, setDefOpen] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
+  // ── landing where the click was about ──────────────────────────────────────
+  // Above the early return on purpose: hooks have to run on every render, and
+  // a render that bails before them crashes the page the moment the counts
+  // differ. (That is not hypothetical — it did.)
+  // A row that says "upload the source data" should land on the Population step,
+  // not at the top of a five-step page the reader then has to search. Same
+  // one-shot channel the deficiency focus uses: set on the way in, consumed once
+  // on arrival, and coming back later lands nowhere in particular.
+  //
+  // The scroll waits a beat because the step it is aiming at has not mounted
+  // when this first runs, and a scroll to nothing is a scroll that silently did
+  // nothing.
+  const [arrivedAt, setArrivedAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (focusStep !== 'population') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('vstep-population')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setArrivedAt('population');
+      clearFocusStep();
+    }, 160);
+    return () => window.clearTimeout(t);
+  }, [focusStep, clearFocusStep]);
+  // The ring is a cue, not a state — it says "here" and then gets out of the way.
+  useEffect(() => {
+    if (!arrivedAt) return;
+    const t = window.setTimeout(() => setArrivedAt(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [arrivedAt]);
+
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // ── who is standing here, and what that permits ─────────────────────────────
   // Rewritten Aug 2026 (Step-2 action item 23). The risk owner is the FIRST LINE:
@@ -3999,7 +4132,7 @@ export default function ControlDossier() {
               greyed: the whole reason the lines are separate is that the first
               line must not learn what will be tested or at what threshold. */}
           {isOwner ? (opApplies && (
-            <VStep n={2} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
+            <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
               status={control.operating.population ? 'Effective' : 'Not tested'}
               right={control.operating.population
                 ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.population.count.toLocaleString()} instances</span>
@@ -4015,7 +4148,7 @@ export default function ControlDossier() {
               person to tick that they agreed. What gates the lock now is the IPE
               conclusion: four checks somebody actually performs on the report the
               population came out of. */}
-          <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
+          <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked ? 'Effective' : 'Not tested'}
             right={popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>

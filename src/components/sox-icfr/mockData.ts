@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -91,7 +91,8 @@ const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points
  *  shape — but "one control, several files" has to be reachable without anyone
  *  building it by hand, or the per-file proof and the per-file draw are features
  *  nobody ever sees. See PopulationSource. */
-const secondSource = (file: string, rows: number, count: number, criteria: string, drawn = true) => ({ file, rows, count, criteria, drawn });
+const secondSource = (file: string, rows: number, count: number, criteria: string, drawn = true, role: SourceRole = 'assisting') =>
+  ({ file, rows, count, criteria, drawn, role });
 
 const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx', extra?: ReturnType<typeof secondSource>): OperatingTrack => ({
   method: 'Manual',
@@ -118,9 +119,9 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
         // was made in, because the paper prints them and a seed that skipped
         // them would print a blank row on every control that was never touched.
         ...(sampling ? { draw: {
-          size: extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size,
+          size: extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size,
           method: sampling.method, seed: sampling.seed ?? 40817,
-          prompt: `Take ${extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size} of the ${popCount.toLocaleString()} instances in ${popFile}, spread across the whole window.`,
+          prompt: `Take ${extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size} of the ${popCount.toLocaleString()} instances in ${popFile}, spread across the whole window.`,
         } } : {}),
         // The first file is worked through and ticked. Something is always left
         // undone on the second — that is the state the call described a ten-file
@@ -129,14 +130,14 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
         ...(extra ? { approvedIpe: { by: 'A. Mehta', at: '13 Apr' }, ...(sampling ? { approvedSample: { by: 'A. Mehta', at: '15 Apr' } } : {}) } : {}),
       },
       ...(extra ? [{
-        id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria,
+        id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria, role: extra.role,
         // A different file is a different draw, so it is a different seed. The
         // whole point of storing one is that the reviewer can reperform THIS
         // selection, and one seed shared by two draws reperforms one of them.
         // A different file is a different question. This one is a vendor master,
         // so the ask is about vendors rather than about a spread of dates —
         // which is the reason the ask is written per file at all.
-        ...(sampling && extra.drawn ? { draw: {
+        ...(sampling && extra.drawn && extra.role !== 'assisting' ? { draw: {
           size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923,
           prompt: `Take ${Math.floor(sampling.size / 2)} vendors from ${extra.file} that had a payment in the period.`,
         } } : {}),
@@ -188,7 +189,7 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     ...sampling,
     seed: sampling.seed ?? 40817,
     samples: extra
-      ? sampling.samples.map((s, i) => ({ ...s, sourceId: extra.drawn && i % 2 !== 0 ? 'src-2' : 'src-1' }))
+      ? sampling.samples.map((s, i) => ({ ...s, sourceId: extra.drawn && extra.role !== 'assisting' && i % 2 !== 0 ? 'src-2' : 'src-1' }))
       : sampling.samples,
   } : undefined,
   steps,
@@ -1991,15 +1992,23 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
             opDone ? 'Effective' : 'Not tested', opSteps,
             opDone || midFlight ? sampling(midFlight ? 12 : 25, 'Standard sample — moderate reliance.', 'Random') : undefined,
             opDone || midFlight ? 2000 + i * 7 : 0, undefined, undefined,
-            (opDone && i === 0) || midFlight
+            // Two different second files, because they are two different things.
+            // The concluded control reads a vendor master — the call's own
+            // example of an assisting table: joined onto the population by the
+            // workflow, proven, and never sampled. The mid-flight control reads
+            // a second half-year extract, which IS population and is the file
+            // still waiting for its draw.
+            opDone && i === 0
               ? secondSource(
                 `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265,
-                'Active vendors with a payment in the period',
-                // The mid-flight control's second file is registered and proven
-                // but never drawn — that is the thing left to do.
-                !midFlight,
+                'Active vendors with a payment in the period', false, 'assisting',
               )
-              : undefined,
+              : midFlight
+                ? secondSource(
+                  `${name.toLowerCase().replace(/[^a-z]+/g, '_')}_h2_extract.csv`, 9240, 1320,
+                  'Second half of the period', false, 'population',
+                )
+                : undefined,
           ),
       };
     });

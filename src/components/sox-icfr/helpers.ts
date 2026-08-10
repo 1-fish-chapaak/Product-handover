@@ -498,11 +498,22 @@ export function samplesFor(c: Control, sourceId: string): Sample[] {
   return samples.filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
 }
 
+/** Is this file the thing being tested, or a table joined onto it? */
+export const isAssisting = (s: PopulationSource): boolean => s.role === 'assisting';
+
+/** The files the control is actually tested on. Assisting tables are read by the
+ *  workflow and proven like anything else, but nothing is drawn from them. */
+export const sampledSources = (sources: PopulationSource[]): PopulationSource[] => sources.filter(s => !isAssisting(s));
+
 /** The totals the control-level record carries — recomputed from the files
  *  rather than incremented, so adding, re-filtering and withdrawing a file all
- *  land on the same arithmetic and none of them can drift. */
+ *  land on the same arithmetic and none of them can drift.
+ *
+ *  Assisting files are left out of both numbers. A vendor master's rows are not
+ *  instances of the control, and adding them to the population count would
+ *  inflate the very figure the sample size is judged against. */
 export function sourceTotals(sources: PopulationSource[]): { count: number; rows: number } {
-  return sources.reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
+  return sampledSources(sources).reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
 }
 
 // ─── Where the population's files come from ──────────────────────────────────────

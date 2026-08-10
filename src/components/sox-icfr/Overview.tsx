@@ -183,10 +183,17 @@ export default function Overview() {
           audit is created from the engagement's SOX audit tab, one level up —
           not from inside a cycle that is already open. */}
       {!isOwner && !inAudit && (
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-2.5">
+          {/* No matrix, no audit. An audit covers a set of controls however it is
+              scoped, so on an engagement with none the wizard has no path that
+              ends in something testable — and a RACM here IS a process's set of
+              controls, so an empty library is an empty matrix. The reason rides
+              beside the dead button; the fix lives on the RACM tab. */}
+          {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           <button
             onClick={() => setCreating(true)}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+            disabled={racmMissing}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={15} /> New audit
           </button>

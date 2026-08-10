@@ -472,6 +472,17 @@ export interface AuditFileRecord {
  *  - the drawn items. They live in `Sampling.samples`, tagged the same way, so
  *    TOE tests one list of items and does not have to know how many files they
  *    came out of. */
+/** What a source file IS to the control.
+ *
+ *  Not every file a control reads is a population. Testing for duplicate vendor
+ *  invoices reads a journal table AND a vendor master, but the invoices are the
+ *  thing being tested and the vendor master is only joined onto them — "वेंडर
+ *  मास्टर इज ए असिस्टिंग टेबल… वेंडर मास्टर का पापुलेशन ड्रा नहीं होगा, सिर्फ
+ *  BKPF का ही होगा". An assisting file is still PROVEN — a join onto an
+ *  unreliable table produces an unreliable answer — but it is never sampled and
+ *  its rows are never counted as instances of the control. */
+export type SourceRole = 'population' | 'assisting';
+
 export interface PopulationSource {
   id: string;
   /** The file record's name. */
@@ -480,6 +491,12 @@ export interface PopulationSource {
   rows: number;
   count: number;
   criteria?: string;
+  /** Absent means population — every file drawn before the distinction existed
+   *  was one. The FIRST file is a population by default and everything added
+   *  after it is assisting until somebody says otherwise: the common reason to
+   *  add a second file is to join something onto the first, and a file that is
+   *  silently sampled is a sample nobody asked for. */
+  role?: SourceRole;
   /** The draw made off THIS file — what was asked for, how many it came to, and
    *  the seed that makes it reperformable. The items themselves are in
    *  `Sampling.samples`. Absent until this file is sampled; a control can have
@@ -868,6 +885,12 @@ export interface HandoffTask {
   assigneeRole: Role;
   raisedBy: string;
   dueLabel: string;
+  /** Which step on the control page answers this task. A row that names a
+   *  specific thing should land on that thing rather than on a page the
+   *  reader then has to search — the same reasoning `focusDefId` follows for
+   *  deficiencies. Absent means the top of the page, which is right for a
+   *  task that is about the control as a whole. */
+  focus?: 'population';
   overdue: boolean;
   status: TaskStatus;
 }

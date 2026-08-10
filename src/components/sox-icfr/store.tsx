@@ -5,7 +5,7 @@ import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
-  PopulationSource, Sample, Sampling, SignificantAccount, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, Sample, Sampling, SignificantAccount, SourceRole, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -107,6 +107,10 @@ function ownsIt(state: IcfrEngagement, controlId: string, person: string): boole
 export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs' | 'deficiencies' | 'config';
 // 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs' | 'config'
 // are root-level views; the rest are drill-ins reached from them.
+/** Which step on the control page a navigation was about. One value today —
+ *  the list grows as other rows learn to name where they land. */
+export type FocusStep = 'population';
+
 type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'config' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
 export interface RacmEditorMeta { name: string; process?: string }
 
@@ -153,7 +157,13 @@ interface IcfrCtx {
   setView: (v: View) => void;
   openRacmMatrix: (process: string) => void;
   openRacmEditor: (meta: RacmEditorMeta) => void;
-  openControl: (id: string) => void;
+  /** Open a control. `focus` names the step the click was about, so a row that
+   *  says "upload the source data" lands on the Population step rather than
+   *  at the top of a five-step page. Consumed once on arrival — coming back
+   *  later should land nowhere in particular. */
+  openControl: (id: string, focus?: FocusStep) => void;
+  focusStep: FocusStep | null;
+  clearFocusStep: () => void;
   /** Open ONE exception, wherever it lives — the audit that owns it, the
    *  deficiencies tab inside it, and that card expanded and scrolled to. A row
    *  that names a specific finding should land on that finding, not on a list
@@ -243,6 +253,10 @@ interface IcfrCtx {
    *  nothing else does — the other files' proof and testing were never in
    *  question. Dropping the last one withdraws the population outright. */
   removePopulationSource: (controlId: string, sourceId: string) => void;
+  /** Say whether a file is the population or a table joined onto it. Turning a
+   *  sampled file into an assisting one throws its sample away — an assisting
+   *  table has no items to test. */
+  setSourceRole: (controlId: string, sourceId: string, role: SourceRole) => void;
   /** Record the draw made off ONE file: how many, how, and the items it landed
    *  on. They join the control's one list of sampled items, tagged with the file
    *  they came out of. */
@@ -489,10 +503,26 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const [focusDefId, setFocusDefId] = useState<string | null>(null);
   const clearFocusDef = useCallback(() => setFocusDefId(null), []);
-  const openControl = useCallback((id: string) => {
+  // Declared up here with the rest of the navigation state — openControl reads
+  // it to decide whether a focused open needs to enter an audit first.
+  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
+  const [focusStep, setFocusStep] = useState<FocusStep | null>(null);
+  const clearFocusStep = useCallback(() => setFocusStep(null), []);
+  const openControl = useCallback((id: string, focus?: FocusStep) => {
     setReturnView(RETURNABLE.includes(view) ? view : null);
+    setFocusStep(focus ?? null);
+    // A focus names a STEP, and the steps only exist on the audit-level control
+    // page — outside an audit the same view renders the library detail, which
+    // has no Population to land on. So a focused open resolves the audit the
+    // control is tested under and goes in through it, the same way
+    // openDeficiency does for a finding.
+    if (focus && !openAuditId) {
+      const proc = eng.controls.find(c => c.id === id)?.process;
+      const owning = eng.audits.find(a => a.controlIds?.length ? a.controlIds.includes(id) : (proc ? a.scopeNames.includes(proc) : false));
+      if (owning) { setOpenAuditId(owning.id); setTabState('overview'); }
+    }
     setSelectedControlId(id); setView('dossier');
-  }, [view]);
+  }, [view, openAuditId, eng.controls, eng.audits]);
   // A counted click on the Overview lands on the register showing exactly the
   // counted set — the register consumes the preset once, then owns its filters.
   const [registerPreset, setRegisterPreset] = useState<{ view?: string; process?: string } | null>(null);
@@ -917,7 +947,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // The same file twice is the same rows twice, and every count downstream
       // would double. Nothing is added rather than a second entry appearing.
       if (existing.some(s => s.file === src.file)) return c;
-      const entry: PopulationSource = { ...src, id: uid('src') };
+      // Assisting unless told otherwise. The usual reason to add a second file
+      // is to join something onto the first — a vendor master onto a journal
+      // table — and a file that starts sampling itself is a sample nobody asked
+      // for, inside a population count nobody meant to inflate.
+      const entry: PopulationSource = { role: 'assisting', ...src, id: uid('src') };
       const ipe = c.operating.ipe;
       return {
         ...c,
@@ -985,6 +1019,49 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     pushExec(prev => {
       const file = prev.controls.find(c => c.id === controlId)?.operating.population?.sources?.find(s => s.id === sourceId)?.file;
       return { controlId, track: 'operating', kind: 'sample', verb: 'dropped a source file — its proof and the items drawn off it went with it', target: file };
+    });
+  }, [patchControl, pushExec, role]);
+
+  // Population or assisting table. Turning a sampled file into an assisting one
+  // takes its items with it — an assisting table is joined onto the population,
+  // not tested, so items drawn from it were testing the wrong thing. Turning one
+  // back into a population leaves it undrawn, which is what it is.
+  // `next` rather than `role` — the hat the user is wearing is already called
+  // that in this scope, and shadowing it here would silently disable the guard.
+  const setSourceRole = useCallback<IcfrCtx['setSourceRole']>((controlId, sourceId, next) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => {
+      const pop = c.operating.population;
+      if (!pop || pop.locked) return c;
+      const gone = next === 'assisting' ? new Set(samplesFor(c, sourceId).map(s => s.id)) : new Set<string>();
+      const samp = c.operating.sampling;
+      const samples = (samp?.samples ?? []).filter(s => !gone.has(s.id));
+      const steps = gone.size === 0 ? c.operating.steps : c.operating.steps.map(st => {
+        if (!st.sampleResults) return st;
+        const kept = Object.fromEntries(Object.entries(st.sampleResults).filter(([id]) => !gone.has(id)));
+        const vals = samples.map(it => kept[it.id] ?? 'Not tested');
+        const derived: TestResult = vals.includes('Fail') ? 'Fail' : vals.length > 0 && vals.every(v => v === 'Pass') ? 'Pass' : 'Not tested';
+        return { ...st, sampleResults: Object.keys(kept).length ? kept : undefined, result: st.override ? st.result : derived };
+      });
+      const sources = populationSources(c).map(s => (s.id === sourceId
+        ? { ...s, role: next, ...(next === 'assisting' ? { draw: undefined, approvedSample: undefined } : {}) }
+        : s));
+      return {
+        ...c,
+        operating: {
+          ...c.operating,
+          population: rebuiltPopulation(pop, sources),
+          sampling: samp && samples.length ? { ...samp, size: samples.length, samples } : gone.size ? undefined : samp,
+          exceptions: (c.operating.exceptions ?? []).filter(x => !gone.has(x.sampleId)),
+          steps,
+        },
+      };
+    });
+    pushExec(prev => {
+      const file = prev.controls.find(c => c.id === controlId)?.operating.population?.sources?.find(s => s.id === sourceId)?.file;
+      return { controlId, track: 'operating', kind: 'sample',
+        verb: next === 'assisting' ? 'marked a source file an assisting table — it is proven but never sampled' : 'marked a source file part of the population',
+        target: file };
     });
   }, [patchControl, pushExec, role]);
 
@@ -1097,6 +1174,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         title: 'Upload the source data for this control',
         detail: what,
         assignee, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open',
+        focus: 'population',
       };
       return { ...prev, tasks: [...prev.tasks, task] };
     });
@@ -1509,7 +1587,6 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Audit logs tabs give way to that audit's Overview / RACM / Control Library /
   // Configuration. Opening one resets to its Overview so the drill-in never
   // lands on a tab left over from a previous audit.
-  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
   const openAudit = useCallback((auditId: string) => {
     setOpenAuditId(auditId);
     setTabState('overview');
@@ -2661,13 +2738,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
-    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView,
+    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     racmCreateOpen, openRacmCreate, clearRacmCreate,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail,
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
-    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
+    setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
     registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
@@ -2678,7 +2755,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
