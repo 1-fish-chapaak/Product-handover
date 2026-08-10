@@ -1603,7 +1603,7 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
 
 function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWrite: boolean; isAuditor: boolean }) {
   // `me` went with the parked form — it only ever stamped the Run by field.
-  const { registerIpe, concludeIpe, clearIpe } = useIcfr();
+  const { registerIpe, concludeIpe, clearIpe, approveSource } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const files = useAuditFiles();
@@ -1614,6 +1614,10 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
   const reliable = ipe?.conclusion === 'Reliable';
   // Settled work folds away; unsettled work does not get to hide.
   const [open, setOpen] = useState(!reliable);
+  // Which file's checks are unfolded. One at a time, and the one that opens on
+  // arrival is the first still owing work — a control returned to after a week
+  // should land on what is left rather than on what is finished.
+  const [openSource, setOpenSource] = useState<string | null>(() => sources.find(s => !s.approvedIpe)?.id ?? null);
 
   // ── PARKED (Aug 2026) — the registration form ─────────────────────────────
   // Eight fields, and the audit already held five of them: the report's name was
@@ -1724,30 +1728,73 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                   {ipe.checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={sources[0]?.rows ?? ipe.recordCount} />)}
                 </div>
               ) : (
-                <div className="mt-2.5 space-y-3">
+                <div className="mt-2.5 space-y-2">
                   {sources.map(s => {
                     const checks = ipeChecksFor(control, s.id);
                     if (!checks.length) return null;
                     const passed = checks.filter(k => k.result === 'Pass').length;
                     const failed = checks.some(k => k.result === 'Fail');
+                    const answered = checks.every(k => k.result !== 'Not tested');
+                    const done = !!s.approvedIpe;
+                    const isOpen = openSource === s.id;
                     return (
-                      <div key={s.id}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <FileText size={12} className="text-ink-400 shrink-0" />
+                      <div key={s.id} className={cn('rounded-lg border overflow-hidden', done ? 'border-compliant-200 bg-compliant-50/20' : 'border-canvas-border bg-canvas-elevated')}>
+                        {/* One file's row. Clicking it opens that file's four
+                            dimensions and closes whichever was open — "उस फाइल
+                            का रो को क्लिक करोगे तब चारों नीचे का खुलेगा, फिर
+                            दूसरे फाइल में क्लिक करोगे तो उसका खुलेगा". Four
+                            checks × ten files unfolded at once is a screen
+                            nobody can work in. */}
+                        <button onClick={() => setOpenSource(isOpen ? null : s.id)}
+                          aria-expanded={isOpen}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer">
+                          {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
+                          {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
                           <span className="text-[0.71875rem] font-bold text-ink-800 truncate min-w-0">{s.file}</span>
-                          <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums">{s.rows.toLocaleString()} records</span>
+                          <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{s.rows.toLocaleString()} records</span>
                           <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
-                            failed ? 'text-risk-700' : passed === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
-                            {failed ? 'a check failed' : `${passed}/${checks.length} proven`}
+                            failed ? 'text-risk-700' : done ? 'text-compliant-700' : passed === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
+                            {failed ? 'a check failed' : done ? 'done' : `${passed}/${checks.length} proven`}
                           </span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {/* The count each check is measured against is THIS
-                              file's row count, not the control's total — a
-                              variance worked out against the wrong denominator
-                              is worse than no variance at all. */}
-                          {checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={s.rows} />)}
-                        </div>
+                        </button>
+                        {isOpen && (
+                          <div className="px-3 pb-3">
+                            <div className="space-y-1.5">
+                              {/* The count each check is measured against is
+                                  THIS file's row count, not the control's total
+                                  — a variance worked out against the wrong
+                                  denominator is worse than no variance at all. */}
+                              {checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={s.rows} />)}
+                            </div>
+                            {canWrite && isAuditor && (
+                              <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                                  {done
+                                    ? `Marked done by ${s.approvedIpe!.by}, ${s.approvedIpe!.at}. Answering a check again takes the mark off.`
+                                    : answered
+                                      ? 'Mark it done and the next file opens. This is a marker, not a lock — the verdict on the report is still signed once, below.'
+                                      : `Work all ${checks.length} checks on this file first.`}
+                                </p>
+                                {done ? (
+                                  <button onClick={() => approveSource(control.id, s.id, 'ipe', false)}
+                                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Take the mark off</button>
+                                ) : (
+                                  <button disabled={!answered} title={answered ? undefined : `Work all ${checks.length} checks on this file first.`}
+                                    onClick={() => {
+                                      approveSource(control.id, s.id, 'ipe', true);
+                                      // "अगला पे जाओगे" — the next file that
+                                      // still owes work opens itself. Landing on
+                                      // a closed list after every approval is
+                                      // ten extra clicks on a ten-file control.
+                                      const next = sources.find(x => x.id !== s.id && !x.approvedIpe);
+                                      setOpenSource(next?.id ?? null);
+                                    }}
+                                    className="shrink-0 h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2769,8 +2816,13 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
  *  under one control do not land on the same items, and the same file drawn
  *  twice does.
  */
-function SourceDrawRow({ control, source, canDraw, single }: { control: Control; source: PopulationSource; canDraw: boolean; single: boolean }) {
-  const { eng, openAuditId, drawSourceSample } = useIcfr();
+function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onApproved }: {
+  control: Control; source: PopulationSource; canDraw: boolean; single: boolean;
+  isOpen: boolean; onToggle: () => void;
+  /** Open the next file still owing work — "अप्रूव करोगे, अगला पे जाओगे". */
+  onApproved: () => void;
+}) {
+  const { eng, openAuditId, drawSourceSample, approveSource, redrawSource } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   // How many to draw is the table's call, not a free guess — sized from the
@@ -2785,6 +2837,8 @@ function SourceDrawRow({ control, source, canDraw, single }: { control: Control;
   const [rows, setRows] = useState(guide.suggested);
   const [drawn, setDrawn] = useState<string[]>([]);
   const [rejecting, setRejecting] = useState(false);
+  const [redrawing, setRedrawing] = useState(false);
+  const ext = already.filter(x => x.extension).length;
   const method: Sampling['method'] = 'Random';
   const seed = useMemo(
     () => 10000 + (`${control.id}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
@@ -2809,113 +2863,160 @@ function SourceDrawRow({ control, source, canDraw, single }: { control: Control;
     logEvent({ action: 'Delete', description: `Rejected the drawn sample from ${source.file} for ${control.id} — draw restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
 
-  // ── this file is done ─────────────────────────────────────────────────────
-  if (already.length > 0) {
-    const ext = already.filter(x => x.extension).length;
-    return (
-      <div className="rounded-xl border border-compliant-200 bg-compliant-50/30 p-3.5 flex items-start gap-2.5">
-        <CheckCircle2 size={15} className="text-compliant-700 mt-0.5 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className="text-[0.78125rem] font-bold text-ink-900 truncate">{source.file}</div>
-          <p className="text-[0.71875rem] text-ink-600 mt-0.5">
-            {already.length} item{already.length === 1 ? '' : 's'} drawn{ext > 0 && <span className="text-ink-500"> · {already.length - ext} original + {ext} extension</span>} — from {source.count.toLocaleString()} instances
-          </p>
-          {source.draw && (
-            <p className="text-[0.65625rem] text-ink-400 mt-1">
-              {source.draw.method.toLowerCase()}, seed <span className="tabular-nums">{source.draw.seed}</span> — reperform the draw with these and land on the same items.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const done = !!source.approvedSample;
+  const drawnAlready = already.length > 0;
 
-  // ── not yet drawn ─────────────────────────────────────────────────────────
-  if (!canDraw) {
-    return (
-      <div className="rounded-xl border border-canvas-border p-3.5">
-        <div className="text-[0.78125rem] font-bold text-ink-900 truncate">{source.file}</div>
-        <p className="text-[0.71875rem] text-ink-400 mt-0.5">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
-      </div>
-    );
-  }
+  // ── the row itself ────────────────────────────────────────────────────────
+  // Every file is an accordion, open one at a time: "10 फाइल हैं, एक अकॉर्डियन
+  // खोलोगे, ये सारा स्टेप करोगे… अप्रूव करोगे, अगला पे जाओगे". Ten draw forms
+  // and ten item tables unfolded together is a screen nobody can work in, and
+  // the header alone answers the question the auditor actually returns with:
+  // which files are done and which are still owed.
+  const header = (
+    <button onClick={onToggle} aria-expanded={isOpen}
+      className="w-full flex items-center gap-2 px-3.5 py-3 text-left cursor-pointer">
+      {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
+      {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
+      <span className="text-[0.78125rem] font-bold text-ink-900 truncate min-w-0">{source.file}</span>
+      <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{source.count.toLocaleString()} instances</span>
+      <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
+        done ? 'text-compliant-700' : drawnAlready ? 'text-brand-700' : 'text-ink-400')}>
+        {done ? 'done' : drawnAlready ? `${already.length} items drawn` : 'not drawn yet'}
+      </span>
+    </button>
+  );
 
   return (
-    <div className="rounded-xl border border-canvas-border p-3.5">
-      <div className="flex items-center gap-2">
-        <FileText size={13} className="text-ink-400 shrink-0" />
-        <span className="text-[0.78125rem] font-bold text-ink-900 truncate min-w-0">{source.file}</span>
-        <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-500 tabular-nums">{source.count.toLocaleString()} instances</span>
-      </div>
-
-      {/* how many, then draw. That is the whole row. */}
-      <div className="mt-3 flex items-end justify-between gap-3 flex-wrap">
-        <label className="block min-w-0">
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Sample size</span>
-          <select value={rows} onChange={e => setRows(+e.target.value)} disabled={stage !== 'ready'}
-            aria-label={`Sample size for ${source.file}`}
-            className="w-44 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60">
-            {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
-              <option key={n} value={n}>{n} items{n === guide.suggested ? ' — suggested' : ''}</option>
-            ))}
-          </select>
-        </label>
-        <button disabled={stage !== 'ready'} onClick={draw}
-          className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-          {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
-        </button>
-      </div>
-      {/* The band and the seed are stated once for a control standing on one
-          file, and once per file when it stands on several — the band is the
-          same reasoning either way, but the seed is not, and a reviewer
-          reperforming the draw needs the one that produced these items. */}
-      {single && (
-        <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
-          {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
-        </p>
-      )}
-      <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
-        Random, seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — spread across the whole period. The seed comes off this control, this round and this file, and is stored on the paper, so the reviewer reperforms the draw and lands on these same items.
-      </p>
-      {stage === 'drawing' && (
-        <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
-      )}
-
-      {/* what came out — approve it onto the paper, or throw it back. Flat: it
-          sits directly under the draw that produced it. */}
-      {stage === 'review' && (
-        <>
-        <div className="ac-div my-3.5" />
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-            <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
-          </div>
-          <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
-            <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
-              <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
-            </div>
-            {drawn.slice(0, 8).map((ref, i) => {
-              const f = sampleRowFacts(i);
-              return (
-                <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                  <span className="font-mono text-ink-700">{ref}</span>
-                  <span className="text-ink-500">{f.date}</span>
-                  <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+    <div className={cn('rounded-xl border overflow-hidden', done ? 'border-compliant-200 bg-compliant-50/20' : 'border-canvas-border')}>
+      {header}
+      {isOpen && (
+        <div className="px-3.5 pb-3.5">
+          {drawnAlready ? (
+            <>
+              {/* what was drawn off this file */}
+              <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+                <p className="text-[0.71875rem] text-ink-700">
+                  {already.length} item{already.length === 1 ? '' : 's'} drawn{ext > 0 && <span className="text-ink-500"> · {already.length - ext} original + {ext} extension</span>} — from {source.count.toLocaleString()} instances
+                </p>
+                {source.draw && (
+                  <p className="text-[0.65625rem] text-ink-400 mt-1">
+                    {source.draw.method.toLowerCase()}, seed <span className="tabular-nums">{source.draw.seed}</span> — reperform the draw with these and land on the same items.
+                  </p>
+                )}
+                <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden">
+                  <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                    <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
+                  </div>
+                  {already.slice(0, 6).map((smp, i) => {
+                    const f = sampleRowFacts(i);
+                    return (
+                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                        <span className="font-mono text-ink-700">{smp.ref}</span>
+                        <span className="text-ink-500">{f.date}</span>
+                        <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+                      </div>
+                    );
+                  })}
+                  {already.length > 6 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{already.length - 6} more items</div>}
                 </div>
-              );
-            })}
-            {drawn.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{drawn.length - 8} more rows in the extract</div>}
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
-              <RotateCcw size={13} /> Reject and try again
-            </button>
-            <button disabled={drawn.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
-              <Check size={14} /> Approve and continue
-            </button>
-          </div>
+              </div>
+              {canDraw && (
+                <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+                  <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                    {done
+                      ? `Marked done by ${source.approvedSample!.by}, ${source.approvedSample!.at}. A re-draw takes the mark off.`
+                      : 'Mark it done and the next file opens. This is a marker, not a lock — TOE still tests every item.'}
+                  </p>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {/* "सैंपल आया, तुम सैंपल पढ़े, तुमको अच्छा नहीं लगा… वापस से
+                        'ड्रा सैंपल' क्लिक हो जाएगा". Offered after approval too,
+                        because the reason to re-draw usually turns up later. */}
+                    <button onClick={() => setRedrawing(true)}
+                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-200 text-[0.71875rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><RotateCcw size={11} /> Reject and retry</button>
+                    {done ? (
+                      <button onClick={() => approveSource(control.id, source.id, 'sample', false)}
+                        className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Take the mark off</button>
+                    ) : (
+                      <button onClick={() => { approveSource(control.id, source.id, 'sample', true); onApproved(); }}
+                        className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : !canDraw ? (
+            <p className="text-[0.71875rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
+          ) : (
+            <>
+              {/* how many, then draw. That is the whole row. */}
+              <div className="flex items-end justify-between gap-3 flex-wrap">
+                <label className="block min-w-0">
+                  <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Sample size</span>
+                  <select value={rows} onChange={e => setRows(+e.target.value)} disabled={stage !== 'ready'}
+                    aria-label={`Sample size for ${source.file}`}
+                    className="w-44 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60">
+                    {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
+                      <option key={n} value={n}>{n} items{n === guide.suggested ? ' — suggested' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                <button disabled={stage !== 'ready'} onClick={draw}
+                  className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                  {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
+                </button>
+              </div>
+              {/* The band is the control's, so on a multi-file control it is
+                  stated once under the list rather than on every row. */}
+              {single && (
+                <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
+                  {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
+                </p>
+              )}
+              <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
+                Random, seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — spread across the whole period. The seed comes off this control, this round and this file, and is stored on the paper, so the reviewer reperforms the draw and lands on these same items.
+              </p>
+              {stage === 'drawing' && (
+                <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
+              )}
+
+              {/* what came out — approve it onto the paper, or throw it back */}
+              {stage === 'review' && (
+                <>
+                <div className="ac-div my-3.5" />
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
+                  </div>
+                  <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
+                    <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                      <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
+                    </div>
+                    {drawn.slice(0, 8).map((ref, i) => {
+                      const f = sampleRowFacts(i);
+                      return (
+                        <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                          <span className="font-mono text-ink-700">{ref}</span>
+                          <span className="text-ink-500">{f.date}</span>
+                          <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+                        </div>
+                      );
+                    })}
+                    {drawn.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{drawn.length - 8} more rows in the extract</div>}
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                      <RotateCcw size={13} /> Reject and retry
+                    </button>
+                    <button disabled={drawn.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                      <Check size={14} /> Approve and continue
+                    </button>
+                  </div>
+                </div>
+                </>
+              )}
+            </>
+          )}
         </div>
-        </>
       )}
 
       {rejecting && createPortal(
@@ -2926,13 +3027,43 @@ function SourceDrawRow({ control, source, canDraw, single }: { control: Control;
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div>
                   <h3 className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
-                  <p className="text-[0.75rem] text-ink-500 mt-1">These items go and the draw starts again from the size. Only this file is affected — the population is untouched, and any other file's sample stays exactly as it is.</p>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">These items go and the draw starts again from the size. Only {source.file} is affected — the population is untouched, and any other file's sample stays exactly as it is.</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
               <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
               <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+
+      {/* Throwing back a draw that is already on the paper. Worth confirming
+          separately: the items exist, TOE may have been tested against them,
+          and those results go with them. */}
+      {redrawing && createPortal(
+        <div className="modal-backdrop" onClick={() => setRedrawing(false)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Draw {source.file} again?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">Its {already.length} item{already.length === 1 ? '' : 's'} go, along with every attribute result recorded against them, and the file goes back to its draw.</p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">Only this file. The population is locked and untouched, and every other file keeps its own sample and its own results.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRedrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => {
+                redrawSource(control.id, source.id);
+                logEvent({ action: 'Delete', description: `Rejected the sample from ${source.file} on ${control.id} — the draw was reopened`, module: 'SOX ICFR', entity: 'Test Result' });
+                addToast({ type: 'success', title: 'Sample rejected', message: `${source.file} — draw it again. Every other file kept its own.` });
+                setRedrawing(false);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
             </div>
           </motion.div>
         </div>,
@@ -2950,6 +3081,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   const sources = populationSources(control);
   const holds = itgcHolds(eng, control);
   const guide = sampleSizeGuide(control, holds);
+  // One file open at a time, starting on the first that still owes work. A
+  // control with ten files is not finished in one sitting, and the point of the
+  // marks is that returning to it lands on what is left.
+  const [openSource, setOpenSource] = useState<string | null>(() => sources.find(s => !s.approvedSample)?.id ?? null);
 
   // Two gates stand in front of the draw, and they fail for different reasons —
   // so the locked state names the one actually holding it up.
@@ -2977,6 +3112,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   }
 
   const drawnFiles = sources.filter(s => samplesFor(control, s.id).length > 0).length;
+  // Drawn and marked done are different states, and the difference is the whole
+  // point of the marks: a file drawn but not ticked is a file somebody still has
+  // to look at.
+  const doneFiles = sources.filter(s => s.approvedSample).length;
 
   return (
     <div className="p-5">
@@ -2990,7 +3129,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           <Check size={13} className="text-compliant-600 shrink-0" />
         </div>
         {sources.length > 1 && (
-          <span className="text-[0.6875rem] text-ink-500">across {sources.length} files — <span className="font-semibold text-ink-700">{drawnFiles} of {sources.length} sampled</span></span>
+          <span className="text-[0.6875rem] text-ink-500">
+            across {sources.length} files — <span className="font-semibold text-ink-700">{drawnFiles} of {sources.length} sampled</span>
+            {doneFiles < sources.length && <span className="text-ink-400">, {doneFiles} marked done</span>}
+          </span>
         )}
       </div>
 
@@ -2999,7 +3141,12 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           quarterly extracts that sampled only the first has tested one quarter,
           however healthy the total item count looks. */}
       <div className="mt-4 space-y-2.5">
-        {sources.map(s => <SourceDrawRow key={s.id} control={control} source={s} canDraw={canDraw} single={sources.length === 1} />)}
+        {sources.map(s => (
+          <SourceDrawRow key={s.id} control={control} source={s} canDraw={canDraw} single={sources.length === 1}
+            isOpen={openSource === s.id}
+            onToggle={() => setOpenSource(openSource === s.id ? null : s.id)}
+            onApproved={() => setOpenSource(sources.find(x => x.id !== s.id && !x.approvedSample)?.id ?? null)} />
+        ))}
       </div>
 
       {/* The band is the control's, not the file's, so on a multi-file control

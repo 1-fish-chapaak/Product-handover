@@ -485,6 +485,19 @@ export interface PopulationSource {
    *  this file is sampled; a control can have three files sampled and a fourth
    *  still waiting. */
   draw?: { size: number; method: Sampling['method']; seed: number };
+  /** The tick on this file's accordion — "done with this one, on to the next".
+   *
+   *  Deliberately NOT a lock (dev call, Aug 2026: "लॉक ऐसे नहीं, बस अप्रूव मतलब
+   *  टिक लग गया" — the section ticks on a tax return, not a signature). Two of
+   *  them because the file is worked twice, once to prove it and once to sample
+   *  it, and a control opened tomorrow has to be able to say which halves of
+   *  which files are still owed: "चार का तुमने कर दिया था, दो बच रहा था".
+   *
+   *  Reversible on purpose. Re-drawing a file clears its sample tick, and
+   *  answering one of its checks again clears its proof tick — a tick that
+   *  survived the work it stood for would be a tick that means nothing. */
+  approvedIpe?: { by: string; at: string };
+  approvedSample?: { by: string; at: string };
 }
 
 export interface Population {

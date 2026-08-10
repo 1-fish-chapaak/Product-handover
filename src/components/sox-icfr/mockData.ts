@@ -91,7 +91,7 @@ const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points
  *  shape — but "one control, several files" has to be reachable without anyone
  *  building it by hand, or the per-file proof and the per-file draw are features
  *  nobody ever sees. See PopulationSource. */
-const secondSource = (file: string, rows: number, count: number, criteria: string) => ({ file, rows, count, criteria });
+const secondSource = (file: string, rows: number, count: number, criteria: string, drawn = true) => ({ file, rows, count, criteria, drawn });
 
 const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx', extra?: ReturnType<typeof secondSource>): OperatingTrack => ({
   method: 'Manual',
@@ -114,14 +114,22 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     sources: [
       {
         id: 'src-1', file: popFile, rows: popCount * 7, count: popCount, criteria: `type ${popSource.split('—')[0].trim()}`,
-        ...(sampling ? { draw: { size: extra ? Math.ceil(sampling.size / 2) : sampling.size, method: sampling.method, seed: sampling.seed ?? 40817 } } : {}),
+        ...(sampling ? { draw: { size: extra?.drawn ? Math.ceil(sampling.size / 2) : sampling.size, method: sampling.method, seed: sampling.seed ?? 40817 } } : {}),
+        // The first file is worked through and ticked. Something is always left
+        // undone on the second — that is the state the call described a ten-file
+        // control returning in ("चार का तुमने कर दिया था, दो बच रहा था"), and it
+        // only reads as a state at all if the whole thing is not finished.
+        ...(extra ? { approvedIpe: { by: 'A. Mehta', at: '13 Apr' }, ...(sampling ? { approvedSample: { by: 'A. Mehta', at: '15 Apr' } } : {}) } : {}),
       },
       ...(extra ? [{
         id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria,
         // A different file is a different draw, so it is a different seed. The
         // whole point of storing one is that the reviewer can reperform THIS
         // selection, and one seed shared by two draws reperforms one of them.
-        ...(sampling ? { draw: { size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923 } } : {}),
+        ...(sampling && extra.drawn ? { draw: { size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923 } } : {}),
+        // Proven, never marked. A file whose proof is done and whose draw is not
+        // is the ordinary half-finished state, and the marks exist to show it.
+        approvedIpe: { by: 'A. Mehta', at: '13 Apr' },
       }] : []),
     ],
     // filterFrom / filterTo / version are stamped by stampPopulationWindows once
@@ -167,7 +175,7 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     ...sampling,
     seed: sampling.seed ?? 40817,
     samples: extra
-      ? sampling.samples.map((s, i) => ({ ...s, sourceId: i % 2 === 0 ? 'src-1' : 'src-2' }))
+      ? sampling.samples.map((s, i) => ({ ...s, sourceId: extra.drawn && i % 2 !== 0 ? 'src-2' : 'src-1' }))
       : sampling.samples,
   } : undefined,
   steps,
@@ -1848,7 +1856,20 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         }));
     return shells.map((c, i) => {
       const last = i === shells.length - 1;
-      const designDone = mode === 'carried' || (mode === 'live' && !last);
+      // ── the one control caught mid-flight ──────────────────────────────────
+      // Every other control is either untouched or finished, and both of those
+      // hide the per-file marks: a finished control is locked, so its Approve
+      // and Reject buttons are gone, and an untouched one has no files to mark.
+      // The half-done state is the one the call actually described — "चार का
+      // तुमने कर दिया था, दो बच रहा था" — so exactly one control is left in it:
+      // population locked, both files proven, the first sampled and ticked, the
+      // second still waiting for its draw.
+      //
+      // Treasury only, and only its last control, so every other process keeps
+      // its untouched control exactly as it was — several specs walk into that
+      // one precisely because nothing has happened to it.
+      const midFlight = mode === 'live' && last && name === 'Treasury';
+      const designDone = mode === 'carried' || (mode === 'live' && !last) || midFlight;
       const opDone = mode === 'live' && !last;
       // `&& !last` is load-bearing. Every process carries 5 shells, so the one
       // untested control is always i=4 — and 4 % 3 === 1 made it Automated in
@@ -1925,10 +1946,16 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
           // control had two would misrepresent the ordinary case.
           : manualTrack(
             opDone ? 'Effective' : 'Not tested', opSteps,
-            opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined,
-            opDone ? 2000 + i * 7 : 0, undefined, undefined,
-            opDone && i === 0
-              ? secondSource(`vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265, 'Active vendors with a payment in the period')
+            opDone || midFlight ? sampling(midFlight ? 12 : 25, 'Standard sample — moderate reliance.', 'Random') : undefined,
+            opDone || midFlight ? 2000 + i * 7 : 0, undefined, undefined,
+            (opDone && i === 0) || midFlight
+              ? secondSource(
+                `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265,
+                'Active vendors with a payment in the period',
+                // The mid-flight control's second file is registered and proven
+                // but never drawn — that is the thing left to do.
+                !midFlight,
+              )
               : undefined,
           ),
       };
