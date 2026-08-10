@@ -151,6 +151,21 @@ export interface AuditorProof {
 export interface DesignPoint {
   id: string;
   text: string;
+  /** THE ATTRIBUTE THIS CHECK IS ABOUT — an `OperatingStep.id`.
+   *
+   *  Set on an attribute-level check (dev call, Aug 2026: "हर एट्रिब्यूट का अपना
+   *  चेक होगा"), absent on a control-level one. Both live in the same
+   *  `design.points` array on purpose: a check is a check, and everything that
+   *  already acts on one — pass/fail, evidence links, the auditor's own proof,
+   *  validation, override, and the rule that sinks TOD when any check fails —
+   *  keeps working without knowing which kind it is holding.
+   *
+   *  The two kinds ask different questions and both are worth asking. Control
+   *  level: does this control address the risk at all, and at what precision.
+   *  Attribute level: is THIS thing the control has to do actually designed to
+   *  happen. Dropping either would leave a design test that cannot fail for a
+   *  reason the other one covers. */
+  stepId?: string;
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
@@ -310,7 +325,18 @@ export interface OperatingStep {
 /** One sampled item. `extension` marks an item drawn in the extension round that
  *  followed an exception, so the paper can show the original draw and what was
  *  added to it without holding two lists. */
-export interface Sample { id: string; ref: string; result: TestResult; extension?: boolean; }
+export interface Sample {
+  id: string; ref: string; result: TestResult; extension?: boolean;
+  /** Which source file this item was drawn out of — see PopulationSource. Absent
+   *  on a control standing on a single file, which is every control seeded before
+   *  a control could stand on several. */
+  sourceId?: string;
+}
+/** The control's sample — every item drawn, across every source file it stands
+ *  on. `size` and `samples` are the totals; which file each item came out of is
+ *  on the item (`Sample.sourceId`), and how each file's own draw was made is on
+ *  the file (`PopulationSource.draw`). TOE reads this one list and never has to
+ *  ask how many files fed it. */
 export interface Sampling {
   basis: string;
   method: 'Random' | 'Systematic' | 'Statistical' | 'Targeted' | 'Full population';
@@ -429,8 +455,82 @@ export interface AuditFileRecord {
   originAt?: string;
 }
 
+/** One source file a control's population stands on.
+ *
+ *  A control rarely stands on one file. A three-way match reads the purchase
+ *  order, the goods receipt and the invoice; a quarterly review is four
+ *  extracts, one per quarter. Each file is proven on its own — its own four IPE
+ *  dimensions — and sampled on its own, because a file nobody proved is a file
+ *  nobody may sample from, and proving one file says nothing about the next.
+ *
+ *  What is NOT here, on purpose:
+ *  - provenance. It belongs to the file record and is inherited, exactly as it
+ *    was when a control had one source. `file` is the join back to it.
+ *  - the four checks. They live in `IpeTest.checks`, tagged with `sourceId`, so
+ *    the single centralised Reliable / Not reliable verdict still reads one flat
+ *    list and one failure anywhere still sinks the report.
+ *  - the drawn items. They live in `Sampling.samples`, tagged the same way, so
+ *    TOE tests one list of items and does not have to know how many files they
+ *    came out of. */
+/** What a source file IS to the control.
+ *
+ *  Not every file a control reads is a population. Testing for duplicate vendor
+ *  invoices reads a journal table AND a vendor master, but the invoices are the
+ *  thing being tested and the vendor master is only joined onto them — "वेंडर
+ *  मास्टर इज ए असिस्टिंग टेबल… वेंडर मास्टर का पापुलेशन ड्रा नहीं होगा, सिर्फ
+ *  BKPF का ही होगा". An assisting file is still PROVEN — a join onto an
+ *  unreliable table produces an unreliable answer — but it is never sampled and
+ *  its rows are never counted as instances of the control. */
+export type SourceRole = 'population' | 'assisting';
+
+export interface PopulationSource {
+  id: string;
+  /** The file record's name. */
+  file: string;
+  /** What the file held, and what this control's filter left of it. */
+  rows: number;
+  count: number;
+  criteria?: string;
+  /** Absent means population — every file drawn before the distinction existed
+   *  was one. The FIRST file is a population by default and everything added
+   *  after it is assisting until somebody says otherwise: the common reason to
+   *  add a second file is to join something onto the first, and a file that is
+   *  silently sampled is a sample nobody asked for. */
+  role?: SourceRole;
+  /** The draw made off THIS file — what was asked for, how many it came to, and
+   *  the seed that makes it reperformable. The items themselves are in
+   *  `Sampling.samples`. Absent until this file is sampled; a control can have
+   *  three files sampled and a fourth still waiting.
+   *
+   *  `prompt` is what the auditor actually asked for, in their own words. A
+   *  number could not carry it: the selection unit is not always a quantity
+   *  (dev call, Aug 2026 — "कभी क्वांटिटी हो रहा है X, तो कभी हो रहा है टाइम"),
+   *  and duplicate-invoice work over a journal table is not a thing 25 rows can
+   *  find at all. It is stored because with a prompt the prompt IS the method,
+   *  and a draw nobody can read back is not a procedure. */
+  draw?: { size: number; method: Sampling['method']; seed: number; prompt?: string };
+  /** The tick on this file's accordion — "done with this one, on to the next".
+   *
+   *  Deliberately NOT a lock (dev call, Aug 2026: "लॉक ऐसे नहीं, बस अप्रूव मतलब
+   *  टिक लग गया" — the section ticks on a tax return, not a signature). Two of
+   *  them because the file is worked twice, once to prove it and once to sample
+   *  it, and a control opened tomorrow has to be able to say which halves of
+   *  which files are still owed: "चार का तुमने कर दिया था, दो बच रहा था".
+   *
+   *  Reversible on purpose. Re-drawing a file clears its sample tick, and
+   *  answering one of its checks again clears its proof tick — a tick that
+   *  survived the work it stood for would be a tick that means nothing. */
+  approvedIpe?: { by: string; at: string };
+  approvedSample?: { by: string; at: string };
+}
+
 export interface Population {
   source: string;
+  /** The files this population was built out of, in the order they were added.
+   *  Absent on a population drawn before a control could stand on more than one
+   *  — read it through `populationSources`, which presents the single-file case
+   *  as a one-entry list so nothing downstream has to branch. */
+  sources?: PopulationSource[];
   /** Instances of THIS control — what the filter produced, not what the file held. */
   count: number;
   tieOut: string;
@@ -454,9 +554,12 @@ export interface Population {
    *  that was filtered on, and prose cannot be grouped by. */
   filterType?: string;
   filterAccount?: string;
-  /** What the count should have been, for controls whose frequency gives no
-   *  answer. Asked only in that case; derived everywhere else. */
-  expectedCount?: number;
+  /* PARKED (dev call, Aug 2026) — `expectedCount?: number` sat here: what the
+     auditor said the count should be, typed before the extract ran so the two
+     could be compared afterwards. The call cut the field on the grounds that the
+     reference number is already visible on the source. NOTE this is NOT
+     PopulationDefinition.expectedCount, which is a different field on a
+     different type and is still live. */
   /** NOTE — there is no provenance field here on purpose. Where the data came
    *  from belongs to the FILE (see AuditFileRecord), is answered once when the
    *  file enters the audit, and is inherited by every population drawn off it.
@@ -520,6 +623,11 @@ export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Period co
 /** One dimension's proof — what is claimed, how it was proven, what was found. */
 export interface IpeCheck {
   id: string;
+  /** Which source file this dimension was proven on — see PopulationSource. A
+   *  control standing on three files has three sets of four checks, and the
+   *  verdict they roll up to is still one (dev call, Aug 2026: "सेंट्रलाइज्ड कर
+   *  दो ना"). Absent on a control standing on a single file. */
+  sourceId?: string;
   dimension: IpeDimension;
   description: string;          // the assertion being proven
   method: string;               // how it was proven — the procedure
@@ -777,6 +885,12 @@ export interface HandoffTask {
   assigneeRole: Role;
   raisedBy: string;
   dueLabel: string;
+  /** Which step on the control page answers this task. A row that names a
+   *  specific thing should land on that thing rather than on a page the
+   *  reader then has to search — the same reasoning `focusDefId` follows for
+   *  deficiencies. Absent means the top of the page, which is right for a
+   *  task that is about the control as a whole. */
+  focus?: 'population';
   overdue: boolean;
   status: TaskStatus;
 }

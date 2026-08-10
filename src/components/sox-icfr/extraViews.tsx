@@ -923,8 +923,11 @@ export function HandoffsView() {
               <span className="ml-auto text-[11px] font-semibold text-ink-400">{rows.length} open</span>
             </div>
             <div className="space-y-0.5">
+              {/* Same rule on the auditor's side: a task that names a step lands on
+                  it. The two lists show the same tasks, so they had better behave
+                  the same way. */}
               {rows.map(t => (
-                <button key={t.id} onClick={() => openControl(t.controlId)} className={rowCls}>
+                <button key={t.id} onClick={() => openControl(t.controlId, t.focus)} className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : 'text-ink-400'} /></span>
                   <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
                     <b className="font-semibold text-ink-900">{t.title}</b> <span className="text-ink-400">· {t.controlId} · with {t.assignee}</span>

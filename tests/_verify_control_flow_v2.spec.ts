@@ -60,12 +60,16 @@ test('five steps, and only five', async ({ page }) => {
     await expect(page.getByText('Account', { exact: true })).toHaveCount(0);
     // Date from / to were parked earlier — the window comes from the audit.
     await expect(page.getByText('Date from')).toHaveCount(0);
-    // The expectation is stated BEFORE the extract runs, and gates it — a number
-    // written down afterwards can only ever agree with the answer.
-    await expect(page.getByText('Expected instances')).toBeVisible();
+    // "Expected instances" was cut (dev call, Aug 2026): the reference number is
+    // already visible on the source, so asking the auditor to type one was
+    // asking twice. Nothing gates the extract now except picking a file.
+    await expect(page.getByText('Expected instances')).toHaveCount(0);
+    // "Add a source" went with it — the platform's data catalogue and its
+    // connect-a-database tab are not where a control's evidence comes from.
+    await expect(page.getByRole('button', { name: /Add a source/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Upload file/ }).first()).toBeVisible();
     const extract = page.getByRole('button', { name: 'Extract', exact: true });
     await expect(extract).toBeVisible();
-    await expect(extract).toBeDisabled();
   } else {
     // The "Checked automatically" strip — count, period covered, and the window
     // sentence — was parked in Aug 2026: three rows that greened themselves and

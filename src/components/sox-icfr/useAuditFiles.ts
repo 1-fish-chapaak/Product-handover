@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useIcfr } from './store';
 import { programmeFor } from './auditScope';
-import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind } from './helpers';
+import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources } from './helpers';
 import type { AuditFileRecord, Control } from './types';
 
 /** A file record as everything downstream reads it: the file's own facts, its
@@ -59,11 +59,41 @@ export function useAuditFiles(): AuditFile[] {
     // the question, so it lands answered rather than blocking work that is done.
     eng.controls.forEach(c => {
       const p = c.operating.population;
-      if (!p?.sourceFile) return;
-      derived.push({
-        name: p.sourceFile, kind: guessFileKind(p.sourceFile), rows: p.sourceCount ?? p.count,
-        from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
-        origin: fileOriginOf(eng, p.sourceFile, p.provenance?.system).origin,
+      if (!p) return;
+      // Every file the population stands on. A control drawing off a ledger and
+      // a vendor master names two, and leaving the second out of the registry
+      // would hide a file the audit is demonstrably reading.
+      populationSources(c).forEach(s => {
+        if (!s.file) return;
+        derived.push({
+          name: s.file, kind: guessFileKind(s.file), rows: s.rows || s.count,
+          from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
+          origin: fileOriginOf(eng, s.file, p.provenance?.system).origin,
+        });
+      });
+    });
+
+    // Files an ATTRIBUTE's workflow reads. They are files the audit holds by any
+    // reading — a workflow runs on them and a validation is recorded against
+    // them — and leaving them out meant the population step could not offer the
+    // very files the call says it should ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स
+    // हैं, वो सारी फाइल्स की लिस्ट").
+    eng.controls.forEach(c => {
+      c.operating.steps.forEach(s => {
+        if (!s.inputFile?.name) return;
+        const name = s.inputFile.name;
+        // A PDF has no rows to count, so it is given none — the row count is
+        // suppressed downstream by name, and a fabricated number here would be
+        // a number somebody has to explain. Structured files get a stable one.
+        const rows = /\.pdf$/i.test(name)
+          ? 0
+          : 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4200);
+        derived.push({
+          name, kind: guessFileKind(name), rows,
+          from: `${s.workflowName ?? 'Workflow'} · ${c.id}`,
+          uploadedBy: s.inputFile.uploadedBy || eng.preparer, uploadedAt: s.inputFile.uploadedAt || 'at scoping',
+          origin: fileOriginOf(eng, name).origin,
+        });
       });
     });
 
