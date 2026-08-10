@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp,
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
+import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, samePerson, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
 import { CourtBadge, SeverityPill, Toggle } from './parts';
 import { FormSelect, HeaderFilter } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
@@ -1537,7 +1537,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         {step >= 3 && d.status !== 'Closed' && <RetestReadyLine readiness={readiness} />}
 
         {/* ⑤ The retest itself — the auditor's grid, in their hat only. */}
-        {!locked && d.status === 'Retest' && isAuditor && <RetestPanel d={d} />}
+        {!locked && d.status === 'Retest' && isAuditor && (
+          samePerson(d.fixSubmitted, me)
+            ? <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must retest this — you declared the fix done.</span>
+            : <RetestPanel d={d} />
+        )}
 
         <RetestHistory rounds={rounds} />
         </div>
@@ -1561,7 +1565,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {/* ② blocking confirmation: significant or worse does not move until the
               reviewer agrees the grade */}
           {!locked && d.status === 'Rating review' && (
-            isReviewer ? (
+            // Same rule the close already states, one rung earlier: agreeing with
+            // your own rating is not a second pair of eyes.
+            isReviewer && samePerson(d.sized, me) ? (
+              <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must confirm — you sized this one.</span>
+            ) : isReviewer ? (
               rejecting === 'rating' ? (
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
@@ -1589,7 +1597,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
 
           {/* ③ the auditor's one say in the plan: does it address the root cause? */}
           {!locked && d.status === 'Plan review' && (
-            isAuditor ? (
+            isAuditor && samePerson(d.planSubmitted, me) ? (
+              <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must judge this plan — you submitted it.</span>
+            ) : isAuditor ? (
               rejecting === 'plan' ? (
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}

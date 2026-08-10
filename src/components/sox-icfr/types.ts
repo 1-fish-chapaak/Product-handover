@@ -1003,8 +1003,11 @@ export interface Deficiency {
    *  aggregate on their own from the control and the failed attributes; a shared
    *  mechanism cannot be read off free prose, so it is stated here instead. */
   rootCauseLinkId?: string;
-  /** Reviewer's confirmation of a Significant Deficiency or worse. Nothing moves
-   *  until this exists — a wrong rating must not drive weeks of remediation. */
+  /** Who sized it and sent it up. Kept so the next rung can refuse the same
+   *  person: a rating is only confirmed if a second pair of eyes confirms it. */
+  sized?: { by: string; at: string };
+  /** Reviewer's confirmation of the grade. Nothing moves until this exists — a
+   *  wrong rating must not drive weeks of remediation. */
   ratingConfirm?: { grade: string; by: string; at: string };
   /** Reviewer disagreed and sent the rating back to the auditor, with a reason. */
   ratingReturn?: { reason: string; by: string; at: string };
@@ -1013,6 +1016,9 @@ export interface Deficiency {
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
   /** The owner has put the plan up for the auditor to judge. */
   planSubmitted?: { by: string; at: string };
+  /** The owner declaring the fix done and ready to be tested — stamped so the
+   *  retest can refuse the same person. You do not test your own repair. */
+  fixSubmitted?: { by: string; at: string };
   /** The auditor's verdict on the plan — does it address the root cause? A
    *  rejection carries the reason back to the owner. The auditor never writes
    *  or executes the fix; this is the whole of their say in it. */

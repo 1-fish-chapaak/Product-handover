@@ -4,7 +4,7 @@ import './register.css';
 import { cn } from '../../lib/cn';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { useIcfr, type SoxTab } from './store';
-import { AUDIT_TABS } from './flow';
+import { AUDIT_TABS, defWord } from './flow';
 import { ownersOf } from './auditScope';
 import type { SoxTabLike } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
@@ -85,11 +85,20 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
      flow.ts), which is why they remain separate files. */
   const audit = eng.audits.find(a => a.id === openAuditId);
   const inAudit = !!audit;
-  // The owner's SOX is a to-do list, not a workspace: just their inbox and their
-  // controls. RACM and the audit register are auditor-side surfaces.
+  // The owner's SOX is a to-do list, not a workspace: their inbox, their controls
+  // and their own findings. RACM and the audit register are auditor-side surfaces.
+  //
+  // That third tab was missing here while the reworked shell had it, which left
+  // the owner on every classic engagement with no route at all to the findings
+  // they are the ones being asked to fix — the deficiency page exists, and they
+  // simply could not reach it. Same three tabs on both shells now; only the
+  // WORDING differs, which is what defWord is for.
   const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
   const tabs = role === 'risk-owner'
-    ? levelTabs.filter(t => t.id === 'overview' || t.id === 'controls')
+    ? [
+        ...levelTabs.filter(t => t.id === 'overview' || t.id === 'controls'),
+        { id: 'deficiencies' as const, label: defWord(eng.id).mine },
+      ]
     : levelTabs;
   // Both capacities — see the same list in SoxIcfrApp.
   const owners = Array.from(new Set(eng.controls.flatMap(c => {
@@ -187,7 +196,9 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
     // The engagement's Overview is the audit portfolio; the audit's own Dashboard
     // is Overview.tsx, reached by opening an audit. This shell has no audit level,
     // so it only ever shows the portfolio — see SoxIcfrApp for the pair.
-    : (inAudit && tab === 'deficiencies') ? <DeficienciesView />
+    // Inside an audit for the audit side; at engagement level it is the owner's
+    // own tab — their findings span whichever audit is testing them.
+    : ((inAudit || role === 'risk-owner') && tab === 'deficiencies') ? <DeficienciesView />
     : (inAudit && tab === 'config') ? <AuditConfigView audit={audit!} />
     // The risk owner never gets the portfolio: their engagement-level tabs are an
     // inbox and their controls, and the inbox (RiskOwnerPortal, inside Overview)

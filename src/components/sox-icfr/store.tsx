@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -103,6 +103,7 @@ function ownsIt(state: IcfrEngagement, controlId: string, person: string): boole
   const c = state.controls.find(x => x.id === controlId);
   return !!c && isOwnerOf(c, person);
 }
+
 
 // The five primary tabs — mirrors how other engagements are laid out.
 // 'deficiencies' is a TAB now, not a drill-in: deficiency management is a place
@@ -2039,7 +2040,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
       return {
         ...prev,
-        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, status: next, ratingReturn: undefined } : d)),
+        deficiencies: prev.deficiencies.map(d => (d.id === id
+          ? { ...d, status: next, ratingReturn: undefined, sized: { by: me, at: 'just now' } } : d)),
         executions: [event, ...prev.executions],
       };
     });
@@ -2054,6 +2056,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Rating review') return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
+      if (samePerson(target.sized, me)) return prev;   // agreeing with your own rating is not a review
       const grade = gradeException(target, prev).grade;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -2124,6 +2127,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Plan review') return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
+      if (samePerson(target.planSubmitted, me)) return prev;   // you do not judge your own plan
       const to: ExceptionStatus = decision === 'Accepted' ? 'Remediation' : 'Planning';
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -2245,6 +2249,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // makes this yours to declare. One owner persona cannot submit another's fix.
       if (!ownsIt(prev, target.controlId, meOwner)) return prev;
       if (!target.remediation.evidence?.length) return prev;         // "done" needs proof
+      // Whoever judged the plan cannot also be the one declaring it built.
+      if (samePerson(target.planReview, meOwner)) return prev;
       // every lifecycle move carries its actor + time into the shared trail
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
@@ -2254,7 +2260,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return {
         ...prev,
         deficiencies: prev.deficiencies.map(d => (
-          d.id === id ? { ...d, status, remediation: { ...d.remediation, status: 'Done' as const } } : d
+          d.id === id
+            ? { ...d, status, fixSubmitted: { by: meOwner, at: 'just now' }, remediation: { ...d.remediation, status: 'Done' as const } }
+            : d
         )),
         // submitting the fix also clears the owner's remediation reminder — one
         // declaration, both surfaces agree (portal checklist ↔ exceptions page)
@@ -2338,6 +2346,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Retest' || !target.retestDraft) return prev;
+      // Nor do you test the repair you declared finished.
+      if (samePerson(target.fixSubmitted, me)) return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
       const draft = target.retestDraft;
       const marks = draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
@@ -2470,7 +2480,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
-      if (!target || target.status !== 'Awaiting reviewer' || (target.retest && target.retest.by === me)) return prev;
+      if (!target || target.status !== 'Awaiting reviewer' || samePerson(target.retest, me)) return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
