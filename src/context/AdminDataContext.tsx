@@ -50,7 +50,10 @@ export interface AdminTeam {
 const LAST_ACTIVE = lastActiveByName();
 const lastLoginOf = (name: string) => LAST_ACTIVE[name] ?? 'Never';
 
-const SEED_USERS: AdminUser[] = [
+/** The seeded roster. Exported so the Platform Usage run history can attribute
+ *  every run to a real member at generation time — an actor who is not on this
+ *  list can never be attributed, and its work would vanish off the page. */
+export const SEED_USERS: AdminUser[] = [
   { name: 'Abhinav Sharma', initials: 'AS', email: 'abhinav@irame.ai', roleId: 'role-admin', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Abhinav Sharma') },
   { name: 'Aditya Thakur', initials: 'AT', email: 'aditya.thakur@irame.ai', roleId: 'role-auditor', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Aditya Thakur') },
   { name: 'Ishaan Verma', initials: 'IV', email: 'ishaan.verma@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Ishaan Verma') },

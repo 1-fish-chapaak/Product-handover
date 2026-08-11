@@ -81,7 +81,7 @@ export type PermissionKey =
   // proposals in My Queue, administer org rules & policy in Admin
   | 'mem_view' | 'mem_approve' | 'mem_admin'
   // Admin (existing 2 + new 4 + usage)
-  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_export';
+  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_self' | 'ad_usage_export';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -187,6 +187,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     // together with `ad_usage` (System Admin) it unlocks every named member and
     // team across the workspace.
     { key: 'ad_usage_people', name: 'Per-person Usage', desc: 'See named member and team activity in Platform Usage' },
+    // The floor. Everyone can read their own work on Platform Usage — their
+    // queue, their runs, the hours their automation saved. It shows one person
+    // and never a comparison, so it is safe to hold on its own.
+    { key: 'ad_usage_self',   name: 'My Own Usage',     desc: 'See your own queue, runs and hours saved in Platform Usage' },
     { key: 'ad_usage_export', name: 'Export Usage',     desc: 'Export platform usage as CSV' },
   ]},
 ];
@@ -226,7 +230,9 @@ export interface Role {
 // Helper sets for readable seed-role definitions.
 // "View everything" minus admin-log visibility — the Admin area stays admin-only,
 // so non-admin roles never see the Admin nav section.
-const VIEW_ALL = VIEW_ONLY_KEYS.filter(k => k !== 'ad_logs');
+// `ad_usage_self` is added by hand because VIEW_ONLY_KEYS takes only the first
+// permission of each group, and the Admin group's first key is `ad_logs`.
+const VIEW_ALL: PermissionKey[] = [...VIEW_ONLY_KEYS.filter(k => k !== 'ad_logs'), 'ad_usage_self'];
 
 const AUDITOR_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
@@ -376,6 +382,6 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'admin-roles': 'ad_roles_manage',
   'admin-logs': 'ad_logs',
   // Either the workspace-wide admin view, or a team lead's own-team scope.
-  'platform-usage': ['ad_usage', 'ad_usage_people'],
+  'platform-usage': ['ad_usage', 'ad_usage_people', 'ad_usage_self'],
   // home, recents, dev routes intentionally ungated (open to all)
 };

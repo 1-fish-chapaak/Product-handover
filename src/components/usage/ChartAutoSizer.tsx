@@ -1,51 +1,39 @@
-import { useState, useRef, useLayoutEffect, type ReactNode } from 'react';
-
 /**
- * A robust replacement for recharts' own <ResponsiveContainer>.
+ * A chart wrapper that measures its own box.
  *
- * recharts 3.x measures its parent with a ResizeObserver that reports 0 on the
- * first paint, which recharts turns into the console warning
- *   "The width(-1) and height(-1) of chart should be greater than 0"
- * Most charts recover on the next observer tick, but a chart that mounts inside
- * an animating / scaling container (the member modal enters at scale 0.98) can
- * latch onto that first 0 and never redraw, so it renders blank at zero width.
- *
- * This wrapper measures its OWN box, holds the chart back until both dimensions
- * are positive, then renders the chart with explicit numeric width/height — the
- * recharts fixed-size API, which neither warns nor renders empty.
- *
- * Drop-in shapes:
- *   <ChartAutoSizer>{({ width, height }) => <BarChart width={width} height={height} …/>}</ChartAutoSizer>
- *     — fills its parent (parent must have a resolved height), like height="100%".
- *   <ChartAutoSizer height={140}>{…}</ChartAutoSizer>
- *     — owns its height, like height={140}.
+ * recharts 3.8's ResponsiveContainer renders at width -1 inside a panel that is
+ * laid out after mount, which draws a blank chart with no error. This measures
+ * the element itself and hands the children real pixels, so a chart inside a
+ * drawer, a modal or a freshly opened section draws the first time.
  */
+
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+
 export default function ChartAutoSizer({
   height,
   children,
+  className = '',
 }: {
-  /** Fixed pixel height. Omit to fill the parent's height (measured live). */
-  height?: number;
+  height: number;
   children: (size: { width: number; height: number }) => ReactNode;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: height ?? 0 });
+  const [width, setWidth] = useState(0);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () =>
-      setSize({ width: el.clientWidth, height: height ?? el.clientHeight });
+    const measure = () => setWidth(el.clientWidth);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [height]);
+  }, []);
 
-  const ready = size.width > 0 && size.height > 0;
   return (
-    <div ref={ref} style={{ width: '100%', height: height ?? '100%' }}>
-      {ready && children(size)}
+    <div ref={ref} className={className} style={{ height }}>
+      {width > 0 && children({ width, height })}
     </div>
   );
 }
