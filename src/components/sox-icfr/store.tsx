@@ -1217,14 +1217,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, []);
 
   /**
-   * Correct a file's provenance — the ONLY place it can be changed.
+   * Correct a file's provenance.
    *
-   * Two consequences, both required: every control that drew a population off
-   * this file now reads the new answer (they hold no copy of it, so that is
-   * automatic), and any of those controls that had already CONCLUDED gets a
-   * review note. A concluded paper whose evidence quietly changed underneath it
-   * is the thing an external reviewer is entitled to be told about, so it is
-   * raised rather than silently restated.
+   * PARKED (user rule, Aug 2026): provenance is answered once, when the file
+   * enters, and is not editable afterwards — the Configuration tab's registry
+   * went read-only, leaving this with no caller. The mutator stays because its
+   * semantics ARE the model, should an edit surface ever return: every control
+   * that drew a population off the file reads the new answer automatically
+   * (they hold no copy), and any that had already CONCLUDED gets a review note
+   * rather than a silently restated paper.
    */
   const setFileOrigin = useCallback<IcfrCtx['setFileOrigin']>((name, origin) => {
     setEng(prev => {
