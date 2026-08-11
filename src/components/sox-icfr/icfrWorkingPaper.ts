@@ -17,7 +17,9 @@ import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types
 export type PaperBlock =
   | { kind: 'heading'; text: string; sub: string }
   | { kind: 'kv'; title?: string; rows: [string, string][] }
-  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number }
+  // tickFrom..tickTo (exclusive) mark the tick columns; tickTo is only needed
+  // where a text column (Remarks) follows the ticks.
+  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number; tickTo?: number }
   | { kind: 'note'; label: string; text: string; tone: 'good' | 'bad' | 'neutral' };
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';
@@ -84,7 +86,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // one-entry list, so nothing below has to know which kind it is holding.
   const sources = populationSources(c);
   const ipe = c.operating.ipe;
-  const def = eng.deficiencies.find(d => d.controlId === c.id);
+  // Every deficiency on this control — the Gaps section lists them all, the way
+  // the reference papers number theirs, and each gets its own exception block.
+  const defs = eng.deficiencies.filter(d => d.controlId === c.id);
   const blocks: PaperBlock[] = [];
 
   blocks.push({ kind: 'heading', text: `Working paper ${c.wpRef} — TOD & TOE`, sub: `${eng.entity} · SOX compliance · Process: ${c.process} / ${c.subProcess}` });
@@ -122,29 +126,13 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Classification', c.clazz ?? '—'],
       ['Control frequency', c.frequency],
       ['Nature / type', `${c.nature} · ${c.type} · ${c.isKey ? 'Key control' : 'Non-key control'}`],
+      // The answer, stated in the header the way the reference papers state it —
+      // the reader opens to the verdict, then reads down into how it was earned.
+      ['Test result — TOE', trackResult(c.operating)],
       // the rating and the size it drives, side by side — the reviewer sizes on
       // frequency AND rating, so a paper that prints one without the other is
       // asking the reader to take the number on trust
       ['Risk rating', c.riskRating ?? 'Not rated'],
-      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
-      ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
-      // The two facts that make a draw reperformable. A reviewer who cannot
-      // re-run the selection cannot check that it was not steered — and each
-      // file is drawn separately, so each file's own seed is printed. One seed
-      // standing for four draws reperforms exactly one of them.
-      ['Selection method / seed', (() => {
-        const drawn = sources.filter(s => s.draw);
-        if (drawn.length) return drawn.map(s => `${s.file} · ${s.draw!.method} · seed ${s.draw!.seed} · ${s.draw!.size} items`).join('; ');
-        if (!c.operating.sampling) return '—';
-        return `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`;
-      })()],
-      // What was asked for, per file, in the words it was asked in. The size and
-      // the method are the RESULT of the ask, and a reviewer reperforming the
-      // draw needs the ask itself: "25 items, random" cannot show that the
-      // auditor asked for two months tested end to end and got rows instead.
-      ...(sources.some(s => s.draw?.prompt)
-        ? [['Sample asked for', sources.filter(s => s.draw?.prompt).map(s => `${s.file} · "${s.draw!.prompt}"`).join('; ')]] as [string, string][]
-        : []),
       ['Population filter', c.operating.population?.criteria ?? '—'],
       // Every file the population stands on, not the first one. A paper that
       // names one of four extracts describes a population nobody can reperform,
@@ -199,12 +187,10 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Count agreed', c.operating.population?.countConfirmed
         ? `${c.operating.population.countConfirmed.by}, ${c.operating.population.countConfirmed.at}`
         : '—'],
-      ['Quarterly split', quarterlySplit(c)],
       ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
       ['Root cause', c.rootCause ?? '—'],
       ['Assertions', c.assertions.join(', ')],
       ['Precision', c.precision],
-      ['Period', periodLine(eng)],
       // Where the evidence physically lives, and which report paragraph this row
       // lands in. Both outlive the engagement, so the paper has to cite them.
       ['Performed by', c.performedBy ?? '—'],
@@ -379,9 +365,37 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     blocks.push({ kind: 'note', label: 'IPE', text: 'No entity-produced report registered — the population has not been validated for source, completeness or accuracy.', tone: 'neutral' });
   }
 
-  // To be tested — every attribute with its population and sample coverage
+  // Sample details — the reference papers' own block, opening the TOE portion:
+  // what period was tested, how big the draw was against what the guide asked,
+  // and how the selection was made (with the seed that makes it reperformable).
   blocks.push({
-    kind: 'table', title: 'To be tested — attributes & coverage',
+    kind: 'kv', title: 'Sample details', rows: [
+      ['Period tested', periodLine(eng)],
+      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
+      ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
+      // The two facts that make a draw reperformable. A reviewer who cannot
+      // re-run the selection cannot check that it was not steered — and each
+      // file is drawn separately, so each file's own seed is printed. One seed
+      // standing for four draws reperforms exactly one of them.
+      ['Sample selection methodology', (() => {
+        const drawn = sources.filter(s => s.draw);
+        if (drawn.length) return drawn.map(s => `${s.file} · ${s.draw!.method} · seed ${s.draw!.seed} · ${s.draw!.size} items`).join('; ');
+        if (!c.operating.sampling) return '—';
+        return `${c.operating.sampling.method}${c.operating.sampling.seed ? ` · seed ${c.operating.sampling.seed}` : ' · no seed (judgemental selection)'}`;
+      })()],
+      // What was asked for, per file, in the words it was asked in. The size and
+      // the method are the RESULT of the ask, and a reviewer reperforming the
+      // draw needs the ask itself.
+      ...(sources.some(s => s.draw?.prompt)
+        ? [['Sample asked for', sources.filter(s => s.draw?.prompt).map(s => `${s.file} · "${s.draw!.prompt}"`).join('; ')]] as [string, string][]
+        : []),
+      ['Quarterly split', quarterlySplit(c)],
+    ],
+  });
+
+  // Attributes tested — every attribute with its population and sample coverage
+  blocks.push({
+    kind: 'table', title: 'Attributes tested',
     note: pop ? `Population: ${pop.count} items from ${pop.source}${ipe ? ` · report ${ipe.conclusion.toLowerCase()}` : ''}` : 'No population drawn',
     headers: ['', 'Attribute', 'Assertion', 'Population', 'Samples drawn', 'Samples tested', 'Exceptions'],
     rows: steps.map((s, i) => {
@@ -407,19 +421,20 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     }),
   });
 
-  blocks.push({
-    kind: 'kv', title: 'Test legend', rows: [
-      ['P', 'Attribute satisfied'],
-      ['r', 'Attribute not satisfied — exception'],
-      ['—', 'Not yet tested'],
-    ],
-  });
-
-  // The heart of the paper: every sampled item × every attribute, ticked
+  // The heart of the paper: every sampled item × every attribute, ticked — the
+  // reference papers' Testing results grid, with their Remarks column stating
+  // per item which attributes failed and what the linked exception says.
   if (samples.length) {
     const tally = combinedSample(c);
+    const tickFrom = sources.length > 1 ? 4 : 3;
+    const remark = (smpId: string, smpRef: string): string => {
+      const failed = steps.filter(s => s.sampleResults?.[smpId] === 'Fail');
+      if (!failed.length) return '—';
+      const hit = defs.find(d => d.failedSamples?.includes(smpRef));
+      return `${failed.map(s => s.code).join(', ')} not satisfied${hit ? ` — ${hit.description}` : ''}`;
+    };
     blocks.push({
-      kind: 'table', title: 'Details of samples tested',
+      kind: 'table', title: 'Test of Operating Effectiveness — testing results',
       // The extension round is marked rather than merged silently: the combined
       // evaluation is what the conclusion rests on, and the reader has to be able
       // to see which items were the second bite.
@@ -427,18 +442,58 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // The Source column appears only where there is more than one — a column
       // repeating the same filename down every row is noise on a paper, and the
       // single-file table has read the same way for as long as it has existed.
-      headers: ['S.No', 'Sample', ...(sources.length > 1 ? ['Source'] : []), 'Round', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
+      headers: ['S.No', 'Sample', ...(sources.length > 1 ? ['Source'] : []), 'Round', ...steps.map((s, i) => `${letter(i)} · ${s.code}`), 'Remarks'],
       rows: samples.map((smp, i) => [
         String(i + 1), smp.ref,
         ...(sources.length > 1 ? [sources.find(s => s.id === (smp.sourceId ?? LEGACY_SOURCE_ID))?.file ?? '—'] : []),
         smp.extension ? 'Extension' : 'Original',
         ...steps.map(s => tick(s.sampleResults?.[smp.id])),
+        remark(smp.id, smp.ref),
       ]),
-      tickFrom: sources.length > 1 ? 4 : 3,
+      tickFrom,
+      tickTo: tickFrom + steps.length,
     });
   } else {
     blocks.push({ kind: 'note', label: 'Samples', text: 'No samples drawn — evidence is attribute-level (automated / full-population / attestation).', tone: 'neutral' });
   }
+
+  // Gaps (if any) — the reference papers' numbered list, one row per finding.
+  if (defs.length) {
+    blocks.push({
+      kind: 'table', title: 'Gaps (if any)',
+      note: `${defs.length} gap${defs.length === 1 ? '' : 's'} raised by the testing`,
+      headers: ['', 'Description'],
+      rows: defs.map((d, i) => [String(i + 1), d.description]),
+    });
+  } else {
+    blocks.push({ kind: 'note', label: 'Gaps (if any)', text: 'None — the testing raised no gaps.', tone: 'good' });
+  }
+
+  // Testing statistics — the reference papers' closing tallies. "Tested" means
+  // at least one attribute check recorded against the item.
+  {
+    const testedIds = samples.filter(smp => steps.some(s => {
+      const r = s.sampleResults?.[smp.id];
+      return r && r !== 'Not tested';
+    }));
+    const withEx = testedIds.filter(smp => steps.some(s => s.sampleResults?.[smp.id] === 'Fail')).length;
+    blocks.push({
+      kind: 'kv', title: 'Testing statistics', rows: [
+        ['Total samples tested with exceptions', String(withEx)],
+        ['Total samples tested without exceptions', String(testedIds.length - withEx)],
+        ['Total samples not yet tested', String(samples.length - testedIds.length)],
+        ['Total samples selected', String(samples.length)],
+      ],
+    });
+  }
+
+  blocks.push({
+    kind: 'kv', title: 'Test legend', rows: [
+      ['P', 'Attribute satisfied without exception'],
+      ['r', 'Attribute not satisfied — exception noted'],
+      ['—', 'Not tested / not applicable'],
+    ],
+  });
 
   // Results narrative + conclusion
   const d = trackResult(c.design); const o = trackResult(c.operating);
@@ -465,8 +520,8 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   ].filter(Boolean);
   if (rationales.length) blocks.push({ kind: 'note', label: 'Rationale', text: rationales.join(' '), tone: 'neutral' });
 
-  // Linked exception, if the testing raised one
-  if (def) {
+  // Linked exceptions, if the testing raised any — one block each
+  for (const def of defs) {
     const a = assessSeverity(def, eng);
     // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────────
     // Recovery / working-capital unblock / leakage are internal-audit VALUE
@@ -518,7 +573,8 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
     if (b.kind === 'kv') {
       if (b.title === SIGNOFF_TITLE) return 'Sign-off';
       if (b.title === 'Control') return 'Control';
-      if (b.title === 'Test legend' || b.title === IPE_TITLE) return 'TOE';
+      if (b.title === 'Test legend' || b.title === IPE_TITLE
+        || b.title === 'Sample details' || b.title === 'Testing statistics') return 'TOE';
       // the walkthrough and the judgements are the design's own work, so they read
       // on the design tab beside the considerations they support
       if (b.title === WALKTHROUGH_TITLE || b.title === JUDGEMENTS_TITLE) return 'TOD';
@@ -542,13 +598,17 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
 // The sign-off block every working paper carries: who signed, who countersigned,
 // and the ICFR conclusion — stamped if signed, live-derived (and marked so) if not.
 function signoffRows(eng: IcfrEngagement): [string, string][] {
-  const so = eng.signoff;
+  // The signature lives on the LIVE audit's record — sign-off moved from the
+  // engagement to the audit, and the engagement-level field is never written.
+  // Reading it here left the paper printing NOT YET SIGNED over a countersigned
+  // cycle. Same derivation as isEngagementLocked, for the same reason.
+  const so = eng.audits.find(a => !a.archive)?.signoff ?? {};
   const mwOpen = openMaterialWeaknesses(eng).length;
   return [
     ['Prepared by', so.preparer ? `${so.preparer.by} — signed off ${so.preparer.at}` : `${eng.preparer} — NOT YET SIGNED`],
     ['Countersigned by', so.reviewer ? `${so.reviewer.by} — countersigned ${so.reviewer.at}` : `${eng.reviewer} — NOT YET COUNTERSIGNED`],
     ['ICFR conclusion', so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
-    ['Engagement status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
+    ['Audit status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
   ];
 }
 
@@ -570,6 +630,8 @@ export type IcfrSheet = { name: string; blocks: PaperBlock[] };
 export const ENG_SIGNOFF_TITLE = 'Engagement sign-off';
 
 export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
+  // The live audit's record — where the signature actually lands. See signoffRows.
+  const liveSignoff = eng.audits.find(a => !a.archive)?.signoff ?? {};
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
   const concl = controls.map(c => conclusionOf(eng, c));
@@ -590,8 +652,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
           ['Period', periodLine(eng)],
           ['Overall materiality', formatINR(eng.materiality)],
           ['Performance materiality', formatINR(eng.performanceMateriality)],
-          ['Prepared by', eng.signoff.preparer ? `${eng.signoff.preparer.by} — signed off ${eng.signoff.preparer.at}` : eng.preparer],
-          ['Reviewed by', eng.signoff.reviewer ? `${eng.signoff.reviewer.by} — countersigned ${eng.signoff.reviewer.at}` : eng.reviewer],
+          ['Prepared by', liveSignoff.preparer ? `${liveSignoff.preparer.by} — signed off ${liveSignoff.preparer.at}` : eng.preparer],
+          ['Reviewed by', liveSignoff.reviewer ? `${liveSignoff.reviewer.by} — countersigned ${liveSignoff.reviewer.at}` : eng.reviewer],
         ],
       },
       {
