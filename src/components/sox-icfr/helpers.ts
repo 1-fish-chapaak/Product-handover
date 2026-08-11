@@ -531,6 +531,45 @@ export function sourceTotals(sources: PopulationSource[]): { count: number; rows
   return sampledSources(sources).reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
 }
 
+// ─── A shared control's reach ────────────────────────────────────────────────────
+// One control run centrally for several companies concludes once, and that
+// conclusion carries to all of them — so the sample has to actually reach each
+// one. A company with nothing drawn has had nothing tested, however healthy the
+// overall sample size looks, and saying it is covered would be saying more than
+// the work supports. Same shape as the per-file rule the population already
+// follows: every source gets its own draw, and here every company gets its own
+// items.
+export function isShared(c: Control): boolean {
+  return (c.entities?.length ?? 0) > 1;
+}
+export interface EntityCoverage {
+  entity: string;
+  drawn: number;
+  failed: number;
+}
+/** Per company: how many items were drawn for it, and how many of those failed.
+ *  Ordered as the control names them, so the list reads the same every time. */
+export function entityCoverage(c: Control): EntityCoverage[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.entities ?? []).map(entity => {
+    const mine = items.filter(s => s.entity === entity);
+    return { entity, drawn: mine.length, failed: mine.filter(s => s.result === 'Fail').length };
+  });
+}
+/** The companies the conclusion would cover without a single item behind them. */
+export function uncoveredEntities(c: Control): string[] {
+  return entityCoverage(c).filter(e => e.drawn === 0).map(e => e.entity);
+}
+/** What a register row prints in its entity cell. An ordinary row is one
+ *  company's copy and names that company; a shared row answers for several, and
+ *  a cell that named only where it is performed would read as an ordinary row —
+ *  the one fact that makes it different is the one the cell must carry. The
+ *  full list rides the title. */
+export function entityCell(c: Control): { label: string; title: string } | null {
+  if (isShared(c)) return { label: `Shared — covers ${c.entities!.length} companies`, title: c.entities!.join(' · ') };
+  return c.entity ? { label: c.entity, title: c.entity } : null;
+}
+
 // ─── Where the population's files come from ──────────────────────────────────────
 // Not from browsing the platform. "फाइल्स वही आ रही है जो एट्रिब्यूट के अंदर
 // वर्कफ्लो लिंक्ड है और वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स

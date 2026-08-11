@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -1177,6 +1177,78 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
 }
 
 /**
+ * The other arrangement: one control, several companies.
+ *
+ * Altura's Treasury controls are seeded the usual way — the same control tested
+ * separately at each company, four rows with four separate lives. That is right
+ * for a control each company runs for itself. It is wrong for one that is run
+ * ONCE, centrally, on everyone's behalf: group treasury verifies a new payee on
+ * one master, under one approval matrix, whoever the payee will be paid by.
+ * Testing that four times is testing the same act four times.
+ *
+ * So this collapses that control's instances back into a single row that names
+ * the companies it answers for. Both arrangements then sit in the same register,
+ * which is the point: the demo can show the contrast rather than describe it.
+ *
+ * It is left MID-FLIGHT and deliberately short: the sample reaches two of the
+ * three companies. A conclusion drawn now would cover a company nothing was
+ * tested at, and the sample step says so instead of letting the total size —
+ * which looks perfectly healthy — carry the reader past it.
+ */
+function alturaSharedControl(controls: Control[]): Control[] {
+  const treasury = controls.filter(c => c.process === 'Treasury');
+  // 'New payee setup independently verified' — index 2 of the Treasury spread.
+  const base = treasury.find(c => /new payee/i.test(c.description));
+  if (!base) return controls;
+  const siblings = treasury.filter(c => (c.code ?? c.id) === (base.code ?? base.id));
+  const covered = Array.from(new Set(siblings.map(c => c.entity).filter(Boolean) as string[]));
+  if (covered.length < 2) return controls;
+
+  const items: Sample[] = [
+    { id: 'py-1', ref: 'PAYEE-2026-0114', result: 'Pass', sourceId: 'src-1', entity: covered[0] },
+    { id: 'py-2', ref: 'PAYEE-2026-0139', result: 'Pass', sourceId: 'src-1', entity: covered[0] },
+    { id: 'py-3', ref: 'PAYEE-2026-0162', result: 'Pass', sourceId: 'src-1', entity: covered[1] },
+    { id: 'py-4', ref: 'PAYEE-2026-0177', result: 'Not tested', sourceId: 'src-1', entity: covered[1] },
+    { id: 'py-5', ref: 'PAYEE-2026-0208', result: 'Not tested', sourceId: 'src-1', entity: covered[0] },
+  ];
+
+  const shared: Control = {
+    ...base,
+    id: base.code ?? base.id,
+    code: undefined,
+    wpRef: base.wpRef.split('/')[0]!,
+    // Where it is PERFORMED — the group's own treasury desk — while `entities`
+    // is who it answers for. Two different questions, two different fields.
+    entity: 'Altura Infra Holdings Ltd',
+    entities: covered,
+    controlActivity: 'Group treasury verifies every new payee against the company’s own bank confirmation and a call-back to a published number before the payee is released for payment. One master serves the whole group, so a payee set up here can be paid by any company in it.',
+    design: { ...base.design, conclusion: 'Effective' },
+    operating: {
+      ...base.operating,
+      conclusion: 'Not tested',
+      steps: base.operating.steps.map(s => ({ ...s, result: 'Not tested' as TestResult })),
+      population: {
+        source: 'Payee master — change log export',
+        sourceFile: 'payee_master_changes_h1_2026.csv',
+        sourceCount: 1860, count: 214,
+        criteria: 'New payees created 1 Jan – 30 Jun 2026, across all three companies',
+        tieOut: 'Change-log count agreed to the payee master’s creation-date filter.',
+        evidence: [{ id: 'py-pop-ev', name: 'payee_master_changes_h1_2026.csv', kind: 'CSV', uploadedBy: 'A. Mehta', uploadedAt: '18 Jul 2026' }],
+        locked: { by: 'A. Mehta', at: '18 Jul 2026' },
+        sources: [{
+          id: 'src-1', file: 'payee_master_changes_h1_2026.csv', rows: 1860, count: 214,
+          criteria: 'New payees created 1 Jan – 30 Jun 2026, across all three companies',
+          draw: { size: 5, method: 'Random', seed: 4417 },
+        }],
+      },
+      sampling: { basis: 'Monthly control — five items across the half-year.', method: 'Random', size: 5, seed: 4417, samples: items },
+    },
+  };
+
+  return [shared, ...controls.filter(c => !siblings.includes(c))];
+}
+
+/**
  * The findings Altura's live cycle has raised — and the controls they came from.
  *
  * A deficiency is a conclusion about a control that FAILED, so seeding one
@@ -1649,7 +1721,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // Only Altura's scoping actually spans companies today, so every other
   // engagement keeps the exact one-row-per-control register it had, now with its
   // own company named on every row.
-  const controls = withEntityInstances(built, meta.id, base.entity);
+  let controls = withEntityInstances(built, meta.id, base.entity);
+  // …and one of them is not tested per company at all — see alturaSharedControl.
+  if (rich) controls = alturaSharedControl(controls);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.

@@ -10,7 +10,7 @@ import { useIcfr } from './store';
 import { defWord } from './flow';
 import {
   conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, openDiscussionCount,
-  operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
+  operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult, entityCell,
 } from './helpers';
 import { ConclusionPill, ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -112,10 +112,10 @@ function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onT
           readable, and in a group audit the entity is the stronger identity: the
           same control number at another company is a different card, with its own
           design, its own sample and its own conclusion. */}
-      {c.entity && (
-        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+      {entityCell(c) && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={entityCell(c)!.title}>
           <Building2 size={11} className="text-ink-300 shrink-0" />
-          <span className="truncate font-medium">{c.entity}</span>
+          <span className="truncate font-medium">{entityCell(c)!.label}</span>
         </div>
       )}
       <div className="ac-div" />
@@ -323,10 +323,12 @@ export default function ControlRegister() {
               it: buildIcfrPaper still assembles Index, Control Summary, TOE and
               Scope, and nothing opened them. Audit report is a different
               document — what management reads, not the evidence file — so it was
-              never a substitute. Icon-only, as it was: the name is in the
-              tooltip and on the modal it opens.
+              never a substitute. NAMED like its sibling (user ask, Aug 2026):
+              two documents whose difference is a rule cannot have one of them
+              anonymous — an unlabelled icon next to a labelled report reads as
+              "what is this?", which is exactly the question it caused.
               Absent for the risk owner: see the note on the control page. */}
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
@@ -462,8 +464,8 @@ export default function ControlRegister() {
                         </div>
                       </td>
                       <td className="text-[0.71875rem] text-ink-700">
-                        {c.entity
-                          ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                        {entityCell(c)
+                          ? <span className="inline-flex items-center gap-1.5 min-w-0" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span></span>
                           : <span className="text-ink-300">—</span>}
                       </td>
                       <td className="text-[0.71875rem] text-ink-600">{c.type}</td>

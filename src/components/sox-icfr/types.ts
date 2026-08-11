@@ -331,6 +331,12 @@ export interface Sample {
    *  on a control standing on a single file, which is every control seeded before
    *  a control could stand on several. */
   sourceId?: string;
+  /** WHICH COMPANY THIS ITEM BELONGS TO. Only meaningful on a shared control (see
+   *  `Control.entities`), where one test has to answer for several companies: a
+   *  company with no item in the sample has had nothing tested, whatever the
+   *  overall size says. Absent on a control that answers for one company, where
+   *  every item is that company's by construction. */
+  entity?: string;
 }
 /** The control's sample — every item drawn, across every source file it stands
  *  on. `size` and `samples` are the totals; which file each item came out of is
@@ -735,6 +741,22 @@ export interface Control {
    *
    *  Absent on engagements that were never scoped by entity. */
   entity?: string;
+  /** THE COMPANIES THIS ONE ROW ANSWERS FOR — a SHARED control.
+   *
+   *  The opposite arrangement to the instances above, and both are real. Some
+   *  controls are run once, centrally, for several companies at once: a group
+   *  treasury releasing payments for every subsidiary is performed by one team,
+   *  on one system, under one approval matrix. Testing it four times would be
+   *  testing the same act four times.
+   *
+   *  So it stays ONE row with one design track, one population, one sample and
+   *  one conclusion — and that conclusion carries to every company named here.
+   *  Which is exactly why the sample has to reach each of them: a company with
+   *  no item drawn has had nothing tested, and a conclusion that covers it would
+   *  be saying more than the work supports. See `Sample.entity`.
+   *
+   *  Absent on ordinary rows, which answer for the one company in `entity`. */
+  entities?: string[];
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;

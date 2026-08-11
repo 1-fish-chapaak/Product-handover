@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -1261,7 +1261,14 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                       {files.length > 0 ? (
                         <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                           {files.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-600 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] max-w-[240px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.name}</span></span>)}
-                          <span className="text-[0.65625rem] text-ink-400">{doc.uploadedBy ? `· ${doc.uploadedBy}, ${doc.at}` : ''}</span>
+                          {/* When it arrived, not who sent it. Who supplied a
+                              document is not a fact this step turns on — the
+                              auditor reads what is on file and judges the design
+                              from it — and printing a supplier here invited the
+                              reader to weigh the evidence by its sender. The name
+                              is still on the record: `uploadedBy` is untouched on
+                              the file, and History carries the handover. */}
+                          <span className="text-[0.65625rem] text-ink-400">{doc.at ? `· ${doc.at}` : ''}</span>
                         </div>
                       ) : doc.waiver ? (
                         <div className="text-[0.6875rem] text-evidence-700 mt-0.5 flex items-start gap-1">
@@ -1306,9 +1313,17 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               it tells them exactly what is being assessed and how it is going. */}
           {isOwner ? null : (<>
           {/* ── what the list is missing ────────────────────────────────────────
-              Above the checks rather than below them, because it is about the
-              set as a whole. Nothing is inserted for you: an auditor who did not
-              choose a check is an auditor who will not defend it at review. */}
+              PARKED (Aug 2026, user ask) — the "Ira read this control" panel that
+              proposed considerations the list did not carry, each with Add and a
+              dismiss. Everything behind it is left intact and compiling —
+              `suggestions` above, `suggestedDesignChecks` in helpers, the
+              `dismissed` state, `addDesignPoint` — so restoring it is uncommenting
+              this block and nothing else.
+
+              It sat above the checks rather than below, because it was about the
+              set as a whole, and it never inserted anything for you: an auditor who
+              did not choose a check is an auditor who will not defend it at review.
+
           {canTest && suggestions.length > 0 && (
             <div className="mb-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3.5">
               <div className="flex items-start gap-2">
@@ -1334,6 +1349,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               </div>
             </div>
           )}
+          */}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
             <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span></h4>
             <div className="flex items-center gap-2">
@@ -3377,6 +3393,42 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         )}
       </div>
 
+      {/* ── who the sample reaches ───────────────────────────────────────────
+          A shared control concludes once for every company it answers for, so
+          the sample has to actually reach each of them — the same rule the
+          files below already follow, applied along the other axis. A company
+          with nothing drawn has had nothing tested, and the overall size
+          (which looks perfectly healthy) would carry the reader straight past
+          that unless this strip says it. */}
+      {isShared(control) && (() => {
+        const cov = entityCoverage(control);
+        const missing = uncoveredEntities(control);
+        return (
+          <div className={cn('mt-4 rounded-xl border p-3.5', missing.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[0.71875rem] font-bold text-ink-700">One conclusion, {cov.length} companies</span>
+              <span className="text-[0.65625rem] text-ink-400">— every company this control answers for needs items of its own in the sample.</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              {cov.map(e => (
+                <span key={e.entity} className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-[0.6875rem] font-semibold',
+                  e.drawn === 0 ? 'border-high-300 bg-high-50 text-high-700' : e.failed > 0 ? 'border-risk-200 bg-risk-50/50 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-700')}>
+                  {e.entity}
+                  <span className={cn('font-normal', e.drawn === 0 ? 'text-high-700' : 'text-ink-400')}>
+                    {e.drawn === 0 ? 'nothing drawn' : `${e.drawn} item${e.drawn === 1 ? '' : 's'}${e.failed ? ` · ${e.failed} failed` : ''}`}
+                  </span>
+                </span>
+              ))}
+            </div>
+            {missing.length > 0 && (
+              <p className="mt-2 text-[0.6875rem] text-high-700 leading-relaxed">
+                <b className="font-semibold">{missing.join(' and ')}</b> {missing.length === 1 ? 'has' : 'have'} no item in the draw — a conclusion recorded now would cover {missing.length === 1 ? 'a company' : 'companies'} nothing was tested at. Extend the sample until every company is reached.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── one row per file ─────────────────────────────────────────────────
           Each file is drawn from separately: a control standing on four
           quarterly extracts that sampled only the first has tested one quarter,
@@ -4107,8 +4159,19 @@ export default function ControlDossier() {
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[0.71875rem] text-ink-500">
                 {/* Which company's copy this is. The same control number is tested
                     separately at each entity in scope, and this page is one of
-                    them — so the entity belongs beside the process, not buried. */}
-                {control.entity && (
+                    them — so the entity belongs beside the process, not buried.
+                    A SHARED control is the other arrangement: performed at one
+                    place, answering for several — so it says both, because "who
+                    runs it" and "who it covers" stop being the same answer. */}
+                {isShared(control) ? (
+                  <span className="inline-flex items-center gap-1 flex-wrap">
+                    <span className="text-ink-400">Performed at</span> · <b className="font-semibold text-ink-700">{control.entity}</b>
+                    <span className="text-ink-400 ml-3">Covers</span> ·
+                    {control.entities!.map(e => (
+                      <span key={e} className="inline-flex items-center h-[18px] px-1.5 rounded border border-canvas-border bg-paper-50/70 font-semibold text-ink-700">{e}</span>
+                    ))}
+                  </span>
+                ) : control.entity && (
                   <span className="inline-flex items-center gap-1">
                     <span className="text-ink-400">Entity</span> · <b className="font-semibold text-ink-700">{control.entity}</b>
                   </span>
