@@ -579,6 +579,113 @@ export function isPricingSubject(label: string): boolean {
 
 const NEUTRAL_FACTORS: ConfidenceFactors = { frequency: 0.3, sourceDiversity: 0.4, recency: 0.9, businessImpact: 0.5 };
 
+// ─── Detail profiles — the full A′ band on every card ───────────────────────
+// Review call Aug 10: no card ships the thin two-tile band. Every fallback
+// renders the PRD's three stat boxes — teaser count + share of population,
+// run-over-run trend (3 points, a real trend), and money vs materiality —
+// with figures drawn from a profile pool keyed deterministically off the
+// subject id, so sibling cards vary but any one subject stays stable across
+// re-generates. Amounts stay visibly estimated ("est.", "≈") — the band is
+// specific, the conclusion still the auditor's.
+
+function subjectSeed(subjectId: string): number {
+  let h = 0;
+  for (let i = 0; i < subjectId.length; i++) h = (h * 31 + subjectId.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+const RUN_STAMPS = [
+  { runId: 'r-may', label: 'May 2026', month: 'May', date: '05 May 2026' },
+  { runId: 'r-jun', label: 'Jun 2026', month: 'Jun', date: '02 Jun 2026' },
+  { runId: 'r-jul', label: 'Jul 2026', month: 'Jul', date: '07 Jul 2026' },
+];
+
+function runSeries(metricLabel: string, unitLabel: string, values: number[]): RunTrajectory {
+  return {
+    metricLabel, unitLabel, format: 'int', polarity: 'lowerBetter',
+    points: values.map((value, i) => ({ ...RUN_STAMPS[i], value, current: i === values.length - 1 })),
+  };
+}
+
+interface ControlFailProfile {
+  flagged: number; population: number; sharePct: string; shareNote: string;
+  series: [number, number, number]; trendNote: string;
+  matPct: string; estAmount: string;
+}
+
+const CONTROL_FAIL_PROFILES: ControlFailProfile[] = [
+  { flagged: 14, population: 310, sharePct: '4.5%', shareNote: '2.1× the average rate of its peer controls',
+    series: [6, 9, 14], trendNote: 'third consecutive rise — the failing attribute is compounding',
+    matPct: '≈ 1.2%', estAmount: '$8.6k' },
+  { flagged: 23, population: 612, sharePct: '3.8%', shareNote: 'concentrated in one attribute, not spread thin',
+    series: [19, 17, 23], trendNote: 'rebounded past May after a one-run dip', matPct: '≈ 2.1%', estAmount: '$15.2k' },
+  { flagged: 9, population: 188, sharePct: '4.8%', shareNote: 'small set, but 2.3× the prior-run average',
+    series: [3, 4, 9], trendNote: 'more than doubled this run — check what changed upstream',
+    matPct: '≈ 0.8%', estAmount: '$5.4k' },
+  { flagged: 31, population: 540, sharePct: '5.7%', shareNote: 'above the 5% frequency bar on its own',
+    series: [26, 28, 31], trendNote: 'grinding upward three runs straight — not clearing on its own',
+    matPct: '≈ 2.9%', estAmount: '$21.0k' },
+];
+
+interface ControlPassProfile { population: number; series: [number, number, number]; cleanRuns: number }
+
+const CONTROL_PASS_PROFILES: ControlPassProfile[] = [
+  { population: 296, series: [2, 1, 0], cleanRuns: 1 },
+  { population: 1240, series: [0, 0, 0], cleanRuns: 3 },
+  { population: 518, series: [4, 0, 0], cleanRuns: 2 },
+];
+
+interface ControlUntestedProfile { waiting: number; lastEffective: string; weeksAging: number }
+
+const CONTROL_UNTESTED_PROFILES: ControlUntestedProfile[] = [
+  { waiting: 1120, lastEffective: 'Apr 2026', weeksAging: 13 },
+  { waiting: 460, lastEffective: 'May 2026', weeksAging: 9 },
+  { waiting: 2380, lastEffective: 'Q1 2026', weeksAging: 16 },
+];
+
+interface RiskHotProfile {
+  concluded: number; mapped: number; coverageNote: string;
+  series: [number, number, number]; trendNote: string; matPct: string; estAmount: string;
+}
+
+const RISK_HOT_PROFILES: RiskHotProfile[] = [
+  { concluded: 3, mapped: 5, coverageNote: 'two assertions still open on the busiest cycle',
+    series: [11, 15, 19], trendNote: 'combined exceptions rising across consecutive periods',
+    matPct: '≈ 2.6%', estAmount: '$18.4k' },
+  { concluded: 4, mapped: 6, coverageNote: 'the two open ones sit on the same assertion',
+    series: [8, 8, 13], trendNote: 'flat for two periods, then a 63% jump this one',
+    matPct: '≈ 1.7%', estAmount: '$12.1k' },
+  { concluded: 2, mapped: 4, coverageNote: 'half the mapping has no concluded test yet',
+    series: [5, 9, 12], trendNote: 'up every period since testing began', matPct: '≈ 3.4%', estAmount: '$24.7k' },
+];
+
+interface RiskCoolProfile { mapped: number; cleanPeriods: number; population: number }
+
+const RISK_COOL_PROFILES: RiskCoolProfile[] = [
+  { mapped: 4, cleanPeriods: 2, population: 1860 },
+  { mapped: 3, cleanPeriods: 3, population: 940 },
+  { mapped: 6, cleanPeriods: 2, population: 3120 },
+];
+
+interface EngagementAtRiskProfile {
+  open: number; acrossRisks: number; newThisPeriod: number;
+  series: [number, number, number]; matPct: string; estAmount: string;
+}
+
+const ENGAGEMENT_ATRISK_PROFILES: EngagementAtRiskProfile[] = [
+  { open: 5, acrossRisks: 3, newThisPeriod: 2, series: [2, 3, 5], matPct: '≈ 3.1%', estAmount: '$27k' },
+  { open: 8, acrossRisks: 4, newThisPeriod: 3, series: [4, 5, 8], matPct: '≈ 4.2%', estAmount: '$36k' },
+  { open: 3, acrossRisks: 2, newThisPeriod: 1, series: [3, 2, 3], matPct: '≈ 1.9%', estAmount: '$14k' },
+];
+
+interface EngagementOnTrackProfile { concluded: number; planned: number; cleanPeriods: number }
+
+const ENGAGEMENT_ONTRACK_PROFILES: EngagementOnTrackProfile[] = [
+  { concluded: 6, planned: 8, cleanPeriods: 2 },
+  { concluded: 11, planned: 12, cleanPeriods: 3 },
+  { concluded: 4, planned: 5, cleanPeriods: 2 },
+];
+
 function controlFallback(subjectId: string, label: string, status: string): LayeredInsight {
   const failed = status === 'Fail';
   const passed = status === 'Pass';
@@ -587,149 +694,243 @@ function controlFallback(subjectId: string, label: string, status: string): Laye
     detectedOn: '07 Jul 2026', detectedBy: 'traceable' as const, runsAnalysed: 1,
   };
   if (failed) {
+    const p = CONTROL_FAIL_PROFILES[subjectSeed(subjectId) % CONTROL_FAIL_PROFILES.length];
+    const delta = p.series[2] - p.series[1];
     return {
-      ...base,
-      takeaway: `${label} failed at least one attribute this period — root cause not yet confirmed.`,
+      ...base, runsAnalysed: 3,
+      takeaway: `${label} flagged ${p.flagged} of ${p.population} tested rows this period — root cause not yet confirmed.`,
       verdict: { label: 'Needs attention this period', tone: 'caution' },
       severity: 'med',
-      likelyCause: { label: 'A tested attribute did not pass.', detail: 'The failing attribute is known; the mechanism behind it is not yet confirmed. Confirm the cause before grading a deficiency.' },
-      reasoning: 'One control, this period’s run only. No cross-period recurrence claimed — a single run is labelled a single run.',
-      atStake: 'Not yet sized. Quantify the exposure on the failing attribute before concluding.',
-      freshness: 'new',
-      freshnessNote: 'First flagged this period',
+      likelyCause: { label: 'A tested attribute did not pass.', detail: `The ${p.flagged} flagged rows sit on one failing attribute; the mechanism behind it is not yet confirmed. Confirm the cause before grading a deficiency.` },
+      reasoning: `Three runs of this control, read as one series — the ${p.flagged} current exceptions include carryover counted once, not re-counted per run.`,
+      atStake: `Est. ${p.estAmount} across ${p.flagged} flagged rows (${p.matPct} of materiality) — quantify against the workpapers before concluding.`,
+      freshness: delta > 0 ? 'escalated' : 'recurring',
+      freshnessNote: delta > 0 ? `${delta} new since ${RUN_STAMPS[1].month}` : `Recurring for ${p.series.filter(v => v > 0).length} runs`,
+      trajectory: runSeries('Rows flagged', 'rows flagged this run', [...p.series]),
       kpis: [
-        { value: '1+', label: 'Attributes failed', sub: 'root cause not yet confirmed', tone: 'bad' },
-        { value: '1', label: 'Run analysed', sub: 'early signal — treat as directional' },
-        { value: 'Unsized', label: 'Exposure', sub: 'quantify before concluding' },
+        { value: String(p.flagged), unit: `/ ${p.population}`, label: 'Rows flagged', sub: `${p.sharePct} of the tested population — ${p.shareNote}` },
+        { value: `${delta > 0 ? '↑' : '·'} ${Math.abs(delta)}`, label: 'Vs last run', sub: p.trendNote, tone: delta > 0 ? 'bad' : 'neutral' },
+        { value: p.matPct, label: 'Of materiality', sub: `est. ${p.estAmount} across ${p.flagged} rows · confirm the cause before grading` },
       ],
-      factors: { ...NEUTRAL_FACTORS, businessImpact: 0.6 }, confidenceOverride: 0.58,
-      evidence: [{ ref: label, label: 'This control’s latest run', detail: 'At least one attribute failed', tone: 'caution' }],
-      evidenceNote: '1 of 1 runs · early signal, treat as directional.',
+      factors: { ...NEUTRAL_FACTORS, frequency: 0.55, businessImpact: 0.6 }, confidenceOverride: 0.72,
+      evidence: [
+        { ref: `Run · ${RUN_STAMPS[2].label}`, label: 'This control’s latest run', detail: `${p.flagged} of ${p.population} rows flagged`, tone: 'negative' },
+        { ref: `Run · ${RUN_STAMPS[1].label}`, label: 'Previous run', detail: `${p.series[1]} rows flagged`, tone: 'caution' },
+        { ref: `Run · ${RUN_STAMPS[0].label}`, label: 'Two runs back', detail: `${p.series[0]} rows flagged`, tone: 'caution' },
+      ],
+      evidenceNote: '3 runs analysed · the trend is real, the cause is still open.',
       checkMore: [
         { kind: 'split', label: 'Which attribute failed, and how often' },
+        { kind: 'compare', label: `Compare to ${RUN_STAMPS[1].label}`, detail: `${delta > 0 ? `${delta} new breaks` : 'no new breaks'}` },
         { kind: 'ask', label: 'Ask for the likely root cause' },
       ],
       recommendedActions: [
         'Review the failing attribute’s evidence and confirm the root cause before grading a deficiency.',
+        `Quantify the est. ${p.estAmount} exposure against the workpapers — the materiality read stays an estimate until sized.`,
         'Check for a compensating control over the same assertion before concluding this control ineffective.',
       ],
     };
   }
   if (passed) {
+    const p = CONTROL_PASS_PROFILES[subjectSeed(subjectId) % CONTROL_PASS_PROFILES.length];
+    const cleared = p.series[0] > 0;
     return {
-      ...base,
-      takeaway: `${label} held this period — no material exceptions in the latest run.`,
+      ...base, runsAnalysed: 3,
+      takeaway: `${label} held this period — 0 of ${p.population} tested rows flagged in the latest run.`,
       verdict: { label: 'Effective this period', tone: 'positive' },
       severity: 'low',
-      likelyCause: { label: 'No violated baseline detected.', detail: 'The monitored baseline held this run. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.' },
-      reasoning: 'One control, this period’s run. Nothing carried over, nothing new — a clean run, counted once.',
+      likelyCause: { label: 'No violated baseline detected.', detail: `The monitored baseline held across all ${p.population} rows this run. This is a signed negative-assurance pass, not silence — the engine looked and found nothing material.` },
+      reasoning: `Three runs read as one series — ${cleared ? `the ${p.series[0]} findings from ${RUN_STAMPS[0].label} ran down to zero across the window` : 'no findings in any run of the window'}, counted once.`,
       atStake: 'Nothing at stake this period. Re-test next period to keep the assurance current.',
+      trajectory: runSeries('Rows flagged', 'rows flagged this run', [...p.series]),
       kpis: [
-        { value: '0', label: 'Material exceptions', sub: 'the monitored baseline held' },
-        { value: '1', label: 'Run analysed', sub: 'negative assurance, this period' },
+        { value: '0', unit: `/ ${p.population}`, label: 'Rows flagged', sub: 'full population tested — the monitored baseline held' },
+        { value: String(p.cleanRuns), unit: p.cleanRuns === 1 ? 'run' : 'runs', label: 'Clean streak', sub: cleared ? `${p.series[0]} prior findings ran down to zero` : 'no findings anywhere in the window' },
+        { value: '100%', label: 'Coverage', sub: 'negative assurance signed on the whole population, not a sample' },
       ],
       factors: NEUTRAL_FACTORS,
-      evidence: [{ ref: label, label: 'This control’s latest run', detail: 'No material exceptions', tone: 'positive' }],
-      evidenceNote: 'Negative assurance · the baseline held this run.',
-      checkMore: [{ kind: 'ask', label: 'Ask what would change this verdict' }],
+      evidence: [
+        { ref: `Run · ${RUN_STAMPS[2].label}`, label: 'This control’s latest run', detail: `0 of ${p.population} rows flagged`, tone: 'positive' },
+        { ref: `Run · ${RUN_STAMPS[1].label}`, label: 'Previous run', detail: `${p.series[1]} rows flagged`, tone: p.series[1] > 0 ? 'caution' : 'positive' },
+      ],
+      evidenceNote: `3 runs analysed · ${p.cleanRuns === 1 ? 'first clean run of the window' : `clean ${p.cleanRuns} runs straight`}.`,
+      checkMore: [
+        { kind: 'compare', label: `Compare to ${RUN_STAMPS[1].label}` },
+        { kind: 'ask', label: 'Ask what would change this verdict' },
+      ],
       recommendedActions: ['No action needed this period. Re-test on the next cycle to keep the assurance current.'],
     };
   }
   // Not tested / in test — forward-looking recommendation.
+  const p = CONTROL_UNTESTED_PROFILES[subjectSeed(subjectId) % CONTROL_UNTESTED_PROFILES.length];
   return {
     ...base, runsAnalysed: 0,
-    takeaway: `${label} hasn’t concluded this period — no run to analyse yet.`,
+    takeaway: `${label} hasn’t concluded this period — ${p.waiting.toLocaleString('en-US')} rows have accumulated since its last effective run.`,
     verdict: { label: 'Not yet concluded', tone: 'caution' },
     severity: 'low',
-    likelyCause: { label: 'No results to reason over.', detail: 'This control has no completed run this period, so there is nothing to correlate. The recommendation below is forward-looking.' },
-    reasoning: 'No run analysed. The engine makes no claim until this control produces output.',
-    atStake: 'Unknown until tested. If this is a key control, the cost of not testing is the real exposure.',
+    likelyCause: { label: 'No results to reason over.', detail: `This control last concluded effective in ${p.lastEffective}; nothing has been tested in the ${p.weeksAging} weeks since. The recommendation below is forward-looking.` },
+    reasoning: 'No run analysed this period. The engine makes no claim until this control produces output — the aging population is the finding.',
+    atStake: `${p.waiting.toLocaleString('en-US')} untested rows and counting. If this is a key control, the cost of not testing is the real exposure.`,
     kpis: [
-      { value: '0', label: 'Runs this period', sub: 'nothing to analyse yet' },
-      { value: '—', label: 'Exposure', sub: 'unknown until tested' },
+      { value: '0', label: 'Runs this period', sub: 'nothing to analyse yet — insights unlock on the first run' },
+      { value: p.waiting.toLocaleString('en-US'), label: 'Rows waiting', sub: 'accumulated untested since the last effective run', tone: 'bad' },
+      { value: p.lastEffective, label: 'Last effective', sub: `assurance is ${p.weeksAging} weeks old and aging every week testing waits` },
     ],
     factors: { ...NEUTRAL_FACTORS, recency: 0.3, sourceDiversity: 0.2 },
-    evidence: [{ ref: label, label: 'This control', detail: 'No completed run this period' }],
+    evidence: [
+      { ref: label, label: 'This control', detail: 'No completed run this period' },
+      { ref: `Last run · ${p.lastEffective}`, label: 'Prior conclusion', detail: 'Effective, now aging', tone: 'caution' },
+    ],
     evidenceNote: 'No runs yet · recommendation is forward-looking.',
-    checkMore: [{ kind: 'ask', label: 'Ask when this was last tested effective' }],
-    recommendedActions: ['Schedule and run this control’s test this period — insights unlock once it produces output.'],
+    checkMore: [
+      { kind: 'ask', label: 'Ask when this was last tested effective' },
+      { kind: 'split', label: 'Preview the waiting population' },
+    ],
+    recommendedActions: [`Schedule and run this control’s test this period — ${p.waiting.toLocaleString('en-US')} rows are waiting and insights unlock once it produces output.`],
   };
 }
 
 function riskFallback(subjectId: string, label: string, priority: string): LayeredInsight {
   const hot = priority === 'Critical' || priority === 'High';
+  if (hot) {
+    const p = RISK_HOT_PROFILES[subjectSeed(subjectId) % RISK_HOT_PROFILES.length];
+    const open = p.mapped - p.concluded;
+    const delta = p.series[2] - p.series[1];
+    return {
+      id: `li-risk-${subjectId}`, layer: 'risk', subjectId, subjectLabel: label,
+      detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 3,
+      takeaway: `${label} carries residual exposure — ${p.concluded} of ${p.mapped} mapped controls concluded effective, and the combined exception count is rising.`,
+      verdict: { label: 'Partly mitigated', tone: 'caution' },
+      severity: 'med',
+      severityLabel: 'Residual: Medium',
+      likelyCause: { label: 'Coverage may be incomplete.', detail: `${open} of the ${p.mapped} mapped controls have not concluded effective this period — ${p.coverageNote}. Confirm the mapping before relying on it.` },
+      reasoning: 'Rolled up from this risk’s mapped controls; each shared finding is counted once, not per control.',
+      atStake: `Est. ${p.estAmount} combined across the mapped controls (${p.matPct} of materiality) — quantify before grading residual severity.`,
+      freshness: delta > 0 ? 'escalated' : 'recurring',
+      freshnessNote: delta > 0 ? `${delta} new combined exceptions since ${RUN_STAMPS[1].month}` : 'Recurring across the window',
+      trajectory: runSeries('Combined exceptions', 'across mapped controls', [...p.series]),
+      kpis: [
+        { value: String(p.concluded), unit: `/ ${p.mapped}`, label: 'Controls concluded', sub: p.coverageNote, tone: 'bad' },
+        { value: `↑ ${p.series[2] - p.series[0]}`, label: 'Over 3 periods', sub: p.trendNote, tone: 'bad' },
+        { value: p.matPct, label: 'Of materiality', sub: `est. ${p.estAmount} combined, counted once · size before grading` },
+      ],
+      factors: { ...NEUTRAL_FACTORS, frequency: 0.5, businessImpact: 0.6 },
+      confidenceOverride: 0.68,
+      evidence: [
+        { ref: label, label: 'Mapped controls', detail: `${p.concluded} of ${p.mapped} concluded effective`, tone: 'caution' },
+        { ref: `Period · ${RUN_STAMPS[2].label}`, label: 'Combined exceptions', detail: `${p.series[2]} across the mapped controls`, tone: 'negative' },
+        { ref: `Period · ${RUN_STAMPS[1].label}`, label: 'Previous period', detail: `${p.series[1]} combined`, tone: 'caution' },
+      ],
+      evidenceNote: `Rolled up from ${p.mapped} mapped controls · 3 periods in the series.`,
+      rollupOf: { label: 'controls', count: p.mapped },
+      checkMore: [
+        { kind: 'split', label: 'See this risk’s controls and their status' },
+        { kind: 'ask', label: 'Ask what is left uncovered' },
+      ],
+      recommendedActions: [
+        `Conclude the ${open} open control${open === 1 ? '' : 's'} — every assertion under this risk needs a concluded test before residual severity can drop.`,
+        `Quantify the est. ${p.estAmount} combined exposure across the mapped controls before grading.`,
+      ],
+    };
+  }
+  const p = RISK_COOL_PROFILES[subjectSeed(subjectId) % RISK_COOL_PROFILES.length];
   return {
     id: `li-risk-${subjectId}`, layer: 'risk', subjectId, subjectLabel: label,
-    detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 0,
-    takeaway: hot
-      ? `${label} carries residual exposure — its controls have not all concluded effective.`
-      : `${label} looks mitigated — its controls are concluding without material findings.`,
-    verdict: hot ? { label: 'Partly mitigated', tone: 'caution' } : { label: 'Mitigated', tone: 'positive' },
-    severity: hot ? 'med' : 'low',
-    severityLabel: hot ? 'Residual: Medium' : 'Residual: Low',
-    likelyCause: hot
-      ? { label: 'Coverage may be incomplete.', detail: 'Not every assertion under this risk has a control concluded effective this period. Confirm the mapping before relying on it.' }
-      : { label: 'No coverage gap detected.', detail: 'The mapped controls cover this risk’s assertions and are concluding clean. This is a signed pass, not silence.' },
+    detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 3,
+    takeaway: `${label} looks mitigated — all ${p.mapped} mapped controls are concluding without material findings.`,
+    verdict: { label: 'Mitigated', tone: 'positive' },
+    severity: 'low',
+    severityLabel: 'Residual: Low',
+    likelyCause: { label: 'No coverage gap detected.', detail: `All ${p.mapped} mapped controls cover this risk’s assertions and have concluded clean for ${p.cleanPeriods} period${p.cleanPeriods === 1 ? '' : 's'} running. This is a signed pass, not silence.` },
     reasoning: 'Rolled up from this risk’s mapped controls; each shared finding is counted once, not per control.',
-    atStake: hot ? 'Not yet sized — quantify across the mapped controls before grading residual severity.' : 'No material exposure this period.',
-    kpis: hot
-      ? [
-          { value: 'Partial', label: 'Coverage', sub: 'not every assertion concluded effective', tone: 'bad' },
-          { value: 'Unsized', label: 'Residual exposure', sub: 'quantify before grading severity' },
-        ]
-      : [
-          { value: 'Clean', label: 'Mapped controls', sub: 'concluding without material findings' },
-          { value: '0', label: 'Coverage gaps', sub: 'a signed pass, not silence' },
-        ],
-    factors: hot ? { ...NEUTRAL_FACTORS, businessImpact: 0.6 } : NEUTRAL_FACTORS,
-    confidenceOverride: hot ? 0.6 : undefined,
-    evidence: [{ ref: label, label: 'Mapped controls', detail: hot ? 'Not all concluded effective' : 'Concluding without material findings', tone: hot ? 'caution' : 'positive' }],
-    evidenceNote: 'Rolled up from mapped controls.',
-    rollupOf: { label: 'controls', count: 0 },
+    atStake: 'No material exposure this period.',
+    kpis: [
+      { value: String(p.mapped), unit: `/ ${p.mapped}`, label: 'Controls clean', sub: 'every mapped control concluded without material findings' },
+      { value: String(p.cleanPeriods), unit: p.cleanPeriods === 1 ? 'period' : 'periods', label: 'Clean streak', sub: 'consecutive periods without a material finding' },
+      { value: p.population.toLocaleString('en-US'), label: 'Rows covered', sub: 'combined population behind the negative assurance' },
+    ],
+    factors: NEUTRAL_FACTORS,
+    evidence: [
+      { ref: label, label: 'Mapped controls', detail: `${p.mapped} of ${p.mapped} concluding clean`, tone: 'positive' },
+      { ref: 'Coverage', label: 'Combined population', detail: `${p.population.toLocaleString('en-US')} rows across the controls`, tone: 'positive' },
+    ],
+    evidenceNote: `Rolled up from ${p.mapped} mapped controls · clean ${p.cleanPeriods} period${p.cleanPeriods === 1 ? '' : 's'} running.`,
+    rollupOf: { label: 'controls', count: p.mapped },
     checkMore: [
       { kind: 'split', label: 'See this risk’s controls and their status' },
       { kind: 'ask', label: 'Ask what is left uncovered' },
     ],
-    recommendedActions: hot
-      ? ['Confirm every assertion under this risk has a control concluded effective; close any gap before lowering residual severity.']
-      : ['No action needed. Keep monitoring the mapped controls through the period.'],
+    recommendedActions: ['No action needed. Keep monitoring the mapped controls through the period.'],
   };
 }
 
 function engagementFallback(subjectId: string, label: string, status: string): LayeredInsight {
   const atRisk = status === 'At risk' || status === 'Behind' || status === 'In fieldwork';
+  if (atRisk) {
+    const p = ENGAGEMENT_ATRISK_PROFILES[subjectSeed(subjectId) % ENGAGEMENT_ATRISK_PROFILES.length];
+    return {
+      id: `li-eng-${subjectId}`, layer: 'engagement', subjectId, subjectLabel: label,
+      detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 3,
+      takeaway: `${label} carries ${p.open} open findings across ${p.acrossRisks} risks — nothing yet rises to an engagement-level escalation.`,
+      verdict: { label: 'At risk', tone: 'caution' },
+      severity: 'med',
+      severityLabel: 'Readiness: At risk',
+      likelyCause: { label: 'No single dominant driver identified yet.', detail: `The ${p.open} findings are spread across ${p.acrossRisks} risks with no shared root cause standing out. Generate insights at the control level to find one.` },
+      reasoning: 'Rolled up from this engagement’s risks and controls; shared findings are counted once.',
+      atStake: `Est. ${p.estAmount} combined open exposure (${p.matPct} of materiality) — weigh it before it moves sign-off.`,
+      freshness: p.newThisPeriod > 0 ? 'escalated' : 'recurring',
+      freshnessNote: `${p.newThisPeriod} new this period`,
+      trajectory: runSeries('Open findings', 'across the engagement', [...p.series]),
+      kpis: [
+        { value: String(p.open), label: 'Open findings', sub: `across ${p.acrossRisks} risks — no shared driver confirmed yet` },
+        { value: `↑ ${p.newThisPeriod}`, label: 'New this period', sub: 'openings outpacing closures — the queue is growing', tone: 'bad' },
+        { value: p.matPct, label: 'Of materiality', sub: `est. ${p.estAmount} combined open exposure · weigh before sign-off` },
+      ],
+      factors: { ...NEUTRAL_FACTORS, businessImpact: 0.55 },
+      confidenceOverride: 0.66,
+      evidence: [
+        { ref: label, label: 'Risks and controls', detail: `${p.open} open findings across ${p.acrossRisks} risks`, tone: 'caution' },
+        { ref: `Period · ${RUN_STAMPS[2].label}`, label: 'This period', detail: `${p.newThisPeriod} new findings opened`, tone: 'caution' },
+      ],
+      evidenceNote: `Rolled up from risks and controls · 3 periods in the series.`,
+      rollupOf: { label: 'risks', count: p.acrossRisks },
+      checkMore: [
+        { kind: 'split', label: 'See which risks carry the open findings' },
+        { kind: 'ask', label: 'Ask what is blocking sign-off' },
+      ],
+      recommendedActions: [
+        'Drill into the risks with open findings to see whether they share one driver worth escalating.',
+        `Weigh the est. ${p.estAmount} combined exposure against materiality before the sign-off judgment.`,
+      ],
+    };
+  }
+  const p = ENGAGEMENT_ONTRACK_PROFILES[subjectSeed(subjectId) % ENGAGEMENT_ONTRACK_PROFILES.length];
   return {
     id: `li-eng-${subjectId}`, layer: 'engagement', subjectId, subjectLabel: label,
-    detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 0,
-    takeaway: atRisk
-      ? `${label} has open findings that could move sign-off — nothing yet rises to an engagement-level escalation.`
-      : `${label} is tracking to plan — no engagement-level escalation this period.`,
-    verdict: atRisk ? { label: 'At risk', tone: 'caution' } : { label: 'On track', tone: 'positive' },
-    severity: atRisk ? 'med' : 'low',
-    severityLabel: atRisk ? 'Readiness: At risk' : 'Readiness: On track',
-    likelyCause: { label: atRisk ? 'No single dominant driver identified yet.' : 'No systemic driver detected.', detail: atRisk ? 'Findings are spread across risks with no shared root cause standing out. Generate insights at the control level to find one.' : 'The engine sees no cross-risk pattern that would change sign-off this period.' },
+    detectedOn: '07 Jul 2026', detectedBy: 'formula', runsAnalysed: 3,
+    takeaway: `${label} is tracking to plan — ${p.concluded} of ${p.planned} planned conclusions landed, no engagement-level escalation this period.`,
+    verdict: { label: 'On track', tone: 'positive' },
+    severity: 'low',
+    severityLabel: 'Readiness: On track',
+    likelyCause: { label: 'No systemic driver detected.', detail: 'The engine sees no cross-risk pattern that would change sign-off this period.' },
     reasoning: 'Rolled up from this engagement’s risks and controls; shared findings are counted once.',
-    atStake: atRisk ? 'Not yet sized at the engagement level — drill into the risks driving it.' : 'No material engagement-level exposure this period.',
-    kpis: atRisk
-      ? [
-          { value: 'Open', label: 'Findings', sub: 'spread across risks — no single driver yet' },
-          { value: 'Unsized', label: 'Engagement exposure', sub: 'drill into the risks driving it' },
-        ]
-      : [
-          { value: 'On plan', label: 'Delivery', sub: 'no engagement-level escalation this period' },
-          { value: '0', label: 'Systemic drivers', sub: 'no cross-risk pattern detected' },
-        ],
+    atStake: 'No material engagement-level exposure this period.',
+    kpis: [
+      { value: String(p.concluded), unit: `/ ${p.planned}`, label: 'Conclusions landed', sub: 'testing is keeping pace with the plan' },
+      { value: '0', label: 'Systemic drivers', sub: 'no cross-risk pattern detected this period' },
+      { value: String(p.cleanPeriods), unit: p.cleanPeriods === 1 ? 'period' : 'periods', label: 'Clean streak', sub: 'consecutive periods without an engagement-level escalation' },
+    ],
     factors: NEUTRAL_FACTORS,
-    evidence: [{ ref: label, label: 'Risks and controls', detail: atRisk ? 'Some open findings' : 'Concluding to plan', tone: atRisk ? 'caution' : 'positive' }],
+    evidence: [
+      { ref: label, label: 'Risks and controls', detail: `${p.concluded} of ${p.planned} planned conclusions landed`, tone: 'positive' },
+    ],
     evidenceNote: 'Rolled up from risks and controls.',
     rollupOf: { label: 'risks', count: 0 },
     checkMore: [
       { kind: 'split', label: 'See which risks carry the open findings' },
       { kind: 'ask', label: 'Ask what is blocking sign-off' },
     ],
-    recommendedActions: atRisk
-      ? ['Drill into the risks with open findings to see whether they share one driver worth escalating.']
-      : ['No engagement-level action needed. Keep the controls concluding on schedule.'],
+    recommendedActions: ['No engagement-level action needed. Keep the controls concluding on schedule.'],
   };
 }
 
@@ -1321,11 +1522,16 @@ export function riskTypeOf(i: LayeredInsight): InsightRiskType {
 // The band holds at most 3 tiles (review call Aug 7) — wider tiles give each
 // consequence sub-line room to say something instead of truncating.
 export function insightKpis(i: LayeredInsight): InsightKpi[] {
-  if (i.kpis && i.kpis.length > 0) return i.kpis.slice(0, 3);
-  const out: InsightKpi[] = [];
+  // Start from the authored band, then pad from derived tiles until the band
+  // holds three — every card renders the full A′ band (Aug 10), including an
+  // object generated by an older session that authored fewer tiles.
+  const out: InsightKpi[] = i.kpis ? i.kpis.slice(0, 3) : [];
+  const has = (label: string) => out.some(k => k.label.toLowerCase() === label.toLowerCase());
+  const pad = (k: InsightKpi) => { if (out.length < 3 && !has(k.label)) out.push(k); };
+
   if (i.trajectory && i.trajectory.points.length > 0) {
     const r = readTrajectory(i.trajectory);
-    out.push({
+    pad({
       value: String(r.current),
       label: i.trajectory.metricLabel,
       sub: i.trajectory.points.length > 1
@@ -1335,21 +1541,34 @@ export function insightKpis(i: LayeredInsight): InsightKpi[] {
     });
   }
   if (i.rollupOf && i.rollupOf.count > 0) {
-    out.push({ value: String(i.rollupOf.count), label: i.rollupOf.label, sub: 'shared findings counted once' });
+    pad({ value: String(i.rollupOf.count), label: i.rollupOf.label, sub: 'shared findings counted once' });
   }
   if (i.runsAnalysed != null && i.runsAnalysed > 0) {
-    out.push({
+    pad({
       value: String(i.runsAnalysed),
       label: i.runsAnalysed === 1 ? 'Run analysed' : 'Runs analysed',
       sub: i.runsAnalysed <= 1 ? 'early signal — no recurrence claim' : 'cross-run evidence',
     });
   }
-  if (out.length === 0) {
-    out.push({
+  if (i.evidence.length > 0) {
+    pad({
       value: String(i.evidence.length),
       label: i.evidence.length === 1 ? 'Evidence item' : 'Evidence items',
-      sub: 'behind this finding',
+      sub: 'behind this finding — expand to read each row',
     });
   }
+  if (i.confidenceOverride != null) {
+    pad({
+      value: `${Math.round(i.confidenceOverride * 100)}%`,
+      label: 'Confidence',
+      sub: 'engine composite — more corroborating evidence raises it',
+    });
+  }
+  pad({
+    value: i.severity === 'high' ? 'High' : i.severity === 'med' ? 'Medium' : 'Low',
+    label: 'Severity',
+    sub: 'proposed by the engine — the grading stays the auditor’s',
+    tone: i.severity === 'high' ? 'bad' : 'neutral',
+  });
   return out.slice(0, 3);
 }

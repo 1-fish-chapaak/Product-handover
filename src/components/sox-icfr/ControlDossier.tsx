@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning,
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -16,16 +16,16 @@ import {
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay, EXTRACT_WOBBLE,
-  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, type PopVerdict,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, type PopVerdict,
 } from './helpers';
-import { useAuditFiles } from './useAuditFiles';
+import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
-import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import { DeficiencyCard } from './extraViews';
@@ -39,7 +39,7 @@ import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, Role, Sampling, TestResult, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -1128,6 +1128,9 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const [waiving, setWaiving] = useState<string | null>(null);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
+  /** Which attribute the check being added belongs to. '' means the control as a
+   *  whole — the kind of check that has no single attribute to sit under. */
+  const [newPointStep, setNewPointStep] = useState('');
   const [validatingAll, setValidatingAll] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   // custom element — named by the auditor, same inline-form shape as Add check
@@ -1202,6 +1205,21 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
     : missing.length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
   const empty = d.documents.length === 0 && d.points.length === 0;
+
+  // ── the checks, filed under what they are about (dev call, Aug 2026) ────────
+  // Design and operating already test the SAME attributes — see Walkthrough in
+  // types.ts, where the attributes are defined once and proven twice. The checks
+  // were the one part of TOD that sat outside them, so they are grouped here:
+  // the control-level ones first (does it address the risk, at what precision),
+  // then one group per attribute (is THIS thing designed to happen).
+  //
+  // A check whose stepId names an attribute that no longer exists falls to the
+  // control-level group rather than disappearing — a check nobody can see is a
+  // check nobody can answer, and the conclusion still counts it.
+  const steps = control.operating.steps;
+  const stepIds = new Set(steps.map(s => s.id));
+  const controlChecks = d.points.filter(p => !p.stepId || !stepIds.has(p.stepId));
+  const stepChecks = steps.map(s => ({ step: s, points: d.points.filter(p => p.stepId === s.id) })).filter(g => g.points.length > 0);
 
   return (
     <div className="p-5">
@@ -1328,17 +1346,59 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                 <button onClick={() => markAll('Fail')} title="Mark every check failed"
                   className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button>
               </>)}
-              {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
+              {/* Named, because "Add" is not unique on this screen — the element
+                  menu and every Ira suggestion carry one too, and three buttons
+                  reading the same word is three buttons nobody can tell apart. */}
+              {canEdit && <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
             </div>
           </div>
-          {addingPoint && (
-            <div className="flex items-center gap-2 mb-2.5">
-              <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPoint.trim()) { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); } }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              <button disabled={!newPoint.trim()} onClick={() => { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
-            </div>
-          )}
+          {addingPoint && (() => {
+            const submit = () => {
+              if (!newPoint.trim()) return;
+              addDesignPoint(control.id, newPoint.trim(), newPointStep || undefined);
+              const where = steps.find(s => s.id === newPointStep);
+              logEvent({ action: 'Create', description: `Added design consideration to ${control.id}${where ? ` — attribute ${where.code}` : ''}`, module: 'SOX ICFR', entity: 'Control' });
+              setNewPoint(''); setNewPointStep(''); setAddingPoint(false);
+            };
+            return (
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 min-w-[16rem] h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                {/* What the check is ABOUT, asked at the point of writing it. Filed
+                    afterwards it never gets filed — and a check under the wrong
+                    heading reads as a check of something it never tested. */}
+                {steps.length > 0 && (
+                  <select value={newPointStep} onChange={e => setNewPointStep(e.target.value)} aria-label="What this check is about"
+                    className="h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-700 max-w-[16rem] focus:outline-none focus:ring-2 focus:ring-brand-200 cursor-pointer">
+                    <option value="">The control as a whole</option>
+                    {steps.map(s => <option key={s.id} value={s.id}>{s.code} · {s.description}</option>)}
+                  </select>
+                )}
+                <button disabled={!newPoint.trim()} onClick={submit} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+              </div>
+            );
+          })()}
           {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
-            <div className="space-y-2 mb-5">{d.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}</div>
+            <div className="space-y-4 mb-5">
+              {controlChecks.length > 0 && (
+                <div className="space-y-2">
+                  {/* Only labelled when there is something to tell it apart FROM.
+                      One heading over one list names nothing. */}
+                  {stepChecks.length > 0 && (
+                    <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">The control as a whole</p>
+                  )}
+                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                </div>
+              )}
+              {stepChecks.map(g => (
+                <div key={g.step.id} className="space-y-2">
+                  <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 flex items-baseline gap-1.5 min-w-0">
+                    <span className="font-mono normal-case text-ink-500 shrink-0">{g.step.code}</span>
+                    <span className="truncate normal-case font-medium text-ink-500">{g.step.description}</span>
+                  </p>
+                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                </div>
+              ))}
+            </div>
           )}
 
           {/* the walkthrough — the design proved on one live transaction.
@@ -1544,16 +1604,21 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
 
 function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWrite: boolean; isAuditor: boolean }) {
   // `me` went with the parked form — it only ever stamped the Run by field.
-  const { registerIpe, concludeIpe, clearIpe } = useIcfr();
+  const { registerIpe, concludeIpe, clearIpe, approveSource } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const files = useAuditFiles();
   const pop = control.operating.population;
   const sourceFile = files.find(f => f.name === pop?.sourceFile);
+  const sources = populationSources(control);
   const ipe = control.operating.ipe;
   const reliable = ipe?.conclusion === 'Reliable';
   // Settled work folds away; unsettled work does not get to hide.
   const [open, setOpen] = useState(!reliable);
+  // Which file's checks are unfolded. One at a time, and the one that opens on
+  // arrival is the first still owing work — a control returned to after a week
+  // should land on what is left rather than on what is finished.
+  const [openSource, setOpenSource] = useState<string | null>(() => sources.find(s => !s.approvedIpe)?.id ?? null);
 
   // ── PARKED (Aug 2026) — the registration form ─────────────────────────────
   // Eight fields, and the audit already held five of them: the report's name was
@@ -1622,16 +1687,21 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
             <p className="text-[0.71875rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
           ) : (
             <>
-              {/* What the audit holds about this report. Every part is optional
+              {/* What the audit holds about the report. Every part is optional
                   except the count, because nothing is typed in any more — the
                   record is seeded off the source file, so a separator is only
-                  printed when there is something on both sides of it. */}
+                  printed when there is something on both sides of it.
+                  On a population standing on several files this is the header
+                  for all of them; each file's own name and row count head its
+                  own group of checks below. */}
               <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="block text-[0.78125rem] font-bold text-ink-900 truncate">{ipe.reportName}</span>
+                    <span className="block text-[0.78125rem] font-bold text-ink-900 truncate">
+                      {sources.length > 1 ? `${sources.length} reports behind this population` : ipe.reportName}
+                    </span>
                     <span className="block text-[0.6875rem] text-ink-500 mt-0.5 truncate">
-                      {[ipe.system, ipe.reportRef, `${ipe.recordCount.toLocaleString()} records`].filter(Boolean).join(' · ')}
+                      {[ipe.system, ipe.reportRef, `${(sources.length > 1 ? sources.reduce((a, s) => a + s.rows, 0) : ipe.recordCount).toLocaleString()} records`].filter(Boolean).join(' · ')}
                     </span>
                   </div>
                   {canWrite && isAuditor && (
@@ -1646,9 +1716,91 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                 </div>
               </div>
 
-              <div className="mt-2.5 space-y-1.5">
-                {ipe.checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={ipe.recordCount} />)}
-              </div>
+              {/* ── the checks, one group per file ────────────────────────────
+                  "IPE टेस्ट तो एक ही रो होगा, उसके नीचे दो रहेगा" — one test,
+                  one verdict, and underneath it each file proven on its own.
+                  The four dimensions are asked of every file separately because
+                  proving one file says nothing about the next: a general ledger
+                  that ties out is no evidence at all about a vendor master.
+                  With one file there is nothing to distinguish, so the heading
+                  is left off and the checks read exactly as they always did. */}
+              {sources.length <= 1 ? (
+                <div className="mt-2.5 space-y-1.5">
+                  {ipe.checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={sources[0]?.rows ?? ipe.recordCount} />)}
+                </div>
+              ) : (
+                <div className="mt-2.5 space-y-2">
+                  {sources.map(s => {
+                    const checks = ipeChecksFor(control, s.id);
+                    if (!checks.length) return null;
+                    const passed = checks.filter(k => k.result === 'Pass').length;
+                    const failed = checks.some(k => k.result === 'Fail');
+                    const answered = checks.every(k => k.result !== 'Not tested');
+                    const done = !!s.approvedIpe;
+                    const isOpen = openSource === s.id;
+                    return (
+                      <div key={s.id} className={cn('rounded-lg border overflow-hidden', done ? 'border-compliant-200 bg-compliant-50/20' : 'border-canvas-border bg-canvas-elevated')}>
+                        {/* One file's row. Clicking it opens that file's four
+                            dimensions and closes whichever was open — "उस फाइल
+                            का रो को क्लिक करोगे तब चारों नीचे का खुलेगा, फिर
+                            दूसरे फाइल में क्लिक करोगे तो उसका खुलेगा". Four
+                            checks × ten files unfolded at once is a screen
+                            nobody can work in. */}
+                        <button onClick={() => setOpenSource(isOpen ? null : s.id)}
+                          aria-expanded={isOpen}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer">
+                          {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
+                          {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
+                          <span className="text-[0.71875rem] font-bold text-ink-800 truncate min-w-0">{s.file}</span>
+                          <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{s.rows.toLocaleString()} records</span>
+                          <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
+                            failed ? 'text-risk-700' : done ? 'text-compliant-700' : passed === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
+                            {failed ? 'a check failed' : done ? 'done' : `${passed}/${checks.length} proven`}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-3 pb-3">
+                            <div className="space-y-1.5">
+                              {/* The count each check is measured against is
+                                  THIS file's row count, not the control's total
+                                  — a variance worked out against the wrong
+                                  denominator is worse than no variance at all. */}
+                              {checks.map(k => <IpeCheckRow key={k.id} control={control} check={k} canWrite={canWrite && isAuditor} reportCount={s.rows} />)}
+                            </div>
+                            {canWrite && isAuditor && (
+                              <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                                  {done
+                                    ? `Marked done by ${s.approvedIpe!.by}, ${s.approvedIpe!.at}. Answering a check again takes the mark off.`
+                                    : answered
+                                      ? 'Mark it done and the next file opens. This is a marker, not a lock — the verdict on the report is still signed once, below.'
+                                      : `Work all ${checks.length} checks on this file first.`}
+                                </p>
+                                {done ? (
+                                  <button onClick={() => approveSource(control.id, s.id, 'ipe', false)}
+                                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Take the mark off</button>
+                                ) : (
+                                  <button disabled={!answered} title={answered ? undefined : `Work all ${checks.length} checks on this file first.`}
+                                    onClick={() => {
+                                      approveSource(control.id, s.id, 'ipe', true);
+                                      // "अगला पे जाओगे" — the next file that
+                                      // still owes work opens itself. Landing on
+                                      // a closed list after every approval is
+                                      // ten extra clicks on a ten-file control.
+                                      const next = sources.find(x => x.id !== s.id && !x.approvedIpe);
+                                      setOpenSource(next?.id ?? null);
+                                    }}
+                                    className="shrink-0 h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* the verdict — a single failure sinks it, so the suggestion is stated and the auditor signs it */}
               <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
@@ -1973,12 +2125,12 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
  *  The file lands in the audit's registry rather than on this control, so the
  *  next control that needs the same vendor master or access review picks it out
  *  of the list and is never asked the question again. */
-/** `preset` arrives when the file was already chosen in the data picker. The
- *  modal then has exactly one question left — where it came from — and asking
- *  for the file a second time would be asking for something already given. */
-function ControlUploadModal({ onClose, onAdd, preset }: { onClose: () => void; onAdd: (name: string, rows: number, origin: FileOrigin) => void; preset?: { name: string; rows: number } }) {
-  const [name, setName] = useState(preset?.name ?? '');
-  const [rows, setRows] = useState(preset?.rows ?? 0);
+/*  `preset` went with the data picker (dev call, Aug 2026) — it existed so a
+ *  file already chosen there was not asked for twice. Upload is the only door
+ *  now, so the modal always starts empty and always asks both questions. */
+function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string, rows: number, origin: FileOrigin) => void }) {
+  const [name, setName] = useState('');
+  const [rows, setRows] = useState(0);
   const [origin, setOrigin] = useState<FileOrigin | undefined>();
   const [reading, setReading] = useState(false);
   const pick = () => {
@@ -2013,12 +2165,8 @@ function ControlUploadModal({ onClose, onAdd, preset }: { onClose: () => void; o
               <FileText size={13} className="text-brand-600 shrink-0" />
               <span className="text-[0.78125rem] font-semibold text-ink-900 truncate min-w-0">{name}</span>
               <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{rows.toLocaleString()} rows</span>
-              {/* No "choose a different file" when the picker already chose it —
-                  that road leads back to the picker, not to this modal. */}
-              {!preset && (
-                <button onClick={() => { setName(''); setOrigin(undefined); }} aria-label="Choose a different file"
-                  className="p-1 rounded text-ink-400 hover:text-risk-700 cursor-pointer shrink-0"><X size={12} /></button>
-              )}
+              <button onClick={() => { setName(''); setOrigin(undefined); }} aria-label="Choose a different file"
+                className="p-1 rounded text-ink-400 hover:text-risk-700 cursor-pointer shrink-0"><X size={12} /></button>
             </div>
           ) : (
             <button onClick={pick} disabled={reading}
@@ -2056,117 +2204,353 @@ function ControlUploadModal({ onClose, onAdd, preset }: { onClose: () => void; o
  *  does not narrow it further, which is the confusion the two steps used to
  *  share.
  */
+/** The attributes still owed a file, and the way to chase them.
+ *
+ *  One implementation, two homes: the picker (while the first file is being
+ *  chosen) and the source list (every time after that). A gap that only appeared
+ *  in the picker vanished the moment the first file landed, which is exactly
+ *  when somebody would come back to look for it.
+ *
+ *  The data is the owner's, so the ask goes to them rather than being worked
+ *  around — "आपको RO को रिमाइंडर भी देना पड़ेगा ईमेल पे कि भाई यहाँ आओ और फाइल
+ *  अपलोड करो". It lands on the same task list the design documents use.
+ */
+function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean }) {
+  const { remindOwnerForFiles } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const { awaiting } = useMemo(() => expectedInputsFor(control), [control]);
+  if (!awaiting.length) return null;
+  return (
+    <div className="mt-1.5">
+      <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
+        {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
+      </p>
+      {canAsk && (
+        <button onClick={() => {
+          const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} need the source data their workflow reads. Upload it on the control's Population step.`;
+          remindOwnerForFiles(control.id, what);
+          logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
+          addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
+        }}
+          className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
+      )}
+    </div>
+  );
+}
+
+/** Pick a file, say what to take out of it, extract.
+ *
+ *  One implementation, two callers: the first file — which creates the
+ *  population — and every file after it, which joins the one already there. A
+ *  control rarely stands on one file (dev call, Aug 2026), and the questions are
+ *  identical either way, so a second copy of this form would only be a second
+ *  place to fix anything wrong with it.
+ *
+ *  The instance count comes off the SOURCE, not off a figure anyone types: the
+ *  same rule the first file has followed since "Expected instances" was cut.
+ */
+function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
+  control: Control;
+  /** Files already in this population. Offered once, never twice — the same
+   *  file added again is the same rows counted again. */
+  exclude: string[];
+  submitLabel: string;
+  onSubmit: (file: AuditFile, criteria: string, count: number) => void;
+}) {
+  const { eng, openAuditId, me, role, registerFile, remindOwnerForFiles } = useIcfr();
+  const isAuditor = role === 'auditor';
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const all = useAuditFiles();
+  const files = all.filter(f => !exclude.includes(f.name));
+  const [picked, setPicked] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const chosen = files.find(f => f.name === picked);
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const from = audit?.windowFrom ?? '';
+  const to = audit?.windowTo ?? '';
+
+  const drafted = extractionCriteria(control, from, to, chosen && { system: chosen.system, name: chosen.name });
+  const [criteria, setCriteria] = useState(drafted);
+  const [criteriaSeed, setCriteriaSeed] = useState(drafted);
+  if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); setCriteria(drafted); }
+
+  // What the attributes' workflows actually read. This is the answer to "which
+  // files", and it beats any heuristic: a linked workflow naming its input is a
+  // fact, not a guess.
+  const { inputs } = useMemo(() => expectedInputsFor(control), [control]);
+  const expected = new Map(inputs.map(i => [i.name, i]));
+  // Files the workflows name come first. The rest of the audit's files stay
+  // selectable — a manual control links no workflow at all, and a step that
+  // could offer it nothing would be a step it could never finish — but they are
+  // visibly not what anything here reads.
+  const ordered = useMemo(
+    () => [...files].sort((a, b) => Number(expected.has(b.name)) - Number(expected.has(a.name))),
+    [files, inputs],
+  );
+  const firstOther = ordered.findIndex(f => !expected.has(f.name));
+  // The heuristic only runs where there is nothing better. See suggestPopulationFile.
+  const hint = useMemo(
+    () => (inputs.length ? null : suggestPopulationFile(eng, control, files, requiredDatasetsFor(control).map(r => r.name))),
+    [eng, control, files, inputs],
+  );
+
+  const submit = () => {
+    if (!chosen) return;
+    setBusy(true);
+    window.setTimeout(() => {
+      // A filtered subset, never the whole file — a population the same size as
+      // its source is a file that was copied rather than filtered. Deterministic
+      // from the control AND the file, so two files under one control narrow to
+      // different numbers and the same extract run twice does not.
+      const seed = `${control.id}·${chosen.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+      const share = 0.2 + (seed % 30) / 100;
+      const narrowed = Math.max(1, Math.min(chosen.rows - 1, Math.round(chosen.rows * share)));
+      onSubmit(chosen, criteria.trim() || 'No filter applied', narrowed);
+      setBusy(false);
+      setPicked(null);
+    }, 1500);
+  };
+
+  return (
+    <>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-[0.8125rem] font-bold text-ink-900">Select the source</h4>
+          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">The files this control's evidence comes from. Then say what to take out of them: the source is the raw data; the population is what this control actually operated on.</p>
+        </div>
+        {/* Upload, not "Add a source" (dev call, Aug 2026). The picker it
+            replaced offered the platform's whole data catalogue and a
+            connect-a-database tab — neither of which is where a control's
+            evidence comes from. A file the owner sends is, so that is the one
+            door. Hidden while the list is empty: the empty state below carries
+            the same action, and two buttons for one job is one button too many. */}
+        {files.length > 0 && (
+          <button onClick={() => setUploading(true)}
+            className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={12} /> Upload file</button>
+        )}
+      </div>
+
+      {/* ── which one it would take, and why ─────────────────────────────────
+          Stated above the list, not applied to it. Nothing is pre-selected: a
+          row already ticked when the screen opens gets confirmed without being
+          read, and the auditor owns this choice. The reason is the part worth
+          printing — "31 P2P controls draw off it" can be argued with, a
+          confidence score cannot. */}
+      {hint && (
+        <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
+          <Sparkles size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          <p className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">
+            <span className="font-semibold text-ink-900">Likely {hint.name}</span> — {hint.reason}. Pick it below if you agree.
+          </p>
+        </div>
+      )}
+      {/* ── where the list comes from ────────────────────────────────────────
+          Said out loud, because otherwise the ordering is a mystery: these are
+          the files the control's own attributes are wired to read, and picking
+          anything else is picking a file no workflow here will run on. */}
+      {inputs.length > 0 && (
+        <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
+          <WorkflowIcon size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+              <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'One file is' : `${inputs.length} files are`} what this control reads</span> — the input{inputs.length === 1 ? '' : 's'} of the workflows linked to its attributes. {inputs.length === 1 ? 'It is' : 'They are'} first in the list.
+            </p>
+            {/* The other half of the truth. An attribute wired to a workflow with
+                no file attached is a thing somebody owes, and hiding it here
+                would make the list look complete when it is not. */}
+            <AwaitingInputs control={control} canAsk={isAuditor} />
+          </div>
+        </div>
+      )}
+      <div className="rounded-xl border border-canvas-border overflow-hidden mb-4">
+        {files.length === 0 ? (
+          /* Nothing left to draw on — either the audit arrived without a trial
+             balance or general ledger, or every file it has is already in this
+             population. Both are fixed the same way: upload one, answer where
+             it came from, and it joins the audit's files so the next control
+             finds it waiting rather than uploading it again. */
+          <div className="px-4 py-5 text-center">
+            <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center"><FileUp size={17} /></span>
+            <p className="text-[0.78125rem] font-semibold text-ink-800 mt-2">{exclude.length ? 'Every file on this audit is already in this population' : 'No source data on this audit yet'}</p>
+            <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[26rem] mx-auto">
+              {exclude.length
+                ? 'Upload another one and it joins the audit\'s sources — every other control can then draw on it without being asked where it came from again.'
+                : 'No trial balance or general ledger was attached when this audit was created. Upload what this control operates on and it joins the audit\'s sources — every other control can then draw on it without being asked where it came from again.'}
+            </p>
+            <button onClick={() => setUploading(true)}
+              className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><FileUp size={14} /> Upload file</button>
+          </div>
+        ) : ordered.map((f, idx) => {
+          const on = picked === f.name;
+          // No answer, no population. Removing "unknown" means a file nobody
+          // can place is not a source you can build a test on.
+          const usable = fileUsable(f);
+          const wanted = expected.get(f.name);
+          return (
+            <div key={f.name}>
+              {/* The line between what the workflows read and everything else.
+                  Only drawn when there is something on both sides of it. */}
+              {inputs.length > 0 && idx === firstOther && idx > 0 && (
+                <div className="px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                  Not read by any of this control's workflows
+                </div>
+              )}
+              <button onClick={() => usable && setPicked(f.name)} disabled={!usable}
+                title={usable ? undefined : 'Say where this file came from on its file record before drawing a population off it'}
+                className={cn('w-full text-left flex items-center gap-2.5 px-3 py-2.5 border-b border-canvas-border last:border-b-0 transition-colors',
+                  !usable ? 'opacity-55 cursor-not-allowed' : on ? 'bg-brand-50 cursor-pointer' : 'hover:bg-paper-50 cursor-pointer')}>
+                <span className={cn('w-3.5 h-3.5 rounded-full border-[3px] shrink-0', on ? 'border-brand-600' : 'border-ink-300')} />
+                {/* a pull from a system reads differently from a file somebody
+                    sent, and the icon is the fastest way to say which */}
+                {f.systemFetched
+                  ? <Database size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
+                  : <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />}
+                <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
+                {/* Which attributes read it. The reason a file is at the top of
+                    the list belongs on the row, not in a paragraph above it. */}
+                {wanted && (
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold whitespace-nowrap">
+                    <WorkflowIcon size={9} /> {wanted.attributes.join(', ')}
+                  </span>
+                )}
+                {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
+                {/* provenance, inherited — stated on every file so the choice of
+                    source is made knowing what it is */}
+                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                  !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
+                  {originLabel(f)}
+                </span>
+                {/* A PDF has no rows to count, so none is claimed for it. */}
+                <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{hasRowCount(f.name) ? `${f.rows.toLocaleString()} rows` : 'no row count'}</span>
+                <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* One statement, not two boxes. A type-and-account pair only ever
+          described a spreadsheet someone had already shaped; pulled from a
+          system, the criteria ARE the query and no fixed set of fields fits
+          them. Drafted from the control and its window, then edited. */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Extraction criteria</span>
+        <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
+      </div>
+      <textarea value={criteria} onChange={e => setCriteria(e.target.value)} rows={2}
+        aria-label="Extraction criteria"
+        placeholder="What to take out of the source — in plain English, for the reviewer."
+        className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+      {/* The window is stated, not asked for — it is the audit's own, which the
+          form was already defaulting to, and the IPE is what proves the report
+          actually covers it. */}
+      <p className="mt-2 text-[0.65625rem] text-ink-400">
+        {from && to ? <>Period covered · {from} – {to} — the audit's own window.</> : <>Period covered · the audit's own window.</>}{' '}
+        The IPE check on this report is what confirms it was run over that period.
+      </p>
+
+      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-[0.65625rem] text-ink-400 min-w-0">
+          {!chosen ? 'Pick the source file first.'
+            : hasRowCount(chosen.name)
+              ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>
+              : <>Filtering {chosen.name} by: {criteria || 'nothing yet'} — a PDF has no rows to count.</>}
+        </p>
+        <button disabled={!chosen || busy} onClick={submit}
+          title={!chosen ? 'Pick a source file first' : undefined}
+          className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+          {busy ? <><Loader2 size={14} className="animate-spin" /> Extracting…</> : <><Database size={14} /> {submitLabel}</>}
+        </button>
+      </div>
+
+      {uploading && (
+        <ControlUploadModal onClose={() => setUploading(false)}
+          onAdd={(name, rows, origin) => {
+            // A trial balance uploaded here is a trial balance, not a nameless
+            // "source file" — the registry on Configuration lists it beside the
+            // ones attached at creation, so it has to read like them.
+            registerFile({ name, kind: guessFileKind(name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
+            logEvent({ action: 'Upload', description: `Added "${name}" to the audit's files from ${control.id} — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
+            addToast({ type: 'success', title: 'File added', message: `${name} — ${origin.toLowerCase()}. Every control on this audit can use it now.` });
+            setPicked(name);
+            setUploading(false);
+          }} />
+      )}
+    </>
+  );
+}
+
 function PopulationSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { eng, openAuditId, role, me, setPopulation, clearPopulation, setPopulationFacts, lockPopulation, registerFile } = useIcfr();
+  const { eng, openAuditId, role, me, setPopulation, clearPopulation, addPopulationSource, removePopulationSource, setSourceRole, lockPopulation } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const files = useAuditFiles();
   const pop = control.operating.population;
-  // Where this population's data came from — read off the file record, never
-  // held here. Correcting the file record moves this line on every control.
-  const sourceFile = files.find(f => f.name === pop?.sourceFile);
   const audit = eng.audits.find(a => a.id === openAuditId);
   const version = `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`;
   const canWrite = canEdit && !isControlLocked(control);
   const isAuditor = role === 'auditor' && canWrite;
+  // The first line stops at the extract. Everything past it — proving the
+  // report, locking, and every step the lock opens — is the audit's own work,
+  // and the owner seeing it is the independence problem the whole page is
+  // arranged around.
+  const isOwnerView = role === 'risk-owner';
   // The window the audit actually tests, as real dates. The coverage check
   // measures the filter against this, and prose like 'Jan 2026' cannot be
   // measured — so the filter asks for dates rather than a label.
   const winFrom = audit?.windowFrom ?? '';
   const winTo = audit?.windowTo ?? '';
 
-  const [picked, setPicked] = useState<string | null>(null);
-  const [from, setFrom] = useState(winFrom);
-  const [to, setTo] = useState(winTo);
-  const [extracting, setExtracting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [sourcePicker, setSourcePicker] = useState(false);
-  const [uploadPreset, setUploadPreset] = useState<{ name: string; rows: number } | undefined>();
-  // What the auditor expects the filter to return, stated BEFORE it runs. An
-  // expectation recorded afterwards is an expectation fitted to the answer, so
-  // it is asked for here and the extract will not run without it.
-  const [expected, setExpected] = useState('');
-  const chosen = files.find(f => f.name === picked);
-  // What the application can offer towards that number: how many times the
-  // control itself runs over the window. Not the same thing as how many
-  // instances it touches, so it is a hint beside the field, never the value.
-  const runsInWindow = derivedRunCount(control, from, to);
+  // Adding a second file is deliberately a step the auditor takes, not a form
+  // sitting open under a finished population: the common case is one file, and
+  // a picker that is always there reads as work still owed.
+  const [addingSource, setAddingSource] = useState(false);
+  const [dropping, setDropping] = useState<PopulationSource | null>(null);
+  // Turning a sampled file into an assisting table throws its items away, so
+  // it is confirmed. Turning one back is not — an assisting table has nothing
+  // to lose.
+  const [roleChange, setRoleChange] = useState<{ source: PopulationSource; drawn: number } | null>(null);
+  const sources = populationSources(control);
 
-  // Drafted the moment a source is picked, then the auditor's to edit. Reseeded
-  // when the source changes — criteria written against a spreadsheet do not
-  // describe a pull from SAP, and silently keeping them would be worse than
-  // asking again.
-  const drafted = extractionCriteria(control, from, to, chosen && { system: chosen.system, name: chosen.name });
-  const [criteria, setCriteria] = useState(drafted);
-  const [criteriaSeed, setCriteriaSeed] = useState(drafted);
-  if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); setCriteria(drafted); }
-
-  const extract = () => {
-    if (!chosen || !Number(expected)) return;
-    setExtracting(true);
-    window.setTimeout(() => {
-      // The filter narrows the file to this control's instances, and it lands on
-      // the figure written down before the run. A number invented from the file
-      // size would disagree with any expectation typed above it, so every extract
-      // would open on a variance nobody asked to see.
-      //
-      // It is not made to agree exactly — a filter that returns the estimate to
-      // the row is its own kind of unreal. The wobble sits on the OVER side and
-      // inside the 5% band, because a shortfall is a completeness gate now: an
-      // extract that undershot by chance would open every demo on a block that
-      // has nothing to do with what is being shown. Deterministic from the
-      // control id: the same extract twice running to a different number is not
-      // something a working paper can carry.
-      const want = Number(expected);
-      const slack = Math.floor(want * EXTRACT_WOBBLE);
-      const seed = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
-      const wobble = slack === 0 ? 0 : seed % (slack + 1);
-      const narrowed = Math.max(1, Math.min(chosen.rows, want + wobble));
-      setPopulation(control.id, {
-        version,
-        source: `${chosen.name} · ${chosen.from}`,
-        sourceFile: chosen.name, sourceCount: chosen.rows,
-        criteria: criteria.trim() || 'No filter applied',
-        filterFrom: from || undefined, filterTo: to || undefined,
-        // The criteria are prose now, but the over-extraction breakdown still
-        // needs a dimension to name ("type Banking 1,180 · type Other 238"). The
-        // sub-process is what the old Transaction-type box defaulted to, so this
-        // is the same answer it always gave — just no longer typed by hand.
-        filterType: control.subProcess !== 'General' ? control.subProcess : undefined,
-        expectedCount: Number(expected),
-        count: narrowed,
-        // The person signed in is the person who just ran the extract, so that
-        // one fact is filled in rather than asked for. The system fills itself in
-        // too when the pull came from one — that is the whole point of fetching
-        // rather than being handed a file. It stays editable either way.
-        provenance: { system: chosen.system ?? '', extractedBy: me, extractedOn: '' },
-        tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
-        evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
-      });
-      setExtracting(false);
-      logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}, against ${Number(expected).toLocaleString()} expected`, module: 'SOX ICFR', entity: 'Evidence' });
-    }, 1500);
+  // The extract itself lives in SourcePickerForm — the first file and every file
+  // after it ask the same two questions, so they are asked in one place.
+  const extract = (chosen: AuditFile, criteria: string, narrowed: number) => {
+    setPopulation(control.id, {
+      version,
+      source: `${chosen.name} · ${chosen.from}`,
+      sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count: narrowed, criteria }],
+      sourceFile: chosen.name, sourceCount: chosen.rows,
+      criteria,
+      filterFrom: winFrom || undefined, filterTo: winTo || undefined,
+      // The criteria are prose now, but the over-extraction breakdown still
+      // needs a dimension to name ("type Banking 1,180 · type Other 238"). The
+      // sub-process is what the old Transaction-type box defaulted to, so this
+      // is the same answer it always gave — just no longer typed by hand.
+      filterType: control.subProcess !== 'General' ? control.subProcess : undefined,
+      count: narrowed,
+      // The person signed in is the person who just ran the extract, so that
+      // one fact is filled in rather than asked for. The system fills itself in
+      // too when the pull came from one — that is the whole point of fetching
+      // rather than being handed a file. It stays editable either way.
+      provenance: { system: chosen.system ?? '', extractedBy: me, extractedOn: '' },
+      tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
+      evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
+    });
+    logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
 
-  // Put the old filter back in the form and drop the population, so fixing an
-  // over-inclusive filter is a tweak to what was already there rather than
-  // starting the whole step again. The confirm only appears when a sample would
-  // go with it — otherwise there is nothing to lose by re-running.
-  const refilter = () => {
-    if (!pop) return;
-    setPicked(pop.sourceFile ?? null);
-    // The criteria come back as they were written, not redrafted — the point of
-    // refiltering is to edit what you had, and a fresh draft would throw it away.
-    if (pop.criteria && pop.criteria !== 'No filter applied') { setCriteriaSeed(pop.criteria); setCriteria(pop.criteria); }
-    if (pop.filterFrom) setFrom(pop.filterFrom);
-    if (pop.filterTo) setTo(pop.filterTo);
-    setExpected(pop.expectedCount != null ? String(pop.expectedCount) : '');
-    if (control.operating.sampling) { setWithdrawing(true); return; }
-    clearPopulation(control.id);
-    logEvent({ action: 'Update', description: `Refiltering the population for ${control.id} — the extract did not agree with the expected count`, module: 'SOX ICFR', entity: 'Evidence' });
+  const addSource = (chosen: AuditFile, criteria: string, narrowed: number) => {
+    addPopulationSource(control.id, { file: chosen.name, rows: chosen.rows, count: narrowed, criteria });
+    setAddingSource(false);
+    logEvent({ action: 'Update', description: `Added ${chosen.name} to the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
+    addToast({ type: 'success', title: 'Source added', message: `${chosen.name} — prove it before the population can lock.` });
   };
+
 
   const locked = !!pop?.locked;
   // A filter that changed nothing didn't filter.
@@ -2211,160 +2595,7 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
     <div className="p-5">
       {!pop ? (
         canWrite ? (
-          <>
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h4 className="text-[0.8125rem] font-bold text-ink-900">Select the source</h4>
-                <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">A file the client sent, or a pull straight from the system of record. Then say what to take out of it: the source is the raw data; the population is what this control actually operated on.</p>
-              </div>
-              {/* A source this control needs that the audit hasn't got. Answered
-                  once here, then reusable by every other control. Hidden while
-                  the list is empty — the empty state below carries the same
-                  action, and two buttons for one job is one button too many. */}
-              {files.length > 0 && (
-                <button onClick={() => setSourcePicker(true)}
-                  className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><Database size={12} /> Add a source</button>
-              )}
-            </div>
-            {/* ── which one it would take, and why ─────────────────────────────
-                Stated above the list, not applied to it. Nothing is pre-selected:
-                a row already ticked when the screen opens gets confirmed without
-                being read, and the auditor owns this choice. The reason is the
-                part worth printing — "31 P2P controls draw off it" can be argued
-                with, a confidence score cannot. */}
-            {hint && (
-              <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
-                <Sparkles size={13} className="text-brand-600 mt-0.5 shrink-0" />
-                <p className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">
-                  <span className="font-semibold text-ink-900">Likely {hint.name}</span> — {hint.reason}. Pick it below if you agree.
-                </p>
-              </div>
-            )}
-            <div className="rounded-xl border border-canvas-border overflow-hidden mb-4">
-              {files.length === 0 ? (
-                /* No trial balance or general ledger was attached when the audit
-                   was created, so there is nothing to filter. That is a thing to
-                   fix from here rather than a wall: the file is uploaded, asked
-                   where it came from, and joins the audit's files — so the next
-                   control finds it waiting rather than uploading it again. */
-                <div className="px-4 py-5 text-center">
-                  <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center"><FileUp size={17} /></span>
-                  <p className="text-[0.78125rem] font-semibold text-ink-800 mt-2">No source data on this audit yet</p>
-                  <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[26rem] mx-auto">
-                    No trial balance or general ledger was attached when this audit was created. Upload what this control operates on, or connect the system it lives in, and it joins the audit's sources — every other control can then draw on it without being asked where it came from again.
-                  </p>
-                  <button onClick={() => setSourcePicker(true)}
-                    className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Database size={14} /> Add a source</button>
-                </div>
-              ) : files.map(f => {
-                const on = picked === f.name;
-                // No answer, no population. Removing "unknown" means a file
-                // nobody can place is not a source you can build a test on.
-                const usable = fileUsable(f);
-                return (
-                  <button key={f.name} onClick={() => usable && setPicked(f.name)} disabled={!usable}
-                    title={usable ? undefined : 'Say where this file came from on its file record before drawing a population off it'}
-                    className={cn('w-full text-left flex items-center gap-2.5 px-3 py-2.5 border-b border-canvas-border last:border-b-0 transition-colors',
-                      !usable ? 'opacity-55 cursor-not-allowed' : on ? 'bg-brand-50 cursor-pointer' : 'hover:bg-paper-50 cursor-pointer')}>
-                    <span className={cn('w-3.5 h-3.5 rounded-full border-[3px] shrink-0', on ? 'border-brand-600' : 'border-ink-300')} />
-                    {/* a pull from a system reads differently from a file somebody
-                        sent, and the icon is the fastest way to say which */}
-                    {f.systemFetched
-                      ? <Database size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
-                      : <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />}
-                    <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
-                    {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden md:inline">{f.system}</span>}
-                    {/* provenance, inherited — stated on every file so the
-                        choice of source is made knowing what it is */}
-                    <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
-                      !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
-                      {originLabel(f)}
-                    </span>
-                    <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{f.rows.toLocaleString()} rows</span>
-                    <span className="text-[0.6875rem] text-ink-400 shrink-0 hidden sm:inline">{f.from}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* One statement, not two boxes. A type-and-account pair only ever
-                described a spreadsheet someone had already shaped; pulled from a
-                system, the criteria ARE the query and no fixed set of fields
-                fits them. Drafted from the control and its window, then edited. */}
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Extraction criteria</span>
-              <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
-            </div>
-            <textarea value={criteria} onChange={e => setCriteria(e.target.value)} rows={2}
-              placeholder="What to take out of the source — in plain English, for the reviewer."
-              className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-            <div className="mt-2.5">
-              {/* PARKED (Aug 2026) — Date from / Date to.
-                  The IPE check already asks whether the report was run over the
-                  audit period, and it asks it of the report's own parameters
-                  rather than of the auditor's memory. Typing the window again
-                  here could only produce a second answer to a question already
-                  answered — and when the two disagreed, nothing said which one
-                  the sample actually came off. The window now comes from the
-                  period, and the IPE proves it. Kept so it can be restored:
-
-                  <div className="block min-w-0">
-                    <span className="block text-[0.65625rem] text-ink-400 mb-1">Date from</span>
-                    <DatePicker value={from} max={to || undefined} onChange={e => setFrom(e.target.value)}
-                      placeholder="Pick a date" aria-label="Filter date from"
-                      className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                  </div>
-                  <div className="block min-w-0">
-                    <span className="block text-[0.65625rem] text-ink-400 mb-1">Date to</span>
-                    <DatePicker value={to} min={from || undefined} onChange={e => setTo(e.target.value)}
-                      placeholder="Pick a date" aria-label="Filter date to"
-                      className="w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                  </div>
-              */}
-            </div>
-            {/* The window is stated, not asked for — it is the audit's own, which
-                the form was already defaulting to, and the IPE is what proves the
-                report actually covers it. */}
-            <p className="mt-2 text-[0.65625rem] text-ink-400">
-              {winFrom && winTo
-                ? <>Period covered · {winFrom} – {winTo} — the audit's own window.</>
-                : <>Period covered · the audit's own window.</>}{' '}
-              The IPE check on this report is what confirms it was run over that period.
-            </p>
-
-            {/* ── the expectation, before the answer ──────────────────────────
-                The only way to tell whether the right number of rows came back
-                is to have said what the right number was first. Written down
-                afterwards it is not a check, it is a caption. */}
-            <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
-              <div className="flex items-start gap-3 flex-wrap">
-                <label className="block shrink-0">
-                  <span className="block text-[0.65625rem] text-ink-400 mb-1">Expected instances</span>
-                  <input type="number" min={1} value={expected} onChange={e => setExpected(e.target.value)} placeholder="e.g. 1,400"
-                    className="w-32 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                </label>
-                <p className="text-[0.65625rem] text-ink-400 leading-relaxed flex-1 min-w-[15rem] sm:mt-5">
-                  {runsInWindow != null
-                    ? <>This control runs <span className="tabular-nums font-semibold text-ink-600">{runsInWindow.toLocaleString()}</span> times over the window you have set. If each run covers many transactions, expect a larger number than that.</>
-                    : <>A {control.frequency.toLowerCase()} control has no fixed rhythm, so there is nothing to work this out from — the figure has to come from you.</>}
-                </p>
-              </div>
-              <p className="text-[0.625rem] text-ink-400 mt-2 leading-relaxed">Say it before extracting. Once the extract has run, the two numbers are compared for you — a figure written down afterwards would only ever agree with itself.</p>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-[0.65625rem] text-ink-400 min-w-0">
-                {!chosen ? 'Pick the source file first.'
-                  : !Number(expected) ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows — say how many instances you expect before extracting.</>
-                    : <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'} · expecting <span className="tabular-nums font-semibold text-ink-600">{Number(expected).toLocaleString()}</span></>}
-              </p>
-              <button disabled={!chosen || !Number(expected) || extracting} onClick={extract}
-                title={!chosen ? 'Pick a source file first' : !Number(expected) ? 'Record how many instances you expect first' : undefined}
-                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                {extracting ? <><Loader2 size={14} className="animate-spin" /> Extracting…</> : <><Database size={14} /> Extract population</>}
-              </button>
-            </div>
-          </>
+          <SourcePickerForm control={control} exclude={[]} submitLabel="Extract population" onSubmit={extract} />
         ) : <p className="text-[0.75rem] text-ink-400">No population yet — the auditor filters it out of the source data.</p>
       ) : (
         <>
@@ -2377,17 +2608,18 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               </div>
               <p className="text-[1.0625rem] font-bold text-ink-900 tabular-nums leading-none">
                 {pop.count.toLocaleString()} <span className="text-[0.75rem] font-medium text-ink-500">instances</span>
-                {pop.sourceCount != null && <span className="text-[0.75rem] font-medium text-ink-400"> from {pop.sourceCount.toLocaleString()} rows</span>}
+                {/* Only where every file actually has rows to count. A total
+                    that silently skipped a PDF would be a total nobody can
+                    reconcile to the files listed under it. */}
+                {pop.sourceCount != null && sources.every(s => hasRowCount(s.file)) && <span className="text-[0.75rem] font-medium text-ink-400"> from {pop.sourceCount.toLocaleString()} rows</span>}
               </p>
-              {/* source · provenance · filter. The provenance is inherited from
-                  the file record and is read-only here on purpose: it belongs to
-                  the file, and changing it on one control would be changing it
-                  for the thirty-nine others that read the same file. */}
+              {/* The source line used to name one file and one filter. It names
+                  the count of them now — the files themselves are listed below,
+                  because a control can stand on several and a single line could
+                  only ever have shown the first. */}
               <p className="text-[0.71875rem] text-ink-500 mt-1.5">
-                <span className="text-ink-400">Source</span> · {pop.sourceFile ?? pop.source}
-                {sourceFile && <> — <span className={cn('font-semibold', fileUsable(sourceFile) ? 'text-ink-700' : 'text-mitigated-800')}>{originLabel(sourceFile)}</span> <span className="text-ink-400">(recorded at upload)</span></>}
+                <span className="text-ink-400">Filtered out of</span> {sources.length} source file{sources.length === 1 ? '' : 's'}
               </p>
-              <p className="text-[0.71875rem] text-ink-500 mt-0.5"><span className="text-ink-400">Filter</span> · {pop.criteria ?? '—'}</p>
               {locked && <p className="text-[0.6875rem] text-ink-400 mt-1.5">Locked by {pop.locked!.by}, {pop.locked!.at}</p>}
             </div>
             <div className="shrink-0 flex items-center gap-2">
@@ -2404,9 +2636,120 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
           {unfiltered && (
             <p className="mt-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              <span>The population is the same size as the file it came from — nothing was filtered out. Unless this control really does operate on every row, withdraw and filter it down first.</span>
+              <span>The population is the same size as the files it came from — nothing was filtered out. Unless this control really does operate on every row, withdraw and filter it down first.</span>
             </p>
           )}
+
+          {/* ── the files it stands on ──────────────────────────────────────
+              One row per file, with what the file held and what this control's
+              filter left of it. A control rarely stands on one (dev call, Aug
+              2026 — "मल्टीपल फाइल्स वो डाल सकता है"), and each row carries its
+              own proof and its own draw, so the state of each file's work is
+              readable without opening anything. */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Source files · {sources.length}</span>
+              {isAuditor && !locked && !addingSource && (
+                <button onClick={() => setAddingSource(true)}
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={11} /> Add file</button>
+              )}
+            </div>
+            <div className="rounded-xl border border-canvas-border overflow-hidden">
+              {sources.map(s => {
+                const rec = files.find(f => f.name === s.file);
+                const checks = ipeChecksFor(control, s.id);
+                const proven = checks.filter(k => k.result === 'Pass').length;
+                const drawn = samplesFor(control, s.id).length;
+                return (
+                  <div key={s.id} className="border-b border-canvas-border last:border-b-0 px-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      {rec?.systemFetched ? <Database size={13} className="shrink-0 text-ink-400" /> : <FileText size={13} className="shrink-0 text-ink-400" />}
+                      <span className="text-[0.78125rem] font-semibold text-ink-800 truncate min-w-0">{s.file}</span>
+                      {rec && (
+                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                          !fileUsable(rec) ? 'bg-mitigated-50 text-mitigated-800' : rec.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
+                          {originLabel(rec)}
+                        </span>
+                      )}
+                      <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-500 tabular-nums">
+                        <span className="font-semibold text-ink-700">{s.count.toLocaleString()}</span>
+                        {hasRowCount(s.file) ? ` of ${s.rows.toLocaleString()} rows` : ' instances'}
+                      </span>
+                      {/* Dropping the LAST file is a withdrawal, and Withdraw is
+                          already the button for that — so this one only appears
+                          when there is something left behind after it. */}
+                      {isAuditor && !locked && sources.length > 1 && (
+                        <button onClick={() => setDropping(s)} title={`Drop ${s.file}`} aria-label={`Drop ${s.file}`}
+                          className="shrink-0 h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:border-risk-300 hover:text-risk-600 transition-colors cursor-pointer"><Trash2 size={12} /></button>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2.5 flex-wrap pl-[1.4375rem]">
+                      {/* Population or assisting table. Asked on the row because
+                          it is a fact about THIS file, and because it changes
+                          what the two numbers beside it mean: an assisting
+                          table's rows are not instances of the control and are
+                          never counted as any. */}
+                      {isAuditor && !locked ? (
+                        <select value={s.role ?? 'population'} aria-label={`What ${s.file} is to this control`}
+                          onChange={e => {
+                            const next = e.target.value as SourceRole;
+                            if (next === 'assisting' && drawn > 0) { setRoleChange({ source: s, drawn }); return; }
+                            setSourceRole(control.id, s.id, next);
+                          }}
+                          className={cn('h-6 pl-1.5 pr-5 rounded border text-[0.625rem] font-bold uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200',
+                            isAssisting(s) ? 'border-canvas-border bg-paper-50 text-ink-500' : 'border-brand-200 bg-brand-50 text-brand-700')}>
+                          <option value="population">Population</option>
+                          <option value="assisting">Assisting</option>
+                        </select>
+                      ) : (
+                        <span className={cn('px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide',
+                          isAssisting(s) ? 'bg-paper-100 text-ink-600' : 'bg-brand-50 text-brand-700')}>
+                          {isAssisting(s) ? 'Assisting' : 'Population'}
+                        </span>
+                      )}
+                      <span className="text-[0.65625rem] text-ink-400 min-w-0 truncate">{s.criteria ?? 'No filter applied'}</span>
+                      {/* How the testing of this file is going — how much of it was
+                          drawn, how far its IPE checks have got — is the auditor's
+                          read, not the owner's. They supplied the file; how much of
+                          it is being looked at tells them how closely to expect to
+                          be examined, which is the thing independence turns on. */}
+                      {!isOwnerView && <>
+                        <span className="text-[0.65625rem] text-ink-400">·</span>
+                        <span className={cn('text-[0.65625rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
+                          {checks.length ? `${proven}/${checks.length} checks proven` : 'not registered yet'}
+                        </span>
+                      </>}
+                      {/* An assisting table is proven and then left alone. Said
+                          once, here, so its blank sample column reads as correct
+                          rather than as work nobody got to. */}
+                      {isAssisting(s)
+                        ? <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] text-ink-500">joined by the workflow, never sampled</span></>
+                        : !isOwnerView && drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[0.65625rem] text-ink-400 leading-relaxed">
+              Each file is proved on its own and sampled on its own. The verdict on the report is one for all of them — a check that fails on any file sinks the lot.
+            </p>
+            {/* ── still owed ──────────────────────────────────────────────────
+                A control with a population can still be short a file: an
+                attribute wired to a workflow that has no input attached owes
+                one, and until this was said here the only place it appeared was
+                the picker — which is closed the moment the first file lands. A
+                gap you can only see while doing something else is a gap nobody
+                chases. */}
+            <AwaitingInputs control={control} canAsk={isAuditor} />
+            {addingSource && (
+              <div className="mt-3 rounded-xl border border-canvas-border bg-paper-50/50 p-3.5">
+                <SourcePickerForm control={control} exclude={sources.map(s => s.file)} submitLabel="Add to the population" onSubmit={addSource} />
+                <div className="mt-2.5 flex justify-end">
+                  <button onClick={() => setAddingSource(false)} className="h-8 px-3 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="ac-div my-4" />
 
@@ -2503,9 +2846,11 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               Last thing before the lock, because it is the last thing that has
               to be true: the count and the period check what the FILTER did,
               this checks whether the thing filtered was worth filtering. */}
-          <div className="mt-4">
-            <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
-          </div>
+          {!isOwnerView && (
+            <div className="mt-4">
+              <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
+            </div>
+          )}
 
           {/* Where the data came from is NOT asked here. It was answered when
               the file entered the audit, it is shown read-only on the source
@@ -2514,9 +2859,16 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.65625rem] text-ink-400 min-w-0">
-              {locked ? 'Every later step draws off this version. A later round re-versions rather than editing it.'
-                : ready ? 'Nothing downstream runs until the population is locked.'
-                  : missing}
+              {/* The owner is told what happens next without being told what is
+                  being looked for. "Locked" is a fact about their data; the
+                  checks behind it are not theirs to read. */}
+              {isOwnerView
+                ? locked
+                  ? 'The auditor has locked this. It is the version their testing draws on — a later round re-versions rather than editing it.'
+                  : 'The auditor tests the report this came out of, then locks it. Nothing here is final until they do.'
+                : locked ? 'Every later step draws off this version. A later round re-versions rather than editing it.'
+                  : ready ? 'Nothing downstream runs until the population is locked.'
+                    : missing}
             </p>
             {!locked && isAuditor && (
               <button disabled={!ready} title={ready ? undefined : missing}
@@ -2530,64 +2882,15 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
       {previewing && pop && createPortal(<PopulationPreviewModal control={control} onClose={() => setPreviewing(false)} />, document.body)}
 
-      {/* The platform's own data picker, the same one chat and the workflow
-          builder use — files already on the platform, folders, and live database
-          connections in one place. A file picked here still has to say where it
-          came from, so it hands off to the upload modal that asks; a system pull
-          does not, because the fetch is the answer. */}
-      <DataPickerModal
-        open={sourcePicker}
-        onClose={() => setSourcePicker(false)}
-        title="Add a population source"
-        confirmLabel="Use this source"
-        attachHint="Pick the file or table this control's population comes out of."
-        // The chat tabs PLUS Connect. A population legitimately comes from either
-        // side — a file the client sent, or a pull the audit team makes itself
-        // from the system of record — and until this was passed the Connect tab
-        // was unreachable here, which left the connect-db branch below as code
-        // that could never run. The default tab list is untouched everywhere else.
-        tabs={['favourites', 'upload', 'all', 'file', 'integrated', 'connect']}
-        onConfirm={(selections: AttachmentSelection[]) => {
-          setSourcePicker(false);
-          const sel = selections[0];
-          if (!sel) return;
-          // A file still has to say where it came from — but not which file it
-          // is, twice. It carries straight through to the provenance question.
-          if (sel.kind === 'upload') {
-            setUploadPreset({ name: sel.name, rows: 400 + (sel.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000) });
-            setUploading(true);
-            return;
-          }
-          // Deterministic from the name so the same table never reports two
-          // different sizes — the prototype holds no rows to count.
-          const rows = 800 + (sel.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 24000);
-          const system = sel.kind === 'connect-db' ? `${sel.name} — ${sel.database}` : sel.subtype || sel.name;
-          registerFile({
-            name: sel.name, kind: 'System extract', rows,
-            from: `Pulled on ${control.id}`, uploadedBy: me, uploadedAt: 'just now',
-            // No origin question: systemFetched IS the provenance. See fileUsable.
-            systemFetched: true, system, originBy: me, originAt: 'just now',
-          });
-          logEvent({ action: 'Run', description: `Connected "${sel.name}" from ${system} as a population source on ${control.id} — ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-          addToast({ type: 'success', title: 'Source connected', message: `${sel.name} — fetched from ${system}. Every control on this audit can use it now.` });
-          setPicked(sel.name);
-        }}
-      />
-
-      {uploading && (
-        <ControlUploadModal preset={uploadPreset} onClose={() => { setUploading(false); setUploadPreset(undefined); }}
-          onAdd={(name, rows, origin) => {
-            // A trial balance uploaded here is a trial balance, not a nameless
-            // "source file" — the registry on Configuration lists it beside the
-            // ones attached at creation, so it has to read like them.
-            registerFile({ name, kind: guessFileKind(name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
-            logEvent({ action: 'Upload', description: `Added "${name}" to the audit's files from ${control.id} — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-            addToast({ type: 'success', title: 'File added', message: `${name} — ${origin.toLowerCase()}. Every control on this audit can use it now.` });
-            setPicked(name);
-            setUploading(false);
-            setUploadPreset(undefined);
-          }} />
-      )}
+      {/* PARKED (dev call, Aug 2026) — the platform's data picker used to open
+          here as "Add a source", offering the whole catalogue plus a
+          connect-a-database tab. Both are gone with it: a control's population
+          comes from the file its evidence came from, not from browsing the
+          platform. The connect path also carried the one way to skip the
+          provenance question (systemFetched IS the answer — see fileUsable), so
+          every source now arrives through the upload modal and every source is
+          asked where it came from. The upload modal itself moved into
+          SourcePickerForm, which is the only place a file is chosen now. */}
 
       {withdrawing && createPortal(
         <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>
@@ -2597,14 +2900,84 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div>
                   <h3 className="text-[0.875rem] font-bold text-ink-900">Withdraw this population?</h3>
-                  <p className="text-[0.75rem] text-ink-500 mt-1">A different filter is a different population. The sample drawn from this one{control.operating.sampling ? ` — ${control.operating.sampling.size} items — ` : ' '}and every result recorded against it go with it.</p>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">All {sources.length} source file{sources.length === 1 ? '' : 's'} go, and so do{control.operating.sampling ? ` the ${control.operating.sampling.size} items drawn off them and ` : ' '}every result recorded against them. To replace just one file, drop that file instead.</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
               <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
-              <button onClick={() => { clearPopulation(control.id); setWithdrawing(false); setPicked(null); logEvent({ action: 'Delete', description: `Withdrew the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+              <button onClick={() => { clearPopulation(control.id); setWithdrawing(false); logEvent({ action: 'Delete', description: `Withdrew the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+
+      {/* ── a sampled file becoming an assisting table ──────────────────────
+          Worth confirming, because the items go. An assisting table is joined
+          onto the population rather than tested, so items drawn from one were
+          testing the wrong thing — but somebody spent time on them, and a
+          dropdown that silently binned that work would not be trusted twice. */}
+      {roleChange && createPortal(
+        <div className="modal-backdrop" onClick={() => setRoleChange(null)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-mitigated-50 text-mitigated-800 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Make {roleChange.source.file} an assisting table?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">
+                    An assisting table is joined onto the population, not tested — so its {roleChange.drawn} drawn item{roleChange.drawn === 1 ? '' : 's'} go, along with every attribute result recorded against them, and its {roleChange.source.count.toLocaleString()} instances leave the population count.
+                  </p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">Its four checks stay. A join onto an unproven table produces an unproven answer, so it is still proven — just never sampled.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRoleChange(null)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it sampled</button>
+              <button onClick={() => {
+                setSourceRole(control.id, roleChange.source.id, 'assisting');
+                logEvent({ action: 'Update', description: `Marked ${roleChange.source.file} an assisting table on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+                addToast({ type: 'success', title: 'Assisting table', message: `${roleChange.source.file} — proven, joined, never sampled.` });
+                setRoleChange(null);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.78125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+
+      {/* ── dropping ONE file ──────────────────────────────────────────────
+          Worth confirming and worth being precise about, because the whole
+          point of the decision is what does NOT happen: the other files keep
+          their proof, their sample and their results. An auditor who expects a
+          drop to cost them everything will not use it. */}
+      {dropping && createPortal(
+        <div className="modal-backdrop" onClick={() => setDropping(null)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Drop {dropping.file}?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">
+                    Its {dropping.count.toLocaleString()} instances leave the population, its checks go unproven again
+                    {samplesFor(control, dropping.id).length > 0 && <>, and the {samplesFor(control, dropping.id).length} items drawn off it — with every result recorded against them — go too</>}.
+                  </p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">The other {sources.length - 1} file{sources.length - 1 === 1 ? '' : 's'} keep{sources.length - 1 === 1 ? 's' : ''} everything — their proof, their sample and their results are untouched.</p>
+                  <p className="text-[0.6875rem] text-ink-400 mt-2">The report goes back to untested either way: one verdict covers every file, so it cannot stand while the files under it change.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setDropping(null)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => {
+                removePopulationSource(control.id, dropping.id);
+                logEvent({ action: 'Delete', description: `Dropped ${dropping.file} from the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
+                addToast({ type: 'success', title: 'Source dropped', message: `${dropping.file} — the other files kept their work.` });
+                setDropping(null);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><Trash2 size={13} /> Drop the file</button>
             </div>
           </motion.div>
         </div>,
@@ -2621,64 +2994,331 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
  *  made them easy to confuse, so every filter control is gone from here: no
  *  file, no criteria, no extraction logic. How many, then draw.
  *
+ *  One draw PER SOURCE FILE (dev call, Aug 2026 — "10 फाइल्स होंगी तो 10 रोज़
+ *  दिखेंगे… सब पे 'ड्रा सैंपल' वाली चीज़ होगी"). A control standing on a ledger
+ *  and a vendor master has two populations of instances, and one draw spread
+ *  across both would leave whichever file it happened to miss untested. The
+ *  items all land in one list, tagged with the file they came from, so TOE still
+ *  tests one sample and the paper can still say where each item is from.
+ *
  *  Method and seed are still recorded, because a draw nobody can reperform is
  *  not a procedure. They are stated as facts of the draw rather than asked for:
- *  the seed is derived from the control and the round, so the same control drawn
- *  twice lands on the same items and the reviewer can check it did.
+ *  the seed is derived from the control, the round AND the file, so two files
+ *  under one control do not land on the same items, and the same file drawn
+ *  twice does.
  */
-function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, openAuditId, role, setSampling } = useIcfr();
-  // Drawing a sample is the auditor's act — the store refuses it from anyone
-  // else, so the journey is not offered to anyone else either.
-  const canDraw = canEdit && role === 'auditor';
+function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onApproved }: {
+  control: Control; source: PopulationSource; canDraw: boolean; single: boolean;
+  isOpen: boolean; onToggle: () => void;
+  /** Open the next file still owing work — "अप्रूव करोगे, अगला पे जाओगे". */
+  onApproved: () => void;
+}) {
+  const { eng, openAuditId, drawSourceSample, approveSource, redrawSource } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
-  const o = control.operating;
-
-  type Stage = 'ready' | 'drawing' | 'review';
-  const [stage, setStage] = useState<Stage>('ready');
   // How many to draw is the table's call, not a free guess — sized from the
   // control's frequency, nature and risk rating, and reduced to sizing-like-a-
   // manual-control the moment an ITGC underneath it fails.
   const holds = itgcHolds(eng, control);
   const guide = sampleSizeGuide(control, holds);
-  const [rows, setRows] = useState(guide.suggested);
+  const already = samplesFor(control, source.id);
+
+  type Stage = 'ready' | 'drawing' | 'review';
+  const [stage, setStage] = useState<Stage>('ready');
   const [drawn, setDrawn] = useState<string[]>([]);
   const [rejecting, setRejecting] = useState(false);
-  // Reperformable by construction: same control, same round, same items. Nobody
-  // is asked to invent a seed, and nobody can quietly reroll one until the draw
-  // comes out convenient.
-  const method: Sampling['method'] = 'Random';
+  const [redrawing, setRedrawing] = useState(false);
+  const ext = already.filter(x => x.extension).length;
+  // What to take out of THIS file, in words. Drafted from the sizing table and
+  // the file, then the auditor's to rewrite — "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़",
+  // one ask per file because each file's question is its own.
+  const drafted = draftSamplePrompt(control, source, guide.suggested);
+  const [prompt, setPrompt] = useState(drafted);
+  const [promptSeed, setPromptSeed] = useState(drafted);
+  if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const months = windowMonths(audit?.windowFrom, audit?.windowTo);
+  const plan = readSamplePrompt(prompt, source, guide.suggested, months);
+  // A draw that picked its items to fit an ask is not a random draw, and the
+  // paper has to say which it was.
+  const method: Sampling['method'] = plan.targeted ? 'Targeted' : 'Random';
   const seed = useMemo(
-    () => 10000 + (`${control.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
-    [control.id, openAuditId],
+    () => 10000 + (`${control.id}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
+    [control.id, source.id, openAuditId],
   );
 
   const draw = () => {
     setStage('drawing');
-    logEvent({ action: 'Run', description: `Drew ${rows} items for ${control.id} — ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { setDrawn(sampleRefs(control.process, rows)); setStage('review'); }, 1800);
+    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'}`, module: 'SOX ICFR', entity: 'Test Result' });
+    window.setTimeout(() => { setDrawn(sampleRefs(control.process, plan.size)); setStage('review'); }, 1800);
   };
-  const visible = drawn.map((ref, i) => ({ ref, i }));
 
   const approve = () => {
-    const kept = visible.map(v => v.ref);
-    // The population is already in and locked — this step only records the draw
-    // off it, and the two facts that make the draw reperformable.
-    const s: Sampling = {
-      basis: `${kept.length} items drawn from ${o.population?.version ?? 'the locked population'} · ${method.toLowerCase()}, seed ${seed} · spread across the period`,
-      method, size: kept.length, seed,
-      samples: kept.map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })),
-    };
-    setSampling(control.id, s);
-    logEvent({ action: 'Update', description: `Approved the sample for ${control.id} — ${kept.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Sample drawn', message: `${kept.length} items — test them against the attributes.` });
+    // The ask travels with the draw. With a prompt the prompt IS the method, and
+    // a reviewer holding only "25 items, random" cannot tell whether the auditor
+    // asked for two months and got twenty-five rows instead.
+    drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined }, drawn);
+    logEvent({ action: 'Update', description: `Approved the sample from ${source.file} for ${control.id} — ${drawn.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
+    addToast({ type: 'success', title: 'Sample drawn', message: `${drawn.length} items from ${source.file} — test them against the attributes.` });
+    setStage('ready'); setDrawn([]);
   };
   const restart = () => {
     setRejecting(false);
-    setStage('ready'); setRows(guide.suggested); setDrawn([]);
-    logEvent({ action: 'Delete', description: `Rejected the drawn sample for ${control.id} — draw restarted`, module: 'SOX ICFR', entity: 'Test Result' });
+    // The ask survives a rejected draw on purpose: the usual reason to reject is
+    // that the items came out wrong, not that the question was wrong, and
+    // retyping it every time would train people to accept whatever appeared.
+    setStage('ready'); setDrawn([]);
+    logEvent({ action: 'Delete', description: `Rejected the drawn sample from ${source.file} for ${control.id} — draw restarted`, module: 'SOX ICFR', entity: 'Test Result' });
   };
+
+  const done = !!source.approvedSample;
+  const drawnAlready = already.length > 0;
+
+  // ── the row itself ────────────────────────────────────────────────────────
+  // Every file is an accordion, open one at a time: "10 फाइल हैं, एक अकॉर्डियन
+  // खोलोगे, ये सारा स्टेप करोगे… अप्रूव करोगे, अगला पे जाओगे". Ten draw forms
+  // and ten item tables unfolded together is a screen nobody can work in, and
+  // the header alone answers the question the auditor actually returns with:
+  // which files are done and which are still owed.
+  const header = (
+    <button onClick={onToggle} aria-expanded={isOpen}
+      className="w-full flex items-center gap-2 px-3.5 py-3 text-left cursor-pointer">
+      {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
+      {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
+      <span className="text-[0.78125rem] font-bold text-ink-900 truncate min-w-0">{source.file}</span>
+      <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{source.count.toLocaleString()} instances</span>
+      <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
+        done ? 'text-compliant-700' : drawnAlready ? 'text-brand-700' : 'text-ink-400')}>
+        {done ? 'done' : drawnAlready ? `${already.length} items drawn` : 'not drawn yet'}
+      </span>
+    </button>
+  );
+
+  return (
+    <div className={cn('rounded-xl border overflow-hidden', done ? 'border-compliant-200 bg-compliant-50/20' : 'border-canvas-border')}>
+      {header}
+      {isOpen && (
+        <div className="px-3.5 pb-3.5">
+          {drawnAlready ? (
+            <>
+              {/* what was drawn off this file */}
+              <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+                <p className="text-[0.71875rem] text-ink-700">
+                  {already.length} item{already.length === 1 ? '' : 's'} drawn{ext > 0 && <span className="text-ink-500"> · {already.length - ext} original + {ext} extension</span>} — from {source.count.toLocaleString()} instances
+                </p>
+                {/* What was asked for, in the words it was asked in. A reviewer
+                    holding only "25 items, random" cannot tell whether the
+                    auditor asked for two months and got twenty-five rows. */}
+                {source.draw?.prompt && (
+                  <p className="text-[0.65625rem] text-ink-500 mt-1.5 leading-relaxed">
+                    <span className="text-ink-400">Asked for</span> · {source.draw.prompt}
+                  </p>
+                )}
+                {source.draw && (
+                  <p className="text-[0.65625rem] text-ink-400 mt-1">
+                    {source.draw.method.toLowerCase()}, seed <span className="tabular-nums">{source.draw.seed}</span> — reperform the draw with these and land on the same items.
+                  </p>
+                )}
+                <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden">
+                  <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                    <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
+                  </div>
+                  {already.slice(0, 6).map((smp, i) => {
+                    const f = sampleRowFacts(i);
+                    return (
+                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                        <span className="font-mono text-ink-700">{smp.ref}</span>
+                        <span className="text-ink-500">{f.date}</span>
+                        <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+                      </div>
+                    );
+                  })}
+                  {already.length > 6 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{already.length - 6} more items</div>}
+                </div>
+              </div>
+              {canDraw && (
+                <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+                  <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                    {done
+                      ? `Marked done by ${source.approvedSample!.by}, ${source.approvedSample!.at}. A re-draw takes the mark off.`
+                      : 'Mark it done and the next file opens. This is a marker, not a lock — TOE still tests every item.'}
+                  </p>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {/* "सैंपल आया, तुम सैंपल पढ़े, तुमको अच्छा नहीं लगा… वापस से
+                        'ड्रा सैंपल' क्लिक हो जाएगा". Offered after approval too,
+                        because the reason to re-draw usually turns up later. */}
+                    <button onClick={() => setRedrawing(true)}
+                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-200 text-[0.71875rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><RotateCcw size={11} /> Reject and retry</button>
+                    {done ? (
+                      <button onClick={() => approveSource(control.id, source.id, 'sample', false)}
+                        className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Take the mark off</button>
+                    ) : (
+                      <button onClick={() => { approveSource(control.id, source.id, 'sample', true); onApproved(); }}
+                        className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : !canDraw ? (
+            <p className="text-[0.71875rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
+          ) : (
+            <>
+              {/* ── say what you want out of this file ─────────────────────
+                  A size dropdown could only ever ask "how many", and how many
+                  is not always the question: "क्या 25 निकालना है, किस महीने का
+                  निकालना है, सब डिपेंड करता है उसपे". Twenty-five vendors off a
+                  master answers whether every vendor has a PAN; twenty-five rows
+                  of a journal table will not find a duplicate invoice, and the
+                  real answer there is two months tested end to end. So the ask
+                  is written, drafted from the sizing table so the ordinary case
+                  is still one read and a click. */}
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">What to draw from this file</span>
+                <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
+              </div>
+              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} disabled={stage !== 'ready'}
+                aria-label={`What to draw from ${source.file}`}
+                placeholder="In plain English — how many, from where, over what period."
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:opacity-60" />
+              {/* How it was read, before it runs. A prompt nobody confirms the
+                  reading of is a prompt that quietly did something else. */}
+              <p className="mt-1.5 text-[0.65625rem] text-ink-500 leading-relaxed">
+                <span className="font-semibold text-ink-700">Read as</span> · {plan.reading}
+              </p>
+              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                  The sizing table says <span className="font-semibold text-ink-600 tabular-nums">{guide.suggested}</span> — band {guide.range}. Ask for something else and the paper records what you asked for.
+                </p>
+                <button disabled={stage !== 'ready'} onClick={draw}
+                  className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                  {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
+                </button>
+              </div>
+              {/* The band is the control's, so on a multi-file control it is
+                  stated once under the list rather than on every row. */}
+              {single && (
+                <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
+                  {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
+                </p>
+              )}
+              <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
+                Seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — off this control, this round and this file, and stored on the paper with the ask, so the reviewer reperforms the draw and lands on these same items.
+              </p>
+              {stage === 'drawing' && (
+                <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {plan.size} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
+              )}
+
+              {/* what came out — approve it onto the paper, or throw it back */}
+              {stage === 'review' && (
+                <>
+                <div className="ac-div my-3.5" />
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
+                  </div>
+                  <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
+                    <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                      <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
+                    </div>
+                    {drawn.slice(0, 8).map((ref, i) => {
+                      const f = sampleRowFacts(i);
+                      return (
+                        <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                          <span className="font-mono text-ink-700">{ref}</span>
+                          <span className="text-ink-500">{f.date}</span>
+                          <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
+                        </div>
+                      );
+                    })}
+                    {drawn.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{drawn.length - 8} more rows in the extract</div>}
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                      <RotateCcw size={13} /> Reject and retry
+                    </button>
+                    <button disabled={drawn.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                      <Check size={14} /> Approve and continue
+                    </button>
+                  </div>
+                </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {rejecting && createPortal(
+        <div className="modal-backdrop" onClick={() => setRejecting(false)}>
+          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div>
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">These items go and the draw starts again from the size. Only {source.file} is affected — the population is untouched, and any other file's sample stays exactly as it is.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
+              <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+
+      {/* Throwing back a draw that is already on the paper. Worth confirming
+          separately: the items exist, TOE may have been tested against them,
+          and those results go with them. */}
+      {redrawing && createPortal(
+        <div className="modal-backdrop" onClick={() => setRedrawing(false)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Draw {source.file} again?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">Its {already.length} item{already.length === 1 ? '' : 's'} go, along with every attribute result recorded against them, and the file goes back to its draw.</p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">Only this file. The population is locked and untouched, and every other file keeps its own sample and its own results.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setRedrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => {
+                redrawSource(control.id, source.id);
+                logEvent({ action: 'Delete', description: `Rejected the sample from ${source.file} on ${control.id} — the draw was reopened`, module: 'SOX ICFR', entity: 'Test Result' });
+                addToast({ type: 'success', title: 'Sample rejected', message: `${source.file} — draw it again. Every other file kept its own.` });
+                setRedrawing(false);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+    </div>
+  );
+}
+
+function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
+  const { eng, role } = useIcfr();
+  // Drawing a sample is the auditor's act — the store refuses it from anyone
+  // else, so the journey is not offered to anyone else either.
+  const canDraw = canEdit && role === 'auditor' && !isControlLocked(control);
+  const o = control.operating;
+  // Only the files the control is tested ON. An assisting table is joined onto
+  // the population by the workflow and never drawn from, so offering it a Draw
+  // sample button would be offering to test the wrong thing.
+  const sources = sampledSources(populationSources(control));
+  const assisting = populationSources(control).filter(isAssisting);
+  const holds = itgcHolds(eng, control);
+  const guide = sampleSizeGuide(control, holds);
+  // One file open at a time, starting on the first that still owes work. A
+  // control with ten files is not finished in one sitting, and the point of the
+  // marks is that returning to it lands on what is left.
+  const [openSource, setOpenSource] = useState<string | null>(() => sources.find(s => !s.approvedSample)?.id ?? null);
 
   // Two gates stand in front of the draw, and they fail for different reasons —
   // so the locked state names the one actually holding it up.
@@ -2705,63 +3345,58 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
     );
   }
 
-  // Already drawn (this session or seeded) — read-only. Nothing is outstanding
-  // once the items exist: the confirmation gate that used to sit here went with
-  // the IPE step.
-  if (o.sampling) {
-    const s = o.sampling;
-    const origCount = s.samples.filter(x => !x.extension).length;
-    const extCount = s.samples.length - origCount;
-    return (
-      <div className="p-5">
-        <div className="rounded-xl border border-compliant-200 bg-compliant-50/30 p-4 flex items-start gap-3 mb-3">
-          <CheckCircle2 size={16} className="text-compliant-700 mt-0.5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[0.8125rem] font-bold text-ink-900">Sample drawn — {s.size} items{extCount > 0 && <span className="font-medium text-ink-500"> · {origCount} original + {extCount} extension</span>}</div>
-            <p className="text-[0.71875rem] text-ink-500 mt-0.5">{s.basis}</p>
-            {o.population && <p className="text-[0.6875rem] text-ink-400 mt-1">Drawn from {o.population.version ?? 'the population'} · {o.population.count.toLocaleString()} records · {o.population.tieOut}</p>}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // A frozen (concluded + signed) control never re-opens the journey, and nor
-  // does a risk owner — the draw is the auditor's to make.
-  if (!canDraw || isControlLocked(control)) {
-    return <div className="p-5"><p className="text-[0.75rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p></div>;
-  }
+  const drawnFiles = sources.filter(s => samplesFor(control, s.id).length > 0).length;
+  // Drawn and marked done are different states, and the difference is the whole
+  // point of the marks: a file drawn but not ticked is a file somebody still has
+  // to look at.
+  const doneFiles = sources.filter(s => s.approvedSample).length;
 
   return (
     <div className="p-5">
       {/* what the draw comes off — stated, not asked for. The population was
           filtered and locked at step ①; this step cannot narrow it further. */}
-      <div className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border border-compliant-100 bg-compliant-50/40">
-        <Lock size={12} className="text-compliant-700 shrink-0" />
-        <span className="text-[0.78125rem] font-semibold text-ink-900">Population {o.population?.version ?? 'locked'}</span>
-        <span className="text-[0.6875rem] text-ink-500 tabular-nums">{o.population?.count.toLocaleString()} instances</span>
-        <Check size={13} className="text-compliant-600 shrink-0" />
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border border-compliant-100 bg-compliant-50/40">
+          <Lock size={12} className="text-compliant-700 shrink-0" />
+          <span className="text-[0.78125rem] font-semibold text-ink-900">Population {o.population?.version ?? 'locked'}</span>
+          <span className="text-[0.6875rem] text-ink-500 tabular-nums">{o.population?.count.toLocaleString()} instances</span>
+          <Check size={13} className="text-compliant-600 shrink-0" />
+        </div>
+        {sources.length > 1 && (
+          <span className="text-[0.6875rem] text-ink-500">
+            across {sources.length} files — <span className="font-semibold text-ink-700">{drawnFiles} of {sources.length} sampled</span>
+            {doneFiles < sources.length && <span className="text-ink-400">, {doneFiles} marked done</span>}
+          </span>
+        )}
+        {/* Named, not omitted. A file that was in the population step and is not
+            here reads as something forgotten unless the step says why. */}
+        {assisting.length > 0 && (
+          <span className="text-[0.6875rem] text-ink-400">
+            {assisting.map(a => a.file).join(', ')} {assisting.length === 1 ? 'is an assisting table' : 'are assisting tables'} — joined, not sampled.
+          </span>
+        )}
       </div>
 
-      {/* how many, then draw. That is the whole screen. */}
-      <div className="mt-4 flex items-end justify-between gap-3 flex-wrap">
-        <label className="block min-w-0">
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Sample size</span>
-          <select value={rows} onChange={e => setRows(+e.target.value)} disabled={stage !== 'ready'}
-            className="w-44 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-60">
-            {Array.from(new Set([guide.suggested, 1, 2, 4, 10, 25, 40, 60])).sort((a, b) => a - b).map(n => (
-              <option key={n} value={n}>{n} items{n === guide.suggested ? ' — suggested' : ''}</option>
-            ))}
-          </select>
-        </label>
-        <button disabled={stage !== 'ready'} onClick={draw}
-          className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-          {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
-        </button>
+      {/* ── one row per file ─────────────────────────────────────────────────
+          Each file is drawn from separately: a control standing on four
+          quarterly extracts that sampled only the first has tested one quarter,
+          however healthy the total item count looks. */}
+      <div className="mt-4 space-y-2.5">
+        {sources.map(s => (
+          <SourceDrawRow key={s.id} control={control} source={s} canDraw={canDraw} single={sources.length === 1}
+            isOpen={openSource === s.id}
+            onToggle={() => setOpenSource(openSource === s.id ? null : s.id)}
+            onApproved={() => setOpenSource(sources.find(x => x.id !== s.id && !x.approvedSample)?.id ?? null)} />
+        ))}
       </div>
-      <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
-        {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
-      </p>
+
+      {/* The band is the control's, not the file's, so on a multi-file control
+          it is stated once underneath rather than repeated on every row. */}
+      {sources.length > 1 && (
+        <p className="text-[0.65625rem] text-ink-400 mt-3 leading-relaxed">
+          {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band. Each file is sized off the same band.
+        </p>
+      )}
       {/* Which ITGC did it. The note above says a failure is in force; a number
           the auditor has to defend needs the name behind it, on the same screen
           as the draw rather than two pages away. */}
@@ -2770,70 +3405,6 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           Because {failedItgcs(eng).map(f => `${controlCode(f)} — ${f.description.replace(/\.$/, '')}`).join('; ')} concluded ineffective. Test of one comes back when that is remediated and retested.
         </p>
       )}
-      <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
-        Random, seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — spread across the whole period. The seed comes off this control and this round and is stored on the paper, so the reviewer reperforms the draw and lands on these same items.
-      </p>
-      {stage === 'drawing' && (
-        <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {rows} from {o.population?.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
-      )}
-
-      {/* what came out — approve it onto the paper, or throw it back. Flat: it
-          sits directly under the draw that produced it, and a box here would be
-          the only one left on the step. */}
-      {stage === 'review' && (
-        <>
-        <div className="ac-div my-4" />
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-            <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
-          </div>
-          <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
-            <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
-              <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
-            </div>
-            {visible.slice(0, 8).map(({ ref, i }) => {
-              const f = sampleRowFacts(i);
-              return (
-                <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                  <span className="font-mono text-ink-700">{ref}</span>
-                  <span className="text-ink-500">{f.date}</span>
-                  <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
-                </div>
-              );
-            })}
-            {visible.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{visible.length - 8} more rows in the extract</div>}
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
-              <RotateCcw size={13} /> Reject and try again
-            </button>
-            <button disabled={visible.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
-              <Check size={14} /> Approve and continue
-            </button>
-          </div>
-        </div>
-        </>
-      )}
-
-      {rejecting && createPortal(
-        <div className="modal-backdrop" onClick={() => setRejecting(false)}>
-          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
-            <div className="px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
-                <div>
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
-                  <p className="text-[0.75rem] text-ink-500 mt-1">These items go and the draw starts again from the size. The population is untouched — it is locked, and rejecting a draw never reaches back into it.</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
-              <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
-            </div>
-          </motion.div>
-        </div>,
-        document.body)}
     </div>
   );
 }
@@ -2865,6 +3436,114 @@ function ReturnForm({ onCancel, onReturn }: { onCancel: () => void; onReturn: (r
   );
 }
 
+/**
+ * The reviewer's challenge, and its life.
+ *
+ * The store has carried the whole cycle since the review gate landed — raise
+ * (reviewer) → resolve (auditor) → verify or reopen (reviewer), each stage
+ * stamping its own actor, with the countersign held while any note is open — but
+ * the rail that drove it was lost in a merge, so for a while a reviewer could be
+ * blocked by a note they had no way to raise, answer or close. This is that rail,
+ * rebuilt where the block is felt: inside the sign-off step, above the signatures.
+ *
+ * Each hat sees only its own move. The raiser never resolves, the resolver never
+ * verifies — the four-eyes here is the role gate, not a checkbox.
+ */
+function ReviewNotesBlock({ control }: { control: Control }) {
+  const { eng, role, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote } = useIcfr();
+  const notes = reviewNotesFor(eng, control.id);
+  const isReviewer = role === 'reviewer';
+  const isAuditor = role === 'auditor';
+  const [raising, setRaising] = useState('');
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [response, setResponse] = useState('');
+  const so = control.wpSignoff;
+  const canRaise = isReviewer && isControlLocked(control) && !so?.reviewer;
+
+  if (!notes.length && !canRaise) return null;
+
+  const ORDER = { Open: 0, Resolved: 1, Closed: 2 } as const;
+  const sorted = [...notes].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+
+  return (
+    <div className="mt-3 rounded-xl border border-canvas-border overflow-hidden">
+      <div className="px-3.5 py-2 bg-paper-50/60 border-b border-canvas-border flex items-center gap-2">
+        <StickyNote size={13} className="text-ink-500" />
+        <span className="text-[0.71875rem] font-bold text-ink-700">Review notes</span>
+        <span className="text-[0.65625rem] text-ink-400">
+          {notes.length === 0 ? 'None raised on this paper' : `${notes.filter(n => n.status !== 'Closed').length} open of ${notes.length}`}
+        </span>
+      </div>
+
+      {sorted.map(n => (
+        <div key={n.id} className="px-3.5 py-3 border-b border-canvas-border last:border-b-0">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[0.75rem] text-ink-800 leading-relaxed min-w-0">{n.text}</p>
+            <span className="shrink-0">
+              {n.status === 'Open' ? <Pill tone="risk">Open</Pill>
+                : n.status === 'Resolved' ? <Pill tone="evidence">Awaiting verification</Pill>
+                : <Pill tone="compliant">Verified &amp; closed</Pill>}
+            </span>
+          </div>
+          <p className="text-[0.65625rem] text-ink-400 mt-1">Raised by {n.raisedBy} · {n.raisedAt}</p>
+
+          {n.resolution && (
+            <div className="mt-2 pl-3 border-l-2 border-canvas-border">
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">{n.resolution.text}</p>
+              <p className="text-[0.65625rem] text-ink-400 mt-0.5">
+                {n.resolution.by} · {n.resolution.at}{n.verified && <> — verified by {n.verified.by} · {n.verified.at}</>}
+              </p>
+            </div>
+          )}
+
+          {/* The auditor answers an open note. No verify pen here: agreeing that
+              your own answer settles it is not a second pair of eyes. */}
+          {isAuditor && n.status === 'Open' && (
+            respondingTo === n.id ? (
+              <div className="mt-2.5">
+                <textarea autoFocus value={response} onChange={e => setResponse(e.target.value)} rows={2}
+                  placeholder="What was done about this — the reviewer verifies against it"
+                  className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                <div className="mt-2 flex items-center gap-2">
+                  <button disabled={!response.trim()}
+                    onClick={() => { resolveReviewNote(n.id, response.trim()); setRespondingTo(null); setResponse(''); }}
+                    className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Resolve</button>
+                  <button onClick={() => { setRespondingTo(null); setResponse(''); }}
+                    className="h-8 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setRespondingTo(n.id); setResponse(''); }}
+                className="mt-2 h-8 px-3 rounded-lg border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Resolve with response</button>
+            )
+          )}
+
+          {/* The reviewer's two answers to an attempt: it settles the point, or it
+              does not and the note goes back open. */}
+          {isReviewer && n.status === 'Resolved' && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <button onClick={() => verifyReviewNote(n.id)}
+                className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.71875rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Verify &amp; close</button>
+              <button onClick={() => reopenReviewNote(n.id)}
+                className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.71875rem] font-semibold hover:bg-high-50 cursor-pointer">Reopen</button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {canRaise && (
+        <div className="px-3.5 py-3 bg-paper-50/40">
+          <textarea value={raising} onChange={e => setRaising(e.target.value)} rows={2}
+            placeholder="Raise a review note — the auditor answers it, you verify, and it holds the countersign until it closes"
+            className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+          <button disabled={!raising.trim()} onClick={() => { raiseReviewNote(control.id, raising.trim()); setRaising(''); }}
+            className="mt-2 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Raise review note</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SignOffSection({ control }: { control: Control }) {
   const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
   const logEvent = useAuditLog();
@@ -2873,6 +3552,12 @@ function SignOffSection({ control }: { control: Control }) {
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
+  // Returning is NOT held by an open note. The two used to share one gate, which
+  // dead-ended the reviewer: a paper they had questioned could be neither signed
+  // nor sent back. A note says "answer this"; a return says "this needs rework" —
+  // and the second is exactly what a reviewer reaches for when the first was not
+  // enough. This mirrors what returnControl itself permits.
+  const canReturn = role === 'reviewer' && !!so?.preparer && !so?.reviewer;
   const done = !!so?.preparer && !!so?.reviewer;
   // ── the reviewer's OTHER answer ─────────────────────────────────────────────
   // Restored Aug 2026. returnControl has done the whole job since 9402d19 —
@@ -2910,12 +3595,16 @@ function SignOffSection({ control }: { control: Control }) {
             </div>
           </div>
 
+          {/* The notes sit with the signatures because they are the reason one of
+              them is being withheld. */}
+          <ReviewNotesBlock control={control} />
+
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.6875rem] text-ink-400 leading-relaxed min-w-0">
               {done ? 'Control done — the working paper is locked and downloadable.'
                 : canSign ? 'Signing states that the testing above is complete and the conclusions are yours.'
                 : role === 'reviewer' && !so?.preparer ? 'Waits for the preparer’s signature.'
-                : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign.`
+                : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign — you can still return the paper.`
                 : so?.preparer?.by === me ? 'You prepared this paper, so you can’t countersign it — four-eyes.'
                 : 'Waits for the reviewer.'}
             </p>
@@ -2923,17 +3612,21 @@ function SignOffSection({ control }: { control: Control }) {
               <button onClick={() => { signOffControlWp(control.id, 'preparer'); logEvent({ action: 'Update', description: `Signed off the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
             )}
-            {canCounter && (
+            {(canReturn || canCounter) && (
               <span className="shrink-0 flex items-center gap-2">
-                <button onClick={() => setReturning(r => !r)}
-                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
-                <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                {canReturn && (
+                  <button onClick={() => setReturning(r => !r)}
+                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
+                )}
+                {canCounter && (
+                  <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                )}
               </span>
             )}
           </div>
 
-          {returning && canCounter && (
+          {returning && canReturn && (
             <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
               <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework?</span>
               <ReturnForm onCancel={() => setReturning(false)} onReturn={reason => {
@@ -3035,7 +3728,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 // ── vertical stepper step ─────────────────────────────────────────────────────────
 // `hideStatus` suppresses the default pill/stamp + flash — used by the sample step,
 // whose status drives the node visual only (a "Sample approved" chip rides in `right`).
-function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean }) {
+function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
   const [open, setOpen] = useState(defaultOpen);
@@ -3051,8 +3744,11 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
     prev.current = status;
   }, [status]);
 
+  // `arrived` rings the step somebody was sent to. A page that scrolls somewhere
+  // without saying why looks like it loaded wrong — the ring is what makes the
+  // scroll read as an answer to the click, and it clears itself.
   return (
-    <motion.div id={id} className="vstep" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+    <motion.div id={id} className={cn('vstep transition-shadow duration-500', arrived && 'rounded-xl ring-2 ring-brand-500/60 shadow-lg shadow-brand-500/10')} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
       <div className="vstep-rail" />
       <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
       <div className={cn('panel relative', locked && 'panel-locked')}>
@@ -3282,7 +3978,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep } = useIcfr();
   const logEvent = useAuditLog();
   // preview-before-download for this control's working paper
   const [wpPreview, setWpPreview] = useState(false);
@@ -3294,6 +3990,35 @@ export default function ControlDossier() {
   // The deficiency this paper raised, graded here rather than somewhere else.
   const [defOpen, setDefOpen] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
+  // ── landing where the click was about ──────────────────────────────────────
+  // Above the early return on purpose: hooks have to run on every render, and
+  // a render that bails before them crashes the page the moment the counts
+  // differ. (That is not hypothetical — it did.)
+  // A row that says "upload the source data" should land on the Population step,
+  // not at the top of a five-step page the reader then has to search. Same
+  // one-shot channel the deficiency focus uses: set on the way in, consumed once
+  // on arrival, and coming back later lands nowhere in particular.
+  //
+  // The scroll waits a beat because the step it is aiming at has not mounted
+  // when this first runs, and a scroll to nothing is a scroll that silently did
+  // nothing.
+  const [arrivedAt, setArrivedAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (focusStep !== 'population') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('vstep-population')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setArrivedAt('population');
+      clearFocusStep();
+    }, 160);
+    return () => window.clearTimeout(t);
+  }, [focusStep, clearFocusStep]);
+  // The ring is a cue, not a state — it says "here" and then gets out of the way.
+  useEffect(() => {
+    if (!arrivedAt) return;
+    const t = window.setTimeout(() => setArrivedAt(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [arrivedAt]);
+
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // ── who is standing here, and what that permits ─────────────────────────────
   // Rewritten Aug 2026 (Step-2 action item 23). The risk owner is the FIRST LINE:
@@ -3310,18 +4035,23 @@ export default function ControlDossier() {
   // buttons that the store then silently dropped on the floor.
   const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
-  // The evidence lane stays theirs — attaching documents, answering a request,
-  // self-attesting. That is the whole reason they are on this page.
-  const canEdit = isAuditor || isOwner;
-  // The testing pen does not. Conclusions, overrides, the draw, attribute
-  // results and the sign-off are the auditor's alone.
-  const canTest = isAuditor;
-  const headOwners = ownersOf(control);
   // Automated + ITGCs holding = the design test IS the test. Everything on this
   // page that asked "have both tracks concluded?" now asks the narrower question.
   const opApplies = operatingApplies(eng, control);
   const concl = controlConclusion(control, opApplies);
   const controlLocked = isControlLocked(control, opApplies);
+  // The evidence lane stays theirs — attaching documents, answering a request,
+  // self-attesting. That is the whole reason they are on this page.
+  //
+  // …until the control concludes. A concluded paper is frozen for everyone, and
+  // the store has always refused to write to one; the design and TOE sections
+  // used not to carry the lock term, so they went on rendering pens that landed
+  // nowhere. Reopening is the way back in, and it says so on the header.
+  const canEdit = (isAuditor || isOwner) && !controlLocked;
+  // The testing pen does not. Conclusions, overrides, the draw, attribute
+  // results and the sign-off are the auditor's alone.
+  const canTest = isAuditor && !controlLocked;
+  const headOwners = ownersOf(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
   const toeLocked = designResult !== 'Effective';
@@ -3492,6 +4222,22 @@ export default function ControlDossier() {
         </div>
       )}
 
+      {/* Same reasoning, the auditor's own way back in: a reopened control is
+          open because somebody said why, and that sentence belongs where the
+          work restarts rather than only in the history rail. */}
+      {control.reopened && !isOwner && !controlLocked && (
+        <div className="rounded-xl border border-canvas-border bg-paper-50/60 p-4 mb-4 flex items-start gap-3">
+          <RotateCcw size={16} className="text-ink-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <h3 className="text-[0.8125rem] font-bold text-ink-800">Reopened by the auditor</h3>
+            {control.reopened.reason && <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{control.reopened.reason}</p>}
+            <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+              {control.reopened.by} · {control.reopened.at} — both conclusions were cleared, and any signature on the paper went with them.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── the ITGC cascade, named ──────────────────────────────────────────────
           Same reasoning as the return above: these steps are open because
           something happened elsewhere, and a control page that quietly grows
@@ -3526,11 +4272,33 @@ export default function ControlDossier() {
               knowing what will be tested, and at what threshold, is the whole
               reason the three lines are separate. The owner's page ends at the
               documents they supply and the exception they have to fix. */}
-          {isOwner ? null : !opApplies ? (
+          {/* ── the owner's half of step ② ────────────────────────────────────
+              Deriving the population is the FIRST LINE's job — "पापुलेशन को
+              डिराइव करने का काम ओनर करेगा" — and the data is theirs: they hold
+              it, they upload it, they say what to take out of it. Testing it is
+              the auditor's, and everything after the extract stays with them.
+              So the owner gets the files and the extract, and the report's
+              proof, the lock, the sample and the results are absent, not
+              greyed: the whole reason the lines are separate is that the first
+              line must not learn what will be tested or at what threshold. */}
+          {isOwner ? (opApplies && (
+            <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
+              status={control.operating.population ? 'Effective' : 'Not tested'}
+              right={control.operating.population
+                ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.population.count.toLocaleString()} instances</span>
+                : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
+              <PopulationSection control={control} canEdit={canEdit} />
+            </VStep>
+          )) : !opApplies ? (
             <ShortFormNote control={control} />
           ) : (
           <>
-          <VStep n={2} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." hideStatus
+          {/* The count / period / source trio this line used to name was parked on
+              2 Aug — three rows that worked out their own answer and then asked a
+              person to tick that they agreed. What gates the lock now is the IPE
+              conclusion: four checks somebody actually performs on the report the
+              population came out of. */}
+          <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked ? 'Effective' : 'Not tested'}
             right={popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>

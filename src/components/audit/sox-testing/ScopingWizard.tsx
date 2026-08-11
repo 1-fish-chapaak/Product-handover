@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
-  ShieldCheck, ClipboardList, Zap, AlertCircle,
+  ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
@@ -395,6 +395,19 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
   /** Entities read off an uploaded file — merged by name so a row the user
    *  already typed never duplicates. */
+  /** A company somebody typed in that the trial balance has never heard of.
+   *
+   *  Scoping runs on the TB's numbers, so a company with no numbers behind it
+   *  carries no captions, derives no processes and can be tested for nothing —
+   *  "वो तो है ही नहीं तुम्हारे इसमें". It is flagged rather than deleted:
+   *  the row may be right and the TB late, and quietly binning somebody's
+   *  typing is not ours to do. Only asked once the TB has actually been read —
+   *  before that, every row is unbacked and saying so would be noise. */
+  const notInTrialBalance = (e: GroupEntity): boolean =>
+    tbUpload === 'done'
+    && !uploads[e.id]
+    && !SEED_ENTITIES.some(s => s.name.trim().toLowerCase() === e.name.trim().toLowerCase());
+
   const mergeExtractedEntities = () => {
     setEntities(prev => {
       const have = new Set(prev.map(e => e.name.trim().toLowerCase()));
@@ -1253,7 +1266,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           button is gone, adding is the header's job). Kept as a
                           flex cell so the icon sits hard right on every row and
                           the column reads as one straight line. */}
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* The trial balance has no numbers for this company, so
+                            scoping has nothing to run on it. Said on the row,
+                            beside the button that fixes it. */}
+                        {notInTrialBalance(ent) && (
+                          <span
+                            title="The trial balance has no numbers for this company — nothing will derive for it. Remove it, or upload its trial balance."
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-mitigated-50 text-mitigated-800 text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                          >
+                            <AlertTriangle size={9} /> No TB
+                          </span>
+                        )}
                         <button
                           onClick={() => (heldBeneath > 0 ? setConfirmRemoveId(ent.id) : removeEntity(ent.id))}
                           disabled={soloEntity || entities.length === 1}

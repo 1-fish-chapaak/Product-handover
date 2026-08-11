@@ -2,6 +2,7 @@ import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning,
 import { useToast } from '../shared/Toast';
 import { useIcfr } from './store';
 import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
+import { isOwnerOf } from './auditScope';
 import { cn } from '../../lib/cn';
 import type { Deficiency, ExceptionStatus, HandoffTask, TaskType } from './types';
 
@@ -55,6 +56,14 @@ export default function RiskOwnerPortal() {
           addToast({ type: 'info', title: 'Write the plan first', message: `${def.id} needs the action, who does it and a due date — the auditor judges it against the root cause.` });
           return;
         }
+        // Only the fixing step submits. Anywhere else the finding is in somebody
+        // else's hands, and a button that reports success while the store refuses
+        // the move is worse than one that says where the thing actually is.
+        if (def.status !== 'Remediation') {
+          setView('deficiencies');
+          addToast({ type: 'info', title: 'Not yours to submit yet', message: `${def.id} is at ${def.status.toLowerCase()} — it comes back to you when the work does.` });
+          return;
+        }
         if ((def.remediation.evidence?.length ?? 0) > 0) {
           setExceptionStatus(def.id, 'Retest'); // clears this reminder with it
           addToast({ type: 'success', title: 'Submitted for retest', message: `${def.id} is with the auditor — your evidence rides along.` });
@@ -69,7 +78,7 @@ export default function RiskOwnerPortal() {
     addToast({ type: 'success', title: 'Sent to audit', message: 'Submitted — we’ll let you know if more is needed.' });
   };
 
-  const dueTests = testsDueNow(eng.controls.filter(c => c.owner === meOwner));
+  const dueTests = testsDueNow(eng.controls.filter(c => isOwnerOf(c, meOwner)));
   const shownTests = dueTests.slice(0, 5);
   const hasWork = dueTests.length > 0 || open.length > 0;
   const anyOverdue = open.some(t => t.overdue) || dueTests.some(c => testDueInDays(c) < 0);
@@ -121,9 +130,13 @@ export default function RiskOwnerPortal() {
               // a remediation row says which of the owner's two steps it is on
               const cta = t.type === 'remediation' ? remediationCta(t) : { label: m.action, Icon: m.Icon };
               const urgent = dueNow(t);
+              // The task says which step answers it, so the row lands there rather
+              // than at the top of a five-step page. A request to upload source
+              // data that opens on the design documents is a row that made the
+              // reader do the finding themselves.
               return (
-                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId); } }}
+                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId, t.focus); } }}
                   className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400'} /></span>
                   <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">

@@ -29,6 +29,14 @@ export default function AuditLogsView() {
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
   // Starting a cycle is not the first line's call.
   const canCreate = role !== 'risk-owner';
+  // An audit scopes itself from the matrix, so an engagement with no RACM has
+  // nothing for one to cover — whichever way the wizard is walked it ends in an
+  // audit that tests zero controls. A RACM here IS a process's set of controls
+  // (the equivalence Racm.tsx and the wizard both work from), so an empty
+  // control library is an empty matrix, and the door stays shut until one
+  // exists rather than opening onto a scope step with nothing in it.
+  const noRacm = eng.controls.length === 0;
+  const racmFirst = 'Add a RACM first — an audit with no controls has nothing to test.';
 
   const sheets = (
     <AnimatePresence>
@@ -47,12 +55,18 @@ export default function AuditLogsView() {
           title="No audits yet"
           body="An audit sets the period, what it covers and the materiality it is measured against. Start one to begin testing."
           action={canCreate ? (
-            <button
-              onClick={() => setCreating(true)}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-            >
-              <Plus size={15} /> New audit
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => setCreating(true)}
+                disabled={noRacm}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <Plus size={15} /> New audit
+              </button>
+              {/* Said here rather than in the body copy above: the body explains
+                  what an audit is, this explains why the button won't move. */}
+              {noRacm && <p className="text-[11.5px] text-ink-400">{racmFirst}</p>}
+            </div>
           ) : undefined}
         />
         {sheets}
@@ -71,12 +85,18 @@ export default function AuditLogsView() {
         </span>
         <div className="flex-1" />
         {canCreate && (
-          <button
-            onClick={() => setCreating(true)}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-          >
-            <Plus size={15} /> New audit
-          </button>
+          <>
+            {/* Beside the button, not under it — the toolbar is one row, and the
+                reason has to arrive with the thing it disables. */}
+            {noRacm && <span className="text-[11.5px] text-ink-400">{racmFirst}</span>}
+            <button
+              onClick={() => setCreating(true)}
+              disabled={noRacm}
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              <Plus size={15} /> New audit
+            </button>
+          </>
         )}
       </div>
 

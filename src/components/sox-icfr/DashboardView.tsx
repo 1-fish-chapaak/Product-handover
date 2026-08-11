@@ -28,6 +28,14 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
 }) {
   const { eng, openAudit } = useIcfr();
 
+  // No matrix, no audit. However an audit is scoped it ends up covering a set of
+  // controls, so on an engagement with none there is nothing for it to test and
+  // the wizard leads nowhere. A RACM here IS a process's set of controls, so an
+  // empty control library is an empty matrix. This surface is currently unwired
+  // (see SoxIcfrApp), but the rule belongs with the button rather than with
+  // whatever restores it.
+  const noRacm = eng.controls.length === 0;
+
   /** How far one audit has got, counted over the controls it actually covers. */
   const progressOf = (a: AuditRecord) => {
     const procs = processesForAudit(a, eng.id);
@@ -77,12 +85,16 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
       <div>
       <div className="flex items-center justify-between gap-3 mb-3">
         <h2 className="text-[13px] font-bold text-ink-800">Audits</h2>
-        <button
-          onClick={onNewAudit}
-          className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
-        >
-          <Plus size={14} /> New audit
-        </button>
+        <div className="flex items-center gap-2.5">
+          {noRacm && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          <button
+            onClick={onNewAudit}
+            disabled={noRacm}
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-700 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <Plus size={14} /> New audit
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">

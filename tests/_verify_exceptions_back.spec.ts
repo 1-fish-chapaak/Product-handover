@@ -25,7 +25,7 @@ test('exceptions breadcrumb back returns to Overview', async ({ page }) => {
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(600);
   // Overview root: engagement header is back, with the year-end box
-  await expect(page.getByText('Engagement sign-off').first()).toBeVisible();
+  await expect(page.getByText('Audit sign-off').first()).toBeVisible();
 });
 
 test('exceptions back still works after a dossier round-trip', async ({ page }) => {
@@ -41,5 +41,5 @@ test('exceptions back still works after a dossier round-trip', async ({ page }) 
   // the ← must not be a dead click now
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(600);
-  await expect(page.getByText('Engagement sign-off').first()).toBeVisible();
+  await expect(page.getByText('Audit sign-off').first()).toBeVisible();
 });

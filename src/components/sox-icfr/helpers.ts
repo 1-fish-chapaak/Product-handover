@@ -1,7 +1,8 @@
 import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
   AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
-  FileOrigin, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, ReviewNote, RiskRating, Role, Severity, TrackConclusion,
+  FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
+  Sample, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -226,10 +227,25 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGra
   return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
 }
 
-/** Significant or worse has to be confirmed by the reviewer before the owner is
- *  sent off to plan a fix — a wrong rating must not drive weeks of remediation. */
-export function needsRatingConfirmation(grade: ExceptionGrade): boolean {
-  return GRADE_RANK[grade] >= GRADE_RANK['Significant Deficiency'];
+// Every rating is confirmed by the reviewer before the owner is sent off to plan
+// a fix — a wrong rating must not drive weeks of remediation, and a grade only
+// looks small once someone has agreed it is small. (This used to fire above
+// Significant Deficiency alone; the rung is the reviewer's on every finding now,
+// so the threshold helper it needed is gone.)
+
+// ─── No two rungs in a row by the same hands ─────────────────────────────────────
+// A finding travels through eight steps, and at every handoff the point is that
+// somebody ELSE looks. Roles alone do not guarantee that: one person can hold two
+// hats, and on a small team usually does. So each rung stamps who did it, and the
+// next one is refused to that name — sized-then-confirmed, submitted-then-judged,
+// fixed-then-retested, retested-then-closed. Checked by NAME for the same reason
+// the own-control prohibition is: changing hats must not change the answer.
+//
+// An absent stamp (a finding seeded mid-ladder, or raised before the field
+// existed) reads as "no clash known" rather than blocking — a rule that fires on
+// missing history would freeze records nobody can unfreeze.
+export function samePerson(previous: { by: string } | undefined, actor: string): boolean {
+  return !!previous && previous.by === actor;
 }
 
 // ─── Baton — whose court an exception is in ──────────────────────────────────────
@@ -452,6 +468,177 @@ export function populationLocked(c: Control): boolean {
   return !!c.operating.population?.locked;
 }
 
+// ─── The files a population stands on ────────────────────────────────────────────
+/** Every source file behind this control's population, oldest first.
+ *
+ *  A control may stand on several (dev call, Aug 2026 — "मल्टीपल फाइल्स वो डाल
+ *  सकता है"), and everything downstream reads them through here rather than off
+ *  `population.sources` directly. A population drawn before that was possible
+ *  has no `sources` array at all, and is presented as the one file it always
+ *  was — so a seeded control, a control extracted last week and a control built
+ *  out of four quarterly files all read the same way, and no caller has to ask
+ *  which kind it is holding.
+ *
+ *  The synthesised id is stable (`src-legacy`) rather than generated: checks and
+ *  drawn items are tagged with it, and an id that changed on every render would
+ *  untag them. */
+export function populationSources(c: Control): PopulationSource[] {
+  const pop = c.operating.population;
+  if (!pop) return [];
+  if (pop.sources?.length) return pop.sources;
+  return [{
+    id: LEGACY_SOURCE_ID,
+    file: pop.sourceFile ?? pop.source,
+    rows: pop.sourceCount ?? pop.count,
+    count: pop.count,
+    criteria: pop.criteria,
+    draw: c.operating.sampling
+      ? { size: c.operating.sampling.size, method: c.operating.sampling.method, seed: c.operating.sampling.seed ?? 0 }
+      : undefined,
+  }];
+}
+export const LEGACY_SOURCE_ID = 'src-legacy';
+
+/** The checks proving one file. An untagged check belongs to the one file a
+ *  single-source population has — which is what every check written before this
+ *  existed is. */
+export function ipeChecksFor(c: Control, sourceId: string): IpeCheck[] {
+  const checks = c.operating.ipe?.checks ?? [];
+  return checks.filter(k => (k.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+}
+
+/** The items drawn out of one file. Tagged the same way, for the same reason. */
+export function samplesFor(c: Control, sourceId: string): Sample[] {
+  const samples = c.operating.sampling?.samples ?? [];
+  return samples.filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+}
+
+/** Is this file the thing being tested, or a table joined onto it? */
+export const isAssisting = (s: PopulationSource): boolean => s.role === 'assisting';
+
+/** The files the control is actually tested on. Assisting tables are read by the
+ *  workflow and proven like anything else, but nothing is drawn from them. */
+export const sampledSources = (sources: PopulationSource[]): PopulationSource[] => sources.filter(s => !isAssisting(s));
+
+/** The totals the control-level record carries — recomputed from the files
+ *  rather than incremented, so adding, re-filtering and withdrawing a file all
+ *  land on the same arithmetic and none of them can drift.
+ *
+ *  Assisting files are left out of both numbers. A vendor master's rows are not
+ *  instances of the control, and adding them to the population count would
+ *  inflate the very figure the sample size is judged against. */
+export function sourceTotals(sources: PopulationSource[]): { count: number; rows: number } {
+  return sampledSources(sources).reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
+}
+
+// ─── Where the population's files come from ──────────────────────────────────────
+// Not from browsing the platform. "फाइल्स वही आ रही है जो एट्रिब्यूट के अंदर
+// वर्कफ्लो लिंक्ड है और वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स
+// की लिस्ट" — the control's attributes each link a workflow, each workflow reads
+// an input file, and those files ARE the population's sources. Picking anything
+// else is picking a file no workflow will run on ("ऐड सोर्स नहीं होगा ना,
+// वर्कफ्लो ही नहीं चलेगा").
+
+/** One file the attributes' workflows read, and which attributes read it. */
+export interface ExpectedInput {
+  name: string;
+  /** Attribute codes, so the reason the file is offered is on the screen rather
+   *  than in someone's head. */
+  attributes: string[];
+  workflow?: string;
+}
+
+/** What this control's attributes expect, and what they are still waiting for.
+ *
+ *  `awaiting` is the honest other half: an attribute can have a workflow linked
+ *  and no input file attached yet, and that is a thing somebody owes rather than
+ *  a thing to hide. It is what the reminder to the owner is built on. */
+export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiting: { code: string; workflow?: string }[] } {
+  const byName = new Map<string, ExpectedInput>();
+  const awaiting: { code: string; workflow?: string }[] = [];
+  for (const s of c.operating.steps) {
+    // An attribute with no workflow and no validation reads nothing — it is
+    // evidenced by inspection or attestation, and it expects no file.
+    const linked = !!s.workflowName || s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.aiValidation;
+    if (!linked) continue;
+    if (s.inputFile?.name) {
+      const hit = byName.get(s.inputFile.name);
+      if (hit) { hit.attributes.push(s.code); hit.workflow = hit.workflow ?? s.workflowName; }
+      else byName.set(s.inputFile.name, { name: s.inputFile.name, attributes: [s.code], workflow: s.workflowName });
+    } else {
+      awaiting.push({ code: s.code, workflow: s.workflowName });
+    }
+  }
+  return { inputs: [...byName.values()], awaiting };
+}
+
+// ─── Asking for a sample in words ────────────────────────────────────────────────
+// A number could not carry what a draw actually needs. "क्या 25 निकालना है, किस
+// महीने का निकालना है, सब डिपेंड करता है उसपे" — testing whether every onboarded
+// vendor has a PAN on file is twenty-five vendors off the master; finding
+// duplicate invoices in a journal table is not something twenty-five rows can
+// find at all, and the answer there is two months tested end to end. The
+// selection unit itself changes, so the ask is written rather than picked, and
+// each file is asked for separately: "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़".
+
+/** What the application would ask for, before the auditor edits it. Drafted from
+ *  the sizing table and the file, so the ordinary case is one read and a click
+ *  and only the unusual one is typed. */
+export function draftSamplePrompt(c: Control, source: PopulationSource, suggested: number): string {
+  const what = c.frequency === 'Monthly' || c.frequency === 'Quarterly'
+    ? `Take ${suggested} of the ${source.count.toLocaleString()} instances in ${source.file}, one per period wherever the period has any, spread across the whole window.`
+    : `Take ${suggested} items at random from the ${source.count.toLocaleString()} instances in ${source.file}, spread across the whole window.`;
+  return what;
+}
+
+/** How the ask was read. Stated back on screen before the draw runs, because a
+ *  prompt nobody confirms the reading of is a prompt that quietly did something
+ *  else — and printed on the paper, because it is the method. */
+export interface SamplePlan {
+  size: number;
+  /** One line, in the same plain English the ask was written in. */
+  reading: string;
+  /** True when the ask narrowed by something other than a bare count — the draw
+   *  is then targeted rather than random, and the paper has to say so. */
+  targeted: boolean;
+}
+
+export function readSamplePrompt(prompt: string, source: PopulationSource, suggested: number, months: number): SamplePlan {
+  const p = prompt.trim();
+  if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items, at random.`, targeted: false };
+  const lower = p.toLowerCase();
+
+  // Time as the selection unit: "two months", "3 months". Every instance inside
+  // the chosen months is tested, so the size is the file's own run-rate over
+  // them — which is the whole reason this cannot be a count in a dropdown.
+  const byMonth = lower.match(/(\d+|one|two|three|four|six)\s*(?:calendar\s*)?months?/);
+  if (byMonth) {
+    const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, six: 6 };
+    const n = Math.max(1, Math.min(months, Number(byMonth[1]) || WORDS[byMonth[1]] || 1));
+    const perMonth = Math.max(1, Math.round(source.count / Math.max(1, months)));
+    return {
+      size: Math.max(1, n * perMonth),
+      reading: `${n} month${n === 1 ? '' : 's'} out of ${months}, every instance inside them — about ${(n * perMonth).toLocaleString()} items at this file's run rate.`,
+      targeted: true,
+    };
+  }
+
+  // A count, wherever it sits in the sentence.
+  const byCount = lower.match(/(\d[\d,]*)\s*(?:items?|rows?|instances?|vendors?|invoices?|entries|samples?)?/);
+  const n = byCount ? Number(byCount[1].replace(/,/g, '')) : NaN;
+  const size = Number.isFinite(n) && n > 0 ? Math.max(1, Math.min(source.count, n)) : suggested;
+  // Anything that names a slice of the population rather than just how many is a
+  // targeted draw, and calling it random on the paper would be untrue.
+  const targeted = /above|over|below|under|highest|largest|top |exceed|greater|only|where|month of|quarter|weekend|manual|duplicate|new |changed/.test(lower);
+  return {
+    size,
+    reading: targeted
+      ? `${size.toLocaleString()} items, chosen to fit the ask rather than at random — a targeted draw.`
+      : `${size.toLocaleString()} items at random, spread across the whole window.`,
+    targeted,
+  };
+}
+
 // ─── What the application can work out for itself ────────────────────────────────
 /** How seriously the application disagrees with the population.
  *
@@ -532,32 +719,17 @@ const dayGap = (a?: string, b?: string) => {
   return Math.round((y.getTime() - x.getTime()) / 86_400_000);
 };
 
-/** An overshoot inside this band is noise on an estimate, not a finding. The
- *  expected figure is a judgement made before the data was seen, and holding it
- *  to the row is false precision. */
-const OVER_BAND = 0.05;
-/** How far the demo extract is allowed to drift off the expectation. Kept on the
- *  OVER side and inside the band above: a shortfall is a completeness gate now,
- *  so an extract that undershot by chance would open every demo on a block. */
-export const EXTRACT_WOBBLE = 0.04;
+/* PARKED (dev call, Aug 2026) — all three below served the extracted-vs-expected
+   comparison, and went with the "Expected instances" field that fed it:
 
-/** Where the surplus rows sit — broken down along the dimension that was
- *  filtered on.
- *
- *  The question an over-inclusive filter raises is "what did I sweep in", and
- *  the fastest answer is the filtered dimension itself: `type Banking 1,180 ·
- *  type Other 238` says the filter let something through in one line. Falls back
- *  to the account when the filter named one instead, and to nothing at all when
- *  the filter named neither — a breakdown of an unnamed dimension explains
- *  nothing. */
-function overBreakdown(pop: Population, excess: number): { label: string; n: number }[] {
-  const dim = pop.filterType ? { key: 'type', value: pop.filterType } : pop.filterAccount ? { key: 'account', value: pop.filterAccount } : null;
-  if (!dim || excess < 1) return [];
-  return [
-    { label: `${dim.key} ${dim.value}`, n: Math.max(0, pop.count - excess) },
-    { label: `${dim.key} Other`, n: excess },
-  ];
-}
+     OVER_BAND       the 5% band an overshoot was forgiven inside
+     EXTRACT_WOBBLE  how far the demo extract drifted off the typed figure
+     overBreakdown   where the surplus rows sat, along the filtered dimension
+
+   overBreakdown is the one worth restoring first if a comparison ever comes
+   back: it answered "what did the filter sweep in" in one line, which no other
+   surface does. It read pop.filterType, falling back to pop.filterAccount, and
+   returned [{filtered dimension, count}, {Other, excess}]. */
 
 // ─── The shape of the extract, month by month ────────────────────────────────────
 /** One month of the population. */
@@ -698,41 +870,38 @@ export function countVerdict(c: Control): PopVerdict | null {
   const span = `${months} month${months === 1 ? '' : 's'}`;
   const runNote = runs != null ? ` The control itself runs ${runs.toLocaleString()} times over ${span}.` : '';
 
-  if (pop.expectedCount != null) {
-    const exp = pop.expectedCount;
-    const diff = pop.count - exp;
-    const off = Math.abs(diff) / Math.max(1, exp);
-    const pct = Math.round(off * 100);
-    const headline = `${pop.count.toLocaleString()} extracted against ${exp.toLocaleString()} expected`;
+  // PARKED (dev call, Aug 2026) — this used to open on "N extracted against M
+  // expected", where M was a figure the auditor typed before running the
+  // extract. That field is gone: the reference number is already visible on the
+  // source, so asking for it by hand was asking twice. What remains is what the
+  // application can work out for itself, and it says nothing it cannot support.
+  const src = pop.sourceCount;
 
-    if (diff === 0) return { level: 'pass', blocks: false, headline, detail: `Exactly the figure recorded before the extract ran.${runNote}` };
-
-    if (diff > 0) {
-      if (off <= OVER_BAND) {
-        return { level: 'pass', blocks: false, headline, detail: `${diff.toLocaleString()} over, ${pct}% — inside the 5% band. Variance on an estimate, not a finding.${runNote}` };
-      }
-      return {
-        level: 'warn', blocks: true, headline,
-        detail: `${diff.toLocaleString()} more than expected, ${pct}% over. Extra rows are not a hole in the test — the risk is sampling an item this control never touched, which turns up later as an exception that was never real. Refilter, or accept it with a reason.`,
-        breakdown: overBreakdown(pop, diff),
-        causes: 'Commonly duplicates, reversals, a transaction type outside the scope, one month too many in the window, or a second entity sitting in the same file.',
-      };
-    }
-
-    // Short. A shortfall is the harder case whatever its size: the rows that
-    // aren't there cannot be diagnosed, cannot be sampled, and cannot be seen
-    // by anyone reading the population afterwards. So every shortfall carries a
-    // recorded reason, and a small one is not waved through on percentage.
+  // A filter that returned the whole file did not filter. This is the one thing
+  // the source count CAN settle on its own — it is not a size comparison, which
+  // would be meaningless (a population is meant to be a subset), it is the
+  // absence of a subset at all.
+  if (src != null && pop.count === src) {
     return {
-      level: 'fail', blocks: true, headline,
-      detail: `${Math.abs(diff).toLocaleString()} fewer than expected, ${pct}% short. An instance that is not in the population can never be sampled, so this is a completeness gap rather than a filter that swept too wide — which is why every shortfall needs an answer, however small.`,
-      causes: 'Commonly a month missing from the window, a transaction type the filter excluded, or an extract taken before the period closed.',
+      level: 'warn', blocks: true,
+      headline: `${pop.count.toLocaleString()} instances from ${src.toLocaleString()} rows`,
+      detail: `Every row in the source came through, so nothing was filtered out. Either the file holds only this control's instances — say so — or the filter did not apply.${runNote}`,
+      causes: 'Commonly a filter that was drafted but never run, or a source already cut to this control before it was sent.',
     };
   }
 
   if (runs == null) {
-    // Recurring / Ad-hoc, and nothing was recorded up front.
-    return { level: 'fail', blocks: true, headline: 'How many should there have been?', detail: `A ${c.frequency.toLowerCase()} control has no fixed rhythm, so the number cannot be worked out from the frequency. It has to come from you.` };
+    // Recurring / Ad-hoc — the frequency gives no rhythm to measure against, and
+    // there is no longer a typed figure standing in for one. So the row states
+    // the two facts it has rather than failing for want of a number nobody is
+    // asked for any more.
+    return {
+      level: 'pass', blocks: false,
+      headline: src != null
+        ? `${pop.count.toLocaleString()} instances from ${src.toLocaleString()} rows`
+        : `${pop.count.toLocaleString()} instances`,
+      detail: `A ${c.frequency.toLowerCase()} control has no fixed rhythm, so there is no run count to measure this against. The filter and the source it came from are what a reviewer reperforms.`,
+    };
   }
   if (pop.count < runs) {
     return { level: 'fail', blocks: true, headline: `${pop.count.toLocaleString()} instances for ${runs.toLocaleString()} runs`, detail: `A ${c.frequency.toLowerCase()} control runs ${runs.toLocaleString()} times over ${span}, but the filter returned fewer instances than that — some runs are not in here.` };
@@ -863,7 +1032,21 @@ export function defaultFileOrigin(kind: string): FileOrigin | undefined {
  *  a list kept in two places is a list that disagrees with itself, and the
  *  populations already name their source. */
 export function controlsUsingFile(eng: IcfrEngagement, name: string): Control[] {
-  return eng.controls.filter(c => c.operating.population?.sourceFile === name);
+  // Every file the population stands on, not just the first — a control drawing
+  // off four quarterly extracts uses all four, and a file that only ever showed
+  // up second would read as used by nobody.
+  return eng.controls.filter(c => populationSources(c).some(s => s.file === name));
+}
+
+/** Whether a file has a row count worth stating.
+ *
+ *  A spreadsheet or an extract does; a PDF does not — "अगर PDF है तो नहीं
+ *  दिखेगी रो सीधी बात है". A number printed beside a PDF is a number somebody
+ *  counted for it, not one the file has, and the population is drawn off
+ *  structured sources anyway: the ground truth an audit tests against lives in
+ *  a spreadsheet, and the PDF is the proof beside it. */
+export function hasRowCount(name?: string): boolean {
+  return !!name && !/\.pdf$/i.test(name.trim());
 }
 
 /** A file's kind read back off its name, for files nobody registered. */
@@ -1059,9 +1242,14 @@ export function isControlLocked(c: Control, opApplies = true): boolean {
 export function isControlLockedIn(eng: IcfrEngagement, c: Control): boolean {
   return isControlLocked(c, operatingApplies(eng, c));
 }
-// A countersigned engagement is locked for good — no edits, no reopen.
+// A countersigned audit seals its cycle — no edits, no reopen. The seal reads the
+// LIVE audit (newest unarchived record — auditPortfolio's liveAuditId, inlined
+// because auditPortfolio imports from this file): that is the only record whose
+// results are on the controls, so both of its signatures freeze the engagement's
+// working state. Starting the next cycle archives it, which is the only release.
 export function isEngagementLocked(eng: IcfrEngagement): boolean {
-  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+  const live = eng.audits.find(a => !a.archive);
+  return !!(live?.signoff?.preparer && live?.signoff?.reviewer);
 }
 
 // ─── Review gate — concluded is not final until the reviewer countersigns ────────
@@ -1228,7 +1416,14 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
     if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
     const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
     if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
-    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(failed.map(p => p.text))}.`;
+    // A failed check is named WITH the attribute it belongs to. The rationale is
+    // what the paper carries as the reason, and "exceptions handled per policy
+    // failed" does not say which of the five things the control has to do.
+    const named = failed.map(p => {
+      const on = p.stepId ? c.operating.steps.find(s => s.id === p.stepId) : undefined;
+      return on ? `${p.text} (${on.code})` : p.text;
+    });
+    return `${pointsPass} of ${pointsTotal} design checks passed${against}. ${failed.length} failed: ${listPhrase(named)}.`;
   }
   const { passed, failed, total } = operatingProgress(c);
   const n = c.operating.sampling?.size;
@@ -1363,8 +1558,8 @@ export function suggestPopulationFile(
     // 1. What this same control drew off before. The strongest signal there is,
     //    and it was sitting unused: a control's population comes out of the same
     //    place round after round unless something changed.
-    const mine = eng.controls.find(x => x.id === c.id)?.operating.population?.sourceFile;
-    if (mine === f.name) { score += 60; why.push('this control drew off it last round'); }
+    const mine = eng.controls.find(x => x.id === c.id);
+    if (mine && populationSources(mine).some(s => s.file === f.name)) { score += 60; why.push('this control drew off it last round'); }
 
     // 2. What the rest of the process uses. Controls in one process read the
     //    same ledgers; a file 30 of them share is not a coincidence.
@@ -1402,7 +1597,13 @@ export function suggestPopulationFile(
 }
 
 export function suggestedDesignChecks(c: Control): string[] {
-  const existing = c.design.points.map(p => keyWords(p.text));
+  // Control-level checks only, deliberately. The library offers control-level
+  // considerations, and it decides "already covered" on keyword overlap — so
+  // letting attribute checks into the corpus would suppress real suggestions on
+  // a coincidence of wording. An attribute check reading "…exceptions handled
+  // per policy…" would silently retire the library's own exceptions check, which
+  // is a different question about a different thing.
+  const existing = c.design.points.filter(p => !p.stepId).map(p => keyWords(p.text));
   return CHECK_LIBRARY
     .filter(x => x.when(c))
     .map(x => x.text)

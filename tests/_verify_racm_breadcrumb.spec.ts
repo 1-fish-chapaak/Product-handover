@@ -116,7 +116,7 @@ test('RACM matrix drops the engagement header for a breadcrumb', async ({ page }
   await page.waitForTimeout(700);
   await crumbs.getByRole('button', { name: 'FY26 ICFR — Airline P2P & O2C' }).click();
   await page.waitForTimeout(900);
-  await expect(page.getByText('Engagement sign-off')).toBeVisible();
+  await expect(page.getByText('Audit sign-off')).toBeVisible();
 });
 
 // R4 — the tickmark legend is visible on the drilled matrix, not hover-only

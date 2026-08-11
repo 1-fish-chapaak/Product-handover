@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ const activityOf = (owner: string, subProcess: string, frequency: Frequency, nat
 };
 
 let _p = 0;
-const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
-  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
+const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check', stepId?: string): DesignPoint =>
+  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
@@ -85,7 +85,16 @@ const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points
     testedAt: conclusion !== 'Not tested' ? '14 Apr' : null,
   });
 
-const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx'): OperatingTrack => ({
+/** A second source file behind a seeded population.
+ *
+ *  Most controls stand on one file, so this is the exception rather than the
+ *  shape — but "one control, several files" has to be reachable without anyone
+ *  building it by hand, or the per-file proof and the per-file draw are features
+ *  nobody ever sees. See PopulationSource. */
+const secondSource = (file: string, rows: number, count: number, criteria: string, drawn = true, role: SourceRole = 'assisting') =>
+  ({ file, rows, count, criteria, drawn, role });
+
+const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx', extra?: ReturnType<typeof secondSource>): OperatingTrack => ({
   method: 'Manual',
   // What the population IS, recorded before it was pulled in — the row count on
   // its own never says whether it counted the right things.
@@ -96,25 +105,93 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     by: 'A. Mehta', at: '12 Apr',
   } : undefined,
   population: popCount ? {
-    source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
-    sourceFile: popFile, sourceCount: popCount * 7,
+    source: popSource, count: popCount + (extra?.count ?? 0), tieOut: 'Agreed to GL control account',
+    sourceFile: popFile, sourceCount: popCount * 7 + (extra?.rows ?? 0),
     criteria: `type ${popSource.split('—')[0].trim()}`,
+    // The files it stands on. Written out even for the single-file case so the
+    // seeds and the application agree on one shape — populationSources() would
+    // synthesise the same entry, but a seed that leaves it to a shim is a seed
+    // that reads differently from anything the app itself produces.
+    sources: [
+      {
+        id: 'src-1', file: popFile, rows: popCount * 7, count: popCount, criteria: `type ${popSource.split('—')[0].trim()}`,
+        // The ask, not just the answer. Every seeded draw carries the words it
+        // was made in, because the paper prints them and a seed that skipped
+        // them would print a blank row on every control that was never touched.
+        ...(sampling ? { draw: {
+          size: extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size,
+          method: sampling.method, seed: sampling.seed ?? 40817,
+          prompt: `Take ${extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size} of the ${popCount.toLocaleString()} instances in ${popFile}, spread across the whole window.`,
+        } } : {}),
+        // The first file is worked through and ticked. Something is always left
+        // undone on the second — that is the state the call described a ten-file
+        // control returning in ("चार का तुमने कर दिया था, दो बच रहा था"), and it
+        // only reads as a state at all if the whole thing is not finished.
+        ...(extra ? { approvedIpe: { by: 'A. Mehta', at: '13 Apr' }, ...(sampling ? { approvedSample: { by: 'A. Mehta', at: '15 Apr' } } : {}) } : {}),
+      },
+      ...(extra ? [{
+        id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria, role: extra.role,
+        // A different file is a different draw, so it is a different seed. The
+        // whole point of storing one is that the reviewer can reperform THIS
+        // selection, and one seed shared by two draws reperforms one of them.
+        // A different file is a different question. This one is a vendor master,
+        // so the ask is about vendors rather than about a spread of dates —
+        // which is the reason the ask is written per file at all.
+        ...(sampling && extra.drawn && extra.role !== 'assisting' ? { draw: {
+          size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923,
+          prompt: `Take ${Math.floor(sampling.size / 2)} vendors from ${extra.file} that had a payment in the period.`,
+        } } : {}),
+        // Proven, never marked. A file whose proof is done and whose draw is not
+        // is the ordinary half-finished state, and the marks exist to show it.
+        approvedIpe: { by: 'A. Mehta', at: '13 Apr' },
+      }] : []),
+    ],
     // filterFrom / filterTo / version are stamped by stampPopulationWindows once
     // the audits exist — a population belongs to ONE round and carries that
     // round's window, which cannot be known from in here.
-    // What the auditor said to expect before pulling it. Rounded to the nearest
-    // fifty because a stated expectation is an estimate, not a readback — it
-    // lands just inside tolerance, which is what a healthy extract looks like.
-    expectedCount: Math.round(popCount / 50) * 50,
+    // expectedCount went with the "Expected instances" field (dev call, Aug
+    // 2026). sourceCount above is the reference number now — the population is
+    // a seventh of the file it was filtered out of, which is what a filter
+    // that filtered looks like.
     // Where it came from. Not derivable from the file, so it was recorded.
     provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair', extractedOn: '2026-04-12' },
     checks: { countMatches: true, dateRangeFull: true, productionSource: true },
     locked: { by: 'A. Mehta', at: '13 Apr' }, version: 'POP-YE',
     evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
   } : undefined,
+  // ── the report behind each file, proven ────────────────────────────────────
+  // Seeded only where there are several files. A single-source control registers
+  // its report the moment an auditor opens the step, so seeding one would be
+  // seeding work the application already does — but a control that has already
+  // CONCLUDED never opens that path, and its per-file proof would be a thing the
+  // feature supports and nobody can look at.
+  //
+  // Four dimensions per file, all passed, one verdict for the lot: that is the
+  // shape the call settled on ("सेंट्रलाइज्ड कर दो ना").
+  ipe: popCount && extra ? {
+    reportName: popFile, system: `${popSource.split('—')[0].trim()} — Production`,
+    reportRef: 'FBL3N / MK03', parameters: `Company code · full period · ${popSource.split('—')[0].trim()}`,
+    generatedBy: 'R. Nair — client finance', generatedAt: '12 Apr',
+    recordCount: popCount * 7 + extra.rows, controlTotal: 'Agreed to the GL control account',
+    checks: [
+      ...ipeChecklist(popFile).map((k, i) => ({ ...k, id: `ipe-s1-${i}`, sourceId: 'src-1', result: 'Pass' as TestResult })),
+      ...ipeChecklist(extra.file).map((k, i) => ({ ...k, id: `ipe-s2-${i}`, sourceId: 'src-2', result: 'Pass' as TestResult })),
+    ],
+    conclusion: 'Reliable', testedBy: 'A. Mehta', testedAt: '13 Apr',
+  } : undefined,
   // A draw nobody can reperform is not a procedure — every seeded sample carries
   // the method and the seed that produced it.
-  sampling: sampling ? { ...sampling, seed: sampling.seed ?? 40817 } : undefined,
+  // Every drawn item says which file it came out of, because a control standing
+  // on two files that drew from one has tested one — and a paper that cannot
+  // show the split cannot show that either. Split down the middle: the seeds are
+  // an illustration, not an inference about how many rows each file holds.
+  sampling: sampling ? {
+    ...sampling,
+    seed: sampling.seed ?? 40817,
+    samples: extra
+      ? sampling.samples.map((s, i) => ({ ...s, sourceId: extra.drawn && extra.role !== 'assisting' && i % 2 !== 0 ? 'src-2' : 'src-1' }))
+      : sampling.samples,
+  } : undefined,
   steps,
   conclusion,
   testedBy: conclusion !== 'Not tested' ? 'A. Mehta' : null,
@@ -802,7 +879,10 @@ const DEFICIENCIES: Deficiency[] = [
   //   gapType: 'TG',
   //   exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
   { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
-    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation' },
+    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation',
+    // Past the reviewer's rating gate, so it carries their agreement to the grade —
+    // every finding passes that rung now, whatever it is rated.
+    ratingConfirm: { grade: 'Significant Deficiency', by: REVIEWER, at: '20 Apr' } },
   // DEF-002 was found in the walkthrough, on a manual control — the review sits
   // after the posting it is meant to stop. Nothing has gone wrong yet; the number
   // is what could pass unchecked in a month of manual journals.
@@ -1140,6 +1220,38 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
  * engagement record. Change those and these grades move, which is the point.
  */
+/**
+ * The reviewer's notes on Altura's papers — one at each stage, so every hat
+ * arrives on a move it can actually make: an OPEN note for the auditor to answer,
+ * a RESOLVED one for the reviewer to verify, and a CLOSED one showing the whole
+ * exchange as it reads afterwards.
+ *
+ * They ride papers the preparer has signed but the reviewer has not, because that
+ * is the only moment a note means anything: before the signature there is nothing
+ * to question, and after it the paper is closed.
+ */
+function alturaReviewNotes(controls: Control[]): ReviewNote[] {
+  const awaiting = controls.filter(c => !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer);
+  const notes: ReviewNote[] = [];
+  const [a, b, c] = awaiting;
+  if (a) notes.push({
+    id: 'rn-a1', controlId: a.id, status: 'Open', raisedBy: 'J. Fernandes', raisedAt: '2d',
+    text: `The conclusion on ${a.wpRef} rests on the sample passing, but the paper doesn't show which items were drawn from the second half of the period — attach the selection so the coverage can be read off it.`,
+  });
+  if (b) notes.push({
+    id: 'rn-a2', controlId: b.id, status: 'Resolved', raisedBy: 'J. Fernandes', raisedAt: '4d',
+    text: `${b.wpRef} records the reviewer's name but not the date each review happened, so timeliness can't be tested from the paper.`,
+    resolution: { text: 'Added the approval timestamps from the workflow export — every item was reviewed within two working days of posting.', by: 'A. Mehta', at: '1d' },
+  });
+  if (c) notes.push({
+    id: 'rn-a3', controlId: c.id, status: 'Closed', raisedBy: 'J. Fernandes', raisedAt: '9d',
+    text: `Confirm the population for ${c.wpRef} covers the entities added mid-period, not only those in scope at the start.`,
+    resolution: { text: 'Re-pulled against the period-end entity list — the two added in May are in the extract and in the sample frame.', by: 'A. Mehta', at: '8d' },
+    verified: { by: 'J. Fernandes', at: '7d' },
+  });
+  return notes;
+}
+
 function alturaDeficiencies(controls: Control[]): Deficiency[] {
   /** The nth control of a process, in RACM order. Undefined when the process
    *  was never scoped — the caller skips rather than inventing a control id. */
@@ -1357,8 +1469,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       failedSamples: ['FA-DSP-0119', 'FA-DSP-0126'],
       likelihood: 'Reasonably possible', magnitude: 4_500_000, mwIndicators: [],
       aggregationGroup: 'Fixed Assets',
-      // No ratingConfirm, and none is owed: ₹45 L is under Altura's ₹60 L floor,
-      // so it grades clearly trivial and never reached the reviewer's rating gate.
+      // Confirmed even at clearly trivial — ₹45 L is under Altura's ₹60 L floor,
+      // and the reviewer still agreed that reading before any fix was planned.
+      // Calling a finding small is a judgement like any other.
+      ratingConfirm: { grade: 'Clearly Trivial', by: REVIEWER, at: '08 Jun 2026' },
       remediation: {
         action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
         date: '30 Jun', owner: 'S. Iyer', status: 'Done',
@@ -1583,7 +1697,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     deficiencies,
     tasks: [],
     discussions: [],
-    reviewNotes: [],
+    reviewNotes: rich ? alturaReviewNotes(controls) : [],
     executions: [],
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit
@@ -1625,6 +1739,10 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
     pop.filterTo = audit.windowTo;
     pop.version = `POP-${ROUND_TAG[audit.round]}`;
     pop.criteria = `${pop.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}`;
+    // Each file's own filter carries the round too — the per-file rows print
+    // these rather than the population-level line, so stamping only the latter
+    // would leave the round visible in one place and missing in the other.
+    pop.sources = pop.sources?.map(s => ({ ...s, criteria: `${s.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}` }));
   }
 }
 
@@ -1789,7 +1907,20 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         }));
     return shells.map((c, i) => {
       const last = i === shells.length - 1;
-      const designDone = mode === 'carried' || (mode === 'live' && !last);
+      // ── the one control caught mid-flight ──────────────────────────────────
+      // Every other control is either untouched or finished, and both of those
+      // hide the per-file marks: a finished control is locked, so its Approve
+      // and Reject buttons are gone, and an untouched one has no files to mark.
+      // The half-done state is the one the call actually described — "चार का
+      // तुमने कर दिया था, दो बच रहा था" — so exactly one control is left in it:
+      // population locked, both files proven, the first sampled and ticked, the
+      // second still waiting for its draw.
+      //
+      // Treasury only, and only its last control, so every other process keeps
+      // its untouched control exactly as it was — several specs walk into that
+      // one precisely because nothing has happened to it.
+      const midFlight = mode === 'live' && last && name === 'Treasury';
+      const designDone = mode === 'carried' || (mode === 'live' && !last) || midFlight;
       const opDone = mode === 'live' && !last;
       // `&& !last` is load-bearing. Every process carries 5 shells, so the one
       // untested control is always i=4 — and 4 % 3 === 1 made it Automated in
@@ -1804,16 +1935,22 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
         doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
       ];
-      const points: DesignPoint[] = [
-        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
-        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
-      ];
       // How many attributes this control carries, and how many of them a
       // workflow evidences. An automated control is fully instrumented; a manual
       // one is mapped partially or not at all, which is what makes "3 of 4
       // workflows mapped" a fact worth putting on a card.
-      const attrCount = rich ? 2 + (i % 4) : 2;
+      // The untouched control carries three attributes rather than two, so the
+      // population step can show all three states a file can be in at once: one
+      // structured input, one PDF (offered, never given a row count) and one
+      // attribute still waiting for its file.
+      const attrCount = rich && last ? 3 : rich ? 2 + (i % 4) : 2;
       const mapped = nature === 'Automated' ? attrCount
+        // The untouched control is the only one an auditor can actually start
+        // from, so it is the only place the population step's file list can be
+        // seen being built. Two wired attributes rather than one: the first
+        // names its input file, the second has none — which is what makes the
+        // list and the thing still owed both visible at once.
+        : rich && last ? Math.min(3, attrCount)
         : rich ? (i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : attrCount - 1)
         : 0;
       const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
@@ -1826,9 +1963,47 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         nature === 'Automated' && k === 0 ? ['Reperformance'] : a.procedures,
         opDone ? 'Pass' : 'Not tested',
         k < mapped
-          ? wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined)
+          ? {
+            ...wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined),
+            // The file the linked workflow reads. It is one of the files this
+            // control's population stands on, because that is what the call
+            // settled: the population's sources ARE the workflows' inputs
+            // ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स की
+            // लिस्ट"). The last mapped attribute is deliberately left without
+            // one — an attribute wired to a workflow with no file attached is
+            // the ordinary half-finished state, and the step has to be able to
+            // say so rather than look complete.
+            // The untouched control's second attribute reads a PDF — signed
+            // approvals, scanned. A real case ("PDF अपलोड किया है वर्कफ्लो
+            // बनाते समय"), and the only one that shows the rule: a PDF is
+            // offered like any other file and is never given a row count,
+            // because it has none.
+            ...(rich && last && k === 1
+              ? { inputFile: file(`signed_approvals_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.pdf`, 'R. Nair', 'PDF') }
+              : k < mapped - 1
+                ? { inputFile: file(k === 0 ? 'population_full_period.xlsx' : `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 'R. Nair', 'XLSX') }
+                : {}),
+          }
           : {},
       ));
+      // Design checks: the control-level pair FIRST, then one per attribute
+      // (dev call, Aug 2026 — every attribute carries its own design check).
+      //
+      // Order is load-bearing twice over. The control-level ones lead because
+      // that is how the step reads — does this control address the risk at all,
+      // then is each thing it has to do designed to happen. And alturaDeficiencies
+      // fails points[0] to seed its design failure, so anything prepended here
+      // would silently move which check that finding is against.
+      const points: DesignPoint[] = [
+        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
+        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
+        ...opSteps.map(s => point(
+          `${s.description.replace(/\.$/, '')} — designed to happen, at ${s.precision.toLowerCase()}.`,
+          designDone ? 'Pass' : 'Not tested',
+          'Design walkthrough check',
+          s.id,
+        )),
+      ];
       const frequency: Frequency = nature === 'Automated' ? 'Recurring' : c.frequency;
       return {
         ...c,
@@ -1839,10 +2014,49 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         // 'General' is the placeholder sub-process on generated rows — naming the
         // process reads better than "over general records".
         controlActivity: activityOf(c.owner, c.subProcess === 'General' ? name : c.subProcess, frequency, nature),
+        // A concluded paper is signed by the auditor and then waits for the
+        // reviewer. Without a few of those the reviewer's queue is empty of
+        // papers, the countersign is never exercised, and a review note has
+        // nothing to ride — a note only means something between the two
+        // signatures. Every second concluded row is left waiting.
+        wpSignoff: designDone && opDone
+          ? (i % 2 === 0
+            ? { preparer: { by: 'A. Mehta', at: '12 Jun 2026' } }
+            : { preparer: { by: 'A. Mehta', at: '12 Jun 2026' }, reviewer: { by: 'J. Fernandes', at: '14 Jun 2026' } })
+          : undefined,
         design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
         operating: nature === 'Automated'
           ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
-          : manualTrack(opDone ? 'Effective' : 'Not tested', opSteps, opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, opDone ? 2000 + i * 7 : 0),
+          // The first tested control of every process stands on TWO source files
+          // (dev call, Aug 2026 — "मल्टीपल फाइल्स वो डाल सकता है"). Seeded rather
+          // than left to be built by hand: the per-file IPE proof, the per-file
+          // draw and the Source column on the paper are all invisible until a
+          // control actually has more than one file, and a feature nobody can
+          // reach on arrival is a feature nobody reviews. One control, not all
+          // of them — several files is the exception, and a register where every
+          // control had two would misrepresent the ordinary case.
+          : manualTrack(
+            opDone ? 'Effective' : 'Not tested', opSteps,
+            opDone || midFlight ? sampling(midFlight ? 12 : 25, 'Standard sample — moderate reliance.', 'Random') : undefined,
+            opDone || midFlight ? 2000 + i * 7 : 0, undefined, undefined,
+            // Two different second files, because they are two different things.
+            // The concluded control reads a vendor master — the call's own
+            // example of an assisting table: joined onto the population by the
+            // workflow, proven, and never sampled. The mid-flight control reads
+            // a second half-year extract, which IS population and is the file
+            // still waiting for its draw.
+            opDone && i === 0
+              ? secondSource(
+                `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265,
+                'Active vendors with a payment in the period', false, 'assisting',
+              )
+              : midFlight
+                ? secondSource(
+                  `${name.toLowerCase().replace(/[^a-z]+/g, '_')}_h2_extract.csv`, 9240, 1320,
+                  'Second half of the period', false, 'population',
+                )
+                : undefined,
+          ),
       };
     });
   });

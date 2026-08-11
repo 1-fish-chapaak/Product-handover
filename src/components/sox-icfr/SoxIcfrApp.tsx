@@ -105,6 +105,8 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
   const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  // Engagement-level signoff is never written — cycles conclude on each audit's
+  // own record, and the engagement outlives them, so the header pill stays Active.
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   const W = defWord(eng.id);
   const audit = eng.audits.find(a => a.id === openAuditId);
