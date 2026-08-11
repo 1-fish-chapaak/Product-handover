@@ -18,7 +18,7 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, type PopVerdict,
+  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -297,6 +297,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   const [note, setNote] = useState(track.rationale ?? drafted);
   const [seed, setSeed] = useState(track.rationale ?? drafted);
   if (seed !== (track.rationale ?? drafted)) { setSeed(track.rationale ?? drafted); setNote(track.rationale ?? drafted); }
+  // Runs recorded over a draw that has since changed — the store refuses to
+  // conclude on them, so the buttons say why instead of failing silently.
+  const staleRuns = which === 'operating' ? control.operating.steps.filter(s => s.staleRun).length : 0;
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -322,9 +325,14 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
-        <button disabled={disabled} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
+        <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
         {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {staleRuns > 0 && (
+          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+            <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
+          </span>
+        )}
       </div>
       {track.override && (
         <div className="mt-2.5 text-[0.71875rem] text-high-700 flex items-start gap-1.5 p-2.5 rounded-lg bg-high-50/50 border border-high-200">
@@ -965,6 +973,16 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               </div>
             )}
           </div>
+          {/* The recorded run was made over a draw that no longer exists — the
+              sample changed underneath it. Results that predate the sample were
+              not testing these items, so the run is stale and the operating
+              track refuses to conclude until it is re-run (or re-attested). */}
+          {step.staleRun && (
+            <div className="rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
+              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+              <span>This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.</span>
+            </div>
+          )}
           {v1 === 'ai' ? (
             <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
               {/* required file the AI validates against */}
@@ -3423,6 +3441,41 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
             {missing.length > 0 && (
               <p className="mt-2 text-[0.6875rem] text-high-700 leading-relaxed">
                 <b className="font-semibold">{missing.join(' and ')}</b> {missing.length === 1 ? 'has' : 'have'} no item in the draw — a conclusion recorded now would cover {missing.length === 1 ? 'a company' : 'companies'} nothing was tested at. Extend the sample until every company is reached.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── which routes the draw has touched ────────────────────────────────
+          A control with more than one way through it — a payment released by
+          hand vs auto-released under a threshold — is only tested when the
+          draw has landed on each route. Same rule as the companies above and
+          the files below, along a third axis: a draw that never touched the
+          second route has not tested the second route. */}
+      {hasPaths(control) && (() => {
+        const cov = pathCoverage(control);
+        const missed = untouchedPaths(control);
+        return (
+          <div className={cn('mt-4 rounded-xl border p-3.5', missed.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[0.71875rem] font-bold text-ink-700">One control, {cov.length} routes</span>
+              <span className="text-[0.65625rem] text-ink-400">— every route work can take through this control needs items of its own in the sample.</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              {cov.map(p => (
+                <span key={p.path} className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-[0.6875rem] font-semibold',
+                  p.drawn === 0 ? 'border-high-300 bg-high-50 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-700')}>
+                  {p.path}
+                  <span className={cn('font-normal', p.drawn === 0 ? 'text-high-700' : 'text-ink-400')}>
+                    {p.drawn === 0 ? 'never touched' : `${p.drawn} item${p.drawn === 1 ? '' : 's'}`}
+                  </span>
+                </span>
+              ))}
+            </div>
+            {missed.length > 0 && (
+              <p className="mt-2 text-[0.6875rem] text-high-700 leading-relaxed">
+                The draw never touched <b className="font-semibold">{missed.join(' or ')}</b> — that route has not been tested, however healthy the overall size looks. Extend the sample until every route is reached.
               </p>
             )}
           </div>

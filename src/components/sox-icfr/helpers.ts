@@ -570,6 +570,37 @@ export function entityCell(c: Control): { label: string; title: string } | null 
   return c.entity ? { label: c.entity, title: c.entity } : null;
 }
 
+// ─── A multi-path control's reach ────────────────────────────────────────────────
+// Some controls have more than one way through them — a payment released by hand
+// vs auto-released under a threshold — and a draw that never landed on the second
+// route has not tested the second route, however healthy its size. Same rule as
+// the companies above, along a different axis: every route needs its own items.
+export function hasPaths(c: Control): boolean {
+  return (c.paths?.length ?? 0) > 1;
+}
+/** Per route: how many drawn items went down it. Ordered as the control names
+ *  them, so the list reads the same every time. */
+export function pathCoverage(c: Control): { path: string; drawn: number }[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.paths ?? []).map(path => ({ path, drawn: items.filter(s => s.path === path).length }));
+}
+/** The routes the conclusion would cover without a single item having gone
+ *  down them. Empty until something is drawn — an undrawn control has no draw
+ *  to accuse of missing anything. */
+export function untouchedPaths(c: Control): string[] {
+  if (!(c.operating.sampling?.samples.length)) return [];
+  return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
+}
+
+/** A draw change puts every already-recorded run out of date — results that
+ *  predate the sample were not testing these items. Flag them; the next run (or
+ *  a fresh attestation) clears the flag, and the operating track refuses to
+ *  conclude while one stands. A step with nothing recorded has nothing to go
+ *  stale. */
+export function staleSteps(steps: OperatingStep[]): OperatingStep[] {
+  return steps.map(s => (s.validation || s.workflowRunRef ? { ...s, staleRun: true } : s));
+}
+
 // ─── Where the population's files come from ──────────────────────────────────────
 // Not from browsing the platform. "फाइल्स वही आ रही है जो एट्रिब्यूट के अंदर
 // वर्कफ्लो लिंक्ड है और वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स

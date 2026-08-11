@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -1108,6 +1108,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         operating: {
           ...c.operating,
           population: pop ? { ...pop, sources } : pop,
+          // A run recorded before this draw was testing the OLD items — flag it
+          // stale; the next run (or a fresh attestation) clears it.
+          steps: staleSteps(c.operating.steps),
           sampling: {
             basis: `${samples.length} items drawn from ${drawn.length} of ${sources.length} source file${sources.length === 1 ? '' : 's'} · ${draw.method.toLowerCase()}, one seed per file · spread across the period`,
             method: draw.method, size: samples.length, seed: draw.seed, samples,
@@ -1170,7 +1173,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           population: { ...pop, sources },
           sampling: samp && samples.length ? { ...samp, size: samples.length, samples } : undefined,
           exceptions: (c.operating.exceptions ?? []).filter(x => !gone.has(x.sampleId)),
-          steps,
+          // the surviving runs were made over the old draw — stale until re-run
+          steps: staleSteps(steps),
         },
       };
     });
@@ -1438,7 +1442,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // this work will read (see PopulationSource).
       const src = populationSources(c)[0]?.id;
       const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src }));
-      return { ...c, operating: { ...c.operating, sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
+      // runs recorded before the extension never saw the new items — stale until re-run
+      return { ...c, operating: { ...c.operating, steps: staleSteps(c.operating.steps), sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
   }, [patchControl, pushExec, role]);
@@ -1459,7 +1464,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const steps = c.operating.steps.map(st => st.sampleResults
         ? { ...st, sampleResults: Object.fromEntries(Object.entries(st.sampleResults).filter(([id]) => kept.has(id))) }
         : st);
-      return { ...c, operating: { ...c.operating, steps, sampling: { ...s, size, samples, basis: `${size} items — sample size revised by the auditor (judgment documented).` } } };
+      // the revised draw is not the one the recorded runs tested — stale until re-run
+      return { ...c, operating: { ...c.operating, steps: staleSteps(steps), sampling: { ...s, size, samples, basis: `${size} items — sample size revised by the auditor (judgment documented).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `revised the sample size to ${size}`, target: `${size} items` }));
   }, [patchControl, pushExec, role]);
@@ -1660,7 +1666,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchStep(controlId, stepId, (s, c) => {
       const res = s.result === 'Not tested' ? 'Pass' : s.result;
-      return stampSamples(c, { ...s, workflowRunRef: `${wfRunRef(controlId + s.id, res === 'Fail')} · just now`, result: res }, res);
+      return stampSamples(c, { ...s, workflowRunRef: `${wfRunRef(controlId + s.id, res === 'Fail')} · just now`, result: res, staleRun: undefined }, res);
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'pull-run', verb: 'pulled a workflow run', target: s.code, result: s.result } : null; });
     pushRun(prev => {
@@ -1680,7 +1686,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role === 'reviewer') return;
     patchStep(controlId, stepId, (s, c) => {
       const att: Attestation = { result, note, by: me, role, at: 'just now', evidence: s.attestation?.evidence ?? [] };
-      return stampSamples(c, { ...s, attestEnabled: true, attestation: att, result }, result);   // a manual attestation IS the attribute's result
+      // a fresh attestation is a fresh look at the current draw — it supersedes a stale run
+      return stampSamples(c, { ...s, attestEnabled: true, attestation: att, result, staleRun: undefined }, result);   // a manual attestation IS the attribute's result
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'attest', verb: `attested ${result.toLowerCase()}`, target: s.code, result } : null; });
   }, [patchStep, me, role, pushExec]);
@@ -1736,7 +1743,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchStep(controlId, stepId, (s, c) => {
       const willFail = (s.override ? s.override.result : s.result) === 'Fail';
       const res: TestResult = willFail ? 'Fail' : 'Pass';
-      return stampSamples(c, { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id, c.operating.sampling?.size), table: validationTable(willFail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' } }, res);
+      return stampSamples(c, { ...s, result: res, staleRun: undefined, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id, c.operating.sampling?.size), table: validationTable(willFail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' } }, res);
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against file', target: s.code, result: s.result } : null; });
     pushRun(prev => {
@@ -1757,7 +1764,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const res: TestResult = fail ? 'Fail' : 'Pass';
       const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
       return stampSamples(c, {
-        ...s, result: res,
+        ...s, result: res, staleRun: undefined,
         workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(controlId + s.id, fail)} · just now`) : s.workflowRunRef,
         validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, controlId + s.id, c.operating.sampling?.size), table: validationTable(fail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
       }, res);
@@ -1777,8 +1784,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     // re-concluding clears a reviewer's return note — the rework happened
-    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } }));
-    if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion }));
+    patchControl(controlId, c => {
+      // A stale run cannot be concluded on: it was testing a draw that no
+      // longer exists. Re-run (or re-attest) the flagged attributes first.
+      if (conclusion !== 'Not tested' && c.operating.steps.some(s => s.staleRun)) return c;
+      return { ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } };
+    });
+    // Reads the state the patch produced: a stale-run refusal above leaves the
+    // conclusion unwritten, and an event for a conclusion that never landed
+    // would be the log lying. raiseDeficiencyIfIneffective checks the live
+    // track itself, so the refusal makes it a no-op too.
+    if (conclusion !== 'Not tested') pushExec(prev => {
+      const cc = prev.controls.find(x => x.id === controlId);
+      if (cc?.operating.conclusion !== conclusion) return null;
+      return { controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion };
+    });
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
 

@@ -314,6 +314,12 @@ export interface OperatingStep {
   aiValidation?: boolean;
   inputFile?: EvidenceFile;      // the required file AI validation runs against
   validation?: ValidationResult;
+  /** The recorded run predates the current draw. Set when the sample changes
+   *  under an attribute that already carries a validation or workflow result —
+   *  results that predate the sample were not testing these items — and cleared
+   *  by the next run (or a fresh attestation). While it stands, the operating
+   *  track refuses to conclude. */
+  staleRun?: boolean;
   attestEnabled?: boolean;
   attestation?: Attestation;
   result: TestResult;
@@ -337,6 +343,11 @@ export interface Sample {
    *  overall size says. Absent on a control that answers for one company, where
    *  every item is that company's by construction. */
   entity?: string;
+  /** WHICH ROUTE THIS ITEM WENT DOWN. Only meaningful on a control with more
+   *  than one path (see `Control.paths`) — the sample step reads these to say
+   *  which routes the draw has actually touched. Absent on a single-route
+   *  control, where there is only one way through. */
+  path?: string;
 }
 /** The control's sample — every item drawn, across every source file it stands
  *  on. `size` and `samples` are the totals; which file each item came out of is
@@ -757,6 +768,16 @@ export interface Control {
    *
    *  Absent on ordinary rows, which answer for the one company in `entity`. */
   entities?: string[];
+  /** THE DISTINCT ROUTES WORK CAN TAKE through this control — a control with
+   *  more than one path (a payment released manually vs auto-released under a
+   *  threshold, a change approved in-system vs on an emergency form) is only
+   *  tested when the draw has touched each of them: a sample that never landed
+   *  on the second route has not tested the second route, however healthy its
+   *  size. Each drawn item says which route it went down (`Sample.path`), and
+   *  the sample step warns on any route left untouched — the same rule the
+   *  per-file draws and the shared control's companies already follow.
+   *  Absent on the ordinary single-route control. */
+  paths?: string[];
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
