@@ -365,6 +365,44 @@ export interface Sampling {
   samples: Sample[];
 }
 
+/**
+ * A round of operating testing that has been SET ASIDE, kept whole.
+ *
+ * Operating testing runs in at most two rounds (user, 12 Aug). A failure in the
+ * first is not automatically the control's failure: the draw itself may have
+ * been wrong — the window, the entity, reversals and test postings left in —
+ * and a population that never tested the control cannot condemn it. So the
+ * auditor may correct the criteria and draw once more.
+ *
+ * Once, and never silently. Opening the second round REQUIRES a written reason,
+ * because the alternative is drawing until a clean sample turns up, which is
+ * not sampling at all. The reason, the person and the round it set aside are
+ * all kept here, and all three print on the working paper and the audit report:
+ * a round that is not on the paper is a round that was hidden.
+ *
+ * The LIVE round is not stored here — it is the ordinary `sampling` and the
+ * per-sample results on each attribute. This holds only what has closed, oldest
+ * first, so the live round's number is `rounds.length + 1`.
+ */
+export interface ToeRound {
+  /** 1-based, and matched by what the paper prints. */
+  n: number;
+  /** The draw exactly as it stood — items, size, method and seed — so the round
+   *  stays reperformable after the live draw has moved on. */
+  sampling: Sampling;
+  /** attribute id → sample id → the result recorded against that item. */
+  results: Record<string, Record<string, TestResult>>;
+  /** attribute id → the verdict its items derived, as it stood at close. Stored
+   *  rather than recomputed: an attribute can carry a result no sample produced
+   *  (an attestation, a workflow run), and the paper has to print what the round
+   *  actually concluded. */
+  stepResults: Record<string, TestResult>;
+  outcome: 'Pass' | 'Fail';
+  /** Why this round was set aside and another drawn. Never blank — the store
+   *  refuses to open the next round without it. */
+  setAside: { reason: string; by: string; at: string };
+}
+
 /** Transaction-based counts rows; occurrence-based counts times the control ran.
  *  A monthly reconciliation is twelve occurrences however many lines it clears,
  *  and sizing it off the line count is the commonest population error there is. */
@@ -687,6 +725,10 @@ export interface OperatingTrack {
   definition?: PopulationDefinition;
   population?: Population;
   sampling?: Sampling;
+  /** Rounds of testing that have CLOSED, oldest first — see ToeRound. Absent or
+   *  empty means the live draw is the first round, which is every control that
+   *  has never been redrawn. */
+  rounds?: ToeRound[];
   /** IPE gate 2 — the auditor confirmed the drawn items trace to the locked
    *  population and that the method and seed are on the paper. */
   extractionConfirmed?: { by: string; at: string };

@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -39,7 +39,7 @@ import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -305,6 +305,10 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   // live, because an account that says the control did not run is still an
   // answer, and blocking it would leave the control nowhere to go.
   const onWordAlone = which === 'operating' ? inquiryOnlyAttributes(control).length : 0;
+  // A failed attribute and an effective conclusion cannot both stand. The store
+  // refuses it; the button says so rather than looking live and doing nothing.
+  // Ineffective stays open — that is the whole point of the round having failed.
+  const roundFail = which === 'operating' && toeRoundFailed(control);
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -330,7 +334,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
         <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
         {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {staleRuns > 0 && (
@@ -341,6 +345,13 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
         {onWordAlone > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {onWordAlone} attribute{onWordAlone === 1 ? ' rests' : 's rest'} on a statement alone — attach what was inspected, or validate the file, before calling this effective.
+          </span>
+        )}
+        {/* The failure itself is stated above, by the block that offers the two
+            ways out — so this names the way forward rather than repeating it. */}
+        {roundFail && (
+          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+            <AlertTriangle size={11} /> An attribute failed — extend or redraw above, or conclude ineffective.
           </span>
         )}
       </div>
@@ -2336,7 +2347,23 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const all = useAuditFiles();
-  const files = all.filter(f => !exclude.includes(f.name));
+  // Only what was uploaded FOR this audit (user ask, 12 Aug) — the trial balance
+  // and ledger attached when the audit was created, plus anything sent in
+  // through Upload file since. What this drops is everything the engagement
+  // merely holds: scoping trial balances, the system pulls other controls drew
+  // on, and the files workflows elsewhere read. Those were offered because a
+  // file the audit demonstrably has is a file this step could use — but they
+  // made the list read as the engagement's drive rather than this audit's
+  // evidence, and picking one meant drawing a population off a file nobody put
+  // here. The registry on Configuration and the working paper still list
+  // everything; this narrowing is the picker's alone.
+  //
+  // The one exception is the file a REFILTER already stands on. Those
+  // populations were drawn before this rule, off system pulls, and dropping a
+  // population's own source out of the list left the form showing a picked file
+  // it could not resolve — nothing selectable, and Extract doing nothing. A file
+  // the audit is demonstrably reading is a file this list has to offer.
+  const files = all.filter(f => (f.ofAudit || f.name === seedFile) && !exclude.includes(f.name));
   const [picked, setPicked] = useState<string | null>(seedFile ?? null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -2364,7 +2391,12 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   // files", and it beats any heuristic: a linked workflow naming its input is a
   // fact, not a guess.
   const { inputs } = useMemo(() => expectedInputsFor(control), [control]);
-  const expected = new Map(inputs.map(i => [i.name, i]));
+  // …of which only the ones actually on this audit can be offered. A workflow
+  // input that nobody uploaded here is still worth knowing about — AwaitingInputs
+  // below says who owes it — but it is not a row in this list, and a banner
+  // pointing at rows that are not there is worse than no banner.
+  const onAudit = new Set(files.map(f => f.name));
+  const expected = new Map(inputs.filter(i => onAudit.has(i.name)).map(i => [i.name, i]));
   // Files the workflows name come first. The rest of the audit's files stay
   // selectable — a manual control links no workflow at all, and a step that
   // could offer it nothing would be a step it could never finish — but they are
@@ -2433,14 +2465,26 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       {/* ── where the list comes from ────────────────────────────────────────
           Said out loud, because otherwise the ordering is a mystery: these are
           the files the control's own attributes are wired to read, and picking
-          anything else is picking a file no workflow here will run on. */}
+          anything else is picking a file no workflow here will run on.
+
+          Two versions now that the list holds only what was uploaded for this
+          audit. A workflow input that IS here is still called out and still
+          sorts first. One that is NOT here used to be pointed at as "first in
+          the list" while not being in the list at all — so it is named instead,
+          as a file this control reads that somebody still has to send in. */}
       {inputs.length > 0 && (
         <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
           <WorkflowIcon size={13} className="text-brand-600 mt-0.5 shrink-0" />
           <div className="min-w-0">
-            <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
-              <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'One file is' : `${inputs.length} files are`} what this control reads</span> — the input{inputs.length === 1 ? '' : 's'} of the workflows linked to its attributes. {inputs.length === 1 ? 'It is' : 'They are'} first in the list.
-            </p>
+            {expected.size > 0 ? (
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+                <span className="font-semibold text-ink-900">{expected.size === 1 ? 'One file is' : `${expected.size} files are`} what this control reads</span> — the input{expected.size === 1 ? '' : 's'} of the workflows linked to its attributes. {expected.size === 1 ? 'It is' : 'They are'} first in the list.
+              </p>
+            ) : (
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+                <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'The file' : 'The files'} this control reads {inputs.length === 1 ? 'is' : 'are'} not on this audit</span> — {inputs.map(i => i.name).join(', ')}. {inputs.length === 1 ? 'Its' : 'Their'} workflow{inputs.length === 1 ? '' : 's'} name{inputs.length === 1 ? 's' : ''} {inputs.length === 1 ? 'it' : 'them'}, but nobody has uploaded {inputs.length === 1 ? 'it' : 'them'} here. Upload above, or draw this population off a file that is.
+              </p>
+            )}
             {/* The other half of the truth. An attribute wired to a workflow with
                 no file attached is a thing somebody owes, and hiding it here
                 would make the list look complete when it is not. */}
@@ -3885,6 +3929,188 @@ function SignOffSection({ control }: { control: Control }) {
   );
 }
 
+/**
+ * A round of testing that was set aside, folded shut above the live one.
+ *
+ * Collapsed by default and open on a click: the reason it was set aside is the
+ * part that has to be readable without asking, and the grid is the part you go
+ * looking for. Read-only throughout — a closed round is a record, not a form.
+ */
+function PriorRound({ control, round }: { control: Control; round: ToeRound }) {
+  const [open, setOpen] = useState(false);
+  const items = round.sampling.samples;
+  const attrs = control.operating.steps;
+  const failed = Object.values(round.stepResults).filter(r => r === 'Fail').length;
+  const passed = Object.values(round.stepResults).filter(r => r === 'Pass').length;
+  const cell = (stepId: string, sampleId: string) => round.results[stepId]?.[sampleId] ?? 'Not tested';
+  return (
+    <div className="rounded-xl border border-canvas-border bg-paper-50/40 overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full text-left px-3.5 py-2.5 flex items-start gap-2.5 hover:bg-paper-50 transition-colors cursor-pointer">
+        <History size={13} className="text-ink-400 mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[0.75rem] font-bold text-ink-700">Round {round.n}</span>
+            <span className="text-[0.71875rem] text-ink-500 tabular-nums">
+              {items.length} item{items.length === 1 ? '' : 's'} · {passed} pass · {failed} fail
+            </span>
+            <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide">set aside</span>
+          </div>
+          {/* The reason, always visible. It is the whole justification for there
+              being a second round at all, so it does not hide behind a click. */}
+          <p className="text-[0.71875rem] text-ink-600 mt-1 leading-relaxed">
+            “{round.setAside.reason}” <span className="text-ink-400">— {round.setAside.by}, {round.setAside.at}</span>
+          </p>
+        </div>
+        <ChevronDown size={14} className={cn('text-ink-400 mt-0.5 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="border-t border-canvas-border px-3.5 py-3 overflow-x-auto">
+          <table className="w-full border-collapse text-[0.6875rem]">
+            <thead>
+              <tr className="text-left">
+                <th className="py-1 pr-3 font-semibold text-ink-500 whitespace-nowrap">Item</th>
+                {attrs.map(a => <th key={a.id} className="py-1 px-2 font-semibold text-ink-500 whitespace-nowrap font-mono">{a.code}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-canvas-border">
+              {items.map(it => (
+                <tr key={it.id}>
+                  <td className="py-1 pr-3 font-mono text-ink-500 whitespace-nowrap">{it.ref}</td>
+                  {attrs.map(a => {
+                    const r = cell(a.id, it.id);
+                    return (
+                      <td key={a.id} className={cn('py-1 px-2 text-center font-mono font-bold',
+                        r === 'Pass' ? 'text-compliant-700' : r === 'Fail' ? 'text-risk-700' : 'text-ink-300')}>
+                        {r === 'Pass' ? 'P' : r === 'Fail' ? 'F' : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {items.length === 0 && <tr><td colSpan={attrs.length + 1} className="py-2 text-ink-400">No items were drawn in this round.</td></tr>}
+            </tbody>
+          </table>
+          <p className="text-[0.6875rem] text-ink-400 mt-2">
+            {round.sampling.method} · {round.sampling.basis}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a failure opens, and what it closes.
+ *
+ * A first failure is not yet the control's: the draw may have been the thing at
+ * fault. So two doors — extend the sample, which is the handbook's answer and
+ * needs nothing written, and correct the criteria and draw again, which needs a
+ * reason because the alternative is drawing until a clean sample turns up.
+ *
+ * A failure in the last round closes both. By then the finding is the control's,
+ * the deficiency has already been raised against it, and more items cannot
+ * unsettle what a second sample has now shown twice.
+ */
+function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean }) {
+  const { extendSample, startToeRound } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const [asking, setAsking] = useState(false);
+  const [why, setWhy] = useState('');
+  const samp = control.operating.sampling;
+  if (!canEdit || !toeRoundFailed(control) || isControlLocked(control)) return null;
+  const spent = toeSpent(control);
+  const canRedraw = canRedrawToe(control);
+  const canExtend = canExtendToe(control) && !!samp;
+  const extra = samp?.size ?? 0;
+  return (
+    <div className={cn('rounded-xl border p-3.5 mb-5', spent ? 'border-risk-200 bg-risk-50/40' : 'border-mitigated-200 bg-mitigated-50/50')}>
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle size={15} className={cn('mt-0.5 shrink-0', spent ? 'text-risk-700' : 'text-mitigated-700')} />
+        <div className="min-w-0 flex-1">
+          {spent ? (
+            <>
+              <h4 className="text-[0.78125rem] font-bold text-risk-700">The finding stands</h4>
+              <p className="text-[0.71875rem] text-ink-700 mt-1 leading-relaxed">
+                This is round {toeRoundNo(control)} of {TOE_MAX_ROUNDS}, and it failed too — on a sample drawn to answer the first
+                failure. The deficiency has been raised. There is no further round: extending or redrawing now would be
+                looking for a kinder sample, not testing the control. Conclude ineffective and work the finding.
+              </p>
+            </>
+          ) : (
+            <>
+              <h4 className="text-[0.78125rem] font-bold text-mitigated-800">An attribute failed — round {toeRoundNo(control)} of {TOE_MAX_ROUNDS}</h4>
+              <p className="text-[0.71875rem] text-ink-700 mt-1 leading-relaxed">
+                A miss is never ignored. Extend the sample to see whether it is isolated — or, if the draw itself was wrong
+                (the window, the entity, reversals nobody excluded), correct the criteria and draw once more. That second
+                draw is the last one, and it needs a reason.
+              </p>
+              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                {canExtend && (
+                  <button onClick={() => {
+                    extendSample(control.id, extra);
+                    logEvent({ action: 'Update', description: `Extended the sample by ${extra} on ${control.id} after a failure`, module: 'SOX ICFR', entity: 'Test Result' });
+                    addToast({ type: 'success', title: 'Sample extended', message: `${extra} more items — test them before concluding.` });
+                  }}
+                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                    <Plus size={13} /> Extend the sample — draw {extra} more
+                  </button>
+                )}
+                {canRedraw && (
+                  <button onClick={() => setAsking(true)}
+                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-mitigated-300 bg-canvas-elevated text-[0.75rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+                    <RotateCcw size={13} /> Fix the criteria and draw again
+                  </button>
+                )}
+                {!canRedraw && (
+                  <span className="text-[0.6875rem] text-ink-500">The redraw has been used — this is the last round.</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {asking && createPortal(
+        <div className="modal-backdrop" onClick={() => setAsking(false)}>
+          <motion.div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <h3 className="text-[0.875rem] font-bold text-ink-900">Set round {toeRoundNo(control)} aside and draw again?</h3>
+              <p className="text-[0.75rem] text-ink-500 mt-1.5 leading-relaxed">
+                Round {toeRoundNo(control)} is kept whole — its items, its results and this reason all print on the working
+                paper. The draw reopens at step ③, and what you draw next is the last round this control gets.
+              </p>
+              {/* Required, and the question is the specific one: not "why are you
+                  redrawing" — which invites "to be sure" — but what was wrong with
+                  the draw. A redraw is only defensible if the first one did not
+                  test the control. */}
+              <label className="block mt-3.5">
+                <span className="text-[0.71875rem] font-semibold text-ink-600">Why did the first draw not test this control?</span>
+                <textarea autoFocus value={why} onChange={e => setWhy(e.target.value)} rows={3}
+                  placeholder="e.g. the extract included reversals and test postings, so the failed item was never a payment the control applies to"
+                  className="mt-1.5 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setAsking(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep this round</button>
+              <button disabled={!why.trim()} onClick={() => {
+                startToeRound(control.id, why.trim());
+                logEvent({ action: 'Update', description: `Set a TOE round aside on ${control.id} and reopened the draw`, module: 'SOX ICFR', entity: 'Test Result' });
+                addToast({ type: 'success', title: 'Round set aside', message: 'Draw the next sample in step ③ — it is the last one.' });
+                setWhy(''); setAsking(false);
+              }}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">
+                <RotateCcw size={13} /> Set aside and reopen
+              </button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
+    </div>
+  );
+}
+
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
   const { addAttribute, testAllAttributes } = useIcfr();
@@ -3913,6 +4139,17 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   return (
     <div className="p-5">
+      {/* Rounds that were set aside, above the live one — "same sample neeche aa
+          jaayega uske". Folded shut, because the live round is the work; the old
+          one is there to be checked, not to be read past. The round below is the
+          ORDINARY TOE screen, unchanged: a second round is the same test done
+          again, so it is the same screen (user ask). */}
+      {toeRounds(control).length > 0 && (
+        <div className="space-y-2 mb-5">
+          {toeRounds(control).map(r => <PriorRound key={r.n} control={control} round={r} />)}
+        </div>
+      )}
+
       {/* sample context — the draw happens in step ③; this is read-only.
           Every control tests against a sample now, whatever its evidence mode. */}
       <div className="mb-5">
@@ -3951,6 +4188,10 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       ) : (
         <div className="space-y-3 mb-5">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
       )}
+
+      {/* What a failure opens — and, in the last round, what it closes. Directly
+          under the attributes, because that is where the failure was just read. */}
+      <RoundActions control={control} canEdit={canEdit} />
 
       {/* No sample, no opinion. A failing attribute concludes ineffective and the
           exception is raised — remediation and retest happen outside this flow. */}

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -424,6 +424,29 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // The heart of the paper: every sampled item × every attribute, ticked — the
   // reference papers' Testing results grid, with their Remarks column stating
   // per item which attributes failed and what the linked exception says.
+  // Rounds that were SET ASIDE, printed in full and ahead of the live one.
+  //
+  // A round the paper does not carry is a round that was hidden — and a redraw
+  // is exactly the thing a reviewer has to be able to second-guess. So each one
+  // prints its own grid, its own items, and the reason it was set aside, in the
+  // order they happened. See ToeRound.
+  toeRounds(c).forEach(r => {
+    const items = r.sampling.samples;
+    const tf = 2;
+    blocks.push({
+      kind: 'table',
+      title: `Test of Operating Effectiveness — round ${r.n}, set aside`,
+      note: `${r.sampling.method}${r.sampling.seed ? ` (seed ${r.sampling.seed})` : ''} sample of ${items.length} — concluded ${r.outcome.toLowerCase()}. Set aside and redrawn: “${r.setAside.reason}” — ${r.setAside.by}, ${r.setAside.at}`,
+      headers: ['S.No', 'Sample', ...steps.map((s, i) => `${letter(i)} · ${s.code}`)],
+      rows: items.map((smp, i) => [
+        String(i + 1), smp.ref,
+        ...steps.map(s => tick(r.results[s.id]?.[smp.id])),
+      ]),
+      tickFrom: tf,
+      tickTo: tf + steps.length,
+    });
+  });
+
   if (samples.length) {
     const tally = combinedSample(c);
     const tickFrom = sources.length > 1 ? 4 : 3;
@@ -434,7 +457,13 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       return `${failed.map(s => s.code).join(', ')} not satisfied${hit ? ` — ${hit.description}` : ''}`;
     };
     blocks.push({
-      kind: 'table', title: 'Test of Operating Effectiveness — testing results',
+      kind: 'table',
+      // Named as a round only once there is more than one — on the ordinary
+      // control, which is nearly all of them, "round 1" is a distinction without
+      // a difference.
+      title: toeRounds(c).length
+        ? `Test of Operating Effectiveness — round ${toeRounds(c).length + 1}, testing results`
+        : 'Test of Operating Effectiveness — testing results',
       // The extension round is marked rather than merged silently: the combined
       // evaluation is what the conclusion rests on, and the reader has to be able
       // to see which items were the second bite.

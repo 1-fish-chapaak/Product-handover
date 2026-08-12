@@ -257,12 +257,30 @@ export default function Overview() {
         </div>
       )}
 
-      {/* ── the ITGC cascade ─────────────────────────────────────────────────────
-          Above the health meters, because it is the one thing on this page that
-          happened TO the audit rather than in it: an ITGC concluded ineffective
-          takes the one-instance shortcut off every automated and IT-dependent
-          control at once. Whoever concluded it was on a different page and had
-          no way to see the size of what they had just done. */}
+      {/* PARKED (user ask, 12 Aug) — the ITGC cascade banner is off the Dashboard
+          too. This was the last of its three homes (the two Control Library
+          screens went first), so the banner no longer renders anywhere.
+
+          Only this block is commented out. ItgcCascadeBanner itself, the
+          `failedItgc` derivation here, `isItgcDependent`, and the register's
+          'itgc' view all stay wired and compiling, so restoring is uncommenting
+          this and the two blocks in ControlRegister / ControlLibrary.
+
+          Known consequence while it is off: nothing announces the cascade. A
+          failed ITGC still does the work — the shortcut is withdrawn, samples
+          resize, and the control page's own notice still says so on each
+          affected control — but the count of what it hit is no longer stated
+          anywhere, and the one-click route to those controls is gone. The 'itgc'
+          view remains in the register's saved-view list whenever an ITGC has
+          actually failed.
+
+          Original note — Above the health meters, because it is the one thing on
+          this page that happened TO the audit rather than in it: an ITGC
+          concluded ineffective takes the one-instance shortcut off every
+          automated and IT-dependent control at once. Whoever concluded it was on
+          a different page and had no way to see the size of what they had just
+          done.
+
       {!isOwner && failedItgc.length > 0 && (
         <ItgcCascadeBanner
           failed={failedItgc.map(f => ({ id: f.id, code: controlCode(f), description: f.description }))}
@@ -271,6 +289,7 @@ export default function Overview() {
           onShowAffected={() => openRegister({ view: 'itgc' })}
         />
       )}
+      */}
 
       {/* progress rail */}
       {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

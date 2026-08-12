@@ -2,18 +2,17 @@ import { test, expect } from './_helpers';
 import { openFromLibrary } from './_sox_helpers';
 
 /**
- * One control, several companies — the OTHER multi-entity arrangement.
+ * One control, several companies.
  *
- * Most of Altura's controls are the ordinary kind: the same control number
- * tested separately at each company, one row per copy. The payee-verification
- * control is the opposite — run once, centrally, on everyone's behalf — so it is
- * ONE row that names the companies it answers for, and its single conclusion
- * carries to all of them.
+ * A control is ONE row whatever the group's shape — run once, concluded once,
+ * and that single conclusion carries to every company the scoping brought in.
+ * The register cell names where it is performed and counts the rest ("+3");
+ * the control page answers performed-where and covers-whom separately.
  *
  * Which is exactly why the sample must reach each company: one with nothing
  * drawn has had nothing tested, however healthy the overall size looks. The
- * seed leaves it mid-flight with companies short, so the demo shows the
- * warning rather than describing it.
+ * seed leaves the payee control mid-flight with a company short, so the demo
+ * shows the warning rather than describing it.
  */
 type Page = import('@playwright/test').Page;
 
@@ -31,8 +30,9 @@ test('a shared control says who it covers, and the register marks it', async ({ 
   await openAlturaLibrary(page);
 
   // The register cell carries the one fact that makes this row different —
-  // several companies behind one line — not just where the desk sits.
-  await expect(page.getByText(/Shared — covers \d+ companies/).first()).toBeVisible({ timeout: 15_000 });
+  // several companies behind one line — not just where the desk sits. The count
+  // sits outside the truncating name so a narrow column can never eat it.
+  await expect(page.getByRole('main').getByText(/^\+\d+$/).first()).toBeVisible({ timeout: 15_000 });
 
   await page.getByText('New payee setup independently verified').first().click();
   await page.waitForTimeout(1300);
