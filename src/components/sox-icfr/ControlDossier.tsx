@@ -2336,7 +2336,23 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const all = useAuditFiles();
-  const files = all.filter(f => !exclude.includes(f.name));
+  // Only what was uploaded FOR this audit (user ask, 12 Aug) — the trial balance
+  // and ledger attached when the audit was created, plus anything sent in
+  // through Upload file since. What this drops is everything the engagement
+  // merely holds: scoping trial balances, the system pulls other controls drew
+  // on, and the files workflows elsewhere read. Those were offered because a
+  // file the audit demonstrably has is a file this step could use — but they
+  // made the list read as the engagement's drive rather than this audit's
+  // evidence, and picking one meant drawing a population off a file nobody put
+  // here. The registry on Configuration and the working paper still list
+  // everything; this narrowing is the picker's alone.
+  //
+  // The one exception is the file a REFILTER already stands on. Those
+  // populations were drawn before this rule, off system pulls, and dropping a
+  // population's own source out of the list left the form showing a picked file
+  // it could not resolve — nothing selectable, and Extract doing nothing. A file
+  // the audit is demonstrably reading is a file this list has to offer.
+  const files = all.filter(f => (f.ofAudit || f.name === seedFile) && !exclude.includes(f.name));
   const [picked, setPicked] = useState<string | null>(seedFile ?? null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -2364,7 +2380,12 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   // files", and it beats any heuristic: a linked workflow naming its input is a
   // fact, not a guess.
   const { inputs } = useMemo(() => expectedInputsFor(control), [control]);
-  const expected = new Map(inputs.map(i => [i.name, i]));
+  // …of which only the ones actually on this audit can be offered. A workflow
+  // input that nobody uploaded here is still worth knowing about — AwaitingInputs
+  // below says who owes it — but it is not a row in this list, and a banner
+  // pointing at rows that are not there is worse than no banner.
+  const onAudit = new Set(files.map(f => f.name));
+  const expected = new Map(inputs.filter(i => onAudit.has(i.name)).map(i => [i.name, i]));
   // Files the workflows name come first. The rest of the audit's files stay
   // selectable — a manual control links no workflow at all, and a step that
   // could offer it nothing would be a step it could never finish — but they are
@@ -2433,14 +2454,26 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       {/* ── where the list comes from ────────────────────────────────────────
           Said out loud, because otherwise the ordering is a mystery: these are
           the files the control's own attributes are wired to read, and picking
-          anything else is picking a file no workflow here will run on. */}
+          anything else is picking a file no workflow here will run on.
+
+          Two versions now that the list holds only what was uploaded for this
+          audit. A workflow input that IS here is still called out and still
+          sorts first. One that is NOT here used to be pointed at as "first in
+          the list" while not being in the list at all — so it is named instead,
+          as a file this control reads that somebody still has to send in. */}
       {inputs.length > 0 && (
         <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
           <WorkflowIcon size={13} className="text-brand-600 mt-0.5 shrink-0" />
           <div className="min-w-0">
-            <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
-              <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'One file is' : `${inputs.length} files are`} what this control reads</span> — the input{inputs.length === 1 ? '' : 's'} of the workflows linked to its attributes. {inputs.length === 1 ? 'It is' : 'They are'} first in the list.
-            </p>
+            {expected.size > 0 ? (
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+                <span className="font-semibold text-ink-900">{expected.size === 1 ? 'One file is' : `${expected.size} files are`} what this control reads</span> — the input{expected.size === 1 ? '' : 's'} of the workflows linked to its attributes. {expected.size === 1 ? 'It is' : 'They are'} first in the list.
+              </p>
+            ) : (
+              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+                <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'The file' : 'The files'} this control reads {inputs.length === 1 ? 'is' : 'are'} not on this audit</span> — {inputs.map(i => i.name).join(', ')}. {inputs.length === 1 ? 'Its' : 'Their'} workflow{inputs.length === 1 ? '' : 's'} name{inputs.length === 1 ? 's' : ''} {inputs.length === 1 ? 'it' : 'them'}, but nobody has uploaded {inputs.length === 1 ? 'it' : 'them'} here. Upload above, or draw this population off a file that is.
+              </p>
+            )}
             {/* The other half of the truth. An attribute wired to a workflow with
                 no file attached is a thing somebody owes, and hiding it here
                 would make the list look complete when it is not. */}
