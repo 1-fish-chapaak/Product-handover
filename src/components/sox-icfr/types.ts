@@ -1395,6 +1395,34 @@ export interface AuditRecord {
 
 // ─── Ground-rules change log — materiality is set before testing; a mid-engagement
 // change is warned, previewed (which exceptions re-grade), and recorded here. ──────
+/** One narrowing of scope, with everything that left the register in it.
+ *
+ *  Scope moves both ways. A process dropped mid-audit has usually been tested
+ *  already, and deleting that work means a scope decision reversed a week later
+ *  costs the whole test again — so the controls are parked here with their
+ *  samples, results, conclusions and everything filed against them, and put back
+ *  untouched if the process returns. It is the same promise roll forward makes
+ *  at year end, kept for a change that happens mid-audit and by accident. */
+export interface ScopeArchiveEntry {
+  id: string;
+  at: string;
+  /** The processes that left, so a widening knows what to look for. */
+  processes: string[];
+  controls: Control[];
+  deficiencies: Deficiency[];
+  tasks: HandoffTask[];
+  discussions: Discussion[];
+  reviewNotes: ReviewNote[];
+  executions: ExecutionEvent[];
+  /** Run rows belonging to archived controls, each with the run they sat in —
+   *  put back into that run if it survived, or restored whole if it did not. */
+  runs: { run: RunRecord; entries: RunControlOutcome[] }[];
+  /** Which hand-picked audits held these controls, by audit id. An audit scoped
+   *  by RACM filters by process and needs nothing remembered; one scoped by
+   *  hand names its controls, and would otherwise come back a control short. */
+  auditControlIds: Record<string, string[]>;
+}
+
 export interface RulesChangeEntry {
   id: string;
   changes: { field: string; from: string; to: string }[];
@@ -1431,6 +1459,10 @@ export interface IcfrEngagement {
   audits: AuditRecord[];
   signoff: EngagementSignoff;
   rulesLog: RulesChangeEntry[];
+  /** Controls that left the register when scope narrowed, kept whole rather than
+   *  deleted (see reconcileScope). Nothing on the register reads this — it is a
+   *  holding bay, and widening scope again empties it back. */
+  scopeArchive?: ScopeArchiveEntry[];
   /** The audit's file registry — every file that entered, with where it came
    *  from. Holds the files uploaded through the app and any answer corrected
    *  afterwards; files the engagement derives from scoping are merged in on

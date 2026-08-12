@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -617,7 +617,16 @@ function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
   rows.forEach(r => r.forEach((c, i) => { w[i] = Math.min(max, Math.max(w[i] ?? 10, String(c ?? '').length + 2)); }));
   return w.map(wch => ({ wch }));
 }
-const stepResult = (s: OperatingStep): string => (s.override ? `${s.override.result} (overridden)` : s.result);
+// The paper has to be readable against the screen, so it applies the same
+// precedence: an override first, then a validation that stands over a
+// contradicting attestation — and it says which of the two it was, because a
+// result nobody can trace back to its evidence is the thing the paper exists to
+// prevent.
+const stepResult = (s: OperatingStep): string => {
+  if (s.override) return `${s.override.result} (overridden)`;
+  if (attestationOverruled(s)) return `${s.validation!.result} (validation stands over the attestation)`;
+  return s.result;
+};
 
 // ─── The consolidated engagement paper, sheet by sheet ───────────────────────────
 // Same contract as the control paper: the preview modal and the .xlsx writer both
@@ -705,11 +714,14 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   };
 
   // Operating testing — attribute-level (each attribute has its own workflow / attestation)
-  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
+  // The validation column is carried next to the attestation columns on purpose:
+  // where an attribute rests on somebody's statement rather than on the document
+  // that existed, the paper has to show both and which one answered.
+  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.validation?.result ? `${s.validation.result}${s.validation.fileName ? ` — ${s.validation.fileName}` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const operating: IcfrSheet = {
     name: 'TOE', blocks: [{
       kind: 'table', title: 'TOE', note: `${opRows.length} attribute rows`,
-      headers: ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'],
+      headers: ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Validation', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'],
       rows: opRows,
     }],
   };

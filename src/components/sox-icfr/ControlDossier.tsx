@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote,
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult,
+  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -928,6 +928,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
+  const overruled = attestationOverruled(step);   // the file and the attester disagree — the file wins, and says so
   // section 1 — validation: AI validation is the default; can switch to a mapped workflow
   const v1: 'ai' | 'workflow' = step.evidenceMode === 'workflow' ? 'workflow' : step.evidenceMode === 'ai' ? 'ai' : (step.workflowName ? 'workflow' : 'ai');
   const busy = testing || validatingWf;
@@ -1035,8 +1036,18 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
           {attestOn && <>
             {att?.result && (
               <div className="mt-2 flex items-center gap-2 flex-wrap text-[0.6875rem]">
-                <span className={cn('inline-flex items-center gap-1 font-bold', att.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={att.result} size={13} /> Attested {att.result}</span>
+                <span className={cn('inline-flex items-center gap-1 font-bold', overruled ? 'text-ink-400 line-through decoration-ink-300' : att.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={att.result} size={13} /> Attested {att.result}</span>
                 <span className="text-ink-400">· by <b className="text-ink-600 font-semibold">{att.by}</b>, {att.at}</span>
+              </div>
+            )}
+            {/* The file says the opposite. An attestation is somebody's account of
+                what they saw, and it is kept as exactly that — but the attribute
+                answers to the evidence, so the validation is the result and this
+                says so rather than leaving two verdicts on one card. */}
+            {overruled && (
+              <div className="mt-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
+                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                <span>The validation reached <b>{step.validation!.result}</b> on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is <b>{step.validation!.result}</b>. To depart from the file, use the auditor's override and say why.</span>
               </div>
             )}
             {att?.note && <p className="text-[0.75rem] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
@@ -2284,13 +2295,19 @@ function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean
  *  The instance count comes off the SOURCE, not off a figure anyone types: the
  *  same rule the first file has followed since "Expected instances" was cut.
  */
-function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
+function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, seedCriteria }: {
   control: Control;
   /** Files already in this population. Offered once, never twice — the same
    *  file added again is the same rows counted again. */
   exclude: string[];
   submitLabel: string;
   onSubmit: (file: AuditFile, criteria: string, count: number) => void;
+  /** A refilter re-opens this form on what was extracted last time: the file
+   *  stays picked and the filter comes back as it was WRITTEN, not redrafted.
+   *  The point of refiltering is to edit an over-inclusive filter, and a fresh
+   *  draft would throw away the sentence being corrected. */
+  seedFile?: string;
+  seedCriteria?: string;
 }) {
   const { eng, openAuditId, me, role, registerFile, remindOwnerForFiles } = useIcfr();
   const isAuditor = role === 'auditor';
@@ -2298,7 +2315,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
   const { addToast } = useToast();
   const all = useAuditFiles();
   const files = all.filter(f => !exclude.includes(f.name));
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(seedFile ?? null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const chosen = files.find(f => f.name === picked);
@@ -2307,9 +2324,19 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
   const to = audit?.windowTo ?? '';
 
   const drafted = extractionCriteria(control, from, to, chosen && { system: chosen.system, name: chosen.name });
-  const [criteria, setCriteria] = useState(drafted);
+  // Redrafting on every file pick is the right help on a first extract and the
+  // wrong one on a refilter: the restored sentence is the thing being corrected,
+  // and picking the file again — or a replacement for one no longer offered —
+  // would silently throw it away. So a seeded box is the auditor's to edit, and
+  // only an unseeded one redrafts underneath them.
+  const [criteria, setCriteria] = useState(seedCriteria ?? drafted);
   const [criteriaSeed, setCriteriaSeed] = useState(drafted);
-  if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); setCriteria(drafted); }
+  if (criteriaSeed !== drafted) { setCriteriaSeed(drafted); if (!seedCriteria) setCriteria(drafted); }
+  // The population named a file the audit no longer offers — a seed-only source,
+  // or one dropped from the registry since. The filter still comes back; the
+  // file has to be picked again, and the form has to say which of the two is
+  // missing rather than sitting disabled with a full-looking form.
+  const seedFileMissing = !!seedFile && !all.some(f => f.name === seedFile);
 
   // What the attributes' workflows actually read. This is the answer to "which
   // files", and it beats any heuristic: a linked workflow naming its input is a
@@ -2472,7 +2499,11 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
           them. Drafted from the control and its window, then edited. */}
       <div className="flex items-center justify-between gap-3 mb-2">
         <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Extraction criteria</span>
-        <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
+        {/* A refilter is not a draft — the sentence in the box is the auditor's
+            own, and calling it drafted would invite them to trust it as new. */}
+        {seedCriteria
+          ? <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><RotateCcw size={11} className="text-ink-400" /> as you wrote it</span>
+          : <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>}
       </div>
       <textarea value={criteria} onChange={e => setCriteria(e.target.value)} rows={2}
         aria-label="Extraction criteria"
@@ -2488,7 +2519,9 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit }: {
 
       <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-[0.65625rem] text-ink-400 min-w-0">
-          {!chosen ? 'Pick the source file first.'
+          {!chosen ? (seedFileMissing
+            ? <>The audit no longer offers <span className="font-semibold text-ink-600">{seedFile}</span> — pick the file this filter should run against.</>
+            : 'Pick the source file first.')
             : hasRowCount(chosen.name)
               ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>
               : <>Filtering {chosen.name} by: {criteria || 'nothing yet'} — a PDF has no rows to count.</>}
@@ -2540,6 +2573,15 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
 
   const [withdrawing, setWithdrawing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  // ── the filter was wrong but the file was right ─────────────────────────────
+  // Rebuilt Aug 2026. Refilter existed, and went out with the multi-file rewrite
+  // when the extract form's state moved into SourcePickerForm and the parent
+  // could no longer seed it — which left withdraw as the only way out of an
+  // over-inclusive filter, i.e. start the whole step again and retype the
+  // sentence from a fresh draft. The seed is held here because dropping the
+  // population is what puts the form back on screen, so it has to outlive it.
+  const [refilterSeed, setRefilterSeed] = useState<{ file: string; criteria?: string } | null>(null);
+  const [confirmRefilter, setConfirmRefilter] = useState(false);
   // Adding a second file is deliberately a step the auditor takes, not a form
   // sitting open under a finished population: the common case is one file, and
   // a picker that is always there reads as work still owed.
@@ -2575,7 +2617,24 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
       tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
       evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
     });
+    setRefilterSeed(null);
     logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}`, module: 'SOX ICFR', entity: 'Evidence' });
+  };
+
+  /** Drop the extract and re-open the form on what it was filtered with, so an
+   *  over-inclusive filter is a sentence to edit rather than a step to redo.
+   *  Same drop as a withdrawal — the items and their results were drawn off the
+   *  filter being corrected, so they cannot survive it. */
+  const beginRefilter = () => {
+    if (!pop) return;
+    setRefilterSeed({
+      file: pop.sourceFile ?? sources[0]?.file ?? '',
+      // 'No filter applied' is the absence of a filter, not one worth restoring.
+      criteria: pop.criteria && pop.criteria !== 'No filter applied' ? pop.criteria : undefined,
+    });
+    clearPopulation(control.id);
+    setConfirmRefilter(false);
+    logEvent({ action: 'Update', description: `Refiltering the population for ${control.id} — the extract was dropped and the filter returned for editing`, module: 'SOX ICFR', entity: 'Evidence' });
   };
 
   const addSource = (chosen: AuditFile, criteria: string, narrowed: number) => {
@@ -2629,7 +2688,16 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
     <div className="p-5">
       {!pop ? (
         canWrite ? (
-          <SourcePickerForm control={control} exclude={[]} submitLabel="Extract population" onSubmit={extract} />
+          <>
+            {refilterSeed && (
+              <p className="mb-3 text-[0.71875rem] text-ink-600 bg-paper-50/60 border border-canvas-border rounded-lg px-3 py-2 flex items-start gap-1.5">
+                <Filter size={13} className="mt-0.5 shrink-0 text-ink-400" />
+                <span>The extract is gone and the filter is back as you wrote it. Edit it and extract again — nothing else about this control has moved.</span>
+              </p>
+            )}
+            <SourcePickerForm control={control} exclude={[]} submitLabel={refilterSeed ? 'Extract again' : 'Extract population'} onSubmit={extract}
+              seedFile={refilterSeed?.file} seedCriteria={refilterSeed?.criteria} />
+          </>
         ) : <p className="text-[0.75rem] text-ink-400">No population yet — the auditor filters it out of the source data.</p>
       ) : (
         <>
@@ -2660,6 +2728,19 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
               {/* the population is a number until somebody can look at it */}
               <button onClick={() => setPreviewing(true)}
                 className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Eye size={11} /> Preview</button>
+              {/* Refilter sits before Withdraw because it is the smaller of the
+                  two and answers the commoner mistake: the file was right, the
+                  filter was not. Both drop the same things — this one hands the
+                  filter back instead of a blank form.
+
+                  Offered on a LOCKED population too, exactly as Withdraw is: the
+                  wrong filter is normally found after testing has started, which
+                  is to say after the lock. Hiding it there would leave the case
+                  it exists for with no answer but a full restart. */}
+              {isAuditor && (
+                <button onClick={() => (control.operating.sampling ? setConfirmRefilter(true) : beginRefilter())}
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer"><Filter size={11} /> Refilter</button>
+              )}
               {isAuditor && (
                 <button onClick={() => setWithdrawing(true)}
                   className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Withdraw</button>
@@ -2670,7 +2751,7 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
           {unfiltered && (
             <p className="mt-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              <span>The population is the same size as the files it came from — nothing was filtered out. Unless this control really does operate on every row, withdraw and filter it down first.</span>
+              <span>The population is the same size as the files it came from — nothing was filtered out. Unless this control really does operate on every row, refilter it down first.</span>
             </p>
           )}
 
@@ -2925,6 +3006,34 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
           every source now arrives through the upload modal and every source is
           asked where it came from. The upload modal itself moved into
           SourcePickerForm, which is the only place a file is chosen now. */}
+
+      {/* ── refilter, once a sample has been drawn ──────────────────────────
+          Only asked when there is something to lose. Before the draw, dropping
+          an extract to re-run it costs nothing and a dialog would be noise. */}
+      {confirmRefilter && createPortal(
+        <div className="modal-backdrop" onClick={() => setConfirmRefilter(false)}>
+          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+            <div className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-mitigated-50 text-mitigated-800 inline-flex items-center justify-center shrink-0"><Filter size={17} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-[0.875rem] font-bold text-ink-900">Refilter this population?</h3>
+                  <p className="text-[0.75rem] text-ink-500 mt-1">
+                    The {control.operating.sampling!.size} items drawn off it go, and so does every result recorded against them — they were drawn from the filter you are about to change.
+                    {sources.length > 1 && <> The other {sources.length - 1} source file{sources.length === 2 ? '' : 's'} go too, and can be added back after.</>}
+                  </p>
+                  <p className="text-[0.75rem] text-ink-600 mt-2">Your filter comes straight back into the form, so you edit it rather than write it again.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
+              <button onClick={() => setConfirmRefilter(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={beginRefilter}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Filter size={13} /> Refilter</button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body)}
 
       {withdrawing && createPortal(
         <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>

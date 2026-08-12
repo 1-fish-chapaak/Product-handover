@@ -106,7 +106,7 @@ export function aggregationKeys(d: Deficiency, eng: IcfrEngagement): { kind: 'pr
   if (c) keys.push({ kind: 'process', key: `process:${c.process}` });
   if (c) {
     const failed = d.track === 'operating'
-      ? c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.assertion)
+      ? c.operating.steps.filter(s => stepResult(s) === 'Fail').map(s => s.assertion)
       : c.assertions;
     Array.from(new Set(failed)).forEach(a => keys.push({ kind: 'assertion', key: `assertion:${a}` }));
   }
@@ -393,13 +393,17 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 // ─── Ground-rules change preview ──────────────────────────────────────────────────
 // What would re-grade if the materiality rule set changed? Used by the review
 // modal before applying, and by the store to record the actual re-grades.
-export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+// Aggregation belongs in the patch even though it is not a threshold: switching
+// it off re-runs rule 6 against a standalone magnitude, so a material weakness
+// that was only material because it combined falls back to significant. That is
+// a re-grade downwards, and it has to be seen before it happens.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; aggregate?: boolean }
 export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
   const next: IcfrEngagement = {
     ...eng,
     materiality: patch.materiality ?? eng.materiality,
     performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
-    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct, aggregate: patch.aggregate ?? eng.rules.aggregate },
   };
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
@@ -1345,7 +1349,26 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
-export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
+
+/** A validated file and a person's attestation reached opposite conclusions on
+ *  the same attribute.
+ *
+ *  Attestation is the answer to a control whose evidence is an inspection
+ *  performed in person — not a way round a document that says otherwise. So it
+ *  is always secondary: where the two disagree, the validation is what the
+ *  attribute tested, and the attestation survives as the statement it is.
+ *  attestStep already refuses to write the contradicting result, so this is the
+ *  read-side backstop for every other way a step can reach that state. */
+export function attestationOverruled(s: OperatingStep): boolean {
+  return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
+}
+export function stepResult(s: OperatingStep): TestResult {
+  // The auditor's own override stays supreme — it is a named judgment with a
+  // recorded reason, not a second opinion sneaking past the evidence.
+  if (s.override) return s.override.result as TestResult;
+  if (attestationOverruled(s)) return s.validation!.result as TestResult;
+  return s.result;
+}
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
@@ -1454,10 +1477,13 @@ export function designProgress(c: Control) {
 }
 export function operatingProgress(c: Control) {
   const s = c.operating.steps;
+  // Counted through stepResult, so the meter and the conclusion cannot disagree:
+  // an override, or a validation that stands over a contradicting attestation,
+  // has to move both or neither.
   return {
     tested: s.filter(x => x.result !== 'Not tested').length,
-    passed: s.filter(x => x.result === 'Pass').length,
-    failed: s.filter(x => x.result === 'Fail').length,
+    passed: s.filter(x => stepResult(x) === 'Pass').length,
+    failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
   };
 }
