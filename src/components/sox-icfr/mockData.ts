@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -1177,6 +1177,118 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
 }
 
 /**
+ * The other arrangement: one control, several companies.
+ *
+ * Altura's Treasury controls are seeded the usual way — the same control tested
+ * separately at each company, four rows with four separate lives. That is right
+ * for a control each company runs for itself. It is wrong for one that is run
+ * ONCE, centrally, on everyone's behalf: group treasury verifies a new payee on
+ * one master, under one approval matrix, whoever the payee will be paid by.
+ * Testing that four times is testing the same act four times.
+ *
+ * So this collapses that control's instances back into a single row that names
+ * the companies it answers for. Both arrangements then sit in the same register,
+ * which is the point: the demo can show the contrast rather than describe it.
+ *
+ * It is left MID-FLIGHT and deliberately short: the sample reaches two of the
+ * three companies. A conclusion drawn now would cover a company nothing was
+ * tested at, and the sample step says so instead of letting the total size —
+ * which looks perfectly healthy — carry the reader past it.
+ */
+function alturaSharedControl(controls: Control[]): Control[] {
+  const treasury = controls.filter(c => c.process === 'Treasury');
+  // 'New payee setup independently verified' — index 2 of the Treasury spread.
+  const base = treasury.find(c => /new payee/i.test(c.description));
+  if (!base) return controls;
+  const siblings = treasury.filter(c => (c.code ?? c.id) === (base.code ?? base.id));
+  const covered = Array.from(new Set(siblings.map(c => c.entity).filter(Boolean) as string[]));
+  if (covered.length < 2) return controls;
+
+  const items: Sample[] = [
+    { id: 'py-1', ref: 'PAYEE-2026-0114', result: 'Pass', sourceId: 'src-1', entity: covered[0] },
+    { id: 'py-2', ref: 'PAYEE-2026-0139', result: 'Pass', sourceId: 'src-1', entity: covered[0] },
+    { id: 'py-3', ref: 'PAYEE-2026-0162', result: 'Pass', sourceId: 'src-1', entity: covered[1] },
+    { id: 'py-4', ref: 'PAYEE-2026-0177', result: 'Not tested', sourceId: 'src-1', entity: covered[1] },
+    { id: 'py-5', ref: 'PAYEE-2026-0208', result: 'Not tested', sourceId: 'src-1', entity: covered[0] },
+  ];
+
+  const shared: Control = {
+    ...base,
+    id: base.code ?? base.id,
+    code: undefined,
+    wpRef: base.wpRef.split('/')[0]!,
+    // Where it is PERFORMED — the group's own treasury desk — while `entities`
+    // is who it answers for. Two different questions, two different fields.
+    entity: 'Altura Infra Holdings Ltd',
+    entities: covered,
+    controlActivity: 'Group treasury verifies every new payee against the company’s own bank confirmation and a call-back to a published number before the payee is released for payment. One master serves the whole group, so a payee set up here can be paid by any company in it.',
+    // Mid-flight ON PURPOSE — the seed's point is the coverage warning, which
+    // only shows while the conclusion is still open. The spread above would
+    // otherwise carry the instanced copy's verdict and signature along, and a
+    // concluded, signed paper is exactly the state this control must not be in.
+    wpSignoff: undefined,
+    design: { ...base.design, conclusion: 'Effective', override: undefined },
+    operating: {
+      ...base.operating,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      steps: base.operating.steps.map(s => ({ ...s, result: 'Not tested' as TestResult, override: undefined })),
+      population: {
+        source: 'Payee master — change log export',
+        sourceFile: 'payee_master_changes_h1_2026.csv',
+        sourceCount: 1860, count: 214,
+        criteria: 'New payees created 1 Jan – 30 Jun 2026, across all three companies',
+        tieOut: 'Change-log count agreed to the payee master’s creation-date filter.',
+        evidence: [{ id: 'py-pop-ev', name: 'payee_master_changes_h1_2026.csv', kind: 'CSV', uploadedBy: 'A. Mehta', uploadedAt: '18 Jul 2026' }],
+        locked: { by: 'A. Mehta', at: '18 Jul 2026' },
+        sources: [{
+          id: 'src-1', file: 'payee_master_changes_h1_2026.csv', rows: 1860, count: 214,
+          criteria: 'New payees created 1 Jan – 30 Jun 2026, across all three companies',
+          draw: { size: 5, method: 'Random', seed: 4417 },
+        }],
+      },
+      sampling: { basis: 'Monthly control — five items across the half-year.', method: 'Random', size: 5, seed: 4417, samples: items },
+    },
+  };
+
+  return [shared, ...controls.filter(c => !siblings.includes(c))];
+}
+
+/**
+ * The MULTI-PATH case — one control, two ways through it, and a draw that only
+ * ever landed on one.
+ *
+ * The payment-run control releases payments two ways: the ordinary run, where
+ * two authorisers release by hand, and an auto-release lane for payments under
+ * the board-set threshold, where the system releases on its own and the second
+ * pair of eyes is a configuration. Both lanes are THIS control — and a sample
+ * drawn entirely from the manual lane has never tested the auto-release lane,
+ * however healthy its size. One Altura instance is tagged so the sample step
+ * demonstrates the warning rather than describing it.
+ */
+function alturaPathControl(controls: Control[]): Control[] {
+  const target = controls.find(c => /payment runs approved/i.test(c.description) && (c.operating.sampling?.samples.length ?? 0) > 0);
+  if (!target) return controls;
+  const samp = target.operating.sampling!;
+  return controls.map(c => (c !== target ? c : {
+    ...c,
+    paths: ['Manual dual-authorised release', 'Auto-release under threshold'],
+    operating: {
+      ...c.operating,
+      sampling: {
+        ...samp,
+        // Every drawn item went down the manual lane — which is exactly what a
+        // random draw over a manual-heavy period does, and exactly the hole the
+        // path strip exists to name.
+        samples: samp.samples.map(s => ({ ...s, path: 'Manual dual-authorised release' })),
+      },
+    },
+  }));
+}
+
+/**
  * The findings Altura's live cycle has raised — and the controls they came from.
  *
  * A deficiency is a conclusion about a control that FAILED, so seeding one
@@ -1254,9 +1366,13 @@ function alturaReviewNotes(controls: Control[]): ReviewNote[] {
 
 function alturaDeficiencies(controls: Control[]): Deficiency[] {
   /** The nth control of a process, in RACM order. Undefined when the process
-   *  was never scoped — the caller skips rather than inventing a control id. */
+   *  was never scoped — the caller skips rather than inventing a control id.
+   *  The SHARED payee row is skipped: alturaSharedControl prepends it to the
+   *  array, which silently shifted every Treasury index here by one — DEF-A-01
+   *  (payment runs) landed on the payee control and concluded the very row
+   *  whose whole point is to be mid-flight. */
   const pick = (process: string, i: number): Control | undefined =>
-    controls.filter(c => c.process === process)[i];
+    controls.filter(c => c.process === process && (c.entities?.length ?? 0) < 2)[i];
 
   /* Fail the track the finding came from, so the control page, the register and
      this tab agree on WHY the control is ineffective — a track concluded
@@ -1556,7 +1672,9 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
  * blocked, and the two on one row would read as a data error.
  */
 function alturaUnableToTest(controls: Control[]): void {
-  const fxDeals = controls.filter(c => c.process === 'Treasury')[4];
+  // Same index shift as alturaFindings' pick: the prepended SHARED payee row
+  // must not count, or [4] lands on the borrowing control instead of FX.
+  const fxDeals = controls.filter(c => c.process === 'Treasury' && (c.entities?.length ?? 0) < 2)[4];
   if (!fxDeals) return;
   fxDeals.unableToTest = {
     track: 'operating',
@@ -1649,7 +1767,11 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // Only Altura's scoping actually spans companies today, so every other
   // engagement keeps the exact one-row-per-control register it had, now with its
   // own company named on every row.
-  const controls = withEntityInstances(built, meta.id, base.entity);
+  let controls = withEntityInstances(built, meta.id, base.entity);
+  // …and one of them is not tested per company at all — see alturaSharedControl.
+  if (rich) controls = alturaSharedControl(controls);
+  // …and one has two routes through it, with a draw that only touched one.
+  if (rich) controls = alturaPathControl(controls);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.

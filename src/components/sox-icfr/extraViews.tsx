@@ -105,7 +105,14 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
   //
   // So nothing here touches the engagement until it has been reviewed against the
   // exceptions it would move and given a reason. applyRules writes both.
-  const saved = useMemo(() => ({ M, pm, ctt, band: r.sdBandPct }), [M, pm, ctt, r.sdBandPct]);
+  //
+  // Aggregation rides the same path (Aug 2026). It is not a threshold, so it
+  // sat outside this draft for a while and applied on the click — but switching
+  // it off drops every grade that only reached its band by combining, which is
+  // the one re-grade that moves DOWNWARDS. Silent is exactly wrong there: a
+  // material weakness quietly becoming a significant deficiency is a conclusion
+  // changing behind the reviewer's back.
+  const saved = useMemo(() => ({ M, pm, ctt, band: r.sdBandPct, agg: r.aggregate }), [M, pm, ctt, r.sdBandPct, r.aggregate]);
   const [draft, setDraft] = useState(saved);
   const [reviewing, setReviewing] = useState(false);
   // Somebody else moved the thresholds (another audit on this engagement, or a
@@ -113,9 +120,9 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
   const [savedSeed, setSavedSeed] = useState(saved);
   if (savedSeed !== saved) { setSavedSeed(saved); setDraft(saved); }
 
-  const dirty = draft.M !== saved.M || draft.pm !== saved.pm || draft.ctt !== saved.ctt || draft.band !== saved.band;
+  const dirty = draft.M !== saved.M || draft.pm !== saved.pm || draft.ctt !== saved.ctt || draft.band !== saved.band || draft.agg !== saved.agg;
   const canEditRules = role === 'auditor' && !isEngagementLocked(eng);
-  const patch: RulesPatch = { materiality: draft.M, performanceMateriality: draft.pm, clearlyTrivial: draft.ctt, sdBandPct: draft.band };
+  const patch: RulesPatch = { materiality: draft.M, performanceMateriality: draft.pm, clearlyTrivial: draft.ctt, sdBandPct: draft.band, aggregate: draft.agg };
   // The ladder previews the DRAFT, so the bands move as you type — the point of
   // the review step is seeing the consequence before committing to it.
   const sd = draft.M * draft.band / 100;
@@ -182,10 +189,15 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       </section>
 
       {/* ── nothing has moved yet ───────────────────────────────────────────────
-          Appears only once a threshold is actually different. It says what is
+          Appears only once a rule is actually different. It says what is
           pending rather than just offering a button, because the fields above
-          look committed the moment you finish typing in them. */}
-      {dirty && !eng.materialityBasis && (
+          look committed the moment you finish typing in them.
+
+          No longer hidden when a materiality worksheet exists: the worksheet
+          only freezes the three money fields, while the band and the
+          aggregation switch stay editable — so that condition stranded a real
+          edit in a draft with no way to review or apply it. */}
+      {dirty && (
         <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-[0.75rem] text-mitigated-800 leading-relaxed min-w-0 inline-flex items-start gap-2">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -230,8 +242,10 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
               the auditor, so a reviewer clicking a live switch got silence: the
               same no-op the risk owner's Conclude buttons used to give. What a
               hat cannot do, it is not shown. */}
+          {/* Drafted, not applied: this switch re-grades, so it goes through the
+              same review-and-reason gate the thresholds do. */}
           {canEditRules
-            ? <Toggle on={r.aggregate} onChange={v => setRules('aggregation', { aggregate: v })} label="Aggregation" />
+            ? <Toggle on={draft.agg} onChange={v => setDraft(d => ({ ...d, agg: v }))} label="Aggregation" />
             : <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>}
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
@@ -298,7 +312,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
                           <span className="font-mono">{g.defId}</span>
                           <span className="text-ink-400">{g.from}</span>
                           <ArrowRight size={9} className="text-ink-300" />
-                          <span className={cn('font-semibold', GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade] ? 'text-risk-700' : 'text-compliant-700')}>{g.to}</span>
+                          <span className={cn('font-semibold', GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade] ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span>
                         </span>
                       ))}
                     </div>
@@ -484,10 +498,16 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
     { field: 'Performance materiality', from: fmtFull(eng.performanceMateriality), to: fmtFull(patch.performanceMateriality ?? eng.performanceMateriality) },
     { field: 'Clearly-trivial threshold', from: fmtFull(eng.rules.clearlyTrivial), to: fmtFull(patch.clearlyTrivial ?? eng.rules.clearlyTrivial) },
     { field: 'Significant-deficiency band', from: `${eng.rules.sdBandPct}%`, to: `${patch.sdBandPct ?? eng.rules.sdBandPct}%` },
+    { field: 'Aggregation', from: eng.rules.aggregate ? 'On' : 'Off', to: (patch.aggregate ?? eng.rules.aggregate) ? 'On' : 'Off' },
   ].filter(x => x.from !== x.to);
   // Worse is worse: a threshold cut that promotes a finding to Material Weakness
   // is the case the reviewer has to see, so it is counted separately.
   const worse = regrades.filter(g => GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade]).length;
+  // And so is easier. Switching aggregation off only ever LOWERS grades, so a
+  // modal that counted upgrades alone would show its most consequential change
+  // as a silent list — a material weakness dropping to significant deficiency is
+  // a conclusion being relaxed, not a problem going away.
+  const eased = regrades.length - worse;
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
@@ -512,7 +532,7 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
 
           <div>
             <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
-              {regrades.length === 0 ? 'Exceptions affected' : `Exceptions re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}`}
+              {regrades.length === 0 ? 'Exceptions affected' : `Exceptions re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}${eased ? `, ${eased} less severe` : ''}`}
             </span>
             {regrades.length === 0 ? (
               <p className="text-[0.75rem] text-ink-500 leading-relaxed rounded-lg border border-compliant-200 bg-compliant-50/40 px-3 py-2.5">
@@ -528,13 +548,16 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
                   {regrades.map(g => {
                     const d = eng.deficiencies.find(x => x.id === g.defId);
                     const up = GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade];
+                    // A drop is amber, never green: nothing was fixed here. The
+                    // finding is the same size — it is being judged less harshly
+                    // because the rule under it moved.
                     return (
-                      <div key={g.defId} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2', up ? 'border-risk-200 bg-risk-50/40' : 'border-compliant-200 bg-compliant-50/30')}>
+                      <div key={g.defId} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2', up ? 'border-risk-200 bg-risk-50/40' : 'border-mitigated-200 bg-mitigated-50/40')}>
                         <span className="min-w-0">
                           <span className="font-mono text-[0.6875rem] text-ink-500">{g.defId}</span>
                           {d && <span className="block text-[0.71875rem] text-ink-700 truncate max-w-[300px]" title={d.description}>{d.controlId} · {d.description}</span>}
                         </span>
-                        <span className="text-[0.71875rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-compliant-700')}>{g.to}</span></span>
+                        <span className="text-[0.71875rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span></span>
                       </div>
                     );
                   })}
@@ -554,7 +577,7 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
           <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-          <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A threshold change needs a reason on the record.'}
+          <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A change to the grading rules needs a reason on the record.'}
             onClick={() => onApply(reason.trim())}
             className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Apply the change</button>
         </div>

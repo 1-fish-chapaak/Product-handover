@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SOX / ICFR Role Based Access Control</title>
+<style>
+  @page { size: A4; margin: 16mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #1c1a24; line-height: 1.58; max-width: 1000px; margin: 0 auto; padding: 28px 24px; font-size: 13px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 21px; margin: 34px 0 10px; padding-top: 14px; border-top: 2px solid #ded4f5; color: #4c1d95; }
+  h3 { font-size: 16.5px; margin: 24px 0 7px; color: #2a2536; }
+  h4 { font-size: 14px; margin: 16px 0 5px; color: #5b21b6; }
+  .sub { color: #6b6580; font-size: 14.5px; margin: 0 0 22px; }
+  table { width: 100%; border-collapse: collapse; margin: 11px 0 16px; font-size: 12px; }
+  th { background: #f5f2fc; text-align: left; padding: 7px 9px; border: 1px solid #e2dcf0; font-weight: 650; color: #37304a; }
+  td { padding: 7px 9px; border: 1px solid #e8e4f2; vertical-align: top; }
+  tr:nth-child(even) td { background: #fcfbfe; }
+  .callout { border-left: 4px solid #0891b2; background: #f2fbfd; padding: 10px 15px; margin: 12px 0; border-radius: 0 7px 7px 0; page-break-inside: avoid; }
+  .callout p { margin: 4px 0; }
+  .callout .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #0e7490; display:block; margin-bottom: 3px; }
+  code { background: #f4f2f7; color: #9d2235; padding: 2px 6px; border-radius: 4px; font-size: 11.5px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+
+<h1>Role Based Access Control</h1>
+<p class="sub">SOX / ICFR engagement</p>
+
+<h2 style="border-top:none;padding-top:0;margin-top:18px">1 · The three roles</h2>
+<table>
+<tr><th>Role</th><th>What they do</th></tr>
+<tr><td><b>Auditor</b></td><td>Does the testing and decides whether a control works</td></tr>
+<tr><td><b>Control owner</b></td><td>Runs the control day to day, and fixes it when it breaks</td></tr>
+<tr><td><b>Reviewer</b></td><td>Checks the auditor's work and signs it off</td></tr>
+</table>
+<p>The same person can own a control in two ways, as the owner of the control itself or as the owner of the process around it. Either one counts as owning it.</p>
+<p>A problem found during testing is called a <b>deficiency</b>. The file holding all the evidence for one control is its <b>audit file</b>.</p>
+
+<h2>2 · What each role can do</h2>
+
+<h3>Auditor</h3>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Set up the audit: its dates, which companies it covers, and which controls are tested</td><td>Agree how serious a deficiency is. That is the reviewer checking the auditor's judgement</td></tr>
+<tr><td>Set the money limits that decide how serious a problem counts as</td><td>Write or edit the fix plan. The auditor advises, the owner writes it</td></tr>
+<tr><td>Approve the control list, add a control, or mark one as important</td><td>Say that the owner's fix is ready to be tested again</td></tr>
+<tr><td>Decide what each control will be checked against</td><td>Sign an audit file second, after their own signature</td></tr>
+<tr><td>Test whether a control is built well: gather documents, check each point, decide</td><td>Close a deficiency, or raise and settle a written challenge</td></tr>
+<tr><td>Choose which transactions are in play, prove the report they came from, and pick the ones to test</td><td>Sign the audit off as reviewer</td></tr>
+<tr><td>Record every result, disagree with a result and say why, and decide whether the control worked</td><td></td></tr>
+<tr><td>Judge how serious a deficiency is, judge the fix plan, and test the fix</td><td></td></tr>
+<tr><td>Mark a control as impossible to test right now, and later clear or escalate that</td><td></td></tr>
+<tr><td>Sign an audit file first, sign the audit off first, and unlock a finished control by giving a reason</td><td></td></tr>
+</table>
+
+<h3>Control owner</h3>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Answer a request for documents and upload what they have</td><td>Decide anything about whether the control worked</td></tr>
+<tr><td>Confirm in writing that a check was done, with evidence attached</td><td><b>Change what their own control is checked against.</b> Writing your own exam is not evidence</td></tr>
+<tr><td>Write the fix plan: what will be done, by whom, by when</td><td>Judge how serious a deficiency is</td></tr>
+<tr><td>Upload proof of the fix and hand it back for testing</td><td>Test their own fix, or close a deficiency</td></tr>
+<tr><td>Disagree with a finding, or ask the audit team a question</td><td>Reopen a closed deficiency, or change what the audit covers</td></tr>
+<tr><td>Open a control they own</td><td>Open a control they do not own, by any route, including a direct link</td></tr>
+</table>
+<p>The fix plan can be edited only while it is still with the owner. Once it goes back to the auditor, it is frozen.</p>
+
+<h3>Reviewer</h3>
+<p>Reads everything and signs. <b>Cannot change anything in the testing.</b></p>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Read every control, audit file, deficiency and history</td><td>Upload evidence, record a result, or decide whether a control worked</td></tr>
+<tr><td>Agree how serious a deficiency is, or send it back with a reason</td><td>Choose which transactions are tested, or which ones are picked</td></tr>
+<tr><td>Raise a written challenge, then accept or reopen the auditor's answer</td><td>Judge how serious a deficiency is in the first place, or judge the fix plan</td></tr>
+<tr><td>Sign an audit file second, once the auditor has signed it</td><td>Sign while a challenge on that control is still open</td></tr>
+<tr><td>Send a finished control back to the auditor, which reopens both decisions but keeps the test results</td><td>Write a fix plan</td></tr>
+<tr><td>Close a deficiency once its fix has passed testing</td><td>Set up or change an audit. That is the auditor's job</td></tr>
+<tr><td>Sign the audit off last, and reopen a closed deficiency by giving a reason</td><td>Sign the audit off first</td></tr>
+</table>
+
+<h2>3 · What each role sees</h2>
+<table>
+<tr><th>Role</th><th>Tabs inside an audit</th><th>Where they land</th></tr>
+<tr><td>Auditor</td><td>Dashboard, Control Library, Deficiency management, Configuration</td><td>The dashboard</td></tr>
+<tr><td>Reviewer</td><td>The same four</td><td>The dashboard, plus a list of what is waiting on them</td></tr>
+<tr><td>Owner</td><td><b>Three only:</b> Overview, Control Library, their own deficiencies</td><td>A task list, not a dashboard</td></tr>
+</table>
+<p>The owner keeps a deficiency view on purpose. Writing the plan and doing the fix are their jobs, and someone who cannot reach their own work cannot do it. The list only shows their controls.</p>
+
+<h3>What the owner is not shown</h3>
+<table>
+<tr><th>Screen</th><th>What the owner gets instead</th></tr>
+<tr><td>Control Library</td><td>Only controls in their name, and the count says so</td></tr>
+<tr><td>A control</td><td>Their documents and what is still outstanding, then a line saying the testing and its result are not shown here. The later steps are simply absent</td></tr>
+<tr><td>History of actions</td><td>Their own actions, plus document requests and what they sent back</td></tr>
+<tr><td>The audit file</td><td>A short summary of what they need to fix, built only from what they are allowed to see</td></tr>
+<tr><td>How many items get tested, and why</td><td>Nothing. That is the audit team's method</td></tr>
+</table>
+<p>The rule the product follows, and the right one: <b>whatever a role cannot do is not on the screen at all, rather than greyed out.</b></p>
+
+<h2>4 · Locks that stop everyone</h2>
+<p>Two locks have nothing to do with roles. They stop <b>everybody</b>, the auditor included, so that a signed decision cannot quietly change afterwards.</p>
+<table>
+<tr><th>Lock</th><th>When it applies</th><th>How it opens</th></tr>
+<tr><td>Control lock</td><td>The moment a control is decided</td><td>The auditor unlocks it with a reason, or the reviewer sends it back with a reason</td></tr>
+<tr><td>Audit lock</td><td>The moment the audit is signed off by the reviewer</td><td>It does not. This one is permanent</td></tr>
+</table>
+<p>Both are checked at the point something is saved, so they hold whichever screen the change came from.</p>
+
+<h2>5 · Who holds a deficiency, and when</h2>
+<p>Work passes back and forth so that no two steps in a row sit with the same person.</p>
+<table>
+<tr><th>Stage</th><th>With</th><th>Doing</th></tr>
+<tr><td>Found</td><td>Auditor</td><td>Writing down what went wrong, then judging how serious it is</td></tr>
+<tr><td>Rating check</td><td>Reviewer</td><td>Agreeing how serious it is, before any fix starts</td></tr>
+<tr><td>Planning</td><td>Owner</td><td>Writing the fix plan, or rewriting a rejected one</td></tr>
+<tr><td>Plan check</td><td>Auditor</td><td>Checking the plan actually addresses the cause</td></tr>
+<tr><td>Fixing</td><td>Owner</td><td>Doing the work and uploading proof</td></tr>
+<tr><td>Testing the fix</td><td>Auditor</td><td>Testing again on fresh items</td></tr>
+<tr><td>Final check</td><td>Reviewer</td><td>Reading the proof and closing it</td></tr>
+<tr><td>Closed</td><td>Nobody</td><td>The auditor or the reviewer can reopen it by giving a reason</td></tr>
+</table>
+<p>The rating check blocks everything. Nothing else can happen until the reviewer agrees or sends it back, because a plan written for the wrong level of seriousness is wasted work.</p>
+<p>A written challenge moves the work too. While one is open the control sits with the auditor, and once answered it sits with the reviewer.</p>
+<p>The screen names <b>the person</b> holding it, not the role. You cannot chase a role for an answer.</p>
+
+<!-- ==========================================================================
+     THE GAP LIST AND THE IMPLEMENTATION REFERENCE ARE COMMENTED OUT, NOT DELETED.
+     Restore by removing this wrapper and re adding the two contents entries.
+     Cross referenced to RBAC-ARCHITECTURE-STUDY.md, which covers all three
+     access systems; the S numbers below are that study's.
+     ==========================================================================
+
+<h2>Open gaps</h2>
+<table>
+<tr><th>Ref</th><th>Gap</th><th>Risk</th><th>Fix</th></tr>
+<tr><td>S4</td><td>The acting person follows the hat, not the login, and the switcher has no restriction. One person can sign as preparer, switch hats and countersign as reviewer. The guard compares two names, neither of which is the signed in user</td><td>Critical. Four eyes is displayed, not enforced</td><td>Derive identity from the session. One line. Derive identity from the session</td></tr>
+<tr><td>S5</td><td>Review notes have a complete store API and zero UI. No component calls raise, resolve, verify or reopen. A seeded open note permanently blocks the countersign on P2P-C-04 with no way to clear it</td><td>Critical. A blocker with no exit</td><td>Build the four call sites. The test file for the old surface still exists. Build the exit</td></tr>
+<tr><td>S8</td><td>addAttribute, removeAttribute, mapStepWorkflow and toggleStepAttest guard with role === 'reviewer', which permits the risk owner. The owner can author the attributes their own control will be tested against, contradicting the module's stated rule</td><td>High. Independence hole</td><td>Change the guard to role !== 'auditor'</td></tr>
+<tr><td>S6</td><td>signOffAudit checks only that the preparer and reviewer are different people. It never checks the hat. The split exists only in JSX</td><td>High. This is the action that produces the ICFR conclusion</td><td>Guard preparer to auditor and reviewer to reviewer, as signOffControlWp already does</td></tr>
+<tr><td>S9</td><td>openControl and openDeficiency have no role or ownership check. Only lists are filtered, so a direct link renders the dossier for an owner who does not own the control</td><td>High. Per field redaction bounds the exposure, but the boundary is a list filter, not a gate</td><td>Check access on open, not only in the list</td></tr>
+<tr><td>4.5</td><td>ownsIt is applied to confirmRating, returnRating, reviewPlan and signOffException, but NOT to signOffControlWp, returnControl or reopenControl. A reviewer who is a named owner can countersign that control's paper</td><td>High</td><td>Apply ownsIt to all three</td></tr>
+<tr><td>4.12</td><td>createAudit and updateAudit have no store guard, and the screen only excludes the risk owner, so the reviewer can start and reconfigure an audit cycle</td><td>High. A preparer act available to the checker</td><td>Guard to auditor</td></tr>
+<tr><td>4.12</td><td>registerFile and setFileOrigin have no guard. Any hat can set whether a file is a system export or client prepared, which decides whether a population can be built and is what the IPE test rests on. The screen says a change should raise a review note, which per S5 cannot happen</td><td>High</td><td>Guard to auditor, and land it once review notes exist</td></tr>
+<tr><td>4.12</td><td>reconcileScope has no guard on screen or in the store, and it can drop controls with everything filed against them. Its sibling updateMateriality is correctly auditor only</td><td>High</td><td>Guard to auditor, and confirm before removing anything</td></tr>
+<tr><td>4.12</td><td>addControl has no store guard. Both buttons are auditor gated on screen only</td><td>Medium</td><td>Guard to auditor</td></tr>
+<tr><td>4.7</td><td>Owner scoping uses two different predicates. The library and register use isOwnerOf, which counts both capacities. The overview, portal and notifications use c.owner, which counts control owner only. A process owner sees the control but gets no counts, reminders or notifications</td><td>Medium</td><td>One predicate everywhere. Use one predicate everywhere</td></tr>
+<tr><td>S2</td><td>Disabled controls are dimmed with pointer-events-none but never given the disabled attribute, so they stay in the tab order and fire on Enter. 71 call sites inherit this, including Submit for review and Sign off</td><td>Medium, and the cheapest fix in the study. One component</td><td>Disable it properly, or remove it</td></tr>
+<tr><td>S3</td><td>Sign in is called from one place and always as the System Administrator. Six of seven personas are unreachable through the UI, so every gate is untested by use</td><td>Blocks production</td><td>Derive identity from the session</td></tr>
+<tr><td>4.12</td><td>submitTask, clearTask, addComment, resolveDiscussion, raiseQuery and addRacmDoc have no guard. Partly deliberate, since the auditor can attach on the owner's behalf, but the reviewer is included too</td><td>Low</td><td>Exclude the reviewer from the evidence paths; confirm the rest is intended and write it down</td></tr>
+</table>
+
+<h2>Implementation reference</h2>
+<h3>Where the rules live</h3>
+<table>
+<tr><th>File</th><th>What it holds</th></tr>
+<tr><td>sox-icfr/types.ts:10</td><td>Role, ROLE_LABEL, Court</td></tr>
+<tr><td>sox-icfr/store.tsx</td><td>108 role guards. me at :454, ownsIt at :99, patchControl locks at :459</td></tr>
+<tr><td>sox-icfr/helpers.ts</td><td>courtFor :1595, courtForException :240, exceptionCourtDetail</td></tr>
+<tr><td>sox-icfr/auditScope.ts:330</td><td>isOwnerOf, ownersOf</td></tr>
+<tr><td>sox-icfr/SoxIcfrApp.tsx:121</td><td>The tab filter. :366 is the one bridge to platform RBAC</td></tr>
+<tr><td>sox-icfr/parts.tsx:97</td><td>The hat switcher, currently unrestricted</td></tr>
+<tr><td>sox-icfr/ControlDossier.tsx:3907</td><td>canEdit, canTest, canWrite. Countersign gate at :3438</td></tr>
+</table>
+
+<h3>The guard patterns</h3>
+<table>
+<tr><th>Pattern</th><th>Meaning</th><th>Sites</th></tr>
+<tr><td>role !== 'auditor'</td><td>Testing action, auditor only</td><td>75</td></tr>
+<tr><td>role === 'reviewer'</td><td>Evidence action, auditor or owner</td><td>16</td></tr>
+<tr><td>role !== 'reviewer'</td><td>Independent action, reviewer only</td><td>6</td></tr>
+<tr><td>role !== 'risk-owner'</td><td>First line action, owner only</td><td>4</td></tr>
+<tr><td>role === 'risk-owner'</td><td>Either second line hat</td><td>1</td></tr>
+<tr><td>ownsIt(prev, controlId, me)</td><td>Refuses the owner of the object</td><td>4</td></tr>
+<tr><td>target.retest.by === me</td><td>Refuses whoever ran the retest</td><td>1</td></tr>
+<tr><td>prev.reviewer === prev.preparer</td><td>Refuses a single signer</td><td>1</td></tr>
+</table>
+
+<h3>Derived flags on the control page</h3>
+<table>
+<tr><th>Flag</th><th>Definition</th><th>Governs</th></tr>
+<tr><td>canEdit</td><td>isAuditor || isOwner</td><td>Attaching, answering a request, attesting</td></tr>
+<tr><td>canTest</td><td>isAuditor</td><td>Conclusions, overrides, the draw, results, sign off</td></tr>
+<tr><td>canWrite</td><td>canEdit && !isControlLocked(control)</td><td>Everything, once the control has concluded</td></tr>
+</table>
+
+<h3>Single hat state changes</h3>
+<table>
+<tr><th>Hat</th><th>State changes</th></tr>
+<tr><td>Reviewer only</td><td>confirmRating, returnRating, signOffException, returnControl, raiseReviewNote, verifyReviewNote, reopenReviewNote</td></tr>
+<tr><td>Owner only</td><td>submitPlan, updateRemediation, addRemediationEvidence, raiseChallenge, and setExceptionStatus when the target is Retest</td></tr>
+<tr><td>Either second line</td><td>reopenException</td></tr>
+<tr><td>Split by argument</td><td>signOffControlWp: preparer step needs the auditor, reviewer step needs the reviewer</td></tr>
+</table>
+
+<h3>Companion document</h3>
+<p>RBAC-ARCHITECTURE-STUDY.md covers all three access systems, the 73 platform permission keys, teams and tenancy, and the full gap ledger with line references. This document is the SOX layer only.</p>
+
+     ========================================================================== -->
+
+
+</body>
+</html>

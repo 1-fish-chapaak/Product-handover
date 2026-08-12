@@ -106,7 +106,7 @@ export function aggregationKeys(d: Deficiency, eng: IcfrEngagement): { kind: 'pr
   if (c) keys.push({ kind: 'process', key: `process:${c.process}` });
   if (c) {
     const failed = d.track === 'operating'
-      ? c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.assertion)
+      ? c.operating.steps.filter(s => stepResult(s) === 'Fail').map(s => s.assertion)
       : c.assertions;
     Array.from(new Set(failed)).forEach(a => keys.push({ kind: 'assertion', key: `assertion:${a}` }));
   }
@@ -393,13 +393,17 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 // ─── Ground-rules change preview ──────────────────────────────────────────────────
 // What would re-grade if the materiality rule set changed? Used by the review
 // modal before applying, and by the store to record the actual re-grades.
-export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+// Aggregation belongs in the patch even though it is not a threshold: switching
+// it off re-runs rule 6 against a standalone magnitude, so a material weakness
+// that was only material because it combined falls back to significant. That is
+// a re-grade downwards, and it has to be seen before it happens.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; aggregate?: boolean }
 export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
   const next: IcfrEngagement = {
     ...eng,
     materiality: patch.materiality ?? eng.materiality,
     performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
-    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct, aggregate: patch.aggregate ?? eng.rules.aggregate },
   };
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
@@ -529,6 +533,76 @@ export const sampledSources = (sources: PopulationSource[]): PopulationSource[] 
  *  inflate the very figure the sample size is judged against. */
 export function sourceTotals(sources: PopulationSource[]): { count: number; rows: number } {
   return sampledSources(sources).reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
+}
+
+// ─── A shared control's reach ────────────────────────────────────────────────────
+// One control run centrally for several companies concludes once, and that
+// conclusion carries to all of them — so the sample has to actually reach each
+// one. A company with nothing drawn has had nothing tested, however healthy the
+// overall sample size looks, and saying it is covered would be saying more than
+// the work supports. Same shape as the per-file rule the population already
+// follows: every source gets its own draw, and here every company gets its own
+// items.
+export function isShared(c: Control): boolean {
+  return (c.entities?.length ?? 0) > 1;
+}
+export interface EntityCoverage {
+  entity: string;
+  drawn: number;
+  failed: number;
+}
+/** Per company: how many items were drawn for it, and how many of those failed.
+ *  Ordered as the control names them, so the list reads the same every time. */
+export function entityCoverage(c: Control): EntityCoverage[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.entities ?? []).map(entity => {
+    const mine = items.filter(s => s.entity === entity);
+    return { entity, drawn: mine.length, failed: mine.filter(s => s.result === 'Fail').length };
+  });
+}
+/** The companies the conclusion would cover without a single item behind them. */
+export function uncoveredEntities(c: Control): string[] {
+  return entityCoverage(c).filter(e => e.drawn === 0).map(e => e.entity);
+}
+/** What a register row prints in its entity cell. An ordinary row is one
+ *  company's copy and names that company; a shared row answers for several, and
+ *  a cell that named only where it is performed would read as an ordinary row —
+ *  the one fact that makes it different is the one the cell must carry. The
+ *  full list rides the title. */
+export function entityCell(c: Control): { label: string; title: string } | null {
+  if (isShared(c)) return { label: `Shared — covers ${c.entities!.length} companies`, title: c.entities!.join(' · ') };
+  return c.entity ? { label: c.entity, title: c.entity } : null;
+}
+
+// ─── A multi-path control's reach ────────────────────────────────────────────────
+// Some controls have more than one way through them — a payment released by hand
+// vs auto-released under a threshold — and a draw that never landed on the second
+// route has not tested the second route, however healthy its size. Same rule as
+// the companies above, along a different axis: every route needs its own items.
+export function hasPaths(c: Control): boolean {
+  return (c.paths?.length ?? 0) > 1;
+}
+/** Per route: how many drawn items went down it. Ordered as the control names
+ *  them, so the list reads the same every time. */
+export function pathCoverage(c: Control): { path: string; drawn: number }[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.paths ?? []).map(path => ({ path, drawn: items.filter(s => s.path === path).length }));
+}
+/** The routes the conclusion would cover without a single item having gone
+ *  down them. Empty until something is drawn — an undrawn control has no draw
+ *  to accuse of missing anything. */
+export function untouchedPaths(c: Control): string[] {
+  if (!(c.operating.sampling?.samples.length)) return [];
+  return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
+}
+
+/** A draw change puts every already-recorded run out of date — results that
+ *  predate the sample were not testing these items. Flag them; the next run (or
+ *  a fresh attestation) clears the flag, and the operating track refuses to
+ *  conclude while one stands. A step with nothing recorded has nothing to go
+ *  stale. */
+export function staleSteps(steps: OperatingStep[]): OperatingStep[] {
+  return steps.map(s => (s.validation || s.workflowRunRef ? { ...s, staleRun: true } : s));
 }
 
 // ─── Where the population's files come from ──────────────────────────────────────
@@ -1124,9 +1198,30 @@ export function combinedSample(c: Control): { orig: number; ext: number; total: 
     anomalies: judged.filter(j => j.kind === 'Anomaly' && ex.some(e => e.sampleId === j.sampleId && e.stepId === j.stepId)).length,
   };
 }
-/** An attribute concluded on nothing but somebody's word. Operating refuses these. */
+/** An attribute concluded on nothing but somebody's word. Operating refuses these.
+ *
+ *  Derived, not asked. The per-attribute "Evidence type" dropdown was removed on
+ *  31 Jul and is not coming back — but the rule under it is a real one, and the
+ *  answer was always sitting in the attribute already: an attestation is somebody
+ *  telling you it happened, and if nothing was validated, no run was pulled and
+ *  the attester attached nothing, then the statement is the whole of the evidence.
+ *  That is inquiry, and inquiry does not carry an operating conclusion.
+ *
+ *  A bare result with no attestation at all is deliberately NOT caught here. That
+ *  is the auditor recording their own testing, not somebody's word about it, and
+ *  sweeping it in would block every manual control on the register.
+ *
+ *  An explicit evidenceType still wins where one exists, so the parked field and
+ *  its mutator keep their meaning if they are ever brought back. */
 export function inquiryOnlyAttributes(c: Control): OperatingStep[] {
-  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType));
+  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType) || restsOnStatementAlone(s));
+}
+/** Attested, with nothing behind the attestation. */
+export function restsOnStatementAlone(s: OperatingStep): boolean {
+  return !!s.attestation
+    && !s.validation?.result
+    && !s.workflowRunRef
+    && (s.attestation.evidence?.length ?? 0) === 0;
 }
 
 // ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────
@@ -1275,7 +1370,26 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
-export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
+
+/** A validated file and a person's attestation reached opposite conclusions on
+ *  the same attribute.
+ *
+ *  Attestation is the answer to a control whose evidence is an inspection
+ *  performed in person — not a way round a document that says otherwise. So it
+ *  is always secondary: where the two disagree, the validation is what the
+ *  attribute tested, and the attestation survives as the statement it is.
+ *  attestStep already refuses to write the contradicting result, so this is the
+ *  read-side backstop for every other way a step can reach that state. */
+export function attestationOverruled(s: OperatingStep): boolean {
+  return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
+}
+export function stepResult(s: OperatingStep): TestResult {
+  // The auditor's own override stays supreme — it is a named judgment with a
+  // recorded reason, not a second opinion sneaking past the evidence.
+  if (s.override) return s.override.result as TestResult;
+  if (attestationOverruled(s)) return s.validation!.result as TestResult;
+  return s.result;
+}
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
@@ -1384,10 +1498,13 @@ export function designProgress(c: Control) {
 }
 export function operatingProgress(c: Control) {
   const s = c.operating.steps;
+  // Counted through stepResult, so the meter and the conclusion cannot disagree:
+  // an override, or a validation that stands over a contradicting attestation,
+  // has to move both or neither.
   return {
     tested: s.filter(x => x.result !== 'Not tested').length,
-    passed: s.filter(x => x.result === 'Pass').length,
-    failed: s.filter(x => x.result === 'Fail').length,
+    passed: s.filter(x => stepResult(x) === 'Pass').length,
+    failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
   };
 }

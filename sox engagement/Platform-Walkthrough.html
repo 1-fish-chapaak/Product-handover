@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>irame.ai Platform — Live Walkthrough</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #1c1a24; line-height: 1.6; max-width: 980px; margin: 0 auto; padding: 32px 28px; font-size: 14px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.4px; }
+  h2 { font-size: 20px; margin: 34px 0 12px; padding-top: 14px; border-top: 2px solid #ede9f6; color: #4c1d95; }
+  h3 { font-size: 15.5px; margin: 22px 0 8px; color: #2a2536; }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: #4c1d95; }
+  .sub { color: #6b6580; font-size: 14px; margin: 0 0 20px; }
+  .meta { background: #faf8ff; border: 1px solid #e6e0f5; border-radius: 8px; padding: 14px 16px; margin: 0 0 26px; font-size: 13px; }
+  .meta div { margin: 3px 0; }
+  .meta b { color: #4c1d95; display: inline-block; min-width: 130px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 12.5px; }
+  th { background: #f5f2fc; text-align: left; padding: 8px 10px; border: 1px solid #e2dcf0; font-weight: 650; color: #37304a; }
+  td { padding: 8px 10px; border: 1px solid #e8e4f2; vertical-align: top; }
+  tr:nth-child(even) td { background: #fcfbfe; }
+  .callout { border-left: 4px solid #7c3aed; background: #faf8ff; padding: 12px 16px; margin: 14px 0; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #dc2626; background: #fef6f6; }
+  .callout.amber { border-left-color: #f59e0b; background: #fffcf3; }
+  .callout.green { border-left-color: #16a34a; background: #f4fdf7; }
+  .callout p { margin: 6px 0; }
+  code { background: #f3f0fa; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+  ul, ol { margin: 8px 0 14px; padding-left: 22px; }
+  li { margin: 5px 0; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .p-ok { background: #dcfce7; color: #15803d; }
+  .p-no { background: #fee2e2; color: #991b1b; }
+  .step { background:#faf8ff; border:1px solid #e6e0f5; border-radius:8px; padding:10px 14px; margin:8px 0; }
+  .step b { color:#4c1d95; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid #e8e4f2; color: #8b849c; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>irame.ai Audit Platform</h1>
+<p class="sub">Live walkthrough — what each module does and how it behaves, in plain English.</p>
+
+<div class="meta">
+  <div><b>Environment</b> product-handover-ujihgyhrpa-uc.a.run.app</div>
+  <div><b>Signed in as</b> Nilesh Anand (System Admin) · engagement role selector set to Auditor</div>
+  <div><b>Method</b> Live browser session — modules opened, actions clicked, one engagement created end to end, and the full SOX/ICFR engagement walked from portfolio down to a single control and its deficiency</div>
+  <div><b>Companion doc</b> Defect &amp; Gap List (separate file)</div>
+</div>
+
+<h2>The one-paragraph summary</h2>
+<p>The platform is an AI-assisted internal audit workspace, organised into <b>Programs</b> (planning and running audits), <b>Global</b> (shared masters and reporting) and <b>System</b> (settings). Its centre of gravity is the <b>SOX / ICFR engagement</b>, which is unusually well built — a proper five-step control-testing workflow, a materiality rule set, and a seven-rule severity engine that shows its own working. The blocker is not the audit content, it is that <b>moving between screens is unreliable and very slow</b>: the sidebar highlights the new module but the content pane lags 10–25 seconds or never updates at all.</p>
+
+<h2>Part 1 — The SOX / ICFR engagement</h2>
+<p>This is the deepest part of the product and the reason the platform exists. It is reached from <b>Engagements → filter to SOX / ICFR → open an engagement</b>. Six SOX engagements exist; the one walked here is <b>FY26 ICFR — Altura Infra Group (SOX-104)</b>.</p>
+
+<h3>The four levels</h3>
+<table>
+<tr><th>Level</th><th>What it is</th><th>Example</th></tr>
+<tr><td>Engagement</td><td>The multi-year ICFR programme for one entity group</td><td>FY26 ICFR — Altura Infra Group</td></tr>
+<tr><td>Audit (round)</td><td>One testing cycle inside it — interim, roll-forward or year-end</td><td>CY 2026 · Jan–Dec 2026 · materiality ₹12 Cr</td></tr>
+<tr><td>Control</td><td>One control tested at one company</td><td>TRY-01 at Altura Infra Holdings Ltd</td></tr>
+<tr><td>Deficiency</td><td>A failure raised from an ineffective control</td><td>DEF-A-01</td></tr>
+</table>
+
+<h3>Creating a SOX engagement — the 5-step wizard</h3>
+<p>From <b>Engagements → New Engagement</b>. The wizard is <b>type-driven</b>: it opens as five steps (Type · Basics · Scope · Team &amp; Timeline · Review), and choosing an engagement type re-tailors the rest.</p>
+<div class="step"><b>Step 1 · Type.</b> Four options, each with a one-line description of what the workflow becomes: <b>SOX / ICFR</b> ("SOX 404 / ICFR — scoping, materiality rules, design + operating…"), <b>Compliance</b> ("Framework-driven control testing"), <b>Internal Audit</b> ("Process audit aligned to RACM + SOPs"), <b>Automation</b> ("Continuous monitoring / reconciliation / MIS / forensic").</div>
+<div class="callout"><p><b>Selecting SOX / ICFR collapsed the wizard from five steps to three</b> — Type · Basics · Review. The type genuinely reconfigures the flow rather than just tagging the record.</p></div>
+<div class="step"><b>Step 2 · Basics.</b> Engagement name (pre-suggested from the group — <i>"Suggested from the group — edit if your team names them differently"</i>), an auto-generated code (<i>"edit if your team uses its own scheme"</i>), Owner, optional description, and <b>Group (Listed / Holding)</b>. Then <b>Entities in scope of the group audit</b>, which starts empty — <i>"No entities yet — upload the org chart or add them by hand"</i> — with <b>Add entity</b> and <b>Org Chart</b> upload. Continue stays disabled until the group structure is settled. Ticking <b>"There are no separate entities"</b> auto-fills the table with the holding company, relabels the section to "Entity in scope", and unblocks Continue.</div>
+<div class="step"><b>Step 3 · Review.</b> Summary before creation.</div>
+
+<h3>Creating an audit round — the 4-step wizard</h3>
+<p>From inside an engagement, <b>SOX testing → New audit</b>. This is where materiality is set, and it is the most important form in the product. Tested end to end. <span class="pill p-ok">Creates successfully</span></p>
+
+<div class="step"><b>Step 1 · Audit period.</b> "The window this audit tests, and which pass of the year it is." From / To dates, plus a <b>Round</b> selector — <b>Interim</b> ("Tests the first part of the period, well before the year end"), <b>Roll-forward</b>, <b>Year-end</b>. Once both dates are set it confirms in words: <i>"This interim audit covers 01 Aug 2026 – 31 Dec 2026."</i></div>
+
+<div class="step"><b>Step 2 · Materiality &amp; files.</b> Two optional uploads first — <b>Trial balance</b> and <b>General ledger</b> (XLSX · CSV), marked <i>"Attach them if this audit needs them — you can add them later instead."</i> Then the <b>Materiality rule</b>, framed as <i>"Set before testing starts — exceptions are measured against it."</i>
+<ul>
+<li><b>Basis</b> — a dropdown, e.g. "% of profit before tax", annotated <i>"Profit-making company — the classic base, typically ~5%."</i></li>
+<li><b>Benchmark amount</b> (₹ Cr) and <b>Basis %</b>.</li>
+<li><b>Performance materiality</b> as a % of overall — <i>"auditors typically set 50–75%."</i></li>
+<li><b>Clearly-trivial threshold</b> as a % of overall — <i>"below this, differences are passed."</i></li>
+</ul>
+</div>
+
+<div class="callout green">
+<p><b>The computed thresholds and severity ladder update live, and the arithmetic is correct.</b> Entering ₹420 Cr profit before tax at 5%, PM 75%, CTT 5% produced:</p>
+<table style="margin-top:8px">
+<tr><th>Computed threshold</th><th>Value</th><th>Working shown</th></tr>
+<tr><td>Overall materiality</td><td>₹21.00 Cr</td><td>5% × ₹420 Cr</td></tr>
+<tr><td>Performance materiality</td><td>₹15.75 Cr</td><td>75% of overall — the working threshold for testing</td></tr>
+<tr><td>Clearly trivial</td><td>₹1.05 Cr</td><td>5% of overall — below this, differences are passed</td></tr>
+</table>
+<p style="margin-top:8px">…and a <b>"Where an exception would land"</b> preview of the four-rung ladder:</p>
+<table style="margin-top:6px">
+<tr><th>Rung</th><th>Band</th></tr>
+<tr><td>1 · Clearly trivial</td><td>≤ ₹1.05 Cr</td></tr>
+<tr><td>2 · Deficiency</td><td>&gt; ₹1.05 Cr and &lt; ₹4.20 Cr</td></tr>
+<tr><td>3 · Significant deficiency</td><td>≥ ₹4.20 Cr · 20% of overall</td></tr>
+<tr><td>4 · Material weakness</td><td>≥ ₹21.00 Cr or any MW indicator</td></tr>
+</table>
+<p style="margin-top:8px">Captioned <i>"Set on Materiality &amp; scope, shown here so you can see the effect before the audit is created."</i> You see the consequence of the numbers before you commit to them.</p>
+</div>
+
+<div class="step"><b>Step 3 · Scope.</b> "Scope by entity or by RACM — one or the other, then pick as many as the audit covers." A <b>By entity / By RACM</b> toggle, then a coverage meter reading <b>95.9% of the group covered · target 60%</b> with the target marked on the bar and the note <i>"Enough of the group is covered. Toggle any company in or out to overrule this."</i>
+<p style="margin-top:8px">Each company is scoped automatically <b>by comparing its balance against performance materiality</b>, and the reason is printed on every row — <i>"₹648.50 Cr clears performance materiality"</i> (in) versus <i>"₹8.00 Cr is below ₹15.75 Cr"</i> (out). Subsidiaries are indented under their parent, and a warning flags a structural gap: <i>"1 company is held by a company that IS in scope, but left out: Altura Logistics Parks Pvt Ltd."</i> Footer counts entities in scope.</p></div>
+
+<div class="step"><b>Step 4 · Review.</b> A summary table — Period, Round, Materiality (with its basis), Performance materiality, Clearly trivial, TB / GL attachment status, and the named entities — then <b>Create audit</b>.</div>
+
+<p>On creation the audit appears in the SOX testing list and opens into its own Dashboard with every control reset to untested (0/45 TOD, 0/45 TOE) while <b>open deficiencies carry forward</b> — 4 open arrived on the new round. That is roll-forward behaving correctly: archive the concluded work, carry the unfinished.</p>
+
+<h3>Engagement level</h3>
+<p>Header carries the engagement name, status, type and code, plus a <b>VIEWING AS</b> role switch — <b>Auditor / Risk Owner / Reviewer</b>. Four tabs: Overview, Control Library, RACM, SOX testing.</p>
+<p>The Overview shows:</p>
+<ul>
+<li>A date-range filter across the programme ("3 of 3 audits") and a <b>New audit</b> button.</li>
+<li>A red <b>Needs attention</b> banner — <i>"Material weakness open — the entity's conclusion is at risk · 4 weaknesses."</i></li>
+<li>The live round: <b>CY 2026 · Interim · Active</b>, its scope (Treasury, Procure to Pay, Fixed Assets, Order to Cash), a note that all rounds of CY 2026 share materiality ₹12 Cr, progress <b>56% concluded (25/45)</b>, and a <b>Roll forward</b> action.</li>
+<li><b>Period coverage</b> — a month-by-month grid showing which months each round (Roll-forward / Interim / Year-end) actually tests, with a "12/12 months covered" confirmation.</li>
+<li><b>Masters shared across every audit</b> — RACM (4 matrices), Control library (45 controls), Entities &amp; scope (8 entities), People &amp; roles.</li>
+</ul>
+<p>The <b>SOX testing</b> tab lists the three audit rounds (CY 2026 ×2, CY 2025) with their scope, materiality and attached files, each with its own <b>Roll forward</b>.</p>
+
+<h3>Audit dashboard — where the confidence scores live</h3>
+<p>Opening a round gives four tabs: <b>Dashboard, Control Library, Deficiency management, Configuration</b>.</p>
+<p>The Dashboard opens with a six-tile progress rail — <b>36/45 TOD concluded · 22/45 TOE concluded · 20 Effective · 5 Ineffective · 0 Awaiting review · 0 Waiting on owner</b> — then <b>Audit health</b>, the three engagement-level confidence scores:</p>
+<table>
+<tr><th>Score</th><th>Live value</th><th>What it means</th></tr>
+<tr><td>RACM</td><td>0% — 0/45 rows approved</td><td>Pre-testing review; every row needs approval before testing leans on it</td></tr>
+<tr><td>Control effectiveness</td><td>44% — 20/45 effective · 5 ineffective</td><td>A single ineffective conclusion turns this red until remediated and retested</td></tr>
+<tr><td>Sample testing</td><td>1% — 21/1680 checks done</td><td>Sample-by-attribute checks completed across TOE</td></tr>
+</table>
+<p>Below sit three cards — <b>Deficiencies</b> (4 open · 5 total; 4 material weakness, 0 significant, 1 deficiency, 1 clearly trivial logged but not evaluated), <b>Handoffs</b> (document requests, open questions, remediations), and <b>Materiality</b> (Overall ₹12.00 Cr · Performance ₹9.00 Cr · Clearly trivial ₹60.0 L).</p>
+<p>Then a year-end countdown — <b>147 days to year-end (31 Dec 2026) — what must close before the opinion date</b> — listing 4 material weaknesses open ("ICFR ineffective if still open at year-end"), 20 controls not concluded, and 25 papers awaiting the preparer's signature. It ends with <b>Engagement sign-off</b>.</p>
+
+<h3>Control register</h3>
+<p>Five KPI tiles (45 Controls · 7 Tests due now · 20 Effective · 0 Awaiting review · 0 Waiting on owner), then a dense table grouped by process with a per-group summary (<i>Treasury · 20 · 16 TOD · 8 TOE concluded</i>).</p>
+<p>Columns: Process, Control (with a key-control star, its code, sub-process and a due badge), Entity, Control type, Frequency, Control Owner, Objective, and further columns for nature and both track statuses. Due badges are specific and useful — <i>Retest after remediation</i>, <i>Next test in 24d</i>, <i>Due in 8d</i>, <i>Overdue 2d</i>, <i>Due today</i>.</p>
+<div class="callout">
+<p><b>The entity-instance model is real.</b> One control tested at four companies appears as four rows — TRY-01 at Altura Infra Holdings, Altura Solar, Altura Wind and Altura Smart Metering — each with its own due date and status. That is exactly how a group audit works, and it is modelled properly rather than collapsed into one row.</p>
+</div>
+<p>Toolbar: search, group-by, Dense mode, list/card toggle, working-paper export, <b>Audit report</b> and <b>New control</b>.</p>
+
+<h3>The control dossier — the five-step testing workflow</h3>
+<p>Opening a control gives the working paper. The header carries chips (Key control, Financial, Manual, Preventive, Monthly, High risk, code), the control objective in plain English, the control activity narrative, and the identity line — Entity, Process, Control owner, Process owner, Risk, Assertions. Then <b>OVERALL STATUS</b> with a pressed stamp (<span class="pill p-no">INEFFECTIVE</span>) and the two tracks: <b>TOD Effective → TOE Ineffective</b>. Buttons: Working paper, Reopen. Note: <i>"Every run is logged in History."</i></p>
+
+<div class="step"><b>1 · TOD — Test of Design.</b> "The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true." Design elements are listed with REQUIRED/OPTIONAL tags and their status (Evidenced), each showing the attached file and who provided it. An <b>Ira read this control</b> panel suggests considerations worth testing that are not yet on the list, each with Add / dismiss — nothing is auto-inserted. The conclude footer says <i>Evidence suggests Effective</i>, pre-drafts the rationale ("All 2 design checks passed against the process narrative, flowchart and walkthrough on file"), and offers Conclude effective / Conclude ineffective.</div>
+
+<div class="step"><b>2 · Population.</b> "Pick the source file and filter it down to this control's instances, then check the count, the period and the source before locking it. Nothing downstream runs until it is locked." Live example: <b>Locked · 2,000 instances</b> from 14,000 rows, version POP-INT, source <code>population_full_period.xlsx — system export (recorded at upload)</code>, filter shown, locked by A. Mehta. Includes a <b>Preview</b> and an <b>IPE test</b> — "the report this population came out of, proven before anything is built on it."</div>
+
+<div class="step"><b>3 · Sample.</b> "Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." Live: <b>25 items</b> — "Standard sample — moderate reliance. Drawn from POP-INT · 2,000 records · Agreed to GL control account."</div>
+
+<div class="step"><b>4 · TOE — Test of Operating Effectiveness.</b> Each attribute carries its assertion line and two independent evidence sections. <b>Validation</b> toggles between <i>AI validation</i> (Ask IRA) and <i>Workflow</i>, and requires a file first — the Run button is disabled and relabelled "Upload the required file first", with the warning <i>"Upload the file the AI should check before running validation."</i> <b>Self-attestation</b> is a separate toggle, default off. The conclude footer read <i>Evidence suggests Ineffective</i> with the drafted rationale "1 of 2 attributes passed across 25 sampled items. 1 failed."</div>
+
+<div class="step"><b>5 · Sign-off.</b> "The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." Two rows — Prepared by (A. Mehta) and Countersigned (J. Fernandes) — each showing not-yet-signed, and a Sign off button.</div>
+
+<p>The right rail carries the three <b>per-control confidence scores</b>, live: <b>Control completeness 100%</b> (2/2 required elements evidenced — Complete), <b>Evidence validated 0%</b> (0/50 operating checks run — Needs attention, amber), and <b>TOD coverage confidence 100%</b> (2/2 considerations pass — Complete). Below them, tabs for <b>History</b> and <b>Discussion</b>, filterable by All / TOD / TOE.</p>
+<p>When a control concludes ineffective, a <b>Deficiency raised</b> banner opens on the same page — no navigation away from the work.</p>
+
+<h3>Deficiency management — severity and remediation</h3>
+<p>A register with columns Deficiency, Finding, Track, Exposure, Severity, Stage, Court — each filterable. Live contents:</p>
+<table>
+<tr><th>ID</th><th>Control</th><th>Track</th><th>Exposure</th><th>Severity</th><th>Stage</th><th>Court</th></tr>
+<tr><td>DEF-A-01</td><td>TRY-01</td><td>TOE</td><td>₹16.80 Cr</td><td>Material Weakness</td><td>Identified</td><td>Your court</td></tr>
+<tr><td>DEF-A-02</td><td>PRO-03</td><td>TOE</td><td>₹13.20 Cr</td><td>Material Weakness</td><td>Rating review</td><td>Reviewer</td></tr>
+<tr><td>DEF-A-03</td><td>O2C-03</td><td>TOE</td><td>₹4.60 Cr</td><td>Material Weakness</td><td>Plan review</td><td>Your court</td></tr>
+<tr><td>DEF-A-04</td><td>O2C-04</td><td>TOD</td><td>₹1.80 Cr</td><td>Material Weakness</td><td>Retest</td><td>Your court</td></tr>
+<tr><td>DEF-A-05</td><td>FIX-04</td><td>TOE</td><td>₹45.0 L</td><td>Clearly Trivial</td><td>Closed</td><td>Closed</td></tr>
+</table>
+<p>Expanding one reveals the whole flow. <b>Root cause</b> is a written field (not a count) — the live example reads <i>"The payment run releases on the first authorisation and queues the second as an after-the-fact review, so the bank file is transmitted before dual authorisation exists rather than because of it."</i> Beneath it, the failed sample references.</p>
+<p>Then a <b>six-step lifecycle stepper</b>: <b>Exception raised → Size it → Plan the fix → Fix and submit → Retest → Close</b>, with a current-state line naming whose court it is in and which step of six.</p>
+
+<h4>Severity inputs — recomputed live against the ground rules</h4>
+<ul>
+<li><b>Likelihood</b> — Remote / Reasonably possible / Probable.</li>
+<li><b>Exposure ₹</b> — with a live comparison to materiality, and the definition stated on screen: <i>"What <b>could</b> have slipped through while the control was broken — not the error actually found."</i></li>
+<li><b>MW indicators</b> — five fixed options (restatement, misstatement found by audit, senior-management fraud, ineffective control environment, ineffective period-end reporting).</li>
+<li><b>Compensating control</b> — a dropdown, annotated <i>"capping Material Weakness → Significant Deficiency — never clears the exception."</i></li>
+<li><b>Aggregation</b> — derived chips (process · Treasury, assertion · Accuracy) marked <i>"derived — not asked"</i>, plus an optional manual link for a shared root cause.</li>
+<li><b>Prudent official</b> — here reading <i>"already at the top of the ladder — nothing to raise."</i></li>
+</ul>
+
+<div class="callout green">
+<p><b>The severity engine shows its own working — and it is correct.</b> Clicking "Show working" on DEF-A-01 printed all seven rules in order:</p>
+<ol style="margin-top:6px">
+<li>MW indicator — none recorded.</li>
+<li>Compensating control — TRY-02 is tested effective, so it can cap a material weakness down to significant, and never clears the exception.</li>
+<li>Clearly trivial — ₹16.80 Cr is above the ₹60.0 L floor.</li>
+<li>Likelihood — Probable, the ladder applies.</li>
+<li>Exposure ladder — ₹16.80 Cr is at or above materiality ₹12.00 Cr ⇒ Material Weakness.</li>
+<li>Compensating control applied — capped from Material Weakness to Significant Deficiency by TRY-02. The exception stands.</li>
+<li>Aggregation — combines with 3 other exceptions sharing assertion — ₹36.40 Cr together ⇒ Material Weakness.</li>
+<li>Prudent official — no judgment applied.</li>
+</ol>
+<p>So the cap genuinely reduced it, and aggregation then raised it back. The conclusion is not asserted — it is derived, and every step is on the record. This is the strongest single feature in the platform.</p>
+</div>
+<p>The step ends with a routing action — <b>"Rated Material Weakness — send to the reviewer"</b> — because anything graded significant or worse must have its rating confirmed before remediation begins.</p>
+
+<h2>Part 2 — The rest of the platform</h2>
+
+<h3>Home</h3>
+<p>A configurable landing dashboard with ~14 widgets: headline counters, a "Set up your workspace" checklist, items waiting on you, a filterable platform activity feed, a quarterly health snapshot (completion vs target, risk counts, control effectiveness, compliance score with 8-quarter trend, framework coverage across SOX / ITGC / IFC), next-audit countdown, workflow performance, active engagements, open exceptions, data sources, shared items, recent queries, business processes, recent reports, AI Concierge shortcuts and a calendar. Layout is customisable.</p>
+
+<h3>Ask IRA</h3>
+<p>The AI copilot. You ask a question and it runs a short clarifying interview (up to four multiple-choice questions, each with a free-text escape), then executes while showing a right-hand panel with three tabs — <b>Plan</b> (a five-step execution plan naming the datasets it touched), <b>Code</b> and <b>Sources</b>. It can ask a further question mid-run, and finishes with a titled result: headline statistics, charts and a table. An editable <b>Assumptions</b> strip records what defaults were applied.</p>
+<div class="callout amber"><p><b>Caveat.</b> The clarifying questions do not follow the question asked — "Summarize this quarter's exceptions" produced four questions about duplicate-invoice detection and a duplicate-payment analysis. The machinery is real; the routing from question to analysis is not.</p></div>
+
+<h3>Audit Planning</h3>
+<p>A Gantt timeline of engagements grouped by process, with completion percentages and filters on process and status. <b>Plan Engagement</b> opens a drawer capturing name, audit type, framework, primary process, audit period, planned dates, owner, reviewer, RACM version and description — with a read-only <b>SOX Enforcement</b> panel explaining that reviewer approval, evidence requirements, key-control validation and period locking will be enforced, and that enforcement follows the framework rather than the audit type. <span class="pill p-ok">Tested and works</span> — an engagement was created and appeared immediately on the timeline.</p>
+
+<h3>Engagements</h3>
+<p>The portfolio: tiles for Total 18 / Active 8 / Portfolio health 80% / Open findings 33, then a three-way breakdown by type (SOX / ICFR 6, Compliance 3, Internal Audit 4, Automation 5), by status and by process — every row clickable into a filtered library. Plus Needs attention and Upcoming milestones. Tabs: Overview, All Engagements, Approval Flow.</p>
+
+<h3>Process Hub</h3>
+<p>Coverage per business process with risk, control and RACM counts — P2P 67%, O2C 57%, R2R 50%, S2C 0%.</p>
+
+<h3>Dashboard</h3>
+<p>Analytics dashboards (separate from Home) with My Dashboards / Shared with Me, search and Create Dashboard. Each card badges its data source — Excel/CSV, SQL or Query — so you can see at a glance whether it is live-queried or file-based.</p>
+
+<h3>Risk Register</h3>
+<p>The master risk list. Each row carries an ID, title, process, category, severity, description and its mapped control chips, with filters on priority, sub-process and category. A banner warns that <i>3 risks are not yet mapped to controls</i>. AI insights are explicitly <b>human-gated</b> — the panel states it "won't run automatically; you trigger it so it only bills when you need it."</p>
+
+<h3>Modules not reachable in this session</h3>
+<p>Recents, My Queue, Report, Control Library (global), Workflow Library, AI Concierge, Knowledge Hub, Platform Usage and Admin could not be opened because of the navigation defect. Nothing here should be read as a judgement on them.</p>
+
+<h2>What is good, and what holds it back</h2>
+<h3>Genuinely good</h3>
+<ul>
+<li><b>The SOX testing model is right.</b> Design gates operating, the population must be locked before a sample is drawn, the seed is stored for reproducibility, and nobody countersigns their own paper. These are real audit disciplines, enforced by the product rather than left to the user.</li>
+<li><b>Severity is derived, not typed</b> — and the engine prints its reasoning step by step.</li>
+<li><b>AI is gated and attributed.</b> Ask IRA shows plan, code and sources; the risk register makes you trigger the expensive step; Ira suggests design checks but never inserts them.</li>
+<li><b>Roles are first-class.</b> Auditor / Risk Owner / Reviewer switching, "whose court" badges, and a court column on the deficiency register.</li>
+<li><b>Findings are surfaced, not buried</b> — unmapped risks, open material weaknesses and the year-end countdown all push themselves to the top.</li>
+</ul>
+<h3>Holding it back</h3>
+<ul>
+<li><b>Navigation is unreliable and slow</b> — the single biggest issue.</li>
+<li><b>Nothing persists</b> — a reload discarded the engagement created minutes earlier.</li>
+<li><b>The URL never changes</b>, so nothing can be bookmarked, shared or reached with the back button.</li>
+<li><b>Numbers disagree between screens</b> — Home says 1 active engagement, Engagements says 8.</li>
+<li><b>Uploads cannot be completed</b> in a browser-automation context because the buttons open a native OS file picker.</li>
+</ul>
+
+<div class="callout red">
+<p><b>If only one thing gets fixed:</b> module navigation. The SOX engagement underneath it is strong enough to sell the product — but nobody will reach it while a sidebar click takes twenty seconds or silently does nothing.</p>
+</div>
+
+<footer>
+Prepared from a live session against the deployed build. Defects, severities and reproduction steps are in the companion <b>Defect &amp; Gap List</b>.
+</footer>
+
+</body>
+</html>
