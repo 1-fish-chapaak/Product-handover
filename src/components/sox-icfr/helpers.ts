@@ -564,14 +564,21 @@ export function entityCoverage(c: Control): EntityCoverage[] {
 export function uncoveredEntities(c: Control): string[] {
   return entityCoverage(c).filter(e => e.drawn === 0).map(e => e.entity);
 }
-/** What a register row prints in its entity cell. An ordinary row is one
- *  company's copy and names that company; a shared row answers for several, and
- *  a cell that named only where it is performed would read as an ordinary row —
- *  the one fact that makes it different is the one the cell must carry. The
- *  full list rides the title. */
-export function entityCell(c: Control): { label: string; title: string } | null {
-  if (isShared(c)) return { label: `Shared — covers ${c.entities!.length} companies`, title: c.entities!.join(' · ') };
-  return c.entity ? { label: c.entity, title: c.entity } : null;
+/** What a register row prints in its entity cell.
+ *
+ *  A row answering for one company names it. A row answering for several names
+ *  the first and counts the rest — "Altura Infra Holdings Ltd +3" — because a
+ *  column of identical "Shared — covers 4 companies" labels says nothing about
+ *  WHICH companies, which is the only thing the reader wants from it. `more` is
+ *  rendered outside the truncating span so a narrow column can eat the name
+ *  without ever eating the count. The full list rides the title. */
+export function entityCell(c: Control): { label: string; more: number; title: string } | null {
+  const covers = c.entities ?? [];
+  if (covers.length > 1) {
+    const first = c.entity && covers.includes(c.entity) ? c.entity : covers[0]!;
+    return { label: first, more: covers.length - 1, title: covers.join(' · ') };
+  }
+  return c.entity ? { label: c.entity, more: 0, title: c.entity } : null;
 }
 
 // ─── A multi-path control's reach ────────────────────────────────────────────────

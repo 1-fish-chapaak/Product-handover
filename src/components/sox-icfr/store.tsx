@@ -1098,7 +1098,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const existing = populationSources(c);
       if (!existing.some(s => s.id === sourceId)) return c;
       const samp = c.operating.sampling;
-      const added: Sample[] = refs.map((ref, i) => ({ id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId }));
+      // A control that answers for several companies has to deal its items among
+      // them, or the coverage strip cannot tell whether the draw reached each one.
+      // Round-robin, so a draw of any size spreads before it repeats.
+      const covers = c.entities ?? [];
+      const added: Sample[] = refs.map((ref, i) => ({
+        id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId,
+        ...(covers.length > 1 ? { entity: covers[i % covers.length]! } : {}),
+      }));
       const samples = [...(samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId), ...added];
       const sources = existing.map(s => (s.id === sourceId ? { ...s, draw } : s));
       const drawn = sources.filter(s => s.draw);
@@ -1441,7 +1448,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // the first one is used; the exception's own file is what a later round of
       // this work will read (see PopulationSource).
       const src = populationSources(c)[0]?.id;
-      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src }));
+      // On a control answering for several companies an extension is the answer
+      // to a coverage shortfall — "extend until every company is reached" is what
+      // the sample step tells the auditor to do. So the new items go to the
+      // companies with nothing drawn FIRST, and only then spread round-robin.
+      const covers = c.entities ?? [];
+      const short = covers.length > 1 ? covers.filter(e => !s.samples.some(x => x.entity === e)) : [];
+      const dealTo = (i: number): string | undefined =>
+        covers.length < 2 ? undefined
+        : i < short.length ? short[i]!
+        : covers[(i - short.length) % covers.length]!;
+      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => {
+        const entity = dealTo(i);
+        return { id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src, ...(entity ? { entity } : {}) };
+      });
       // runs recorded before the extension never saw the new items — stale until re-run
       return { ...c, operating: { ...c.operating, steps: staleSteps(c.operating.steps), sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
