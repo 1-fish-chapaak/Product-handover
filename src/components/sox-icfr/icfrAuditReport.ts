@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import {
   conclusionOf, designStarted, formatDueDate, formatINR, gradeException,
-  icfrConclusion, openMaterialWeaknesses, trackResult,
+  icfrConclusion, openMaterialWeaknesses, toeRounds, trackResult,
 } from './helpers';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, Deficiency, IcfrEngagement } from './types';
@@ -219,6 +219,33 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           ?? '—',
       ]));
   });
+  /**
+   * Controls whose first sample was set aside and drawn again.
+   *
+   * The deliverable has to disclose this. A redraw is legitimate — the first
+   * draw can be wrong, and a population that never tested the control cannot
+   * condemn it — but it is also the one move that could be used to walk away
+   * from an exception, so it is named, counted and reasoned in the report rather
+   * than left in the working paper for whoever thinks to look. The item-by-item
+   * grid of each round stays on the paper; this is the fact and the reason.
+   */
+  const redrawRows = controls.flatMap(c =>
+    toeRounds(c).map(r => [
+      c.id,
+      String(r.n),
+      String(r.sampling.samples.length),
+      r.outcome === 'Fail' ? 'Failed' : 'Passed',
+      r.setAside.reason,
+      `${r.setAside.by}, ${r.setAside.at}`,
+    ]));
+
+  const redrawBlock: PaperBlock[] = redrawRows.length ? [{
+    kind: 'table', title: 'Rounds set aside',
+    note: `${redrawRows.length} round${redrawRows.length === 1 ? '' : 's'} set aside and redrawn — the item-by-item results of each are in the control's working paper`,
+    headers: ['Control', 'Round', 'Items', 'Outcome', 'Why it was set aside', 'Recorded by'],
+    rows: redrawRows,
+  }] : [];
+
   const exceptions: IcfrSheet = {
     name: 'Exceptions', blocks: exceptionRows.length ? [
       {
@@ -231,8 +258,10 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
         kind: 'note', label: 'Reading this', tone: 'neutral',
         text: 'These rows come straight off the TOE grid. A design gap has no sampled item to point at, so it does not appear here — it is graded under Deficiency Severity and carried on the action plan like any other finding.',
       },
+      ...redrawBlock,
     ] : [
       { kind: 'note', label: 'Exceptions', tone: 'good', text: 'No failed checks — every attribute tested passed on every sampled item.' },
+      ...redrawBlock,
     ],
   };
 
@@ -311,9 +340,12 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
   const body: { sheet: IcfrSheet; covers: string }[] = [
     { sheet: summary, covers: 'The opinion, who the audit was for and over what period, and testing at a glance' },
     { sheet: rollup, covers: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row each, from readiness to conclusion` },
-    { sheet: exceptions, covers: exceptionRows.length
-      ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
-      : 'No failed checks — every attribute tested passed on every sampled item' },
+    { sheet: exceptions, covers: [
+      exceptionRows.length
+        ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
+        : 'No failed checks — every attribute tested passed on every sampled item',
+      redrawRows.length ? `${redrawRows.length} round${redrawRows.length === 1 ? '' : 's'} set aside and redrawn, with the reason` : '',
+    ].filter(Boolean).join('; ') },
     { sheet: defSeverity, covers: defs.length
       ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'} — graded by the engine, confirmed by a second pair of eyes`
       : 'Nothing classified' },

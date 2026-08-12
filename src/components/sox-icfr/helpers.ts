@@ -2,7 +2,7 @@ import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
   AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, TrackConclusion,
+  Sample, Severity, ToeRound, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -1503,6 +1503,54 @@ export function designProgress(c: Control) {
     pointsTotal: c.design.points.length,
   };
 }
+/* ── Rounds of operating testing ──────────────────────────────────────────────
+ *
+ * At most two (user, 12 Aug). The first failure is allowed to be the draw's
+ * fault rather than the control's — a window that was wrong, an entity that was
+ * wrong, reversals nobody excluded — so the auditor may correct the criteria and
+ * draw once more, with a written reason. A failure in the SECOND round is the
+ * control's: the deficiency is raised there and then, and there is no third
+ * round to look for a kinder sample in.
+ *
+ * Every question about rounds is answered here so the store's guards and the
+ * screen's buttons cannot drift apart.
+ */
+export const TOE_MAX_ROUNDS = 2;
+
+/** Rounds that have closed, oldest first. */
+export const toeRounds = (c: Control): ToeRound[] => c.operating.rounds ?? [];
+
+/** Which round the live draw is — 1 until a redraw, 2 after it. */
+export const toeRoundNo = (c: Control): number => toeRounds(c).length + 1;
+
+/** Has the LIVE round produced a failure on any attribute? Read through
+ *  stepResult, so an override or a validation standing over an attestation
+ *  counts exactly as the conclusion will count it. */
+export const toeRoundFailed = (c: Control): boolean =>
+  c.operating.steps.some(s => stepResult(s) === 'Fail');
+
+/** Is this the last round the control gets, and has it already failed? Past this
+ *  point the finding stands: no extension, no redraw. */
+export const toeSpent = (c: Control): boolean =>
+  toeRoundNo(c) >= TOE_MAX_ROUNDS && toeRoundFailed(c);
+
+/** May the auditor correct the criteria and draw again?
+ *
+ *  Needs a failure to answer — a redraw over a clean round is not a correction,
+ *  it is a re-roll — and needs the redraw not to have been used already. The
+ *  reason itself is the store's to insist on; this only says the door exists. */
+export const canRedrawToe = (c: Control): boolean =>
+  !isControlLocked(c) && toeRoundNo(c) < TOE_MAX_ROUNDS && toeRoundFailed(c);
+
+/** May the sample still be extended?
+ *
+ *  Extending stays INSIDE the round it happens in — more items against the same
+ *  criteria is the handbook's answer to a deviation, and it is not a new round.
+ *  It closes only once the last round has failed, because by then the finding is
+ *  already the control's. */
+export const canExtendToe = (c: Control): boolean =>
+  !isControlLocked(c) && !!c.operating.sampling && !toeSpent(c);
+
 export function operatingProgress(c: Control) {
   const s = c.operating.steps;
   // Counted through stepResult, so the meter and the conclusion cannot disagree:

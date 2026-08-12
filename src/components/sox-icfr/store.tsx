@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, controlConclusion, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, canExtendToe, canRedrawToe, controlConclusion, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
-  PopulationSource, Sample, Sampling, SignificantAccount, SourceRole, TestResult, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, Sample, Sampling, SignificantAccount, SourceRole, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -317,6 +317,9 @@ interface IcfrCtx {
   setStepInputFile: (controlId: string, stepId: string, fileName: string) => void;
   concludeOperating: (controlId: string, conclusion: TrackConclusion, rationale?: string) => void;
   overrideOperating: (controlId: string, override: Override | null) => void;
+  /** Set the failed round aside and reopen the draw — see ToeRound. The reason
+   *  is not optional: without one this is drawing until a clean sample appears. */
+  startToeRound: (controlId: string, reason: string) => void;
   // operating CRUD + workflow mapping + attest toggle + test-all
   addAttribute: (controlId: string, description: string) => void;
   removeAttribute: (controlId: string, stepId: string) => void;
@@ -600,11 +603,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // no-ops unless the track actually reads Ineffective, and dedupes against an
   // existing open exception for the same control + track. Severity starts at the
   // floor until likelihood/magnitude are assessed on the exception card.
-  const raiseDeficiencyIfIneffective = useCallback((controlId: string, track: 'design' | 'operating') => {
+  /** `onSecondRound` — the failure IS the finding, so the deficiency is raised
+   *  when it happens rather than waiting for the conclusion (user, 12 Aug). The
+   *  first round's failure never lands here: it is allowed to be the draw's
+   *  fault, and the auditor gets one corrected redraw to show that it was. */
+  const raiseDeficiencyIfIneffective = useCallback((controlId: string, track: 'design' | 'operating', onSecondRound = false) => {
     setEng(prev => {
       const c = prev.controls.find(x => x.id === controlId);
       if (!c) return prev;
-      if (trackResult(track === 'design' ? c.design : c.operating) !== 'Ineffective') return prev;
+      if (onSecondRound
+        // Only in the LAST round. A first-round failure passes through
+        // untouched — the auditor still has one corrected redraw to show the
+        // draw was at fault rather than the control.
+        ? toeRoundNo(c) < TOE_MAX_ROUNDS || !c.operating.steps.some(s => stepResult(s) === 'Fail')
+        : trackResult(track === 'design' ? c.design : c.operating) !== 'Ineffective') return prev;
       if (prev.deficiencies.some(d => d.controlId === controlId && d.track === track && d.status !== 'Closed')) return prev;
       const failed = track === 'design'
         ? c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text)
@@ -620,9 +632,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const def: Deficiency = {
         id: `DEF-${String(next).padStart(3, '0')}`,
         controlId, track,
-        description: failed.length
-          ? `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
-          : `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef}.`,
+        // A second-round failure is described as what it is — the control failed
+        // again, on a sample drawn to answer the first failure — because reading
+        // "concluded ineffective" on a track nobody has concluded yet would be
+        // the record saying something that did not happen.
+        description: (() => {
+          const what = failed.length
+            ? ` — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
+            : '.';
+          if (onSecondRound) return `TOE failed again on ${c.wpRef}, on the redrawn sample${what}`;
+          return `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef}${what}`;
+        })(),
         // Deliberately blank, not pre-filled with a plausible sentence: the whole
         // exception turns on this, and a default here would be a guess the auditor
         // never made. Step 1 is not complete until it is written.
@@ -1434,11 +1454,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchControl, role]);
 
   // Any failure means extend the sample — never "small miss, ignore" (handbook).
+  // Extending stays inside the round it happens in; it is not a new round. It
+  // closes once the last round has failed, because the finding is settled by
+  // then and more items cannot unsettle it — see canExtendToe.
   const extendSample = useCallback<IcfrCtx['extendSample']>((controlId, extra) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => {
       const s = c.operating.sampling;
       if (!s) return c;
+      if (!canExtendToe(c)) return c;
       // Tagged as the extension round: appended to the one list the results are
       // keyed against, but distinguishable on the paper from the original draw.
       // Also tagged with a source file, because an untagged item on a control
@@ -1493,7 +1517,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const setStepResult = useCallback<IcfrCtx['setStepResult']>((controlId, stepId, result) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? stampSamples(c, { ...s, result }, result) : s) } }));
-  }, [patchControl, role]);
+    if (result === 'Fail') raiseDeficiencyIfIneffective(controlId, 'operating', true);
+  }, [patchControl, role, raiseDeficiencyIfIneffective]);
 
   // Record one attribute's result against ONE drawn sample; the attribute's own
   // result derives from its samples (any fail ⇒ Fail, all pass ⇒ Pass).
@@ -1510,7 +1535,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         return { ...s, sampleResults: m, result: derived };
       }) } };
     });
-  }, [patchControl, role]);
+    if (result === 'Fail') raiseDeficiencyIfIneffective(controlId, 'operating', true);
+  }, [patchControl, role, raiseDeficiencyIfIneffective]);
 
   const overrideStep = useCallback<IcfrCtx['overrideStep']>((controlId, stepId, override) => {
     if (role !== 'auditor') return;
@@ -1833,6 +1859,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // were given says the control did not run, that is a conclusion you can
       // defend, and refusing it would trap the control with no way out.
       if (conclusion === 'Effective' && inquiryOnlyAttributes(c).length) return c;
+      // Nor can a track with a failed attribute be called effective. Nothing
+      // stopped this before; it matters now, because a second-round failure
+      // raises its deficiency the moment it is recorded — and a control carrying
+      // an open deficiency while reading Effective is the file contradicting
+      // itself. Extend the sample, redraw with a reason, or conclude the
+      // failure.
+      if (conclusion === 'Effective' && toeRoundFailed(c)) return c;
       return { ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } };
     });
     // Reads the state the patch produced: a stale-run refusal above leaves the
@@ -1846,6 +1879,71 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
   }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
+
+  /**
+   * Set the failed round aside and reopen the draw.
+   *
+   * Everything the round proved is kept whole — the items, the per-attribute
+   * results, the verdicts — and filed under `rounds` with the reason it was set
+   * aside, the person and the time. The working paper prints all of it; a round
+   * that leaves no trace is a round that was hidden.
+   *
+   * What clears is only what the next round has to answer for itself: the draw,
+   * the per-item results, each attribute's verdict, and any override made about
+   * the old evidence. Attestations and validations are left standing — they are
+   * statements about the control, not about the items — but their result is gone
+   * with the verdict, so nothing carries forward untested.
+   */
+  const startToeRound = useCallback<IcfrCtx['startToeRound']>((controlId, reason) => {
+    if (role !== 'auditor') return;
+    const why = reason.trim();
+    if (!why) return;
+    patchControl(controlId, c => {
+      if (!canRedrawToe(c)) return c;
+      const samp = c.operating.sampling;
+      if (!samp) return c;
+      const results: Record<string, Record<string, TestResult>> = {};
+      const stepResults: Record<string, TestResult> = {};
+      c.operating.steps.forEach(s => {
+        if (s.sampleResults) results[s.id] = { ...s.sampleResults };
+        stepResults[s.id] = stepResult(s);
+      });
+      const closed: ToeRound = {
+        n: toeRoundNo(c),
+        sampling: structuredClone(samp),
+        results,
+        stepResults,
+        outcome: Object.values(stepResults).includes('Fail') ? 'Fail' : 'Pass',
+        setAside: { reason: why, by: me, at: 'just now' },
+      };
+      const pop = c.operating.population;
+      return {
+        ...c,
+        operating: {
+          ...c.operating,
+          rounds: [...toeRounds(c), closed],
+          sampling: undefined,
+          exceptions: [],
+          // Each file goes back to its draw as well. Clearing the sample alone
+          // left every source still marked as drawn, so step ③ had nothing left
+          // to offer and the round that had just been opened could not be filled.
+          // The population itself is untouched — it is the CRITERIA the auditor is
+          // about to correct, on the file, not the file's own standing.
+          population: pop ? { ...pop, sources: populationSources(c).map(s => ({ ...s, draw: undefined, approvedSample: undefined })) } : pop,
+          steps: c.operating.steps.map(s => ({
+            ...s, sampleResults: undefined, result: 'Not tested' as TestResult, override: undefined, staleRun: undefined,
+          })),
+        },
+      };
+    });
+    pushExec(prev => {
+      const cc = prev.controls.find(x => x.id === controlId);
+      // The patch refuses on a spent control; an event for a round that never
+      // opened would be the trail claiming work nobody did.
+      if (!cc || toeRoundNo(cc) < 2) return null;
+      return { controlId, track: 'operating', kind: 'sample', verb: `set round ${toeRoundNo(cc) - 1} aside and reopened the draw`, target: short(why, 80) };
+    });
+  }, [patchControl, pushExec, me, role]);
 
   const overrideOperating = useCallback<IcfrCtx['overrideOperating']>((controlId, override) => {
     if (role !== 'auditor') return;
@@ -3009,7 +3107,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
     setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
-    registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
+    registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
@@ -3018,7 +3116,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
