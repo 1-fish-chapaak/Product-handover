@@ -82,6 +82,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
         'A duplicate can reach payment while its flag ages in the queue — the exposure the improving KPI hides.',
         'The headline will keep improving even if the oldest flags never close, so nobody is forced to look.',
       ],
+      kpis: [
+        { value: '3', unit: '/ 8', label: 'Sampled still open', sub: 'duplicate-matched and unworked — the oldest since 13-Dec', tone: 'bad' },
+        { value: '−12%', label: 'Headline KPI', sub: '23 flags open — improving while the tail ages unseen' },
+        { value: '+3', label: 'Overnight arrivals', sub: 'Acme Corp (2), Global Supplies (1) — arrivals have not stopped' },
+      ],
       factors: { frequency: 0.55, sourceDiversity: 0.6, recency: 0.95, businessImpact: 0.6 },
       evidence: [
         { ref: 'KPI', label: 'Duplicate Flags KPI', detail: '23 open · −12% vs last period', tone: 'positive' },
@@ -137,6 +142,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       ],
       stakes: [
         'Nothing at stake this period. The one open thread is Atlas Manufacturing’s pending KYC — keep it ahead of the next payment batch.',
+      ],
+      kpis: [
+        { value: '3', unit: '/ 3', label: 'KPIs improved', sub: 'compliance, processing time and duplicates — one direction' },
+        { value: '94.2%', label: 'Compliance rate', sub: '+1.4 pts in the window after the cleanup' },
+        { value: '12h', label: 'Cleanup → move', sub: 'the digest dates the cleanup just before the compliance move' },
       ],
       factors: { frequency: 0.5, sourceDiversity: 0.65, recency: 0.95, businessImpact: 0.35 },
       evidence: [
@@ -199,6 +209,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
         'If the drive pulled April’s cash into March, the DSO gain reverses next month — after close has priced it in.',
         'The two SLA-breached approvals age toward the quarter boundary with every day unescalated.',
       ],
+      kpis: [
+        { value: '−$1.1M', label: 'March collections', sub: '$8.3M → $7.2M while recognition runs +12%', tone: 'bad' },
+        { value: '2', label: 'Approvals past SLA', sub: '$180K+ each — aging toward the quarter boundary', tone: 'bad' },
+        { value: '38', unit: 'days', label: 'DSO', sub: '−2d right after the drive — April decides if it holds' },
+      ],
       factors: { frequency: 0.55, sourceDiversity: 0.65, recency: 0.95, businessImpact: 0.8 },
       evidence: [
         { ref: 'KPI', label: 'Revenue Recognized', detail: '$42.5M · +12%', tone: 'caution' },
@@ -255,6 +270,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       ],
       stakes: [
         'Anything unresolved at close hardens: a pre-close journal fix becomes a post-close adjustment with sign-off implications.',
+      ],
+      kpis: [
+        { value: '34', label: 'Open disputes', sub: '↑ 3 this period — converging on quarter close', tone: 'bad' },
+        { value: '1', label: 'Rev-rec discrepancy', sub: 'Q4 timing flag still unresolved in the digest' },
+        { value: '2', label: 'Signals, one root?', sub: 'both may share a billing-timing cause — sample before merging' },
       ],
       factors: { frequency: 0.45, sourceDiversity: 0.5, recency: 0.9, businessImpact: 0.65 },
       evidence: [
@@ -318,6 +338,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
         'A renewal signed before the scores are read locks in a full contract cycle with an under-bar vendor.',
         'The two >$500K expirations carry most of the money in the 30-day window.',
       ],
+      kpis: [
+        { value: '4', unit: '/ 12', label: 'Expiring in 30 days', sub: '2 above $500K — most of the money in the window', tone: 'bad' },
+        { value: '65%', label: 'Lowest vendor score', sub: 'FastShip — TechParts at 72% joins it under the 75% bar', tone: 'bad' },
+        { value: '3', label: 'Downgraded', sub: 'vendors moved to Medium risk in the same window' },
+      ],
       factors: { frequency: 0.5, sourceDiversity: 0.6, recency: 0.9, businessImpact: 0.85 },
       evidence: [
         { ref: 'KPI', label: 'Expiring Soon', detail: '12 contracts · +4', tone: 'caution' },
@@ -374,6 +399,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       stakes: [
         'Nothing at stake this period. The renewal-window finding above is the one active thread on this board.',
       ],
+      kpis: [
+        { value: '$2.1M', label: 'Savings realized', sub: '+$340K — the rate is holding through growth' },
+        { value: '+18', label: 'Net-new contracts', sub: 'the base grew without diluting the savings pace' },
+        { value: '87%', label: 'Vendor score', sub: '+2.3 pts alongside — consistent with consolidation' },
+      ],
       factors: { frequency: 0.5, sourceDiversity: 0.6, recency: 0.9, businessImpact: 0.3 },
       evidence: [
         { ref: 'KPI', label: 'Savings Realized', detail: '$2.1M · +$340K', tone: 'positive' },
@@ -427,6 +457,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       stakes: [
         'A missed DEF-002 deadline converts a tracked deficiency into a reportable failure.',
         'RSK-012 (GL balance discrepancy, R2R) ages uncovered while capacity goes to the calendar.',
+      ],
+      kpis: [
+        { value: '10', unit: '/ 24', label: 'Controls untested', sub: 'while the register added 2 risks this period', tone: 'bad' },
+        { value: '6', unit: 'days', label: 'DEF-002 deadline', sub: 'remediation still “in progress” — the hardest date on the board', tone: 'bad' },
+        { value: '58%', label: 'SOX FY26 complete', sub: 'weakest families Auth (70) and SOD (78) — order capacity by exposure' },
       ],
       factors: { frequency: 0.6, sourceDiversity: 0.7, recency: 0.95, businessImpact: 0.85 },
       evidence: [
@@ -485,6 +520,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       stakes: [
         'Nothing at stake this period. The unautomated remainder of the 10 untested controls is the natural next target.',
       ],
+      kpis: [
+        { value: '156', label: 'Workflow runs', sub: '+23 this period — automation absorbing the added scope' },
+        { value: '2', label: 'Deficiencies', sub: '−1 while tested controls rose 3 — moving the right way together' },
+        { value: '45', unit: 'hrs', label: 'Saved this month', sub: 'the digest prices the automation gain in person-hours' },
+      ],
       factors: { frequency: 0.5, sourceDiversity: 0.6, recency: 0.9, businessImpact: 0.35 },
       evidence: [
         { ref: 'KPI', label: 'Workflow Runs', detail: '156 · +23', tone: 'positive' },
@@ -541,6 +581,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
         'Faster payment shrinks the window in which a risk review can stop a payment to a deteriorating vendor.',
         '₹7.98L sits outstanding with the two Active 70+ vendors in the sample alone.',
       ],
+      kpis: [
+        { value: '38', unit: 'days', label: 'Avg days to pay', sub: '−4d in the week 5 vendors crossed the 70-point bar', tone: 'bad' },
+        { value: '2', unit: '/ 3', label: '70+ still Active', sub: 'only TechParts is on Hold — the review hasn’t reached the rest', tone: 'bad' },
+        { value: '₹7.98L', label: 'Outstanding', sub: 'with the two Active 70+ vendors in the sample alone' },
+      ],
       factors: { frequency: 0.55, sourceDiversity: 0.65, recency: 0.95, businessImpact: 0.8 },
       evidence: [
         { ref: 'KPI', label: 'Avg Days to Pay', detail: '38d · −4d', tone: 'caution' },
@@ -596,6 +641,11 @@ const INSIGHTS: Record<InsightDashboardId, LayeredInsight[]> = {
       ],
       stakes: [
         'Nothing at stake this period. The tail risk is the one the companion insight covers: fast payment reaching the wrong vendors.',
+      ],
+      kpis: [
+        { value: '−4', unit: 'days', label: 'Days to pay', sub: 'now 38d — the discount drive is landing' },
+        { value: '−3', unit: 'pts', label: 'Avg risk score', sub: 'now 42 — consistent with healthier vendors taking the discount' },
+        { value: '2', unit: '/ 2', label: 'KPIs corroborate', sub: 'one more window graduates this read to a trend' },
       ],
       factors: { frequency: 0.45, sourceDiversity: 0.55, recency: 0.9, businessImpact: 0.3 },
       evidence: [

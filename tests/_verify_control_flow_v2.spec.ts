@@ -166,7 +166,12 @@ test('header, sign-off gating and the working paper', async ({ page }) => {
   // so it came off every control surface and survives only in the exports. The
   // court badge kept its place in the header.
   await expect(page.locator('.leadsheet-stamp')).toHaveCount(0);
-  await expect(page.getByText(/court$/i).first()).toBeVisible();
+  // The badge names whose custody the control is in, and the wording follows the
+  // custody AND who is reading it: "Your court" only when the ball is with the
+  // hat you are wearing, otherwise the holder is named. Matching /court$/ pinned
+  // the assertion to one of those states and went red the moment the seeded
+  // control sat in somebody else's hands — the badge was there the whole time.
+  await expect(page.getByText(/^(Your court|Auditor|Risk owner|Reviewer|You|Closed)$/).first()).toBeVisible();
 
   // ── the working paper is view-only until both tracks conclude ─────────────
   await page.getByRole('button', { name: /Working paper/ }).first().click();

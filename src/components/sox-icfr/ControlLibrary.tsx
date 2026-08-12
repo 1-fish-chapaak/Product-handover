@@ -11,7 +11,7 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
-  conclusionOf, controlCode, courtFor, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
+  conclusionOf, controlCode, courtFor, entityCell, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
 } from './helpers';
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -182,10 +182,10 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
       <div className="ac-meta">{controlCode(c)} · {c.nature} · {c.frequency}</div>
       {/* The company this row is tested at, on its own line — same as the audit
           register: at another company it is a different control with its own life. */}
-      {c.entity && (
-        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+      {entityCell(c) && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={entityCell(c)!.title}>
           <Building2 size={11} className="text-ink-300 shrink-0" />
-          <span className="truncate font-medium">{c.entity}</span>
+          <span className="truncate font-medium">{entityCell(c)!.label}</span>
         </div>
       )}
       <div className="ac-div" />
@@ -601,8 +601,8 @@ export default function ControlLibrary() {
                           <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess}</div>
                         </td>
                         <td className="text-[0.71875rem] text-ink-700">
-                          {c.entity
-                            ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                          {entityCell(c)
+                            ? <span className="inline-flex items-center gap-1.5 min-w-0" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span></span>
                             : <span className="text-ink-300">—</span>}
                         </td>
                         <td className="text-[0.71875rem] text-ink-600">{c.type}</td>

@@ -43,20 +43,16 @@ const yearOf = (a: AuditRecord): number => {
 /**
  * The audit's file registry — every file that entered, and where each came from.
  *
- * This is the ONLY place provenance can be changed. It is a property of the
- * file: a general ledger forty controls extract from has one answer, recorded
- * when it arrived, and correcting it here corrects it for all forty at once
- * rather than forty times over. Controls that already CONCLUDED on the old
- * answer are flagged for review — a concluded paper whose evidence changed
- * underneath it is something a reviewer is entitled to be told about.
+ * Provenance here is READ-ONLY (user rule, Aug 2026): the question is answered
+ * once, at the moment a file enters — the attach flow below, or the control
+ * page's evidence ask — and the answer stands as recorded. This registry
+ * reports every file's origin in one place; it does not re-open it.
  */
 function FileRegistrySection({ audit, addFile }: {
   audit: AuditRecord;
   addFile: (kind: 'tb' | 'gl', name: string, origin: FileOrigin) => void;
 }) {
-  const { setFileOrigin, updateAudit } = useIcfr();
-  const { addToast } = useToast();
-  const logEvent = useAuditLog();
+  const { updateAudit } = useIcfr();
   const files = useAuditFiles();
   const [adding, setAdding] = useState<{ kind: 'tb' | 'gl'; name: string } | null>(null);
   const [origin, setOrigin] = useState<FileOrigin | undefined>();
@@ -69,14 +65,8 @@ function FileRegistrySection({ audit, addFile }: {
     input.click();
   };
 
-  const change = (f: { name: string; usedBy: { id: string }[] }, next: FileOrigin) => {
-    setFileOrigin(f.name, next);
-    logEvent({ action: 'Update', description: `Re-recorded the origin of "${f.name}" as ${next.toLowerCase()} — ${f.usedBy.length} control${f.usedBy.length === 1 ? '' : 's'} draw on it`, module: 'SOX ICFR', entity: 'Evidence' });
-    addToast({ type: 'success', title: 'Origin updated', message: `${f.name} — ${next.toLowerCase()}. Every control reading this file now shows it.` });
-  };
-
   return (
-    <Section icon={FileSpreadsheet} title="Source files" sub="Every file this audit holds, and where each one came from. Provenance is answered once, here — never per control.">
+    <Section icon={FileSpreadsheet} title="Source files" sub="Every file this audit holds, and where each one came from. Provenance is answered once, when a file enters — never re-asked, never re-edited.">
       <div className="flex gap-2 mb-4">
         {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, t]) => (
           <button
@@ -145,15 +135,9 @@ function FileRegistrySection({ audit, addFile }: {
                     <span className="text-[11.5px] font-semibold text-ink-700">Fetched by the system — nothing to answer</span>
                   ) : (
                     <>
-                      {(['System export', 'Client-prepared'] as FileOrigin[]).map(o => (
-                        <button key={o} onClick={() => change(f, o)}
-                          className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5',
-                            f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
-                          {f.origin === o && <Check size={11} />}{o}
-                        </button>
-                      ))}
+                      <span className="text-[11.5px] font-semibold text-ink-700">{f.origin}</span>
                       <span className="text-[10.5px] text-ink-400">
-                        {f.originBy ? `Recorded by ${f.originBy}, ${f.originAt}` : f.recorded ? 'Recorded at upload' : 'Taken from the file’s kind — correct it if that is wrong'}
+                        {f.originBy ? `Recorded by ${f.originBy}, ${f.originAt}` : f.recorded ? 'Recorded at upload' : 'Taken from the file’s kind'}
                       </span>
                     </>
                   )}
@@ -164,7 +148,7 @@ function FileRegistrySection({ audit, addFile }: {
         </div>
       )}
       <p className="text-[11px] text-ink-400 mt-3 leading-relaxed">
-        Changing an origin re-states it everywhere the file is read, and is written to the audit trail. Any control that already concluded on the old answer gets a review note rather than a silently rewritten working paper.
+        An origin is recorded at the moment its file enters the audit, and stands as recorded — this registry reports it, it does not re-open it.
       </p>
     </Section>
   );

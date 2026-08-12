@@ -50,6 +50,9 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  // The register itself, read for one purpose: saying what a re-derivation is
+  // about to park and what it is about to bring back.
+  const { eng } = useIcfr();
 
   const [groupName, setGroupName] = useState(prog.groupName);
   const [entities, setEntities] = useState<GroupEntity[]>(() => prog.entities.map(e => ({ ...e })));
@@ -186,6 +189,14 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       };
       e.entity = prog.groupName;
     }
+    // What this re-derivation is about to move on the register, read before it
+    // runs. Processes leaving take their controls with them — parked whole, not
+    // deleted — and a process coming home brings its testing back rather than an
+    // empty template. Both are worth saying out loud: a scope change that
+    // silently binned a week of testing is the reason the archive exists.
+    const wanted = new Set(inScope);
+    const parking = eng.controls.filter(c => !wanted.has(c.process));
+    const returning = (eng.scopeArchive ?? []).flatMap(a => a.controls.filter(c => wanted.has(c.process)));
     reconcileScope(inScope);
     setStale(false);
     // Both numbers, every time: what the trial balances produced, and what was
@@ -194,7 +205,11 @@ function ConfigInner({ prog, engId, reconcileScope }: {
     // count leaves the reader to discover the rest for themselves.
     const beyond = declared.length ? ` ${declared.join(', ')} kept — scoped beyond the trial balance.` : '';
     const toastTail = declared.length ? `, plus ${declared.length} beyond the trial balance` : '';
-    setLastDerive(`${derived.length} processes in scope — ${quant.length} quantitative + ${qual.length} qualitative captions across ${entities.length} entities.${beyond}`);
+    const moved = [
+      parking.length ? `${parking.length} control${parking.length === 1 ? '' : 's'} parked with their testing — they come back if the scope widens again` : '',
+      returning.length ? `${returning.length} control${returning.length === 1 ? '' : 's'} restored from an earlier narrowing, testing intact` : '',
+    ].filter(Boolean).join('. ');
+    setLastDerive(`${derived.length} processes in scope — ${quant.length} quantitative + ${qual.length} qualitative captions across ${entities.length} entities.${beyond}${moved ? ` ${moved}.` : ''}`);
     logEvent({ action: 'Update', description: `Scope re-derived from configuration — ${derived.length} in-scope processes${beyond ? `, ${declared.join(', ')} kept beyond the trial balance` : ''}, materiality ${fmtCr(groupOverall)}`, module: 'SOX ICFR', entity: 'Engagement' });
     addToast({ message: `Scope re-derived — ${derived.length} processes in scope${toastTail}`, type: 'success' });
   };
@@ -210,9 +225,14 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
       {stale && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-evidence-200 bg-evidence-50">
-          <div className="flex items-center gap-2 text-[12.5px] font-medium text-evidence-800">
-            <AlertTriangle size={14} className="text-evidence-700 shrink-0" />
-            Configuration changed — the derived scope may be stale.
+          <div className="flex items-start gap-2 text-[12.5px] font-medium text-evidence-800 min-w-0">
+            <AlertTriangle size={14} className="text-evidence-700 shrink-0 mt-0.5" />
+            <span>
+              Configuration changed — the derived scope may be stale.
+              {/* Said before the click, not after: the auditor about to re-derive
+                  is the person who needs to know that testing survives it. */}
+              <span className="block font-normal text-evidence-700 mt-0.5">Controls for any process that leaves are parked with their testing, not deleted — they come back if it returns to scope.</span>
+            </span>
           </div>
           <button
             onClick={reDerive}

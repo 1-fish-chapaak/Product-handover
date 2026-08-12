@@ -314,6 +314,12 @@ export interface OperatingStep {
   aiValidation?: boolean;
   inputFile?: EvidenceFile;      // the required file AI validation runs against
   validation?: ValidationResult;
+  /** The recorded run predates the current draw. Set when the sample changes
+   *  under an attribute that already carries a validation or workflow result —
+   *  results that predate the sample were not testing these items — and cleared
+   *  by the next run (or a fresh attestation). While it stands, the operating
+   *  track refuses to conclude. */
+  staleRun?: boolean;
   attestEnabled?: boolean;
   attestation?: Attestation;
   result: TestResult;
@@ -331,6 +337,17 @@ export interface Sample {
    *  on a control standing on a single file, which is every control seeded before
    *  a control could stand on several. */
   sourceId?: string;
+  /** WHICH COMPANY THIS ITEM BELONGS TO. Only meaningful on a shared control (see
+   *  `Control.entities`), where one test has to answer for several companies: a
+   *  company with no item in the sample has had nothing tested, whatever the
+   *  overall size says. Absent on a control that answers for one company, where
+   *  every item is that company's by construction. */
+  entity?: string;
+  /** WHICH ROUTE THIS ITEM WENT DOWN. Only meaningful on a control with more
+   *  than one path (see `Control.paths`) — the sample step reads these to say
+   *  which routes the draw has actually touched. Absent on a single-route
+   *  control, where there is only one way through. */
+  path?: string;
 }
 /** The control's sample — every item drawn, across every source file it stands
  *  on. `size` and `samples` are the totals; which file each item came out of is
@@ -735,6 +752,32 @@ export interface Control {
    *
    *  Absent on engagements that were never scoped by entity. */
   entity?: string;
+  /** THE COMPANIES THIS ONE ROW ANSWERS FOR — a SHARED control.
+   *
+   *  The opposite arrangement to the instances above, and both are real. Some
+   *  controls are run once, centrally, for several companies at once: a group
+   *  treasury releasing payments for every subsidiary is performed by one team,
+   *  on one system, under one approval matrix. Testing it four times would be
+   *  testing the same act four times.
+   *
+   *  So it stays ONE row with one design track, one population, one sample and
+   *  one conclusion — and that conclusion carries to every company named here.
+   *  Which is exactly why the sample has to reach each of them: a company with
+   *  no item drawn has had nothing tested, and a conclusion that covers it would
+   *  be saying more than the work supports. See `Sample.entity`.
+   *
+   *  Absent on ordinary rows, which answer for the one company in `entity`. */
+  entities?: string[];
+  /** THE DISTINCT ROUTES WORK CAN TAKE through this control — a control with
+   *  more than one path (a payment released manually vs auto-released under a
+   *  threshold, a change approved in-system vs on an emergency form) is only
+   *  tested when the draw has touched each of them: a sample that never landed
+   *  on the second route has not tested the second route, however healthy its
+   *  size. Each drawn item says which route it went down (`Sample.path`), and
+   *  the sample step warns on any route left untouched — the same rule the
+   *  per-file draws and the shared control's companies already follow.
+   *  Absent on the ordinary single-route control. */
+  paths?: string[];
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
@@ -808,6 +851,10 @@ export interface Control {
   /** The reviewer sent the concluded paper back instead of countersigning —
    *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
   reviewReturn?: { reason: string; by: string; at: string };
+  /** The auditor unlocked a concluded control to test it again. The reason is
+   *  kept in full here — the trail only carries a truncated line — because
+   *  "why was a signed conclusion undone" is a working-paper question. */
+  reopened?: { reason: string; by: string; at: string };
   /** The auditor could not test at all. Deliberately NOT an exception: nothing
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
@@ -999,8 +1046,11 @@ export interface Deficiency {
    *  aggregate on their own from the control and the failed attributes; a shared
    *  mechanism cannot be read off free prose, so it is stated here instead. */
   rootCauseLinkId?: string;
-  /** Reviewer's confirmation of a Significant Deficiency or worse. Nothing moves
-   *  until this exists — a wrong rating must not drive weeks of remediation. */
+  /** Who sized it and sent it up. Kept so the next rung can refuse the same
+   *  person: a rating is only confirmed if a second pair of eyes confirms it. */
+  sized?: { by: string; at: string };
+  /** Reviewer's confirmation of the grade. Nothing moves until this exists — a
+   *  wrong rating must not drive weeks of remediation. */
   ratingConfirm?: { grade: string; by: string; at: string };
   /** Reviewer disagreed and sent the rating back to the auditor, with a reason. */
   ratingReturn?: { reason: string; by: string; at: string };
@@ -1009,6 +1059,9 @@ export interface Deficiency {
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
   /** The owner has put the plan up for the auditor to judge. */
   planSubmitted?: { by: string; at: string };
+  /** The owner declaring the fix done and ready to be tested — stamped so the
+   *  retest can refuse the same person. You do not test your own repair. */
+  fixSubmitted?: { by: string; at: string };
   /** The auditor's verdict on the plan — does it address the root cause? A
    *  rejection carries the reason back to the owner. The auditor never writes
    *  or executes the fix; this is the whole of their say in it. */
@@ -1342,6 +1395,34 @@ export interface AuditRecord {
 
 // ─── Ground-rules change log — materiality is set before testing; a mid-engagement
 // change is warned, previewed (which exceptions re-grade), and recorded here. ──────
+/** One narrowing of scope, with everything that left the register in it.
+ *
+ *  Scope moves both ways. A process dropped mid-audit has usually been tested
+ *  already, and deleting that work means a scope decision reversed a week later
+ *  costs the whole test again — so the controls are parked here with their
+ *  samples, results, conclusions and everything filed against them, and put back
+ *  untouched if the process returns. It is the same promise roll forward makes
+ *  at year end, kept for a change that happens mid-audit and by accident. */
+export interface ScopeArchiveEntry {
+  id: string;
+  at: string;
+  /** The processes that left, so a widening knows what to look for. */
+  processes: string[];
+  controls: Control[];
+  deficiencies: Deficiency[];
+  tasks: HandoffTask[];
+  discussions: Discussion[];
+  reviewNotes: ReviewNote[];
+  executions: ExecutionEvent[];
+  /** Run rows belonging to archived controls, each with the run they sat in —
+   *  put back into that run if it survived, or restored whole if it did not. */
+  runs: { run: RunRecord; entries: RunControlOutcome[] }[];
+  /** Which hand-picked audits held these controls, by audit id. An audit scoped
+   *  by RACM filters by process and needs nothing remembered; one scoped by
+   *  hand names its controls, and would otherwise come back a control short. */
+  auditControlIds: Record<string, string[]>;
+}
+
 export interface RulesChangeEntry {
   id: string;
   changes: { field: string; from: string; to: string }[];
@@ -1378,6 +1459,10 @@ export interface IcfrEngagement {
   audits: AuditRecord[];
   signoff: EngagementSignoff;
   rulesLog: RulesChangeEntry[];
+  /** Controls that left the register when scope narrowed, kept whole rather than
+   *  deleted (see reconcileScope). Nothing on the register reads this — it is a
+   *  holding bay, and widening scope again empties it back. */
+  scopeArchive?: ScopeArchiveEntry[];
   /** The audit's file registry — every file that entered, with where it came
    *  from. Holds the files uploaded through the app and any answer corrected
    *  afterwards; files the engagement derives from scoping are merged in on

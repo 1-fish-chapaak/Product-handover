@@ -4,7 +4,9 @@ import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, PenLine, X } from
 import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
+import { downloadAuditReportPdf } from './icfrReportPdf';
 import { useIcfr } from './store';
+import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
 
@@ -60,7 +62,8 @@ function Block({ b }: { b: PaperBlock }) {
                 <tr key={ri}>
                   {r.map((cell, ci) => (
                     <td key={ci} className={cn('px-2.5 py-1.5 align-top text-ink-700',
-                      b.tickFrom != null && ci >= b.tickFrom ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
+                      b.tickFrom != null && ci >= b.tickFrom && (b.tickTo == null || ci < b.tickTo)
+                        ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
                       ci === 0 && 'font-mono text-ink-400 whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>
@@ -200,6 +203,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper reads sheet by sheet, like the workbook it exports to
   const [sheetIx, setSheetIx] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { addToast } = useToast();
 
   // Escape closes the preview — but while the attest confirm is open it only
   // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
@@ -216,9 +220,21 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper follows the register's visible controls — a filtered
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
-  const fileName = report ? `Audit_Report_ICFR_${eng.code}.xlsx`
+  // the report is issued as a PDF (user rule, Aug 2026); the papers stay .xlsx
+  const fileName = report ? `Audit_Report_ICFR_${eng.code}.pdf`
     : control ? `Working_Paper_${control.id}.xlsx`
     : `Working_Paper_ICFR_${eng.code}.xlsx`;
+
+  // Each sheet of the report becomes a page of the PDF; the .xlsx export keeps
+  // the same sheets as a workbook, so the three surfaces can never disagree.
+  const issuePdf = async () => {
+    try {
+      await downloadAuditReportPdf(eng, included);
+      onDownload?.(); onClose();
+    } catch {
+      addToast({ type: 'error', title: 'PDF not generated', message: 'The PDF engine could not be loaded — try again.' });
+    }
+  };
   const sheets = report ? buildAuditReport(eng, included)
     : control ? controlPaperSections(eng, control)
     : buildIcfrPaper(eng, included);
@@ -280,10 +296,21 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
               </span>
             )}
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button disabled={downloadBlocked}
-              title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
-              onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
-              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            {report ? (
+              <>
+                {/* the report is ISSUED as a PDF (each sheet a page); the .xlsx
+                    is a secondary export of the same sheets */}
+                <button onClick={() => { downloadAuditReport(eng, included); onDownload?.(); onClose(); }}
+                  className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer inline-flex items-center gap-1.5"><FileSpreadsheet size={14} /> Export .xlsx</button>
+                <button onClick={issuePdf}
+                  className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download PDF</button>
+              </>
+            ) : (
+              <button disabled={downloadBlocked}
+                title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
+                onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
+                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            )}
           </div>
         </div>
       </div>

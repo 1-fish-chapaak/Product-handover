@@ -28,7 +28,7 @@ test('owner mode is a scoped to-do list, not the workspace', async ({ page }) =>
   // to-do surfaces lead; the engagement-wide workspace is gone
   await expect(page.getByText('My controls').first()).toBeVisible();
   await expect(page.getByText('My exceptions').first()).toBeVisible();
-  await expect(page.getByText('Engagement sign-off')).toHaveCount(0);
+  await expect(page.getByText('Audit sign-off')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Materiality & scope/ })).toHaveCount(0);
   await expect(page.getByText('By process')).toHaveCount(0);
   // register is the persona's own controls — S. Iyer's P2P-C-02 is not M. Nair's

@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp,
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, needsRatingConfirmation, previewRegrades, retestReadiness, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
+import { aggregationKeys, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, samePerson, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
 import { CourtBadge, SeverityPill, Toggle } from './parts';
 import { FormSelect, HeaderFilter } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
@@ -15,6 +15,7 @@ import { cn } from '../../lib/cn';
 // Exposure / GapType types — priced impact and the gap taxonomy are off the card.
 // `gapNature` replaces the latter, derived read-only from the track and the nature.
 import RemediationBriefModal from './RemediationBriefModal';
+import { isOwnerOf } from './auditScope';
 import { CHALLENGED_INPUT_LABEL, EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -104,7 +105,14 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
   //
   // So nothing here touches the engagement until it has been reviewed against the
   // exceptions it would move and given a reason. applyRules writes both.
-  const saved = useMemo(() => ({ M, pm, ctt, band: r.sdBandPct }), [M, pm, ctt, r.sdBandPct]);
+  //
+  // Aggregation rides the same path (Aug 2026). It is not a threshold, so it
+  // sat outside this draft for a while and applied on the click — but switching
+  // it off drops every grade that only reached its band by combining, which is
+  // the one re-grade that moves DOWNWARDS. Silent is exactly wrong there: a
+  // material weakness quietly becoming a significant deficiency is a conclusion
+  // changing behind the reviewer's back.
+  const saved = useMemo(() => ({ M, pm, ctt, band: r.sdBandPct, agg: r.aggregate }), [M, pm, ctt, r.sdBandPct, r.aggregate]);
   const [draft, setDraft] = useState(saved);
   const [reviewing, setReviewing] = useState(false);
   // Somebody else moved the thresholds (another audit on this engagement, or a
@@ -112,9 +120,9 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
   const [savedSeed, setSavedSeed] = useState(saved);
   if (savedSeed !== saved) { setSavedSeed(saved); setDraft(saved); }
 
-  const dirty = draft.M !== saved.M || draft.pm !== saved.pm || draft.ctt !== saved.ctt || draft.band !== saved.band;
+  const dirty = draft.M !== saved.M || draft.pm !== saved.pm || draft.ctt !== saved.ctt || draft.band !== saved.band || draft.agg !== saved.agg;
   const canEditRules = role === 'auditor' && !isEngagementLocked(eng);
-  const patch: RulesPatch = { materiality: draft.M, performanceMateriality: draft.pm, clearlyTrivial: draft.ctt, sdBandPct: draft.band };
+  const patch: RulesPatch = { materiality: draft.M, performanceMateriality: draft.pm, clearlyTrivial: draft.ctt, sdBandPct: draft.band, aggregate: draft.agg };
   // The ladder previews the DRAFT, so the bands move as you type — the point of
   // the review step is seeing the consequence before committing to it.
   const sd = draft.M * draft.band / 100;
@@ -181,10 +189,15 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       </section>
 
       {/* ── nothing has moved yet ───────────────────────────────────────────────
-          Appears only once a threshold is actually different. It says what is
+          Appears only once a rule is actually different. It says what is
           pending rather than just offering a button, because the fields above
-          look committed the moment you finish typing in them. */}
-      {dirty && !eng.materialityBasis && (
+          look committed the moment you finish typing in them.
+
+          No longer hidden when a materiality worksheet exists: the worksheet
+          only freezes the three money fields, while the band and the
+          aggregation switch stay editable — so that condition stranded a real
+          edit in a draft with no way to review or apply it. */}
+      {dirty && (
         <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-[0.75rem] text-mitigated-800 leading-relaxed min-w-0 inline-flex items-start gap-2">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -229,8 +242,10 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
               the auditor, so a reviewer clicking a live switch got silence: the
               same no-op the risk owner's Conclude buttons used to give. What a
               hat cannot do, it is not shown. */}
+          {/* Drafted, not applied: this switch re-grades, so it goes through the
+              same review-and-reason gate the thresholds do. */}
           {canEditRules
-            ? <Toggle on={r.aggregate} onChange={v => setRules('aggregation', { aggregate: v })} label="Aggregation" />
+            ? <Toggle on={draft.agg} onChange={v => setDraft(d => ({ ...d, agg: v }))} label="Aggregation" />
             : <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>}
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
@@ -297,7 +312,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
                           <span className="font-mono">{g.defId}</span>
                           <span className="text-ink-400">{g.from}</span>
                           <ArrowRight size={9} className="text-ink-300" />
-                          <span className={cn('font-semibold', GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade] ? 'text-risk-700' : 'text-compliant-700')}>{g.to}</span>
+                          <span className={cn('font-semibold', GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade] ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span>
                         </span>
                       ))}
                     </div>
@@ -483,10 +498,16 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
     { field: 'Performance materiality', from: fmtFull(eng.performanceMateriality), to: fmtFull(patch.performanceMateriality ?? eng.performanceMateriality) },
     { field: 'Clearly-trivial threshold', from: fmtFull(eng.rules.clearlyTrivial), to: fmtFull(patch.clearlyTrivial ?? eng.rules.clearlyTrivial) },
     { field: 'Significant-deficiency band', from: `${eng.rules.sdBandPct}%`, to: `${patch.sdBandPct ?? eng.rules.sdBandPct}%` },
+    { field: 'Aggregation', from: eng.rules.aggregate ? 'On' : 'Off', to: (patch.aggregate ?? eng.rules.aggregate) ? 'On' : 'Off' },
   ].filter(x => x.from !== x.to);
   // Worse is worse: a threshold cut that promotes a finding to Material Weakness
   // is the case the reviewer has to see, so it is counted separately.
   const worse = regrades.filter(g => GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade]).length;
+  // And so is easier. Switching aggregation off only ever LOWERS grades, so a
+  // modal that counted upgrades alone would show its most consequential change
+  // as a silent list — a material weakness dropping to significant deficiency is
+  // a conclusion being relaxed, not a problem going away.
+  const eased = regrades.length - worse;
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
@@ -511,7 +532,7 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
 
           <div>
             <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
-              {regrades.length === 0 ? 'Exceptions affected' : `Exceptions re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}`}
+              {regrades.length === 0 ? 'Exceptions affected' : `Exceptions re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}${eased ? `, ${eased} less severe` : ''}`}
             </span>
             {regrades.length === 0 ? (
               <p className="text-[0.75rem] text-ink-500 leading-relaxed rounded-lg border border-compliant-200 bg-compliant-50/40 px-3 py-2.5">
@@ -527,13 +548,16 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
                   {regrades.map(g => {
                     const d = eng.deficiencies.find(x => x.id === g.defId);
                     const up = GRADE_RANK[g.to as ExceptionGrade] > GRADE_RANK[g.from as ExceptionGrade];
+                    // A drop is amber, never green: nothing was fixed here. The
+                    // finding is the same size — it is being judged less harshly
+                    // because the rule under it moved.
                     return (
-                      <div key={g.defId} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2', up ? 'border-risk-200 bg-risk-50/40' : 'border-compliant-200 bg-compliant-50/30')}>
+                      <div key={g.defId} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2', up ? 'border-risk-200 bg-risk-50/40' : 'border-mitigated-200 bg-mitigated-50/40')}>
                         <span className="min-w-0">
                           <span className="font-mono text-[0.6875rem] text-ink-500">{g.defId}</span>
                           {d && <span className="block text-[0.71875rem] text-ink-700 truncate max-w-[300px]" title={d.description}>{d.controlId} · {d.description}</span>}
                         </span>
-                        <span className="text-[0.71875rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-compliant-700')}>{g.to}</span></span>
+                        <span className="text-[0.71875rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span></span>
                       </div>
                     );
                   })}
@@ -553,7 +577,7 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
           <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-          <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A threshold change needs a reason on the record.'}
+          <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A change to the grading rules needs a reason on the record.'}
             onClick={() => onApply(reason.trim())}
             className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Apply the change</button>
         </div>
@@ -991,8 +1015,13 @@ export function DeficienciesView() {
   // a countersigned engagement is a sealed record — the store already drops
   // every write, so the page must say so and put its pens away
   const locked = isEngagementLocked(eng);
-  // person-lane: the owner sees only exceptions riding their own controls
-  const all = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
+  // person-lane: the owner sees only exceptions riding their own controls. Owning
+  // is either capacity — the control's own owner or the process's — the same
+  // question the control register and the remediation brief ask, so a process
+  // owner does not see a control in one place and lose its finding in another.
+  const all = isOwner
+    ? eng.deficiencies.filter(d => { const c = eng.controls.find(x => x.id === d.controlId); return !!c && isOwnerOf(c, meOwner); })
+    : eng.deficiencies;
 
   // ── Column filters ────────────────────────────────────────────────────────────
   // In the headers, like the control register's — the column IS the trigger, so a
@@ -1036,7 +1065,7 @@ export function DeficienciesView() {
       {locked && (
         <p className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500 bg-paper-100 border border-canvas-border rounded-lg px-2.5 py-1.5">
           <Lock size={12} className="text-ink-400 shrink-0" />
-          The engagement is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.
+          The audit is countersigned, so this record is sealed — severity, remediation and stages are as they stood at conclusion.
         </p>
       )}
 
@@ -1531,7 +1560,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         {step >= 3 && d.status !== 'Closed' && <RetestReadyLine readiness={readiness} />}
 
         {/* ⑤ The retest itself — the auditor's grid, in their hat only. */}
-        {!locked && d.status === 'Retest' && isAuditor && <RetestPanel d={d} />}
+        {!locked && d.status === 'Retest' && isAuditor && (
+          samePerson(d.fixSubmitted, me)
+            ? <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must retest this — you declared the fix done.</span>
+            : <RetestPanel d={d} />
+        )}
 
         <RetestHistory rounds={rounds} />
         </div>
@@ -1546,7 +1579,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             isAuditor ? (
               d.rootCause.trim()
                 ? <button onClick={() => completeSizing(d.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5">
-                    <Scale size={13} /> {needsRatingConfirmation(grade) ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
+                    <Scale size={13} /> {!d.ratingConfirm ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
                   </button>
                 : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> Write the root cause first — the grade and the plan both hang off it.</span>
             ) : null
@@ -1555,7 +1588,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {/* ② blocking confirmation: significant or worse does not move until the
               reviewer agrees the grade */}
           {!locked && d.status === 'Rating review' && (
-            isReviewer ? (
+            // Same rule the close already states, one rung earlier: agreeing with
+            // your own rating is not a second pair of eyes.
+            isReviewer && samePerson(d.sized, me) ? (
+              <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must confirm — you sized this one.</span>
+            ) : isReviewer ? (
               rejecting === 'rating' ? (
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
@@ -1583,7 +1620,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
 
           {/* ③ the auditor's one say in the plan: does it address the root cause? */}
           {!locked && d.status === 'Plan review' && (
-            isAuditor ? (
+            isAuditor && samePerson(d.planSubmitted, me) ? (
+              <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must judge this plan — you submitted it.</span>
+            ) : isAuditor ? (
               rejecting === 'plan' ? (
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
@@ -1641,8 +1680,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             <button onClick={() => setBriefOpen(true)}
               className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={13} /> Remediation brief</button>
           )}
-          {/* the way back in: audit-side only, never one-click — the reason is the record */}
-          {!locked && !isOwner && d.status === 'Closed' && (
+          {/* the way back in: the reviewer's alone — they signed it closed, so
+              undoing that is theirs — and never one-click; the reason is the record */}
+          {!locked && isReviewer && d.status === 'Closed' && (
             <button onClick={() => { setReopening(true); setReopenReason(''); }}
               className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
           )}
@@ -1735,7 +1775,9 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         </td>
         <td><SeverityPill s={grade} /></td>
         <td><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill></td>
-        <td><CourtBadge court={courtForException(d)} fromRole={role} /></td>
+        {/* By name: a register that says which ROLE holds a finding still leaves
+            the reader asking who to chase. */}
+        <td><CourtBadge court={courtForException(d)} fromRole={role} who={exceptionCourtDetail(d, eng).who} /></td>
       </tr>
       {open && <tr className="def-detail"><td colSpan={DEF_COLS}>{detail}</td></tr>}
       {modals}
