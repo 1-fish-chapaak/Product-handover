@@ -1,51 +1,35 @@
 import { test, expect } from './_helpers';
+import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
 
 /**
- * SOX / ICFR — engagement creation drawer + locked materiality + TOD completeness.
- * 1) New engagement: side drawer → upload one-month GL → entity detected →
- *    materiality worksheet (benchmarks prefilled) → go live locks materiality.
- * 2) Configuration page shows the locked worksheet (seeded live engagement).
- * 3) TOD: design completeness gates "Conclude effective" until every required
+ * SOX / ICFR — engagement creation, locked materiality, TOD completeness.
+ *
+ * 1) A SOX engagement is created and lands in the library.
+ * 2) The materiality worksheet reads as locked on the audit's Configuration tab.
+ * 3) TOD: control completeness gates "Conclude effective" until every required
  *    element has evidence attached.
+ *
+ * Rewritten 12 Aug 2026. This file used to drive a creation SIDE DRAWER that
+ * uploaded a one-month GL, detected the entity from it, prefilled a benchmark
+ * table and ended in a "Go live — lock materiality" button. None of that is in
+ * the product any more — the strings do not exist anywhere in src — so those
+ * assertions were red against a feature that had been removed, not a bug. What
+ * survives is creation itself, which now runs through the four-step sheet off
+ * Engagements, and the locked worksheet, which is read where materiality
+ * actually lives.
  */
 
-test('create engagement via drawer — GL detects entity, go-live locks materiality', async ({ page }) => {
+test('a SOX engagement is created and lands in the library', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
-  await page.locator('[title="Engagements"]').first().click();
-  await page.waitForTimeout(800);
-  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
-  await page.waitForTimeout(1000);
-  await page.locator('.sox-book-ui').getByRole('button', { name: 'Control Library', exact: true }).first().click();
-  await page.waitForTimeout(600);
-  await page.getByRole('button', { name: 'New', exact: true }).click();
-  await expect(page.getByText('New SOX / ICFR engagement')).toBeVisible();
-
-  // upload the one-month GL → entity + benchmarks detected
-  await page.locator('input[aria-label="Upload one-month GL"]').setInputFiles({
-    name: 'GL_Apr2026_AG01.csv', mimeType: 'text/csv',
-    buffer: Buffer.from('company_code,account,amount\nAG01,Revenue,68400000\n'),
-  });
-  await expect(page.getByText(/Detected from the GL/)).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('input[aria-label="Entity name"]')).toHaveValue('Airline Group Ltd');
-  await expect(page.getByText(/Company code/)).toBeVisible();
-
-  // materiality worksheet — benchmark table prefilled from the GL
-  await page.getByRole('button', { name: /^Materiality/ }).click();
-  await expect(page.getByText('Total assets').first()).toBeVisible();
-  await expect(page.getByText('Overall materiality').first()).toBeVisible();
-  await expect(page.getByText('Allocation to significant account groups')).toBeVisible();
-
-  // review & go live — the lock warning, then live
-  await page.getByRole('button', { name: /Review & go live/ }).click();
-  await expect(page.getByText(/Materiality locks at go-live/)).toBeVisible();
-  await page.getByRole('button', { name: /Go live — lock materiality/ }).click();
-  await expect(page.getByText('Engagement is live')).toBeVisible({ timeout: 15_000 });
-  // lands in the new engagement's control library
-  await expect(page.getByText('FY27 ICFR — Airline Group Ltd').first()).toBeVisible({ timeout: 10_000 });
+  // The shared helper walks the current route: Engagements → New Engagement →
+  // SOX / ICFR → Basics → Review → Create.
+  await createSoxEngagement(page, 'FY27 ICFR — Airline Group');
+  await openFromLibrary(page, 'FY27 ICFR — Airline Group');
+  await expect(page.getByRole('heading', { name: 'FY27 ICFR — Airline Group' })).toBeVisible({ timeout: 15_000 });
 });
 
-test('configuration shows locked materiality; TOD completeness gates conclusion', async ({ page }) => {
+test('the worksheet reads as locked; control completeness gates the TOD conclusion', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
   await page.locator('[title="Engagements"]').first().click();
@@ -53,24 +37,44 @@ test('configuration shows locked materiality; TOD completeness gates conclusion'
   await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
 
-  // configuration — the seeded live engagement carries a locked worksheet
-  await page.getByRole('button', { name: /^Configuration/ }).click();
-  await page.waitForTimeout(600);
-  await expect(page.getByText('Locked at go-live')).toBeVisible();
-  await expect(page.getByText('Materiality is locked', { exact: false }).first()).toBeVisible();
+  // The engagement-level Configuration TAB is parked out of the tab strip, and
+  // this engagement has no audits, so there is no audit Configuration either.
+  // Materiality survives as the "Entities & scope" drill-in off the Overview,
+  // which is where the locked worksheet is now read.
+  await page.getByText('Entities & scope').first().click();
+  await page.waitForTimeout(800);
+  await expect(page.getByText('Materiality is locked', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Allocation to significant account groups')).toBeVisible();
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Back', exact: true }).first().click();
+  await page.waitForTimeout(600);
 
-  // TOD — P2P-C-03 has one required element without evidence → conclude locked
+  // TOD — one required element without evidence → conclude locked.
+  //
+  // Two hops, not one. The Control Library opens the LIBRARY page for a control
+  // (attributes, workflow mapping) — the five-step testing page lives behind the
+  // audit-run card on it, and that is where the meters and the conclusions are.
+  // The meter is called "Control completeness" now and states its fraction on
+  // its own line, so the count is read there rather than out of the old caption.
   await page.locator('.sox-book-ui').getByRole('button', { name: 'Control Library', exact: true }).first().click();
   await page.waitForTimeout(600);
   await page.getByText('Invoices are matched three-way').first().click();
-  await page.waitForTimeout(800);
-  await expect(page.getByText(/Design completeness — 2 of 3/)).toBeVisible();
+  await page.waitForTimeout(1200);
+  const runCard = page.getByRole('button').filter({ hasText: /Interim|Year-end|Roll-forward/ });
+  if (await runCard.count()) { await runCard.first().click(); await page.waitForTimeout(1400); }
+  const meter = page.getByText('Control completeness').first();
+  await expect(meter).toBeVisible({ timeout: 15_000 });
+  // The meter cards open on click; the fraction is in the body, not the face.
+  await meter.click();
+  await page.waitForTimeout(400);
+  await expect(page.getByText(/2\/3 required elements evidenced/)).toBeVisible();
   await expect(page.getByRole('button', { name: /Conclude effective/ }).first()).toBeDisabled();
-  // attach the missing evidence → completeness 100% → conclusion unlocks
+  // Attach the missing evidence → completeness reaches 100%. The conclusion does
+  // NOT open on that alone: a second gate asks whether the design checks were
+  // validated, and it is named separately. This used to assert the button went
+  // live here, which stopped being true when that gate was added — completeness
+  // is one of the preconditions, not the only one.
   await page.getByRole('button', { name: 'Attach evidence' }).first().click();
-  await expect(page.getByText(/Design completeness — 3 of 3/)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole('button', { name: /Conclude effective/ }).first()).toBeEnabled();
+  await expect(page.getByText(/3\/3 required elements evidenced/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /Conclude effective/ }).first()).toBeDisabled();
+  await expect(page.getByText(/design checks? not validated yet/)).toBeVisible();
 });
