@@ -123,9 +123,12 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
   const grades = defs.map(d => gradeException(d, eng).grade);
   const tally = (g: string) => grades.filter(x => x === g).length;
 
+  // The masthead moved to the contents page below — that page is the report's
+  // cover, and a title repeated on the page straight after it reads as a
+  // mistake. Summary now opens on the engagement's particulars, and the PDF
+  // prints its name at the top like every other section.
   const summary: IcfrSheet = {
     name: 'Summary', blocks: [
-      { kind: 'heading', text: `Audit report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
       {
         kind: 'kv', title: 'Engagement', rows: [
           ['Engagement', `${eng.name} (${eng.code})`],
@@ -290,7 +293,54 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     ],
   };
 
-  return [summary, rollup, exceptions, defSeverity, map];
+  /**
+   * The contents page — the report's cover and its index in one.
+   *
+   * Built LAST and from the sections themselves, so it can never drift from
+   * what follows it: a section added to the return below appears here without
+   * anyone remembering to list it, and each line quotes that section's own
+   * count rather than a second, hand-kept one.
+   *
+   * No page numbers. A section starts a new page but does not end one — the
+   * rollup runs to several pages on any real audit — so a printed number would
+   * be right for the first section and wrong from the second onward. The two
+   * other surfaces have no pages at all: the preview scrolls and the workbook
+   * has tabs. What is true everywhere is the order, so the order is what this
+   * states.
+   */
+  const body: { sheet: IcfrSheet; covers: string }[] = [
+    { sheet: summary, covers: 'The opinion, who the audit was for and over what period, and testing at a glance' },
+    { sheet: rollup, covers: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row each, from readiness to conclusion` },
+    { sheet: exceptions, covers: exceptionRows.length
+      ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
+      : 'No failed checks — every attribute tested passed on every sampled item' },
+    { sheet: defSeverity, covers: defs.length
+      ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'} — graded by the engine, confirmed by a second pair of eyes`
+      : 'Nothing classified' },
+    { sheet: map, covers: defs.length
+      ? `${actionable.length} open of ${defs.length} observation${defs.length === 1 ? '' : 's'} — management's agreed action, owner and committed date`
+      : 'Nothing to remediate' },
+  ];
+
+  const contents: IcfrSheet = {
+    name: 'Contents', blocks: [
+      { kind: 'heading', text: `Audit report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
+      {
+        kind: 'table', title: 'Contents',
+        note: `${body.length} sections — the report reads in this order`,
+        headers: ['#', 'Section', 'What it covers'],
+        rows: body.map((b, i) => [String(i + 1), b.sheet.name, b.covers]),
+      },
+      {
+        kind: 'note', label: 'Status', tone: signed ? 'good' : 'neutral',
+        text: signed
+          ? `Issued — signed by ${liveSignoff.preparer!.by} and countersigned by ${liveSignoff.reviewer!.by}. The opinion stated in Summary is final.`
+          : 'DRAFT — the opinion in Summary is indicative and is not final until the audit is signed and countersigned.',
+      },
+    ],
+  };
+
+  return [contents, ...body.map(b => b.sheet)];
 }
 
 /** The report as a workbook — one sheet per section, same blocks the preview
