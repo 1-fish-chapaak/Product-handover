@@ -1720,11 +1720,23 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
 }
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
-export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
+  *  seed: without it every engagement inherited the flagship's own company, and
+  *  the audit report — which names the entity in its title and its first table —
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+
+/** A group is recorded with its listing status attached — "Altura Infra Holdings
+ *  Ltd (Listed)" — because that is what the scoping screens key off. A document
+ *  names the company, not its listing state, so the parenthetical comes off on
+ *  the way into the workspace. */
+const legalName = (g: string) => g.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim();
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const base = structuredClone(ENGAGEMENT);
+  // Before anything reads it: withEntityInstances takes this as the fallback
+  // company, and the report prints it as the client.
+  if (meta?.entity) base.entity = legalName(meta.entity);
   if (meta?.materiality) base.materiality = meta.materiality;
   if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
   if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;

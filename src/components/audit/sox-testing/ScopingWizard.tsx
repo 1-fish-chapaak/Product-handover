@@ -50,33 +50,77 @@ const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracki
  *  margin itself, so the label and the control beside it sit on one baseline. */
 const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider';
 
-/** ── The group a sample org chart describes ────────────────────────────────
- *  Matches docs/samples/meridian-global-holdings-org-chart.* — upload that file
- *  and these are the rows that land, so the document and the screen agree.
+/** ── The groups the sample org charts describe ─────────────────────────────
+ *  One per document in docs/samples/. Upload a chart and its rows are what
+ *  land, so the document on the table and the table on screen agree.
  *
- *  Shaped like a real SOX 404 registrant rather than a tidy list: ONE listed
- *  parent (only the parent carries the NYSE listing — subsidiaries sit under it
- *  unlisted), wholly-owned subsidiaries, one majority-owned with a 26%
- *  non-controlling interest, and a second-level subsidiary held through another
- *  subsidiary. Depth and partial ownership are the two things an org chart tells
- *  you that a list of names cannot, so the sample carries both. */
-const ORG_CHART_GROUP_NAME = 'Meridian Global Holdings, Inc. (NYSE: MGH)';
-/** Authored in the order the chart reads — parent, then everything held beneath
- *  it — because the table indents rather than sorts. */
-const ORG_CHART_ENTITIES: GroupEntity[] = [
-  { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100 },
-  { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-  { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs' },
-  { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs' },
-  { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-  { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-  { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-  { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-  { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle' },
-  { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle' },
-  { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh' },
-  { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps' },
-];
+ *  Both are shaped like real registrants rather than tidy lists: ONE listed
+ *  parent (only the parent carries the listing — subsidiaries sit under it
+ *  unlisted), wholly-owned subsidiaries, at least one majority-owned with a
+ *  non-controlling interest, and a company held through another subsidiary
+ *  rather than directly. Depth and partial ownership are the two things an org
+ *  chart tells you that a list of names cannot, so each sample carries both.
+ *
+ *  Entities are authored in the order the chart reads — parent, then everything
+ *  held beneath it — because the table indents rather than sorts. */
+interface SampleChart {
+  /** Recognised off the uploaded file's NAME. A prototype stand-in for reading
+   *  the document: uploads here carry no bytes, so the filename is the only
+   *  thing that distinguishes one client's chart from another's. */
+  match: RegExp;
+  groupName: string;
+  entities: GroupEntity[];
+}
+
+/** docs/samples/meridian-global-holdings-org-chart.* — a US SEC registrant. */
+const MERIDIAN_CHART: SampleChart = {
+  match: /meridian/i,
+  groupName: 'Meridian Global Holdings, Inc. (NYSE: MGH)',
+  entities: [
+    { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100 },
+    { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+    { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs' },
+    { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs' },
+    { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+    { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
+    { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
+    { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
+    { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle' },
+    { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle' },
+    { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh' },
+    { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps' },
+  ],
+};
+
+/** docs/samples/altura-infra-holdings-org-chart.* — the group the SOX workspace
+ *  is already seeded with, so a chart-led creation and the seeded FY26 audit
+ *  name the same eight companies. Two of the six branches are joint ventures
+ *  (a state transmission utility holds 26%, a municipal corporation 49%), and
+ *  Smart Metering is held through Transmission — 100% of it, 74% reaching the
+ *  group. Green Hydrogen is deliberately ABSENT: the chart is dated before it
+ *  was incorporated, which is what leaves it for the trial balance to find. */
+const ALTURA_CHART: SampleChart = {
+  match: /altura/i,
+  groupName: 'Altura Infra Holdings Ltd (Listed)',
+  entities: [
+    { id: 'ent-aih', name: 'Altura Infra Holdings Limited', type: 'Holding', ownership: 100 },
+    { id: 'ent-aso', name: 'Altura Solar One Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+    { id: 'ent-awt', name: 'Altura Wind Two Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+    { id: 'ent-aro', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+    { id: 'ent-atr', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'ent-aih' },
+    { id: 'ent-asm', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-atr' },
+    { id: 'ent-awu', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 51, parentId: 'ent-aih' },
+    { id: 'ent-alp', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+  ],
+};
+
+const SAMPLE_CHARTS: SampleChart[] = [MERIDIAN_CHART, ALTURA_CHART];
+
+/** Which client's chart was uploaded. An unrecognised filename still extracts —
+ *  a demo that reads "nothing happened" is worse than one that reads the group
+ *  it has — so Meridian remains the default. */
+const chartFor = (fileName: string): SampleChart =>
+  SAMPLE_CHARTS.find(c => c.match.test(fileName)) ?? MERIDIAN_CHART;
 
 /** A row and everything held beneath it, however deep. Deleting one company
  *  has to take its whole family: a subsidiary only reaches the group THROUGH
@@ -131,8 +175,11 @@ const effectiveOwnership = (ent: GroupEntity, all: GroupEntity[]): number => {
 
 /** Rows an org chart put in the table. The chart names companies, not
  *  processes, so these rows keep the hand-added treatment in the process
- *  column — until a RACM or trial balance parse has something to extract. */
-const ORG_CHART_ENTITY_IDS = new Set(ORG_CHART_ENTITIES.map(e => e.id));
+ *  column — until a RACM or trial balance parse has something to extract.
+ *  Every sample's ids, not just the uploaded one's: the question this answers is
+ *  "did a chart put this row here", and the answer cannot depend on which chart
+ *  is on screen now. */
+const ORG_CHART_ENTITY_IDS = new Set(SAMPLE_CHARTS.flatMap(c => c.entities.map(e => e.id)));
 
 /** The listing parenthetical belongs to the group field, not to a name people
  *  will read on a card: "Meridian Global Holdings, Inc. (NYSE: MGH)" is how the
@@ -433,6 +480,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  fill until a RACM or trial balance arrives with something to extract.
    *  Merged by name, so a row already typed never doubles up. */
   const [orgChart, setOrgChart] = useState<{ name: string; state: 'parsing' | 'done' } | null>(null);
+  /** The chart the uploaded document turned out to be. Held rather than derived
+   *  on each read: the clash prompt can sit open for as long as the user likes,
+   *  and the merge it eventually runs has to be the one the upload started. */
+  const [chart, setChart] = useState<SampleChart>(MERIDIAN_CHART);
   /** Companies the chart names that are already sitting in the table, typed by
    *  hand. Held rather than silently resolved: skipping them quietly orphaned
    *  everything held beneath them, and overwriting them quietly binned the
@@ -448,60 +499,65 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  `replace` — the chart's version wins; anything the user had hanging off
    *              their row is re-pointed at the chart's row so it isn't cut
    *              loose along with it. */
-  const mergedWithChart = (existing: GroupEntity[], mode: 'adopt' | 'replace'): GroupEntity[] => {
+  const mergedWithChart = (existing: GroupEntity[], mode: 'adopt' | 'replace', src: SampleChart): GroupEntity[] => {
     const byName = new Map(existing.map(e => [e.name.trim().toLowerCase(), e]));
     if (mode === 'replace') {
       const swap = new Map<string, string>(); // the user's row id → the chart's
-      ORG_CHART_ENTITIES.forEach(e => {
+      src.entities.forEach(e => {
         const mine = byName.get(e.name.toLowerCase());
         if (mine) swap.set(mine.id, e.id);
       });
       const kept = existing
         .filter(e => !swap.has(e.id))
         .map(e => (e.parentId && swap.has(e.parentId) ? { ...e, parentId: swap.get(e.parentId) } : e));
-      return [...ORG_CHART_ENTITIES.map(e => ({ ...e })), ...kept];
+      return [...src.entities.map(e => ({ ...e })), ...kept];
     }
     const adopted = new Map<string, string>(); // the chart's row id → the user's
-    ORG_CHART_ENTITIES.forEach(e => {
+    src.entities.forEach(e => {
       const mine = byName.get(e.name.toLowerCase());
       if (mine) adopted.set(e.id, mine.id);
     });
-    const fresh = ORG_CHART_ENTITIES
+    const fresh = src.entities
       .filter(e => !byName.has(e.name.toLowerCase()))
       .map(e => ({ ...e, parentId: e.parentId ? adopted.get(e.parentId) ?? e.parentId : undefined }));
     return [...existing, ...fresh];
   };
 
   const resolveClash = (mode: 'adopt' | 'replace') => {
-    setEntities(prev => mergedWithChart(prev, mode));
-    setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? ORG_CHART_GROUP_NAME : prev));
+    setEntities(prev => mergedWithChart(prev, mode, chart));
+    setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? chart.groupName : prev));
     setClash(null);
   };
 
   const onOrgChartSelected = (list: FileList | null) => {
     const file = list?.[0];
     if (!file) return;
+    // Which client's chart this is, decided once, here — everything downstream
+    // reads the decision rather than re-making it off a filename that may have
+    // been replaced by the time the merge runs.
+    const src = chartFor(file.name);
+    setChart(src);
     setClash(null);
     setOrgChart({ name: file.name, state: 'parsing' });
     window.setTimeout(() => {
       // The user can tick "There are no separate entities" while this is still
-      // reading. That answer wins: merging twelve companies in underneath it
-      // would contradict the box they just ticked, and none of the rows would
-      // be removable. Drop the extraction rather than half-apply it.
+      // reading. That answer wins: merging a whole group in underneath it would
+      // contradict the box they just ticked, and none of the rows would be
+      // removable. Drop the extraction rather than half-apply it.
       if (soloEntityRef.current) { setOrgChart(null); return; }
       const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
-      const clashing = ORG_CHART_ENTITIES.filter(e => have.has(e.name.toLowerCase()));
+      const clashing = src.entities.filter(e => have.has(e.name.toLowerCase()));
       if (clashing.length) {
         // Stop and ask. Nothing is merged until the user says which version wins.
         setClash(clashing.map(c => c.name));
         setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
         return;
       }
-      setEntities(prev => mergedWithChart(prev, 'adopt'));
+      setEntities(prev => mergedWithChart(prev, 'adopt', src));
       // The chart's root IS the group. Filled in only while the field still
       // holds the untouched default or nothing — a name the user typed is an
       // answer, and an extraction does not get to overwrite an answer.
-      setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? ORG_CHART_GROUP_NAME : prev));
+      setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? src.groupName : prev));
       setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
     }, 900);
   };
@@ -1111,7 +1167,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="flex items-start gap-1.5 text-[11px] text-compliant-700 mb-1.5">
                     <Sparkles size={11} className="shrink-0 mt-0.5" />
                     <span>
-                      Read {ORG_CHART_ENTITIES.length} companies off the chart — check the names and types before
+                      Read {chart.entities.length} companies off the chart — check the names and types before
                       you continue.
                     </span>
                   </p>
