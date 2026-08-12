@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled,
+  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -300,6 +300,11 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   // Runs recorded over a draw that has since changed — the store refuses to
   // conclude on them, so the buttons say why instead of failing silently.
   const staleRuns = which === 'operating' ? control.operating.steps.filter(s => s.staleRun).length : 0;
+  // Attributes standing on a statement nobody backed. The store refuses to call
+  // the control effective on them, so Effective says why — Ineffective stays
+  // live, because an account that says the control did not run is still an
+  // answer, and blocking it would leave the control nowhere to go.
+  const onWordAlone = which === 'operating' ? inquiryOnlyAttributes(control).length : 0;
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -325,12 +330,17 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
         <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
         {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
+          </span>
+        )}
+        {onWordAlone > 0 && (
+          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+            <AlertTriangle size={11} /> {onWordAlone} attribute{onWordAlone === 1 ? ' rests' : 's rest'} on a statement alone — attach what was inspected, or validate the file, before calling this effective.
           </span>
         )}
       </div>
@@ -929,6 +939,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
   const overruled = attestationOverruled(step);   // the file and the attester disagree — the file wins, and says so
+  const wordAlone = restsOnStatementAlone(step);  // attested, with nothing behind it — cannot carry an effective conclusion
   // section 1 — validation: AI validation is the default; can switch to a mapped workflow
   const v1: 'ai' | 'workflow' = step.evidenceMode === 'workflow' ? 'workflow' : step.evidenceMode === 'ai' ? 'ai' : (step.workflowName ? 'workflow' : 'ai');
   const busy = testing || validatingWf;
@@ -1048,6 +1059,17 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               <div className="mt-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
                 <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                 <span>The validation reached <b>{step.validation!.result}</b> on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is <b>{step.validation!.result}</b>. To depart from the file, use the auditor's override and say why.</span>
+              </div>
+            )}
+            {/* Inquiry. The attester wrote what they saw and attached nothing,
+                and nothing was validated behind them — so the whole of the
+                evidence is the sentence above. Said here rather than only at the
+                conclusion, because the fix belongs on this card: attach what the
+                visit produced, or run the validation. */}
+            {wordAlone && (
+              <div className="mt-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
+                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                <span>This attribute rests on the statement alone — nothing was attached and nothing was validated behind it. An attribute proven by inquiry is not tested, so the control cannot be concluded <b>effective</b> while it stands. Attach what was inspected, or run the validation.</span>
               </div>
             )}
             {att?.note && <p className="text-[0.75rem] text-ink-700 mt-1.5 italic">“{att.note}”</p>}

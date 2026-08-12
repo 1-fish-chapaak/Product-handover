@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -625,6 +625,10 @@ function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
 const stepResult = (s: OperatingStep): string => {
   if (s.override) return `${s.override.result} (overridden)`;
   if (attestationOverruled(s)) return `${s.validation!.result} (validation stands over the attestation)`;
+  // The paper has to be readable against the rule that blocked the conclusion.
+  // A reviewer who sees a Pass and no evidence should not have to work out for
+  // themselves that the attribute rested on somebody's account of it.
+  if (restsOnStatementAlone(s)) return `${s.result} (inquiry only — statement with nothing attached)`;
   return s.result;
 };
 

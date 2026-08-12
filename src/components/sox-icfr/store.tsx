@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, controlConclusion, formatINR, gradeException, icfrConclusion, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, controlConclusion, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -1805,6 +1805,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // A stale run cannot be concluded on: it was testing a draw that no
       // longer exists. Re-run (or re-attest) the flagged attributes first.
       if (conclusion !== 'Not tested' && c.operating.steps.some(s => s.staleRun)) return c;
+      // Nor can a statement nobody backed. An attribute whose only support is
+      // somebody saying so has not been tested, and a control cannot be called
+      // effective on the strength of it.
+      //
+      // Effective only. Ineffective stays open on purpose: if the account you
+      // were given says the control did not run, that is a conclusion you can
+      // defend, and refusing it would trap the control with no way out.
+      if (conclusion === 'Effective' && inquiryOnlyAttributes(c).length) return c;
       return { ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } };
     });
     // Reads the state the patch produced: a stale-run refusal above leaves the

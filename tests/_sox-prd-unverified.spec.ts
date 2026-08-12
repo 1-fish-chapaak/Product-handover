@@ -22,6 +22,11 @@ import { openFromLibrary } from './_sox_helpers';
  * carried by reconcileScope, whose only caller is the engagement-level
  * ConfigurationView — parked out of the tab list, so there is no journey to
  * drive. It is covered by the type checker and by reading, not by this file.
+ *
+ * A fifth rule joined them later: an attribute proven by inquiry alone cannot
+ * carry an operating conclusion. It is derived rather than asked — the
+ * per-attribute "Evidence type" dropdown was removed on 31 Jul and stays
+ * removed — so the test drives the state instead of picking it from a menu.
  */
 type Page = import('@playwright/test').Page;
 
@@ -187,4 +192,47 @@ test('refiltering hands the filter back instead of a blank form', async ({ page 
 
   await expect(page.getByLabel('Extraction criteria')).toHaveValue(PROBE, { timeout: 10_000 });
   await expect(page.getByText('as you wrote it').first()).toBeVisible();
+});
+
+test('an attribute resting on a statement alone cannot carry an effective conclusion', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/');
+  await openAlturaControl(page, 'New payee setup independently verified');
+
+  // The one attribute with nothing recorded behind it yet — seeded run refs are
+  // only written for attributes that have been tested, so "not run yet" is how
+  // an untouched evidence lane identifies itself.
+  const card = page.locator('.step-row').filter({ hasText: 'not run yet' }).first();
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toBeVisible({ timeout: 15_000 });
+
+  // Attest it, and attach nothing. That is inquiry: somebody's account of what
+  // happened, with no document and no run standing behind it.
+  await card.getByRole('switch', { name: 'Toggle self-attestation' }).click();
+  await page.waitForTimeout(300);
+  const note = card.getByPlaceholder(/Describe how this attribute is satisfied/);
+  await note.fill('Asked the treasury lead, who confirmed the call-back is always performed.');
+  await note.locator('xpath=following::button[normalize-space()="Pass"][1]').click();
+  await page.waitForTimeout(800);
+
+  // 1 · the card names it, and says what would fix it
+  await expect(card.getByText(/rests on the statement alone/)).toBeVisible({ timeout: 10_000 });
+  await expect(card.getByText(/Attach what was inspected, or run the validation/)).toBeVisible();
+
+  // 2 · the conclusion is held, and the footer says why — Ineffective stays live
+  await expect(page.getByText(/rests? on a statement alone/).last()).toBeVisible();
+  // Design and operating each have a conclude footer, so take the second — the
+  // operating one, which is the track this rule holds.
+  const effective = page.getByRole('button', { name: 'Conclude effective' }).last();
+  await effective.scrollIntoViewIfNeeded();
+  await expect(effective).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Conclude ineffective' }).last()).toBeEnabled();
+
+  // 3 · attaching what the visit produced clears it — the statement now has
+  //     something behind it, so the rule lets go
+  await card.getByRole('button', { name: 'Attach evidence' }).click();
+  await page.waitForTimeout(800);
+  await expect(card.getByText(/rests on the statement alone/)).toHaveCount(0);
+  await expect(effective).toBeEnabled();
 });

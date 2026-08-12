@@ -1198,9 +1198,30 @@ export function combinedSample(c: Control): { orig: number; ext: number; total: 
     anomalies: judged.filter(j => j.kind === 'Anomaly' && ex.some(e => e.sampleId === j.sampleId && e.stepId === j.stepId)).length,
   };
 }
-/** An attribute concluded on nothing but somebody's word. Operating refuses these. */
+/** An attribute concluded on nothing but somebody's word. Operating refuses these.
+ *
+ *  Derived, not asked. The per-attribute "Evidence type" dropdown was removed on
+ *  31 Jul and is not coming back — but the rule under it is a real one, and the
+ *  answer was always sitting in the attribute already: an attestation is somebody
+ *  telling you it happened, and if nothing was validated, no run was pulled and
+ *  the attester attached nothing, then the statement is the whole of the evidence.
+ *  That is inquiry, and inquiry does not carry an operating conclusion.
+ *
+ *  A bare result with no attestation at all is deliberately NOT caught here. That
+ *  is the auditor recording their own testing, not somebody's word about it, and
+ *  sweeping it in would block every manual control on the register.
+ *
+ *  An explicit evidenceType still wins where one exists, so the parked field and
+ *  its mutator keep their meaning if they are ever brought back. */
 export function inquiryOnlyAttributes(c: Control): OperatingStep[] {
-  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType));
+  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType) || restsOnStatementAlone(s));
+}
+/** Attested, with nothing behind the attestation. */
+export function restsOnStatementAlone(s: OperatingStep): boolean {
+  return !!s.attestation
+    && !s.validation?.result
+    && !s.workflowRunRef
+    && (s.attestation.evidence?.length ?? 0) === 0;
 }
 
 // ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────
