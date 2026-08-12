@@ -724,6 +724,11 @@ export function CrossWorkflowCorrelationPanel({
         },
     reasoning: `The ${checks} checks flag one ${entityType}, not ${checks} separate problems. This run's ${shortName} exceptions overlap the ${correlated.length} earlier run${correlated.length === 1 ? '' : 's'}, so memory counts the pattern once — it is not new noise.`,
     atStake: `${usd0(totalPaid)} flagged across sampled rows in ${checks} checks — sampled rows only, the full population is larger. This run: ${currentRunFlag}.`,
+    kpis: [
+      { value: String(checks), label: checks === 1 ? 'Check flags it' : 'Checks flag it', sub: `the same ${entityType} across unrelated tests — one driver, counted once`, tone: checks >= 3 ? 'bad' : 'neutral' },
+      { value: usd0(totalPaid), label: 'Flagged, sampled rows', sub: 'sampled rows only — the full population is larger' },
+      { value: String(evidenceRows.length), label: 'Rows in evidence', sub: `across ${allRecords.length} run${allRecords.length === 1 ? '' : 's'} — correlation, not yet a confirmed shared cause` },
+    ],
     factors: { frequency: 0.72, sourceDiversity: 0.9, recency: 0.96, businessImpact: 0.7 },
     confidenceOverride: current.insight.confidence,
     evidence: [

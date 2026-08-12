@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
+import { Sparkles, Plus, FileSpreadsheet } from 'lucide-react';
+import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import { WORKFLOWS } from '../../data/mockData';
+import { getActiveWorkflowEdit } from '../../data/workflowActions';
 import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
 import DataSourcePanel from '../concierge-workflow-builder/DataSourcePanel';
 import { SAMPLE_WORKFLOWS } from '../concierge-workflow-builder/sampleWorkflows';
@@ -104,9 +107,19 @@ function resolveWorkflowName(workflowId: string): string | null {
 
 export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props) {
   const logEvent = useAuditLog();
-  const workflowName = resolveWorkflowName(workflowId);
+  // Insight → editor handoff (a boot-time fact, read once per tab). When an
+  // insight sent the reader here, the change to make is already known — so the
+  // journey skips the generic clarify stage and opens the editor grounded in
+  // that insight: context banner up top, recap + suggested change in the chat.
+  const insightCtx = getActiveWorkflowEdit();
+  const workflowName = resolveWorkflowName(workflowId) ?? insightCtx?.workflowName ?? null;
 
-  const [phase, setPhase] = useState<'clarify' | 'editor'>('clarify');
+  // Every entry — insight tile or the details page's "Edit in Chat" — lands on
+  // the chat hello screen first (review call Aug 11): editing banner, connected
+  // source, and a composer already holding "I want to change". Submitting the
+  // intent drops straight into the editor with that message leading the thread.
+  const [phase, setPhase] = useState<'landing' | 'clarify' | 'editor'>('landing');
+  const [landingInput, setLandingInput] = useState('I want to change');
   // Editor sub-stage. mapping = step 3 (Input Config tab); review = step 4
   // (Plan tab) — mirrors the AI Concierge builder's Map Data → Review & Run.
   const [editorStage, setEditorStage] = useState<'mapping' | 'review'>('mapping');
@@ -164,10 +177,23 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
   // 4 = Plan. Manual tab clicks still take precedence after the transition.
   const panelStep = editorStage === 'review' ? 4 : 3;
 
-  const initialMessages = useMemo<EditChatMessage[]>(
-    () => buildInitialMessages(workflowName ?? 'Workflow'),
-    [workflowName],
-  );
+  const initialMessages = useMemo<EditChatMessage[]>(() => {
+    const base = buildInitialMessages(workflowName ?? 'Workflow');
+    if (!insightCtx) return base;
+    // The insight leads the thread: what was found, the unconfirmed cause, and
+    // the one change it argues for — already queued, nothing to restate.
+    const recap: EditChatMessage = {
+      id: nextMsgId(),
+      role: 'ira',
+      text: [
+        `You've arrived from an insight on **${insightCtx.subjectLabel}**: “${insightCtx.takeaway}”`,
+        insightCtx.cause ? `\nLikely cause — confirm before relying on it: ${insightCtx.cause}` : '',
+        `\nI've queued the suggested change: **${insightCtx.suggestedChange}**`,
+        `\nReview the mapping on the right, refine anything here in chat, then hit **Confirm & Proceed** — I'll validate before anything runs.`,
+      ].join('\n'),
+    };
+    return [recap, ...base];
+  }, [workflowName, insightCtx]);
   const [messages, setMessages] = useState<EditChatMessage[]>(initialMessages);
 
   const handleClarificationsComplete = useCallback(
@@ -368,6 +394,96 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
     });
   }, [logEvent, workflowName]);
 
+  if (phase === 'landing') {
+    const connectedFile = Object.values(editFiles)[0]?.[0]?.name ?? null;
+    const submitIntent = () => {
+      const text = landingInput.trim();
+      if (text) {
+        setMessages((prev) => [{ id: nextMsgId(), role: 'user', text }, ...prev]);
+      }
+      setPhase('editor');
+    };
+    return (
+      <div className="flex h-full flex-col overflow-y-auto bg-canvas">
+        <div className="m-auto w-[52.5rem] max-w-full px-6 py-10 text-center">
+          {/* The hello mark + heading — the same welcome the chat hero gives,
+              so editing reads as a conversation, not a form. */}
+          <AuditifyHelloEffect className="text-primary h-14 mx-auto mb-5" speed={0.7} />
+          <h1 className="text-[2.125rem] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
+            Audit smarter. <span className="font-bold">Not harder.</span>
+          </h1>
+          <p className="text-[0.9375rem] text-ink-500">
+            Let <span className="font-semibold text-ink-700">Ira</span> handle your grunt tasks. Just ask.
+          </p>
+
+          {/* What this tab IS — the version contract up front, before a word
+              is typed: edits never overwrite, they save as the next version. */}
+          <div className="mx-auto mt-8 max-w-[42rem] rounded-r-lg border-l-4 border-amber-400 bg-amber-50 px-4 py-2.5 text-left">
+            <p className="text-[0.8125rem] font-bold text-amber-900">
+              📝 Editing {workflowName ?? 'this workflow'} — current latest is v1
+            </p>
+            <p className="mt-0.5 text-[0.75rem] font-medium text-amber-700">
+              Make changes and click “Save as new version” → creates v2
+            </p>
+          </div>
+
+          {/* The source already wired to this workflow — carried in, not re-picked. */}
+          {connectedFile && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-[0.8125rem]">
+              <span className="font-semibold text-ink-700">Connected:</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50/50 px-2.5 py-1 text-[0.75rem] font-medium text-brand-700">
+                <FileSpreadsheet size={12} aria-hidden="true" />
+                {connectedFile}
+                <span className="text-[0.625rem] font-bold uppercase text-ink-400">· {connectedFile.split('.').pop()}</span>
+              </span>
+            </div>
+          )}
+
+          {/* Composer — pre-filled with the intent so the reader only has to
+              finish the sentence. Enter submits; the message leads the thread. */}
+          <div className="ai-border mx-auto mt-4 max-w-[42rem] text-left">
+            <textarea
+              value={landingInput}
+              onChange={(e) => setLandingInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitIntent();
+                }
+              }}
+              rows={3}
+              aria-label="Describe the change you want to make"
+              className="w-full resize-none rounded-t-2xl bg-transparent px-4 pt-3.5 text-[0.875rem] text-ink-900 outline-none placeholder:text-ink-400"
+              autoFocus
+            />
+            <div className="flex items-center gap-2 px-3 pb-3">
+              <button
+                type="button"
+                onClick={() => setShowDataPicker(true)}
+                title="Attach a data source"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 hover:bg-canvas hover:text-ink-700 transition-colors cursor-pointer"
+              >
+                <Plus size={16} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={submitIntent}
+                className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 text-[0.8125rem] font-semibold text-white hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
+              >
+                <Sparkles size={13} aria-hidden="true" /> Submit
+              </button>
+            </div>
+          </div>
+        </div>
+        <DataPickerModal
+          open={showDataPicker}
+          onClose={() => setShowDataPicker(false)}
+          onConfirm={handleDataPickerConfirm}
+        />
+      </div>
+    );
+  }
+
   if (phase === 'clarify') {
     return (
       <div className="flex flex-col h-full bg-canvas">
@@ -388,6 +504,20 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
 
   return (
     <div className="flex flex-col h-full bg-canvas">
+      {/* Insight provenance — the one strip that says why this tab exists and
+          reassures that the report the reader came from is still where it was. */}
+      {insightCtx && (
+        <div className="shrink-0 flex items-center gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-2">
+          <Sparkles size={12} className="shrink-0 text-brand-600" aria-hidden="true" />
+          <span className="shrink-0 text-[0.625rem] font-bold uppercase tracking-wider text-brand-700">Editing from insight</span>
+          <span className="min-w-0 truncate text-[0.75rem] font-medium text-ink-700" title={insightCtx.takeaway}>
+            {insightCtx.takeaway}
+          </span>
+          <span className="ml-auto hidden md:inline shrink-0 text-[0.6875rem] text-ink-400">
+            Your insight report stays open in the original tab.
+          </span>
+        </div>
+      )}
       {/* Body — 50% chat / 50% workspace (mirrors the AI Concierge builder journey from Map Data step onward) */}
       <div
         className="flex-1 min-h-0 grid transition-[grid-template-columns] duration-300"

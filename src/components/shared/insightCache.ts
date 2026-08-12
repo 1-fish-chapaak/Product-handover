@@ -170,8 +170,22 @@ export function setInsightFeedback(insightId: string, feedback: InsightFeedback 
 // every cache write broadcasts one. Union-merge (never clears), structured
 // clone (insights are plain data), still session-scoped — nothing persists.
 
+// A long-lived tab can outlive the deploy that loaded it, then answer a new
+// tab's hello with insights built by code that no longer exists — the new
+// bundle renders an object shape it never produced (a card generated before
+// authored KPIs existed shows the fallback band, stamped days old). Guard both
+// axes: snapshots must come from the same schema version (old bundles send
+// none), and an insight past the freshness window never crosses tabs — the new
+// tab regenerates instead.
+const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+const isFresh = (i: LayeredInsight) =>
+  i.generatedAt == null || Date.now() - i.generatedAt < SNAPSHOT_MAX_AGE_MS;
+
 interface CacheSnapshot {
   type: 'snapshot';
+  version: number;
   single: [string, LayeredInsight][];
   multi: [string, LayeredInsight[]][];
   empty: string[];
@@ -192,6 +206,7 @@ function broadcastSnapshot() {
     broadcastQueued = false;
     const msg: CacheSnapshot = {
       type: 'snapshot',
+      version: SNAPSHOT_VERSION,
       single: [...CACHE],
       multi: [...MULTI_CACHE],
       empty: [...EMPTY_CACHE],
@@ -209,11 +224,11 @@ if (channel) {
       if (CACHE.size || MULTI_CACHE.size || EMPTY_CACHE.size) broadcastSnapshot();
       return;
     }
-    if (msg.type !== 'snapshot') return;
+    if (msg.type !== 'snapshot' || msg.version !== SNAPSHOT_VERSION) return;
     applyingRemote = true;
     try {
-      msg.single.forEach(([k, v]) => CACHE.set(k, v));
-      msg.multi.forEach(([k, v]) => MULTI_CACHE.set(k, v));
+      msg.single.forEach(([k, v]) => { if (isFresh(v)) CACHE.set(k, v); });
+      msg.multi.forEach(([k, v]) => { if (v.every(isFresh)) MULTI_CACHE.set(k, v); });
       msg.empty.forEach(k => EMPTY_CACHE.add(k));
       msg.actions.forEach(([k, v]) => ACTION_STATUS.set(k, v));
       msg.feedback.forEach(([k, v]) => INSIGHT_FEEDBACK.set(k, v));
