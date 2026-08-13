@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, canExtendToe, canRedrawToe, controlConclusion, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -373,6 +373,13 @@ interface IcfrCtx {
    *  newly-scoped ones, drop the rest. */
   reconcileScope: (processes: string[]) => void;
   // deficiencies / exception lifecycle — the six steps
+  /** Put an exception in a root-cause group — an existing one, or a new one
+   *  named here with the exceptions it is being linked to. */
+  linkRootCause: (id: string, target: { groupId: string } | { name: string; withIds: string[] }) => void;
+  unlinkRootCause: (id: string, groupId: string) => void;
+  /** File the judgement that a group's members do not compound. The group and
+   *  its combined grade both stand — see setGroupConclusion. */
+  setGroupConclusion: (groupKey: string, note: string) => void;
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
   /** ② the auditor is done sizing — to the reviewer if significant or worse,
@@ -2172,10 +2179,66 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // whichever WAY it moved. Clearing only on the way up let a confirmed
       // material weakness be walked down past the reviewer with their stamp
       // still attached, which is the one thing this rung exists to stop.
-      const cleared = before.ratingConfirm
-        ? next.deficiencies.map(d => (d.id === id ? { ...d, ratingConfirm: undefined, status: 'Rating review' as const } : d))
-        : next.deficiencies;
-      return { ...next, deficiencies: cleared, executions: [event, ...next.executions] };
+      //
+      // Swept across EVERY exception, not just this one: one member's figures
+      // move its whole group, and a sibling whose grade the group has just
+      // raised is carrying a confirmation for a grade that no longer stands.
+      return reconcileConfirmations({ ...next, executions: [event, ...next.executions] });
+    });
+  }, [me, role]);
+
+  /* ── Root-cause groups ──────────────────────────────────────────────────────
+   *
+   * The one grouping a person makes. Membership lives on the group so it can
+   * only ever be symmetric — the old single `rootCauseLinkId` could point one
+   * way and leave the other exception not knowing it had been linked.
+   */
+  const linkRootCause = useCallback<IcfrCtx['linkRootCause']>((id, target) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const groups = prev.rootCauseGroups ?? [];
+      let next: IcfrEngagement;
+      if ('groupId' in target) {
+        if (!groups.some(g => g.id === target.groupId)) return prev;
+        next = { ...prev, rootCauseGroups: groups.map(g => (g.id === target.groupId && !g.memberIds.includes(id) ? { ...g, memberIds: [...g.memberIds, id] } : g)) };
+      } else {
+        const name = target.name.trim();
+        if (!name) return prev;
+        // A new group starts with both ends of the link in it — a root-cause
+        // group of one says nothing about a shared mechanism.
+        const members = Array.from(new Set([id, ...target.withIds]));
+        next = { ...prev, rootCauseGroups: [...groups, { id: uid('rcg'), name, memberIds: members, by: me, at: 'just now' }] };
+      }
+      return reconcileConfirmations(next);
+    });
+  }, [me, role]);
+
+  const unlinkRootCause = useCallback<IcfrCtx['unlinkRootCause']>((id, groupId) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      // A group that empties out to one member is not a group any more.
+      const groups = (prev.rootCauseGroups ?? [])
+        .map(g => (g.id === groupId ? { ...g, memberIds: g.memberIds.filter(m => m !== id) } : g))
+        .filter(g => g.memberIds.length > 1);
+      return reconcileConfirmations({ ...prev, rootCauseGroups: groups });
+    });
+  }, [role]);
+
+  /** "These members do not compound, and here is why."
+   *
+   *  Deliberately NOT a way to break a derived group up: two exceptions hitting
+   *  Accounts Payable is a fact, and an auditor who judges they do not compound
+   *  is making an argument, not correcting a record. So the argument is filed
+   *  and the combined grade stands beside it. */
+  const setGroupConclusion = useCallback<IcfrCtx['setGroupConclusion']>((groupKey, note) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const rest = (prev.groupConclusions ?? []).filter(c => c.groupKey !== groupKey);
+      const text = note.trim();
+      return { ...prev, groupConclusions: text ? [...rest, { groupKey, note: text, by: me, at: 'just now' }] : rest };
     });
   }, [me, role]);
 
@@ -3113,10 +3176,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
