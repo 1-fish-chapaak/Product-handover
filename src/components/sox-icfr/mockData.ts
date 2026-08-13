@@ -1740,7 +1740,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // engagement with the most data in it.
     // The flagship was never scoped from trial balances, so it is one company —
     // its own. Named on every row rather than left blank.
-    base.controls = withEntityCoverage(base.controls, base.id, base.entity);
+    base.controls = withAccounts(withEntityCoverage(base.controls, base.id, base.entity));
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
@@ -1764,7 +1764,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // control either way. Only Altura's scoping actually spans companies today, so
   // every other engagement keeps the register it had, now with its own company
   // named on every row.
-  let controls = withEntityCoverage(built, meta.id, base.entity);
+  let controls = withAccounts(withEntityCoverage(built, meta.id, base.entity));
   // The draw is then dealt across those companies, because a conclusion covering
   // four of them is worth only what the sample behind it touched.
   controls = tagSamplesByEntity(controls);
@@ -1895,6 +1895,35 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
  * per control; `entities` is what makes the reach of that row visible, and the
  * sample step is where the reach has to be earned.
  */
+/**
+ * The FS line items a control stands behind — the grouping key for aggregation.
+ *
+ * Seeded off the process, but deliberately NOT one-for-one with it: a payment
+ * run settles payables as well as moving cash, and a three-way match is as much
+ * an inventory control as a payables one. If every process mapped to exactly one
+ * account, account groups and process groups would be the same thing wearing a
+ * different name — which is the arrangement this replaced.
+ *
+ * IT General Controls map to nothing on purpose: an ITGC does not land on one
+ * line item, it withdraws reliance across the engagement. See
+ * `joinsNoDerivedGroup`.
+ */
+const ACCOUNTS_FOR_PROCESS: Record<string, string[]> = {
+  'Procure to Pay': ['a1', 'a2'],
+  Treasury: ['a4', 'a1'],
+  'Order to Cash': ['a3'],
+  'Record to Report': ['a5'],
+  Inventory: ['a2'],
+};
+
+/** Attach them, without overwriting a control that already names its own. */
+function withAccounts(controls: Control[]): Control[] {
+  controls.forEach(c => {
+    if (!c.accountIds?.length) c.accountIds = ACCOUNTS_FOR_PROCESS[c.process] ?? [];
+  });
+  return controls;
+}
+
 function withEntityCoverage(controls: Control[], engagementId: string, fallback: string): Control[] {
   const prog = programmeFor(engagementId);
   // The single company the whole engagement is against. Every audit has one, even
