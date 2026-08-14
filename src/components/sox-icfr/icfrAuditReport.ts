@@ -1,43 +1,94 @@
 import * as XLSX from 'xlsx';
 import {
-  assessSeverity, conclusionOf, controlConclusion, formatDueDate, formatINR, icfrConclusion,
-  openMaterialWeaknesses, trackResult,
+  conclusionOf, designStarted, formatDueDate, formatINR, gradeException,
+  icfrConclusion, openMaterialWeaknesses, toeRounds, trackResult,
 } from './helpers';
-import { gapNature } from './types';
-// ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
-// Restore this import alongside the blocks parked further down the file.
-//
-// import { exposureTotal, GAP_LABEL } from './types';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, Deficiency, IcfrEngagement } from './types';
 
 /**
  * The audit report — the deliverable, which the working paper is not.
  *
- * The working paper is the evidence: what was tested, on what, and what it showed.
- * It is written for a reviewer and a regulator. Nobody in management reads it, and
- * on the review call that was said out loud — the paper is not the final output; a
- * report with a management action plan is, and this tool produced no such thing.
+ * The working paper is the evidence: what was tested, on what, and what it
+ * showed — written for a reviewer and a regulator. This is the same testing
+ * addressed to the people who act on it, and its shape follows the client's own
+ * end-of-audit summary report (the P2P SOX Control Testing example, Aug 2026):
  *
- * So this is the same testing, addressed to the people who have to act on it:
- * what the group's controls do and don't cover, what broke, what it is worth in
- * rupees, and who has committed to fixing it by when. It is built from the SAME
- * `PaperBlock` union as the working paper, so the preview modal renders it and the
- * .xlsx writer exports it with no renderer of their own — one document format, two
- * documents.
+ *   Summary → Control Rollup → Exceptions → Deficiency Severity
  *
- * Nothing here is authored: every line is read off the controls, the deficiencies
- * and the sign-off. A report that could say something the working paper doesn't
+ * plus the Management action plan, kept on the user's call — the review call
+ * named a report with a MAP as the engagement's real output, so the example's
+ * four sheets gained a fifth rather than losing it.
+ *
+ * The report is issued as a PDF (each sheet becomes a page); preview and an
+ * .xlsx export read the same sheets, so the three can never disagree. Nothing
+ * here is authored: every line is read off the controls, the deficiencies and
+ * the sign-off. A report that could say something the working paper doesn't
  * would be a second version of the truth.
+ *
+ * (The earlier narrative format — Cover / Executive summary / Observations /
+ * Appendix — and its parked Priced-impact & Gap-type columns live in git
+ * history, superseded by this sheet layout.)
  */
 
-export const REPORT_COVER_TITLE = 'Report — basis of issue';
 export const MAP_TITLE = 'Management action plan';
 
-/** Severity as the report states it, with the reason for any adjustment. */
-function severityOf(d: Deficiency, eng: IcfrEngagement): string {
-  const a = assessSeverity(d, eng);
-  return a.bumped ? `${a.final} (raised on judgement)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
+/** The TOE grid in numbers — the handbook grain is attribute × sampled item,
+ *  so "checks" here means exactly the cells of that grid. */
+function checkCounts(c: Control): { items: number; done: number; total: number; fails: number } {
+  const samples = c.operating.sampling?.samples ?? [];
+  const steps = c.operating.steps;
+  let done = 0, fails = 0;
+  steps.forEach(s => samples.forEach(smp => {
+    const r = s.sampleResults?.[smp.id];
+    if (r && r !== 'Not tested') done += 1;
+    if (r === 'Fail') fails += 1;
+  }));
+  return { items: samples.length, done, total: steps.length * samples.length, fails };
+}
+
+/** The rollup's Testing cell — completion of the attribute grid, as a share. */
+function testingCell(k: ReturnType<typeof checkCounts>): string {
+  if (k.total === 0) return 'Not started';
+  return `${Math.round((k.done / k.total) * 100)}%`;
+}
+
+/** Readiness is the design test's standing: TOD gates TOE, so a control whose
+ *  design has not held up is not ready to be operated on a sample at all. */
+function readiness(c: Control): string {
+  const d = trackResult(c.design);
+  if (d === 'Effective') return 'Ready';
+  if (d === 'Ineffective') return 'Design gap';
+  return designStarted(c) ? 'In progress' : 'Not assessed';
+}
+
+/** Where the control's paper stands with the reviewer. Caps mark the states
+ *  where nothing has been granted yet, the way the sheet's reader scans for. */
+function reviewCell(c: Control): string {
+  if (c.wpSignoff?.reviewer) return 'Signed off';
+  if (c.wpSignoff?.preparer) return 'PENDING REVIEW';
+  if (c.reviewReturn) return 'RETURNED';
+  return 'NOT SUBMITTED';
+}
+
+const GRADE_RANK: Record<string, number> = {
+  'Clearly Trivial': 0, Deficiency: 1, 'Significant Deficiency': 2, 'Material Weakness': 3,
+};
+
+/** The grade as the report states it, with the reason for any adjustment. */
+function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
+  const g = gradeException(d, eng);
+  return g.bumped ? `${g.grade} (raised on judgement)`
+    : g.cap ? `${g.grade} (capped from ${g.cap.from})`
+    : g.grade;
+}
+
+/** The worst grade among a control's deficiencies — the rollup's Severity cell. */
+function worstGrade(defs: Deficiency[], eng: IcfrEngagement): string {
+  if (!defs.length) return '—';
+  return defs
+    .map(d => gradeException(d, eng).grade)
+    .reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
 }
 
 /** Plain-English standing of one observation, for a reader who doesn't know the
@@ -54,162 +105,191 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
   const concl = controls.map(c => conclusionOf(eng, c));
-  const ineffective = concl.filter(x => x === 'Ineffective').length;
-  const effective = concl.filter(x => x === 'Effective').length;
   const untested = concl.filter(x => x === 'Not started').length;
   const mwOpen = openMaterialWeaknesses(eng).length;
-  // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────────────
-  // Recovery / working-capital unblock / leakage are internal-audit VALUE
-  // metrics. ICFR asks what could have been misstated, which is a different
-  // number — so the report no longer puts a price on an observation.
-  //
-  // const exposure = defs.reduce((sum, d) => sum + exposureTotal(d.exposure), 0);
-  const opinion = eng.signoff.icfrConclusion ?? icfrConclusion(eng);
-  const signed = !!eng.signoff.preparer && !!eng.signoff.reviewer;
-  const processes = [...new Set(controls.map(c => c.process))];
+  // Off the LIVE audit's record, like the working paper and the lock — the
+  // engagement-level signoff field is never written, so reading it kept this
+  // report a permanent draft whatever the reviewer had signed.
+  const liveSignoff = eng.audits.find(a => !a.archive)?.signoff ?? {};
+  const opinion = liveSignoff.icfrConclusion ?? icfrConclusion(eng);
+  const signed = !!liveSignoff.preparer && !!liveSignoff.reviewer;
   const byControl = (id: string): Control | undefined => controls.find(c => c.id === id);
 
-  const cover: IcfrSheet = {
-    name: 'Cover', blocks: [
-      { kind: 'heading', text: `Report on Internal Financial Controls — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
+  const counts = controls.map(checkCounts);
+  const items = counts.reduce((s, k) => s + k.items, 0);
+  const done = counts.reduce((s, k) => s + k.done, 0);
+  const total = counts.reduce((s, k) => s + k.total, 0);
+  const fails = counts.reduce((s, k) => s + k.fails, 0);
+  const grades = defs.map(d => gradeException(d, eng).grade);
+  const tally = (g: string) => grades.filter(x => x === g).length;
+
+  // The masthead moved to the contents page below — that page is the report's
+  // cover, and a title repeated on the page straight after it reads as a
+  // mistake. Summary now opens on the engagement's particulars, and the PDF
+  // prints its name at the top like every other section.
+  const summary: IcfrSheet = {
+    name: 'Summary', blocks: [
       {
-        kind: 'kv', title: REPORT_COVER_TITLE, rows: [
-          ['Entity', eng.entity],
+        kind: 'kv', title: 'Engagement', rows: [
           ['Engagement', `${eng.name} (${eng.code})`],
           ['Framework', eng.framework],
-          ['Period covered', periodLine(eng)],
-          ['Scope', `${controls.length} control${controls.length === 1 ? '' : 's'} across ${processes.length} process${processes.length === 1 ? '' : 'es'} — ${controls.filter(c => c.isKey).length} key`],
-          ['Overall materiality', formatINR(eng.materiality)],
-          ['Performance materiality', formatINR(eng.performanceMateriality)],
-          ['Prepared by', eng.signoff.preparer ? `${eng.signoff.preparer.by} — ${eng.signoff.preparer.at}` : `${eng.preparer} — DRAFT, not yet signed`],
-          ['Reviewed by', eng.signoff.reviewer ? `${eng.signoff.reviewer.by} — ${eng.signoff.reviewer.at}` : `${eng.reviewer} — DRAFT, not yet countersigned`],
-          ['Status of this report', signed ? 'Issued — signed and countersigned' : 'DRAFT — issued only once the engagement is signed and countersigned'],
+          ['Entity', eng.entity],
+          ['Audit period', periodLine(eng)],
+          ['Preparer / Reviewer', `${liveSignoff.preparer?.by ?? eng.preparer} / ${liveSignoff.reviewer?.by ?? eng.reviewer}`],
+          ['Materiality', formatINR(eng.materiality)],
+          ['Report status', signed ? 'Issued — signed and countersigned' : 'DRAFT — issued only once the audit is signed and countersigned'],
         ],
       },
       {
-        kind: 'note', label: 'Basis', tone: 'neutral',
-        text: 'This report states the conclusions of the ICFR testing performed for the period above. The evidence behind every conclusion — the design walkthroughs, the reports relied on and the samples tested — is in the working paper, which is referenced by the W/P column throughout and is not reproduced here.',
+        kind: 'note', label: 'Opinion', tone: opinion === 'Effective' ? 'good' : opinion === 'Not effective' ? 'bad' : 'neutral',
+        text: signed
+          ? `${opinion} — internal financial controls over financial reporting, as at the end of the period.`
+          : `${opinion} (indicative) — ${untested > 0 ? `${untested} control${untested === 1 ? '' : 's'} not yet tested; ` : ''}this conclusion is not final until the audit is signed and countersigned.`,
+      },
+      {
+        kind: 'kv', title: 'Testing at a glance', rows: [
+          ['Controls in scope', String(controls.length)],
+          ['Key controls', String(controls.filter(c => c.isKey).length)],
+          ['Test items', String(items)],
+          ['Attribute checks completed', total === 0 ? 'None defined yet' : `${done}/${total} (${Math.round((done / total) * 100)}%)`],
+          ['Failed checks', String(fails)],
+        ],
+      },
+      {
+        kind: 'kv', title: 'Conclusions', rows: [
+          ['Effective', String(concl.filter(x => x === 'Effective').length)],
+          ['Ineffective', String(concl.filter(x => x === 'Ineffective').length)],
+          ['In progress', String(concl.filter(x => x === 'In progress').length)],
+          ['Not yet tested', String(untested)],
+        ],
+      },
+      {
+        kind: 'kv', title: 'Deficiency severity', rows: [
+          ['Material weaknesses', String(tally('Material Weakness'))],
+          ['Significant deficiencies', String(tally('Significant Deficiency'))],
+          ['Deficiencies', String(tally('Deficiency'))],
+          ['Clearly trivial', String(tally('Clearly Trivial'))],
+        ],
       },
     ],
   };
 
-  const summary: IcfrSheet = {
-    name: 'Executive summary', blocks: [
+  const rollup: IcfrSheet = {
+    name: 'Control Rollup', blocks: [
       {
-        kind: 'note', label: 'Conclusion', tone: opinion === 'Effective' ? 'good' : opinion === 'Not effective' ? 'bad' : 'neutral',
-        text: signed
-          ? `${opinion} — internal financial controls over financial reporting, as at the end of the period.`
-          : `${opinion} (indicative) — ${untested > 0 ? `${untested} control${untested === 1 ? '' : 's'} not yet tested; ` : ''}this conclusion is not final until the engagement is signed and countersigned.`,
-      },
-      {
-        kind: 'kv', title: 'Where the testing landed', rows: [
-          ['Controls in scope', String(controls.length)],
-          ['Key controls', String(controls.filter(c => c.isKey).length)],
-          ['Concluded effective', String(effective)],
-          ['Concluded ineffective', String(ineffective)],
-          ['Not yet tested', String(untested)],
-          ['Observations raised', String(defs.length)],
-          ['Material weaknesses open', String(mwOpen)],
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // Read as "the number management acts on", but it is an internal-audit
-          // value metric: severity already says what could have slipped through,
-          // and what the gap cost the business is a different question this
-          // report is not the place to answer.
-          //
-          // ['Priced impact — total', exposure > 0 ? formatINR(exposure) : 'Not priced'],
-          // ['— recoverable', formatINR(defs.reduce((s, d) => s + (d.exposure?.recovery ?? 0), 0))],
-          // ['— working capital released by the fix', formatINR(defs.reduce((s, d) => s + (d.exposure?.workingCapital ?? 0), 0))],
-          // ['— leakage (not recoverable)', formatINR(defs.reduce((s, d) => s + (d.exposure?.leakage ?? 0), 0))],
-        ],
-      },
-      {
-        kind: 'table', title: 'By process',
-        note: `${processes.length} process${processes.length === 1 ? '' : 'es'} in scope`,
-        // Header and row are one column per line, in step — park a column here
-        // and its cell below, or the sheet shears.
-        headers: [
-          'Process', 'Controls', 'Key', 'Effective', 'Ineffective', 'Not tested', 'Observations',
-          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number.
-          //
-          // 'Priced impact',
-        ],
-        rows: processes.map(p => {
-          const inP = controls.filter(c => c.process === p);
-          const pDefs = defs.filter(d => inP.some(c => c.id === d.controlId));
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // const pExposure = pDefs.reduce((s, d) => s + exposureTotal(d.exposure), 0);
+        kind: 'table', title: 'Control rollup',
+        note: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row per control, from readiness to conclusion`,
+        headers: ['Control ID', 'Control', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
+        rows: controls.map((c, i) => {
+          const k = counts[i];
           return [
-            p, String(inP.length), String(inP.filter(c => c.isKey).length),
-            String(inP.filter(c => controlConclusion(c) === 'Effective').length),
-            String(inP.filter(c => controlConclusion(c) === 'Ineffective').length),
-            String(inP.filter(c => controlConclusion(c) === 'Not started').length),
-            String(pDefs.length),
-            // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-            // pExposure > 0 ? formatINR(pExposure) : '—',
+            c.id,
+            c.description,
+            readiness(c),
+            String(k.items),
+            testingCell(k),
+            String(k.fails),
+            reviewCell(c),
+            conclusionOf(eng, c),
+            worstGrade(defs.filter(d => d.controlId === c.id), eng),
+            c.wpSignoff?.reviewer?.by ?? '—',
           ];
         }),
       },
+      {
+        kind: 'note', label: 'Reading this', tone: 'neutral',
+        text: 'Readiness is the design test: a control whose design has not held up is not ready to be operated on a sample. Testing is the share of attribute checks completed across the drawn items. Review is where the control’s working paper stands with the reviewer, and Finalized by names the reviewer who countersigned it. Severity is the worst grade among the control’s deficiencies.',
+      },
     ],
   };
 
-  const observations: IcfrSheet = {
-    name: 'Observations', blocks: defs.length ? [
+  const exceptionRows: string[][] = controls.flatMap(c => {
+    const samples = c.operating.sampling?.samples ?? [];
+    return c.operating.steps.flatMap(s => samples
+      .filter(smp => s.sampleResults?.[smp.id] === 'Fail')
+      .map(smp => [
+        c.id,
+        smp.ref,
+        s.code,
+        s.description,
+        s.assertion,
+        s.aiValidation ? 'AI validation' : 'Manual testing',
+        defs.find(d => d.controlId === c.id && d.failedSamples?.includes(smp.ref))?.description
+          ?? defs.find(d => d.controlId === c.id && d.track === 'operating')?.description
+          ?? '—',
+      ]));
+  });
+  /**
+   * Controls whose first sample was set aside and drawn again.
+   *
+   * The deliverable has to disclose this. A redraw is legitimate — the first
+   * draw can be wrong, and a population that never tested the control cannot
+   * condemn it — but it is also the one move that could be used to walk away
+   * from an exception, so it is named, counted and reasoned in the report rather
+   * than left in the working paper for whoever thinks to look. The item-by-item
+   * grid of each round stays on the paper; this is the fact and the reason.
+   */
+  const redrawRows = controls.flatMap(c =>
+    toeRounds(c).map(r => [
+      c.id,
+      String(r.n),
+      String(r.sampling.samples.length),
+      r.outcome === 'Fail' ? 'Failed' : 'Passed',
+      r.setAside.reason,
+      `${r.setAside.by}, ${r.setAside.at}`,
+    ]));
+
+  const redrawBlock: PaperBlock[] = redrawRows.length ? [{
+    kind: 'table', title: 'Rounds set aside',
+    note: `${redrawRows.length} round${redrawRows.length === 1 ? '' : 's'} set aside and redrawn — the item-by-item results of each are in the control's working paper`,
+    headers: ['Control', 'Round', 'Items', 'Outcome', 'Why it was set aside', 'Recorded by'],
+    rows: redrawRows,
+  }] : [];
+
+  const exceptions: IcfrSheet = {
+    name: 'Exceptions', blocks: exceptionRows.length ? [
       {
-        kind: 'table', title: 'Observations',
-        note: `${defs.length} observation${defs.length === 1 ? '' : 's'} · ordered as they appear in the report`,
-        // Header and row are one column per line, in step — park a column here
-        // and its cell below, or the sheet shears.
-        headers: [
-          'Report ref', 'W/P', 'Control', 'What we found', 'Why it happened',
-          // Derived off the failed track and the control's nature — read-only.
-          'Gap nature',
-          'Severity',
-          // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number.
-          //
-          // 'Priced impact',
-          'Standing',
-        ],
-        rows: [...defs]
-          .sort((a, b) => (a.reportRef ?? 'zz').localeCompare(b.reportRef ?? 'zz'))
-          .map(d => {
-            const c = byControl(d.controlId);
-            return [
-              d.reportRef ?? '—',
-              c?.wpRef ?? '—',
-              c ? `${c.id} — ${c.description}` : d.controlId,
-              d.description,
-              d.rootCause,
-              c ? gapNature(d.track, c.nature) : '—',
-              // ─── PARKED (Aug 2026) — Gap type ────────────────────────────
-              // Asked by hand (MDG / ITDG / TG) until the control's RACM row
-              // was found to answer it already. Superseded by the cell above.
-              //
-              // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
-              severityOf(d, eng),
-              // ─── PARKED (Aug 2026) — Priced impact ──────────────────────
-              // d.exposure ? formatINR(exposureTotal(d.exposure)) : 'Not priced',
-              observationStatus(d),
-            ];
-          }),
+        kind: 'table', title: 'Exceptions',
+        note: `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`,
+        headers: ['Control', 'Sample', 'Attribute', 'Attribute name', 'Assertion', 'Source', 'Notes'],
+        rows: exceptionRows,
       },
       {
         kind: 'note', label: 'Reading this', tone: 'neutral',
-        text: 'Gap nature says where the failure was found and what kind of control broke. It is read off the control’s own RACM row and the track that failed, never asked again: a design gap means the control as built cannot do the job; an operating failure means the design is sound but the control did not run as designed. Severity answers the separate question of what could have gone through undetected, measured against materiality.',
+        text: 'These rows come straight off the TOE grid. A design gap has no sampled item to point at, so it does not appear here — it is graded under Deficiency Severity and carried on the action plan like any other finding.',
       },
-      // ─── PARKED (Aug 2026) — Gap type & Priced impact ────────────────────
-      // The note above used to explain the hand-typed MDG / ITDG / TG labels and
-      // the rupee value of each observation. Both are gone from the report.
-      //
-      // {
-      //   kind: 'note', label: 'Reading this', tone: 'neutral',
-      //   text: 'Gap type says where the failure was found and what kind of thing broke: a design gap means the control as built cannot do the job, whether because a person cannot (MDG) or because the system does not enforce it (ITDG); a testing gap (TG) means the design is sound but the control did not operate. Severity answers what could have gone through undetected; priced impact answers what it actually cost.',
-      // },
+      ...redrawBlock,
     ] : [
-      { kind: 'note', label: 'Observations', tone: 'good', text: 'No observations were raised. Every control tested concluded effective in both design and operation.' },
+      { kind: 'note', label: 'Exceptions', tone: 'good', text: 'No failed checks — every attribute tested passed on every sampled item.' },
+      ...redrawBlock,
+    ],
+  };
+
+  const defSeverity: IcfrSheet = {
+    name: 'Deficiency Severity', blocks: [
+      {
+        kind: 'table', title: 'Deficiency severity',
+        note: defs.length ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'} · graded by the engine, confirmed by a second pair of eyes` : 'Nothing classified',
+        headers: ['Control', 'Severity', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Rationale', 'Classified by', 'Classified at'],
+        rows: defs.length ? defs.map(d => [
+          d.controlId,
+          gradeLabel(d, eng),
+          d.likelihood,
+          formatINR(d.magnitude),
+          formatINR(eng.materiality),
+          d.mwIndicators.length ? d.mwIndicators.join('; ') : '—',
+          d.rootCause,
+          d.ratingConfirm?.by ?? d.sized?.by ?? '—',
+          d.ratingConfirm?.at ?? d.sized?.at ?? '—',
+        ]) : [
+          // the example report's own empty state: a placeholder row, not a blank sheet
+          ['—', 'No deficiency severity classifications recorded', '—', '—', formatINR(eng.materiality), '—', '—', '—', '—'],
+        ],
+      },
+      {
+        kind: 'note', label: 'Reading this', tone: 'neutral',
+        text: 'Severity is never typed by hand: likelihood × magnitude against materiality, the material-weakness indicators, the compensating-control cap and any recorded judgement — one engine, so this sheet cannot disagree with the register. Classified by names the reviewer who confirmed the grade, or the auditor who sized it where confirmation is still pending.',
+      },
     ],
   };
 
@@ -242,52 +322,62 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     ],
   };
 
-  const appendix: IcfrSheet = {
-    name: 'Appendix', blocks: [
+  /**
+   * The contents page — the report's cover and its index in one.
+   *
+   * Built LAST and from the sections themselves, so it can never drift from
+   * what follows it: a section added to the return below appears here without
+   * anyone remembering to list it, and each line quotes that section's own
+   * count rather than a second, hand-kept one.
+   *
+   * No page numbers. A section starts a new page but does not end one — the
+   * rollup runs to several pages on any real audit — so a printed number would
+   * be right for the first section and wrong from the second onward. The two
+   * other surfaces have no pages at all: the preview scrolls and the workbook
+   * has tabs. What is true everywhere is the order, so the order is what this
+   * states.
+   */
+  const body: { sheet: IcfrSheet; covers: string }[] = [
+    { sheet: summary, covers: 'The opinion, who the audit was for and over what period, and testing at a glance' },
+    { sheet: rollup, covers: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row each, from readiness to conclusion` },
+    { sheet: exceptions, covers: [
+      exceptionRows.length
+        ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
+        : 'No failed checks — every attribute tested passed on every sampled item',
+      redrawRows.length ? `${redrawRows.length} round${redrawRows.length === 1 ? '' : 's'} set aside and redrawn, with the reason` : '',
+    ].filter(Boolean).join('; ') },
+    { sheet: defSeverity, covers: defs.length
+      ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'} — graded by the engine, confirmed by a second pair of eyes`
+      : 'Nothing classified' },
+    { sheet: map, covers: defs.length
+      ? `${actionable.length} open of ${defs.length} observation${defs.length === 1 ? '' : 's'} — management's agreed action, owner and committed date`
+      : 'Nothing to remediate' },
+  ];
+
+  const contents: IcfrSheet = {
+    name: 'Contents', blocks: [
+      { kind: 'heading', text: `Audit report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
       {
-        kind: 'table', title: 'Appendix — controls tested',
-        note: `${controls.length} control${controls.length === 1 ? '' : 's'} · the working paper reference for each`,
-        headers: ['W/P', 'Control', 'Objective', 'Process', 'Class', 'Key', 'Risk rating', 'Frequency', 'TOD', 'Report (IPE)', 'TOE', 'Conclusion', 'Performed by', 'Report ref'],
-        rows: controls.map(c => [
-          c.wpRef,
-          `${c.id} — ${c.description}`,
-          c.objective ?? '—',
-          c.process,
-          c.clazz ?? '—',
-          c.isKey ? 'Key' : 'Non-key',
-          c.riskRating ?? 'Not rated',
-          c.frequency,
-          trackResult(c.design),
-          c.operating.ipe?.conclusion ?? 'No report registered',
-          trackResult(c.operating),
-          controlConclusion(c),
-          c.performedBy ?? '—',
-          c.reportRef ?? '—',
-        ]),
+        kind: 'table', title: 'Contents',
+        note: `${body.length} sections — the report reads in this order`,
+        headers: ['#', 'Section', 'What it covers'],
+        rows: body.map((b, i) => [String(i + 1), b.sheet.name, b.covers]),
       },
       {
-        kind: 'kv', title: 'Definitions used in this report', rows: [
-          ['Key control', 'A control relied on to prevent or detect a material misstatement. Agreed with management, not derived from the procedure.'],
-          ['Test of design', 'Whether the control, as built, can address the risk — proved by walking one live transaction against every attribute.'],
-          ['Test of operating effectiveness', 'Whether it did address the risk across the period — proved by a sample sized on the control’s frequency and its risk rating.'],
-          ['IPE', 'Information produced by the entity. A report the client ran is tested for source, completeness and accuracy before anything is sampled from it.'],
-          ['Severity', 'Likelihood × magnitude against materiality, with the material-weakness indicators applied.'],
-          ['Gap nature', 'What kind of control broke and on which track — derived from the control’s nature on the RACM and the track that failed, not stated by the auditor.'],
-          // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
-          // An internal-audit VALUE metric. ICFR asks what could have been
-          // misstated, which is a different number — so nothing in this report
-          // prices an observation any more and the definition has no referent.
-          //
-          // ['Priced impact', 'What the gap is worth: recoverable amounts, working capital the fix releases, and leakage that is gone.'],
-        ],
+        kind: 'note', label: 'Status', tone: signed ? 'good' : 'neutral',
+        text: signed
+          ? `Issued — signed by ${liveSignoff.preparer!.by} and countersigned by ${liveSignoff.reviewer!.by}. The opinion stated in Summary is final.`
+          : 'DRAFT — the opinion in Summary is indicative and is not final until the audit is signed and countersigned.',
       },
     ],
   };
 
-  return [cover, summary, observations, map, appendix];
+  return [contents, ...body.map(b => b.sheet)];
 }
 
-/** The report as a workbook — one sheet per section, same blocks the preview shows. */
+/** The report as a workbook — one sheet per section, same blocks the preview
+ *  shows and the PDF pages. The .xlsx keeps this sheet-per-section format; the
+ *  PDF (the primary issue format) turns each sheet into a page. */
 export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): void {
   const wb = XLSX.utils.book_new();
   for (const sheet of buildAuditReport(eng, controls)) {

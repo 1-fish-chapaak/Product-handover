@@ -11,6 +11,18 @@ export interface AuditFile extends AuditFileRecord {
   /** True where the record came out of the registry rather than being derived —
    *  i.e. somebody uploaded it through the app or corrected its answer. */
   recorded: boolean;
+  /** Was this file PUT HERE, for this audit — the trial balance and ledger
+   *  attached when the audit was created, and anything uploaded through the app
+   *  since. False for everything the engagement merely holds: scoping trial
+   *  balances, system pulls another control drew on, files a workflow elsewhere
+   *  reads.
+   *
+   *  Note this is not the same question as `recorded`. Answering "where did this
+   *  come from" on a SAP pull writes a registry entry, which makes it recorded —
+   *  but nobody uploaded it, so it did not arrive for this audit. The population
+   *  step's source picker asks THIS question (user ask, 12 Aug); the file
+   *  registry and the working paper still show everything. */
+  ofAudit: boolean;
 }
 
 /**
@@ -41,13 +53,19 @@ export function useAuditFiles(): AuditFile[] {
     const prog = programmeFor(eng.id);
     const audit = eng.audits.find(a => a.id === openAuditId);
     const derived: AuditFileRecord[] = [];
+    /** Names that arrived FOR this audit rather than being inherited — see
+     *  `ofAudit`. Collected by name because that is what dedupe keys on. */
+    const auditOwn = new Set<string>();
     const add = (name: string, kind: string, rows: number, from: string, by: string) => {
       derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: defaultFileOrigin(kind) });
     };
-    audit?.files.forEach(f => add(
-      f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger',
-      f.kind === 'tb' ? 1240 : 18432, `${audit.period} audit`, audit.by,
-    ));
+    audit?.files.forEach(f => {
+      add(
+        f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger',
+        f.kind === 'tb' ? 1240 : 18432, `${audit.period} audit`, audit.by,
+      );
+      auditOwn.add(f.name);
+    });
     prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) add(en.tbFile, 'Trial balance', en.tbLines ?? 1240, `${en.name} · engagement scoping`, eng.preparer);
     });
@@ -115,15 +133,17 @@ export function useAuditFiles(): AuditFile[] {
         ...(rec ? { origin: rec.origin, systemFetched: rec.systemFetched, originBy: rec.originBy, originAt: rec.originAt } : {}),
         usedBy: controlsUsingFile(eng, d.name),
         recorded: !!rec,
+        ofAudit: auditOwn.has(d.name),
       });
     }
     // Registered files the engagement doesn't derive — the ones a control
     // uploaded. They are in the registry precisely so every other control can
-    // reuse them without being asked where they came from again.
+    // reuse them without being asked where they came from again. Nothing derives
+    // them, so an entry here IS the upload: it arrived for this audit.
     for (const r of registry) {
       if (seen.has(r.name)) continue;
       seen.add(r.name);
-      out.push({ ...r, usedBy: controlsUsingFile(eng, r.name), recorded: true });
+      out.push({ ...r, usedBy: controlsUsingFile(eng, r.name), recorded: true, ofAudit: true });
     }
     return out;
   }, [eng, racmDocs, openAuditId]);

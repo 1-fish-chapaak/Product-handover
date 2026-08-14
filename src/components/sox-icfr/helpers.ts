@@ -2,7 +2,7 @@ import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
 import type {
   AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, TrackConclusion,
+  Sample, Severity, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -96,41 +96,243 @@ function ladder(magnitude: number, materiality: number, bandPct: number): Except
   return 'Deficiency';
 }
 
-/** What this exception aggregates on. Process comes off the control and assertion
- *  off the attributes that actually failed — both already known, so neither is
- *  asked for. A shared root cause cannot be read off free prose, so it is the one
- *  the auditor states, by linking two exceptions together. */
-export function aggregationKeys(d: Deficiency, eng: IcfrEngagement): { kind: 'process' | 'assertion' | 'root cause'; key: string }[] {
-  const c = eng.controls.find(x => x.id === d.controlId);
-  const keys: { kind: 'process' | 'assertion' | 'root cause'; key: string }[] = [];
-  if (c) keys.push({ kind: 'process', key: `process:${c.process}` });
-  if (c) {
-    const failed = d.track === 'operating'
-      ? c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.assertion)
-      : c.assertions;
-    Array.from(new Set(failed)).forEach(a => keys.push({ kind: 'assertion', key: `assertion:${a}` }));
+/**
+ * The severity ladder, callable with FIGURES rather than a deficiency record.
+ *
+ * `gradeException` below grades one exception and narrates every rule it passed
+ * through. A GROUP has no record to narrate — it has a combined exposure and a
+ * combined likelihood and nothing else — so the same rules have to be reachable
+ * without one. Both read the same primitives (isClearlyTrivial, the remote
+ * ceiling, `ladder`, and the cap), so a group and a member can never be graded
+ * by two different rulebooks.
+ */
+export function gradeFromFigures(
+  input: { exposure: number; likelihood: Likelihood; mwIndicator?: boolean; capBy?: string },
+  eng: IcfrEngagement,
+): { grade: ExceptionGrade; cap?: { from: ExceptionGrade; to: ExceptionGrade; by: string } } {
+  // An indicator settles it whatever the amount, and cannot be argued down.
+  if (input.mwIndicator) return { grade: 'Material Weakness' };
+  if (isClearlyTrivial(input.exposure, eng.rules)) return { grade: 'Clearly Trivial' };
+  const ladderGrade: ExceptionGrade = isReasonablyPossible(input.likelihood)
+    ? ladder(input.exposure, eng.materiality, eng.rules.sdBandPct)
+    : 'Deficiency';
+  // One step down, never to zero.
+  if (input.capBy && ladderGrade === 'Material Weakness') {
+    return { grade: 'Significant Deficiency', cap: { from: 'Material Weakness', to: 'Significant Deficiency', by: input.capBy } };
   }
-  if (d.rootCauseLinkId) keys.push({ kind: 'root cause', key: `root:${d.rootCauseLinkId}` });
+  return { grade: ladderGrade };
+}
+
+/* ── Groups ───────────────────────────────────────────────────────────────────
+ *
+ * Replaced process and assertion as grouping keys (13 Aug 2026). They grouped
+ * exceptions that share a WORKFLOW; aggregation is about exceptions that hit the
+ * same NUMBER. Two P2P controls failing on unrelated accounts were being added
+ * together, and two controls in different processes hitting Accounts Payable
+ * were not — both the wrong way round.
+ *
+ * What a deficiency joins now: one derived group per FS line item on its
+ * control, plus any root-cause group a person has put it in.
+ */
+
+/** Deficiencies that never join anything.
+ *
+ *  An MW-indicator exception is already a material weakness whatever the amount,
+ *  so a group cannot raise it — and adding its exposure to one would inflate
+ *  every other member's grade off a figure the indicator made irrelevant. An
+ *  ITGC exception is out of the ACCOUNT groups by the same logic it has always
+ *  followed: it does not land on one line item, it withdraws reliance across the
+ *  engagement. Both can still be put in a root-cause group by hand. */
+export function joinsNoDerivedGroup(d: Deficiency, eng: IcfrEngagement): boolean {
+  if (d.mwIndicators.length > 0) return true;
+  const c = eng.controls.find(x => x.id === d.controlId);
+  return c?.process === 'IT General Controls';
+}
+
+/** Is this exception live enough to be part of what is still wrong? Clearly
+ *  trivial never aggregates — the de-minimis rule stopped it before aggregation
+ *  was reached — and a closed one has been remediated. */
+export const aggregable = (d: Deficiency, eng: IcfrEngagement): boolean =>
+  d.status !== 'Closed' && !isClearlyTrivial(d.magnitude, eng.rules);
+
+/** The keys this exception groups on. */
+export function groupKeysFor(d: Deficiency, eng: IcfrEngagement): { kind: 'account' | 'root cause'; key: string; name: string }[] {
+  const keys: { kind: 'account' | 'root cause'; key: string; name: string }[] = [];
+  if (!joinsNoDerivedGroup(d, eng)) {
+    const c = eng.controls.find(x => x.id === d.controlId);
+    (c?.accountIds ?? []).forEach(id => {
+      const acc = eng.accounts.find(a => a.id === id);
+      if (acc) keys.push({ kind: 'account', key: `account:${id}`, name: acc.name });
+    });
+  }
+  (eng.rootCauseGroups ?? []).forEach(g => {
+    if (g.memberIds.includes(d.id)) keys.push({ kind: 'root cause', key: `root:${g.id}`, name: g.name });
+  });
   return keys;
 }
 
-/** The other live exceptions this one combines with. Clearly-trivial items never
- *  join a group — rule 3 stopped them before aggregation was reached — and closed
- *  ones have been remediated, so they are not part of what is still wrong. */
-export function aggregationGroup(d: Deficiency, eng: IcfrEngagement): { members: Deficiency[]; sharedBy: string } {
-  const mine = new Set(aggregationKeys(d, eng).map(k => k.key));
-  const shared = new Set<string>();
-  const members = eng.deficiencies.filter(o => {
-    if (o.id === d.id || o.status === 'Closed') return false;
-    if (isClearlyTrivial(o.magnitude, eng.rules)) return false;
-    const hits = aggregationKeys(o, eng).filter(k => mine.has(k.key));
-    hits.forEach(h => shared.add(h.kind));
-    return hits.length > 0;
-  });
-  return { members, sharedBy: Array.from(shared).join(' and ') };
+/**
+ * The exposure a group actually stands behind.
+ *
+ * Two members share a population when their figures came out of the same file
+ * under the same filter — a control failing twice on one extract is one hole,
+ * not two, and adding them would count the same rupees twice. So members are
+ * partitioned by population identity, the LARGEST is taken inside a partition,
+ * and the partitions are added.
+ *
+ * Identity is proven, never guessed. `criteria` is a sentence the auditor wrote,
+ * so two of them can only be compared for being the SAME — nothing can read
+ * whether "Jan–Jun, excluding reversals" overlaps "H1 payments". Anything short
+ * of an exact match on both file and criteria is treated as a separate
+ * population and added, which errs upward. That is the safe direction: the rule
+ * that must never break is that aggregation does not lower a grade.
+ *
+ * A member whose figure cannot be placed against any file at all becomes its own
+ * partition and marks the whole group unverified — the total is still shown,
+ * because the auditor needs a number, but it is not claimed as proven.
+ */
+export function populationIdentity(d: Deficiency, eng: IcfrEngagement): string | null {
+  const c = eng.controls.find(x => x.id === d.controlId);
+  if (!c) return null;
+  const sources = populationSources(c);
+  if (!sources.length) return null;
+  // Which file the failure was found in — read off the items that failed.
+  const failed = new Set(d.failedSamples ?? []);
+  const hit = (c.operating.sampling?.samples ?? []).find(s => failed.has(s.ref));
+  const src = hit ? sources.find(s => s.id === (hit.sourceId ?? LEGACY_SOURCE_ID)) : undefined;
+  // A single-source control has only one answer, so it does not need the items
+  // to point at it. A multi-source control does, and without them nothing is
+  // proven — see `unverified` on the group.
+  const only = sources.length === 1 ? sources[0] : undefined;
+  const use = src ?? only;
+  if (!use?.file) return null;
+  return `${use.file} ${use.criteria ?? ''}`;
 }
 
-export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGradeResult {
+export function combinedExposure(members: Deficiency[], eng: IcfrEngagement): { total: number; unverified: boolean } {
+  const partitions = new Map<string, number>();
+  let unverified = false;
+  members.forEach((d, i) => {
+    const id = populationIdentity(d, eng);
+    if (id === null) unverified = true;
+    // Unplaceable figures each get a partition of their own, keyed so they can
+    // never merge with anything — including each other.
+    const key = id ?? ` unplaced:${d.id}:${i}`;
+    partitions.set(key, Math.max(partitions.get(key) ?? 0, d.magnitude));
+  });
+  return { total: Array.from(partitions.values()).reduce((a, b) => a + b, 0), unverified };
+}
+
+/** The highest likelihood among the members — a group is at least as likely to
+ *  bite as its likeliest member. */
+export function combinedLikelihood(members: Deficiency[]): Likelihood {
+  return members.some(m => isReasonablyPossible(m.likelihood)) ? 'Reasonably possible' : 'Remote';
+}
+
+/** A compensating control that may cap the GROUP.
+ *
+ *  Once for the whole group, and only one that is not already doing the job for
+ *  an individual member: a control cannot be spent twice. */
+function groupCap(members: Deficiency[], eng: IcfrEngagement): string | undefined {
+  for (const m of members) {
+    const id = m.compensatingControlId;
+    if (!id) continue;
+    const cc = eng.controls.find(c => c.id === id);
+    if (!cc || controlConclusion(cc) !== 'Effective') continue;
+    // Already claimed — this member's own grade was capped by it.
+    if (gradeException({ ...m, prudentOverride: undefined }, eng, true).cap?.by === id) continue;
+    return id;
+  }
+  return undefined;
+}
+
+/** Every group in the engagement, rebuilt from current state. Derived groups
+ *  with a single member are not groups — nothing aggregates with itself — so
+ *  they are dropped rather than shown as a group of one. */
+export function deficiencyGroups(eng: IcfrEngagement): DeficiencyGroup[] {
+  if (!eng.rules.aggregate) return [];
+  const live = eng.deficiencies.filter(d => aggregable(d, eng));
+  const byKey = new Map<string, { kind: 'account' | 'root cause'; name: string; members: Deficiency[] }>();
+  live.forEach(d => groupKeysFor(d, eng).forEach(k => {
+    const g = byKey.get(k.key) ?? { kind: k.kind, name: k.name, members: [] };
+    g.members.push(d);
+    byKey.set(k.key, g);
+  }));
+  const out: DeficiencyGroup[] = [];
+  byKey.forEach((g, key) => {
+    // A root-cause group the user made is theirs to keep even at one member —
+    // they are mid-linking. A derived group of one is just a deficiency.
+    if (g.kind === 'account' && g.members.length < 2) return;
+    const { total, unverified } = combinedExposure(g.members, eng);
+    const likelihood = combinedLikelihood(g.members);
+    const mwIndicator = g.members.some(m => m.mwIndicators.length > 0);
+    const capBy = groupCap(g.members, eng);
+    const { grade, cap } = gradeFromFigures({ exposure: total, likelihood, mwIndicator, capBy }, eng);
+    out.push({
+      key, kind: g.kind, name: g.name, members: g.members,
+      exposure: total, unverified, likelihood, grade, cap,
+      conclusion: (eng.groupConclusions ?? []).find(c => c.groupKey === key),
+    });
+  });
+  return out;
+}
+
+/** The groups one exception belongs to. */
+export const groupsFor = (d: Deficiency, eng: IcfrEngagement): DeficiencyGroup[] =>
+  deficiencyGroups(eng).filter(g => g.members.some(m => m.id === d.id));
+
+/** A group of three or more resting on the lowest likelihood is worth a second
+ *  look before it is accepted — several exceptions all judged remote is the
+ *  shape a understated group takes. */
+export const likelihoodNeedsConfirming = (g: DeficiencyGroup): boolean =>
+  g.members.length >= 3 && !isReasonablyPossible(g.likelihood);
+
+/**
+ * Confirmations that no longer stand.
+ *
+ * A reviewer confirms a GRADE, not a deficiency: "I agree this is a significant
+ * deficiency". Aggregation means someone else's exception can move that grade —
+ * a fourth finding on Accounts Payable can turn three significant deficiencies
+ * into a material weakness without any of the three being touched. The
+ * confirmation given for the old grade is then a confirmation of something that
+ * is no longer true.
+ *
+ * So this is a SWEEP, not a per-record fix: every recompute walks every
+ * confirmed exception, not only the one that changed, which is the whole reason
+ * it exists. Where the grade has moved the confirmation is cleared, the
+ * exception goes back to the reviewer, and `ratingReset` records what it used to
+ * be and why — a confirmation that simply vanished would read as a bug.
+ *
+ * Run after anything that can move a grade: a member's figures, membership, the
+ * ground rules, materiality, a remediation that closed one.
+ */
+export function reconcileConfirmations(eng: IcfrEngagement): IcfrEngagement {
+  let touched = false;
+  const deficiencies = eng.deficiencies.map(d => {
+    if (!d.ratingConfirm) return d;
+    const now = gradeException(d, eng).grade;
+    if (now === d.ratingConfirm.grade) return d;
+    touched = true;
+    const g = groupsFor(d, eng).find(x => GRADE_RANK[x.grade] >= GRADE_RANK[now as ExceptionGrade]);
+    return {
+      ...d,
+      ratingConfirm: undefined,
+      status: 'Rating review' as ExceptionStatus,
+      ratingReset: {
+        was: d.ratingConfirm.grade,
+        reason: g ? `${g.name} — the group now grades ${g.grade}` : 'the severity inputs changed',
+        at: 'just now',
+      },
+    };
+  });
+  return touched ? { ...eng, deficiencies } : eng;
+}
+
+/** `ownGradeOnly` is the cycle-breaker, and internal. A group's grade is built
+ *  from its members' OWN grades, so anything computing a group must be able to
+ *  ask for one without the group being consulted again on the way. Step 1 of the
+ *  order feeding step 5, never the other way round. */
+export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly = false): ExceptionGradeResult {
   const M = eng.materiality;
   const band = eng.rules.sdBandPct;
   const working: GradeStep[] = [];
@@ -191,27 +393,30 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement): ExceptionGra
   }
 
   // ── 6 ── individually minor, collectively not.
+  //
+  // Roll-down, and only ever upward: a member's final grade is the worst of its
+  // own and every group it is in. A group that grades lower changes nothing —
+  // aggregation exists to catch what the single view misses, never to argue a
+  // finding down.
   let aggregate: ExceptionGradeResult['aggregate'];
-  if (eng.rules.aggregate) {
-    const { members, sharedBy } = aggregationGroup(d, eng);
-    if (members.length > 0) {
-      const sum = members.reduce((n, o) => n + o.magnitude, 0) + d.magnitude;
-      const anyReasonable = [d, ...members].some(o => isReasonablyPossible(o.likelihood));
-      const aggGrade: ExceptionGrade = anyReasonable ? ladder(sum, M, band) : 'Deficiency';
-      const raised = GRADE_RANK[aggGrade] > GRADE_RANK[grade];
-      aggregate = { members: members.length + 1, sum, grade: aggGrade, raised, sharedBy };
+  if (!eng.rules.aggregate) {
+    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Switched off in the engagement ground rules.' });
+  } else if (ownGradeOnly) {
+    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Not evaluated — this is the exception on its own, which is what its groups are built from.' });
+  } else {
+    const groups = groupsFor(d, eng);
+    if (groups.length) {
+      const worst = groups.reduce((a, b) => (GRADE_RANK[b.grade] > GRADE_RANK[a.grade] ? b : a));
+      const raised = GRADE_RANK[worst.grade] > GRADE_RANK[grade];
+      aggregate = { members: worst.members.length, sum: worst.exposure, grade: worst.grade, raised, sharedBy: worst.name };
       working.push({
         n: 6, rule: 'Aggregation', fired: raised,
-        detail: raised
-          ? `Combines with ${members.length} other exception${members.length > 1 ? 's' : ''} sharing ${sharedBy} — ${RUPEE(sum)} together ⇒ ${aggGrade}.`
-          : `Combines with ${members.length} other exception${members.length > 1 ? 's' : ''} sharing ${sharedBy} — ${RUPEE(sum)} together, which does not raise it.`,
+        detail: `${worst.members.length} exception${worst.members.length === 1 ? '' : 's'} on ${worst.name} — ${RUPEE(worst.exposure)} together${worst.unverified ? ' (not all of it placed against a population)' : ''} ⇒ ${worst.grade}${raised ? `, which raises this one from ${grade}.` : ', which does not raise it.'}`,
       });
-      if (raised) grade = aggGrade;
+      if (raised) grade = worst.grade;
     } else {
-      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Nothing else shares its process, assertion or root cause.' });
+      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: joinsNoDerivedGroup(d, eng) ? 'Not grouped — an MW indicator or an ITGC exception does not aggregate on a line item.' : 'Nothing else hits the same line item, and it is not linked to a root cause.' });
     }
-  } else {
-    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Switched off in the engagement ground rules.' });
   }
 
   // ── 7 ── judgment, upward only.
@@ -393,13 +598,17 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 // ─── Ground-rules change preview ──────────────────────────────────────────────────
 // What would re-grade if the materiality rule set changed? Used by the review
 // modal before applying, and by the store to record the actual re-grades.
-export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+// Aggregation belongs in the patch even though it is not a threshold: switching
+// it off re-runs rule 6 against a standalone magnitude, so a material weakness
+// that was only material because it combined falls back to significant. That is
+// a re-grade downwards, and it has to be seen before it happens.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; aggregate?: boolean }
 export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
   const next: IcfrEngagement = {
     ...eng,
     materiality: patch.materiality ?? eng.materiality,
     performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
-    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct, aggregate: patch.aggregate ?? eng.rules.aggregate },
   };
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
@@ -529,6 +738,83 @@ export const sampledSources = (sources: PopulationSource[]): PopulationSource[] 
  *  inflate the very figure the sample size is judged against. */
 export function sourceTotals(sources: PopulationSource[]): { count: number; rows: number } {
   return sampledSources(sources).reduce((a, s) => ({ count: a.count + s.count, rows: a.rows + s.rows }), { count: 0, rows: 0 });
+}
+
+// ─── A shared control's reach ────────────────────────────────────────────────────
+// One control run centrally for several companies concludes once, and that
+// conclusion carries to all of them — so the sample has to actually reach each
+// one. A company with nothing drawn has had nothing tested, however healthy the
+// overall sample size looks, and saying it is covered would be saying more than
+// the work supports. Same shape as the per-file rule the population already
+// follows: every source gets its own draw, and here every company gets its own
+// items.
+export function isShared(c: Control): boolean {
+  return (c.entities?.length ?? 0) > 1;
+}
+export interface EntityCoverage {
+  entity: string;
+  drawn: number;
+  failed: number;
+}
+/** Per company: how many items were drawn for it, and how many of those failed.
+ *  Ordered as the control names them, so the list reads the same every time. */
+export function entityCoverage(c: Control): EntityCoverage[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.entities ?? []).map(entity => {
+    const mine = items.filter(s => s.entity === entity);
+    return { entity, drawn: mine.length, failed: mine.filter(s => s.result === 'Fail').length };
+  });
+}
+/** The companies the conclusion would cover without a single item behind them. */
+export function uncoveredEntities(c: Control): string[] {
+  return entityCoverage(c).filter(e => e.drawn === 0).map(e => e.entity);
+}
+/** What a register row prints in its entity cell.
+ *
+ *  A row answering for one company names it. A row answering for several names
+ *  the first and counts the rest — "Altura Infra Holdings Ltd +3" — because a
+ *  column of identical "Shared — covers 4 companies" labels says nothing about
+ *  WHICH companies, which is the only thing the reader wants from it. `more` is
+ *  rendered outside the truncating span so a narrow column can eat the name
+ *  without ever eating the count. The full list rides the title. */
+export function entityCell(c: Control): { label: string; more: number; title: string } | null {
+  const covers = c.entities ?? [];
+  if (covers.length > 1) {
+    const first = c.entity && covers.includes(c.entity) ? c.entity : covers[0]!;
+    return { label: first, more: covers.length - 1, title: covers.join(' · ') };
+  }
+  return c.entity ? { label: c.entity, more: 0, title: c.entity } : null;
+}
+
+// ─── A multi-path control's reach ────────────────────────────────────────────────
+// Some controls have more than one way through them — a payment released by hand
+// vs auto-released under a threshold — and a draw that never landed on the second
+// route has not tested the second route, however healthy its size. Same rule as
+// the companies above, along a different axis: every route needs its own items.
+export function hasPaths(c: Control): boolean {
+  return (c.paths?.length ?? 0) > 1;
+}
+/** Per route: how many drawn items went down it. Ordered as the control names
+ *  them, so the list reads the same every time. */
+export function pathCoverage(c: Control): { path: string; drawn: number }[] {
+  const items = c.operating.sampling?.samples ?? [];
+  return (c.paths ?? []).map(path => ({ path, drawn: items.filter(s => s.path === path).length }));
+}
+/** The routes the conclusion would cover without a single item having gone
+ *  down them. Empty until something is drawn — an undrawn control has no draw
+ *  to accuse of missing anything. */
+export function untouchedPaths(c: Control): string[] {
+  if (!(c.operating.sampling?.samples.length)) return [];
+  return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
+}
+
+/** A draw change puts every already-recorded run out of date — results that
+ *  predate the sample were not testing these items. Flag them; the next run (or
+ *  a fresh attestation) clears the flag, and the operating track refuses to
+ *  conclude while one stands. A step with nothing recorded has nothing to go
+ *  stale. */
+export function staleSteps(steps: OperatingStep[]): OperatingStep[] {
+  return steps.map(s => (s.validation || s.workflowRunRef ? { ...s, staleRun: true } : s));
 }
 
 // ─── Where the population's files come from ──────────────────────────────────────
@@ -1124,9 +1410,30 @@ export function combinedSample(c: Control): { orig: number; ext: number; total: 
     anomalies: judged.filter(j => j.kind === 'Anomaly' && ex.some(e => e.sampleId === j.sampleId && e.stepId === j.stepId)).length,
   };
 }
-/** An attribute concluded on nothing but somebody's word. Operating refuses these. */
+/** An attribute concluded on nothing but somebody's word. Operating refuses these.
+ *
+ *  Derived, not asked. The per-attribute "Evidence type" dropdown was removed on
+ *  31 Jul and is not coming back — but the rule under it is a real one, and the
+ *  answer was always sitting in the attribute already: an attestation is somebody
+ *  telling you it happened, and if nothing was validated, no run was pulled and
+ *  the attester attached nothing, then the statement is the whole of the evidence.
+ *  That is inquiry, and inquiry does not carry an operating conclusion.
+ *
+ *  A bare result with no attestation at all is deliberately NOT caught here. That
+ *  is the auditor recording their own testing, not somebody's word about it, and
+ *  sweeping it in would block every manual control on the register.
+ *
+ *  An explicit evidenceType still wins where one exists, so the parked field and
+ *  its mutator keep their meaning if they are ever brought back. */
 export function inquiryOnlyAttributes(c: Control): OperatingStep[] {
-  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType));
+  return c.operating.steps.filter(s => isInquiryOnly(s.evidenceType) || restsOnStatementAlone(s));
+}
+/** Attested, with nothing behind the attestation. */
+export function restsOnStatementAlone(s: OperatingStep): boolean {
+  return !!s.attestation
+    && !s.validation?.result
+    && !s.workflowRunRef
+    && (s.attestation.evidence?.length ?? 0) === 0;
 }
 
 // ─── Sample sizing — frequency AND the risk's rating (handbook table) ─────────────
@@ -1275,7 +1582,26 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
-export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
+
+/** A validated file and a person's attestation reached opposite conclusions on
+ *  the same attribute.
+ *
+ *  Attestation is the answer to a control whose evidence is an inspection
+ *  performed in person — not a way round a document that says otherwise. So it
+ *  is always secondary: where the two disagree, the validation is what the
+ *  attribute tested, and the attestation survives as the statement it is.
+ *  attestStep already refuses to write the contradicting result, so this is the
+ *  read-side backstop for every other way a step can reach that state. */
+export function attestationOverruled(s: OperatingStep): boolean {
+  return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
+}
+export function stepResult(s: OperatingStep): TestResult {
+  // The auditor's own override stays supreme — it is a named judgment with a
+  // recorded reason, not a second opinion sneaking past the evidence.
+  if (s.override) return s.override.result as TestResult;
+  if (attestationOverruled(s)) return s.validation!.result as TestResult;
+  return s.result;
+}
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
@@ -1382,12 +1708,63 @@ export function designProgress(c: Control) {
     pointsTotal: c.design.points.length,
   };
 }
+/* ── Rounds of operating testing ──────────────────────────────────────────────
+ *
+ * At most two (user, 12 Aug). The first failure is allowed to be the draw's
+ * fault rather than the control's — a window that was wrong, an entity that was
+ * wrong, reversals nobody excluded — so the auditor may correct the criteria and
+ * draw once more, with a written reason. A failure in the SECOND round is the
+ * control's: the deficiency is raised there and then, and there is no third
+ * round to look for a kinder sample in.
+ *
+ * Every question about rounds is answered here so the store's guards and the
+ * screen's buttons cannot drift apart.
+ */
+export const TOE_MAX_ROUNDS = 2;
+
+/** Rounds that have closed, oldest first. */
+export const toeRounds = (c: Control): ToeRound[] => c.operating.rounds ?? [];
+
+/** Which round the live draw is — 1 until a redraw, 2 after it. */
+export const toeRoundNo = (c: Control): number => toeRounds(c).length + 1;
+
+/** Has the LIVE round produced a failure on any attribute? Read through
+ *  stepResult, so an override or a validation standing over an attestation
+ *  counts exactly as the conclusion will count it. */
+export const toeRoundFailed = (c: Control): boolean =>
+  c.operating.steps.some(s => stepResult(s) === 'Fail');
+
+/** Is this the last round the control gets, and has it already failed? Past this
+ *  point the finding stands: no extension, no redraw. */
+export const toeSpent = (c: Control): boolean =>
+  toeRoundNo(c) >= TOE_MAX_ROUNDS && toeRoundFailed(c);
+
+/** May the auditor correct the criteria and draw again?
+ *
+ *  Needs a failure to answer — a redraw over a clean round is not a correction,
+ *  it is a re-roll — and needs the redraw not to have been used already. The
+ *  reason itself is the store's to insist on; this only says the door exists. */
+export const canRedrawToe = (c: Control): boolean =>
+  !isControlLocked(c) && toeRoundNo(c) < TOE_MAX_ROUNDS && toeRoundFailed(c);
+
+/** May the sample still be extended?
+ *
+ *  Extending stays INSIDE the round it happens in — more items against the same
+ *  criteria is the handbook's answer to a deviation, and it is not a new round.
+ *  It closes only once the last round has failed, because by then the finding is
+ *  already the control's. */
+export const canExtendToe = (c: Control): boolean =>
+  !isControlLocked(c) && !!c.operating.sampling && !toeSpent(c);
+
 export function operatingProgress(c: Control) {
   const s = c.operating.steps;
+  // Counted through stepResult, so the meter and the conclusion cannot disagree:
+  // an override, or a validation that stands over a contradicting attestation,
+  // has to move both or neither.
   return {
     tested: s.filter(x => x.result !== 'Not tested').length,
-    passed: s.filter(x => x.result === 'Pass').length,
-    failed: s.filter(x => x.result === 'Fail').length,
+    passed: s.filter(x => stepResult(x) === 'Pass').length,
+    failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
   };
 }

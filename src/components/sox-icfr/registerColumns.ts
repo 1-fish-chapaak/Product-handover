@@ -26,6 +26,26 @@ export const GROUP_OPTIONS = [
 export const groupKeyOf = (c: { process: string; entity?: string }, by: GroupBy): string =>
   by === 'entity' ? (c.entity ?? 'No entity recorded') : c.process;
 
+/** Every company a row belongs under when the list is stacked by entity.
+ *
+ *  A control answering for several companies is ONE row, but stacking by entity
+ *  asks "is Solar done?" — and a control whose conclusion covers Solar has to
+ *  appear under Solar or the answer is wrong. So a shared row files under each
+ *  company it covers; an ordinary row files under its one. */
+export const groupKeysOf = (c: { process: string; entity?: string; entities?: string[] }, by: GroupBy): string[] => {
+  if (by !== 'entity') return [c.process];
+  const covers = c.entities ?? [];
+  return covers.length > 1 ? covers : [c.entity ?? 'No entity recorded'];
+};
+
+/** Does this row answer for the named company — performed there, or covered? */
+export const rowCovers = (c: { entity?: string; entities?: string[] }, name: string): boolean =>
+  c.entity === name || (c.entities?.includes(name) ?? false);
+
+/** Every company a row names, for a filter facet or a search index. */
+export const rowEntities = (c: { entity?: string; entities?: string[] }): string[] =>
+  Array.from(new Set([...(c.entities ?? []), ...(c.entity ? [c.entity] : [])]));
+
 // ─── Widths ──────────────────────────────────────────────────────────────────────
 
 /** Narrow enough to be a deliberate choice, wide enough to still show something. */

@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -1177,6 +1177,105 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
 }
 
 /**
+ * The payee control — the clearest case of one control answering for a group.
+ *
+ * Group treasury verifies a new payee on one master, under one approval matrix,
+ * whoever the payee will end up being paid by. It is performed in one place and
+ * it answers for every company in the group, which is what `entities` records.
+ *
+ * It is left MID-FLIGHT and deliberately short: the draw reaches three of its
+ * four companies. A conclusion recorded now would cover a company nothing was
+ * tested at, and the sample step says so instead of letting the total size —
+ * which looks perfectly healthy — carry the reader past it.
+ */
+function alturaPayeeControl(controls: Control[]): Control[] {
+  // 'New payee setup independently verified' — index 2 of the Treasury spread.
+  const base = controls.find(c => c.process === 'Treasury' && /new payee/i.test(c.description));
+  const covered = base?.entities;
+  if (!base || !covered || covered.length < 2) return controls;
+  // The draw reaches all but the last company. That last one is the whole point:
+  // it is what the coverage strip names, and what stands between this control and
+  // a conclusion it has not earned.
+  const reach = covered.slice(0, -1);
+  const at = (i: number) => reach[i % reach.length]!;
+
+  const items: Sample[] = [
+    { id: 'py-1', ref: 'PAYEE-2026-0114', result: 'Pass', sourceId: 'src-1', entity: at(0) },
+    { id: 'py-2', ref: 'PAYEE-2026-0139', result: 'Pass', sourceId: 'src-1', entity: at(1) },
+    { id: 'py-3', ref: 'PAYEE-2026-0162', result: 'Pass', sourceId: 'src-1', entity: at(2) },
+    { id: 'py-4', ref: 'PAYEE-2026-0177', result: 'Not tested', sourceId: 'src-1', entity: at(0) },
+    { id: 'py-5', ref: 'PAYEE-2026-0208', result: 'Not tested', sourceId: 'src-1', entity: at(1) },
+  ];
+
+  const shaped: Control = {
+    ...base,
+    controlActivity: 'Group treasury verifies every new payee against the company\u2019s own bank confirmation and a call-back to a published number before the payee is released for payment. One master serves the whole group, so a payee set up here can be paid by any company in it.',
+    // Mid-flight ON PURPOSE — the coverage warning only says something while the
+    // conclusion is still open. A concluded, signed paper is exactly the state
+    // this control must not be in.
+    wpSignoff: undefined,
+    design: { ...base.design, conclusion: 'Effective', override: undefined },
+    operating: {
+      ...base.operating,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      steps: base.operating.steps.map(s => ({ ...s, result: 'Not tested' as TestResult, override: undefined })),
+      population: {
+        source: 'Payee master — change log export',
+        sourceFile: 'payee_master_changes_h1_2026.csv',
+        sourceCount: 1860, count: 214,
+        criteria: `New payees created 1 Jan \u2013 30 Jun 2026, across all ${covered.length} companies`,
+        tieOut: 'Change-log count agreed to the payee master\u2019s creation-date filter.',
+        evidence: [{ id: 'py-pop-ev', name: 'payee_master_changes_h1_2026.csv', kind: 'CSV', uploadedBy: 'A. Mehta', uploadedAt: '18 Jul 2026' }],
+        locked: { by: 'A. Mehta', at: '18 Jul 2026' },
+        sources: [{
+          id: 'src-1', file: 'payee_master_changes_h1_2026.csv', rows: 1860, count: 214,
+          criteria: `New payees created 1 Jan \u2013 30 Jun 2026, across all ${covered.length} companies`,
+          draw: { size: 5, method: 'Random', seed: 4417 },
+        }],
+      },
+      sampling: { basis: 'Monthly control — five items across the half-year.', method: 'Random', size: 5, seed: 4417, samples: items },
+    },
+  };
+
+  return controls.map(c => (c === base ? shaped : c));
+}
+
+/**
+ * The MULTI-PATH case — one control, two ways through it, and a draw that only
+ * ever landed on one.
+ *
+ * The payment-run control releases payments two ways: the ordinary run, where
+ * two authorisers release by hand, and an auto-release lane for payments under
+ * the board-set threshold, where the system releases on its own and the second
+ * pair of eyes is a configuration. Both lanes are THIS control — and a sample
+ * drawn entirely from the manual lane has never tested the auto-release lane,
+ * however healthy its size. One Altura instance is tagged so the sample step
+ * demonstrates the warning rather than describing it.
+ */
+function alturaPathControl(controls: Control[]): Control[] {
+  const target = controls.find(c => /payment runs approved/i.test(c.description) && (c.operating.sampling?.samples.length ?? 0) > 0);
+  if (!target) return controls;
+  const samp = target.operating.sampling!;
+  return controls.map(c => (c !== target ? c : {
+    ...c,
+    paths: ['Manual dual-authorised release', 'Auto-release under threshold'],
+    operating: {
+      ...c.operating,
+      sampling: {
+        ...samp,
+        // Every drawn item went down the manual lane — which is exactly what a
+        // random draw over a manual-heavy period does, and exactly the hole the
+        // path strip exists to name.
+        samples: samp.samples.map(s => ({ ...s, path: 'Manual dual-authorised release' })),
+      },
+    },
+  }));
+}
+
+/**
  * The findings Altura's live cycle has raised — and the controls they came from.
  *
  * A deficiency is a conclusion about a control that FAILED, so seeding one
@@ -1254,7 +1353,9 @@ function alturaReviewNotes(controls: Control[]): ReviewNote[] {
 
 function alturaDeficiencies(controls: Control[]): Deficiency[] {
   /** The nth control of a process, in RACM order. Undefined when the process
-   *  was never scoped — the caller skips rather than inventing a control id. */
+   *  was never scoped — the caller skips rather than inventing a control id.
+   *  Order is the RACM's own: one row per control, nothing prepended and nothing
+   *  cloned, so index i here is the i-th control of that process on screen. */
   const pick = (process: string, i: number): Control | undefined =>
     controls.filter(c => c.process === process)[i];
 
@@ -1556,7 +1657,9 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
  * blocked, and the two on one row would read as a data error.
  */
 function alturaUnableToTest(controls: Control[]): void {
-  const fxDeals = controls.filter(c => c.process === 'Treasury')[4];
+  // Same index shift as alturaFindings' pick: the prepended SHARED payee row
+  // must not count, or [4] lands on the borrowing control instead of FX.
+  const fxDeals = controls.filter(c => c.process === 'Treasury' && (c.entities?.length ?? 0) < 2)[4];
   if (!fxDeals) return;
   fxDeals.unableToTest = {
     track: 'operating',
@@ -1602,11 +1705,23 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
 }
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
-export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
+  *  seed: without it every engagement inherited the flagship's own company, and
+  *  the audit report — which names the entity in its title and its first table —
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+
+/** A group is recorded with its listing status attached — "Altura Infra Holdings
+ *  Ltd (Listed)" — because that is what the scoping screens key off. A document
+ *  names the company, not its listing state, so the parenthetical comes off on
+ *  the way into the workspace. */
+const legalName = (g: string) => g.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim();
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const base = structuredClone(ENGAGEMENT);
+  // Before anything reads it: withEntityCoverage takes this as the fallback
+  // company, and the report prints it as the client.
+  if (meta?.entity) base.entity = legalName(meta.entity);
   if (meta?.materiality) base.materiality = meta.materiality;
   if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
   if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;
@@ -1625,7 +1740,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // engagement with the most data in it.
     // The flagship was never scoped from trial balances, so it is one company —
     // its own. Named on every row rather than left blank.
-    base.controls = withEntityInstances(base.controls, base.id, base.entity);
+    base.controls = withAccounts(withEntityCoverage(base.controls, base.id, base.entity));
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
@@ -1644,12 +1759,20 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const built = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
-  // Every control gets the company it is tested at, and a process the scoping
-  // spread across several companies gets a row each — see withEntityInstances.
-  // Only Altura's scoping actually spans companies today, so every other
-  // engagement keeps the exact one-row-per-control register it had, now with its
-  // own company named on every row.
-  const controls = withEntityInstances(built, meta.id, base.entity);
+  // Every control gets the company it is performed at, plus — where its process
+  // reaches further — the companies its one conclusion answers for. One row per
+  // control either way. Only Altura's scoping actually spans companies today, so
+  // every other engagement keeps the register it had, now with its own company
+  // named on every row.
+  let controls = withAccounts(withEntityCoverage(built, meta.id, base.entity));
+  // The draw is then dealt across those companies, because a conclusion covering
+  // four of them is worth only what the sample behind it touched.
+  controls = tagSamplesByEntity(controls);
+  // …and the payee control is held one company short on purpose: that is the
+  // coverage warning the demo shows rather than describes.
+  if (rich) controls = alturaPayeeControl(controls);
+  // …and one has two routes through it, with a draw that only touched one.
+  if (rich) controls = alturaPathControl(controls);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -1746,97 +1869,108 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
   }
 }
 
-// ── The same control, at every company in its scope ─────────────────────────────
+// ── One control, every company it answers for ───────────────────────────────────
 //
-// A group audit does not test a control once. It tests it separately at each
-// entity the scoping brought in: same control number, same wording, four
-// separate lives. Altura's Treasury RACM covers Holdings, Solar, Wind and Smart
-// Metering, so TRY-01 is four rows — and one being concluded effective says
-// nothing at all about the other three.
+// A control is ONE row, whatever the group's shape. It is run once, tested once,
+// and concluded once — and that single conclusion carries to every company the
+// scoping brought in. Altura's Treasury RACM covers Holdings, Solar, Wind and
+// Smart Metering, so TRY-01 is one row that names all four.
 //
-// Which companies each control runs at is NOT invented here. It is read straight
-// off the programme's own RACM derivation — the same mapping the scoping wizard
-// wrote when it decided which trial-balance captions were in scope — so the
-// register can never disagree with the Configuration tab.
-
-/** Where the row's testing has got to. The whole point of separate rows is that
- *  entities are at different points, so the clones spread across these. */
-type EntityStage = 'fresh' | 'design' | 'part' | 'done';
-
-/** One entity's copy of a control: same number, its own working paper, its own
- *  design and operating tracks reset to `stage`. */
-function instanceAt(base: Control, entity: string, short: string, stage: EntityStage): Control {
-  const designDone = stage !== 'fresh';
-  const opDone = stage === 'done';
-  return {
-    ...base,
-    // `id` is the key everything else in the workspace hangs off (findings,
-    // tasks, run records), so it has to be unique. `code` is what people read.
-    id: `${base.id}@${short.toLowerCase()}`,
-    code: base.code ?? base.id,
-    // A working paper index has to be unique too — the entity suffix is exactly
-    // how a group file references the same control at a different company.
-    wpRef: `${base.wpRef}/${short.slice(0, 3).toUpperCase()}`,
-    entity,
-    design: {
-      ...base.design,
-      documents: base.design.documents.map(d => ({ ...d, status: (designDone ? 'Received' : 'Requested') as DocStatus })),
-      points: base.design.points.map(p => ({ ...p, result: (designDone ? 'Pass' : 'Not tested') as TestResult })),
-      conclusion: (designDone ? 'Effective' : 'Not tested') as TrackConclusion,
-      testedBy: designDone ? base.design.testedBy : null,
-      testedAt: designDone ? base.design.testedAt : null,
-    },
-    operating: {
-      ...base.operating,
-      // Nothing is sampled until design is signed off, so a row that hasn't got
-      // there carries no population and no sample — the control page opens at ①.
-      population: designDone ? base.operating.population : undefined,
-      sampling: opDone ? base.operating.sampling : undefined,
-      steps: base.operating.steps.map((s, i) => ({
-        ...s,
-        result: (opDone ? 'Pass' : stage === 'part' && i === 0 ? 'Pass' : 'Not tested') as TestResult,
-      })),
-      conclusion: (opDone ? 'Effective' : 'Not tested') as TrackConclusion,
-      testedBy: opDone ? base.operating.testedBy : null,
-      testedAt: opDone ? base.operating.testedAt : null,
-    },
-  };
-}
+// Which is exactly why the sample has to reach each of them: one conclusion
+// covering four companies is only worth what the draw behind it touched, and a
+// company with no item drawn has had nothing tested however healthy the total
+// size looks. See `Control.entities`, `Sample.entity` and the coverage strip on
+// the sample step.
+//
+// Which companies each control answers for is NOT invented here. It is read
+// straight off the programme's own RACM derivation — the same mapping the
+// scoping wizard wrote when it decided which trial-balance captions were in
+// scope — so the register can never disagree with the Configuration tab.
 
 /**
- * Give every control its entity, and add a row for each further company its
- * process covers.
+ * Give every control the company it is performed at, and — when its process
+ * reaches further — the full list of companies its one conclusion answers for.
  *
- * The originals keep their ids and their place at the front of the array —
- * everything that picks a control by position (the seeded findings, the run
- * history) goes on meaning what it meant before. The copies are appended.
+ * No control is ever split into a row per company. The register carries ONE row
+ * per control; `entities` is what makes the reach of that row visible, and the
+ * sample step is where the reach has to be earned.
  */
-function withEntityInstances(controls: Control[], engagementId: string, fallback: string): Control[] {
+/**
+ * The FS line items a control stands behind — the grouping key for aggregation.
+ *
+ * Seeded off the process, but deliberately NOT one-for-one with it: a payment
+ * run settles payables as well as moving cash, and a three-way match is as much
+ * an inventory control as a payables one. If every process mapped to exactly one
+ * account, account groups and process groups would be the same thing wearing a
+ * different name — which is the arrangement this replaced.
+ *
+ * IT General Controls map to nothing on purpose: an ITGC does not land on one
+ * line item, it withdraws reliance across the engagement. See
+ * `joinsNoDerivedGroup`.
+ */
+const ACCOUNTS_FOR_PROCESS: Record<string, string[]> = {
+  'Procure to Pay': ['a1', 'a2'],
+  Treasury: ['a4', 'a1'],
+  'Order to Cash': ['a3'],
+  'Record to Report': ['a5'],
+  Inventory: ['a2'],
+};
+
+/** Attach them, without overwriting a control that already names its own. */
+function withAccounts(controls: Control[]): Control[] {
+  controls.forEach(c => {
+    if (!c.accountIds?.length) c.accountIds = ACCOUNTS_FOR_PROCESS[c.process] ?? [];
+  });
+  return controls;
+}
+
+function withEntityCoverage(controls: Control[], engagementId: string, fallback: string): Control[] {
   const prog = programmeFor(engagementId);
   // The single company the whole engagement is against. Every audit has one, even
   // the ones that were never scoped from trial balances — it is who is being
   // audited — so a control always has an entity to name, and the register never
-  // shows a column of dashes.
-  const wholeAudit = prog?.groupName ?? fallback;
+  // shows a column of dashes. `legalName` strips a listing suffix so the group
+  // reads with the same name here as it does in the entity register — otherwise
+  // the register's Entity filter lists one company twice.
+  const wholeAudit = legalName(prog?.groupName ?? fallback);
   const fullName = new Map((prog?.entities ?? []).map(e => [entityShort(e.id, prog!.entities), e.name]));
   const scopeOf = new Map<string, string[]>();
   prog?.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
 
-  const STAGES: EntityStage[] = ['done', 'part', 'design', 'fresh'];
-  const copies: Control[] = [];
-  controls.forEach((c, i) => {
-    // A process the scoping mapped to several companies splits into a row each —
-    // same control number, separate lives. A process mapped to one, or an
-    // engagement whose RACM was uploaded rather than derived, is the audit's own
-    // company and stays one row.
-    const shorts = scopeOf.get(normaliseProcess(c.process)) ?? [];
-    if (!shorts.length) { c.entity = wholeAudit; return; }
-    c.entity = fullName.get(shorts[0]!) ?? shorts[0]!;
-    shorts.slice(1).forEach((short, k) => {
-      copies.push(instanceAt(c, fullName.get(short) ?? short, short, STAGES[(i + k) % STAGES.length]!));
-    });
+  controls.forEach(c => {
+    // A process the scoping mapped to several companies gives this control its
+    // reach. A process mapped to one — or an engagement whose RACM was uploaded
+    // rather than derived — is the audit's own company, and the row answers for
+    // that company alone.
+    const names = (scopeOf.get(normaliseProcess(c.process)) ?? []).map(s => fullName.get(s) ?? s);
+    if (!names.length) { c.entity = wholeAudit; return; }
+    // Performed where, then who it answers for — two different questions, and a
+    // row that reaches only one company must not claim to be shared.
+    c.entity = names[0]!;
+    if (names.length > 1) c.entities = names;
   });
-  return copies.length ? [...controls, ...copies] : controls;
+  return controls;
+}
+
+/**
+ * Every drawn item belongs to one of the companies the control answers for.
+ *
+ * A conclusion that covers four companies is worth what the draw behind it
+ * touched, so each item is dealt to a company in turn — and the coverage strip
+ * on the sample step reads the result back. `short` deliberately holds one
+ * company out of the deal, which is how a control is left mid-flight with a
+ * company nothing was tested at: the warning is then shown, not described.
+ */
+function tagSamplesByEntity(controls: Control[], short?: (c: Control) => boolean): Control[] {
+  controls.forEach(c => {
+    const names = c.entities;
+    const items = c.operating.sampling?.samples;
+    if (!names || names.length < 2 || !items?.length) return;
+    const reach = short?.(c) ? names.slice(0, -1) : names;
+    if (!reach.length) return;
+    c.operating.sampling!.samples = items.map((s, i) => ({ ...s, entity: reach[i % reach.length]! }));
+  });
+  return controls;
 }
 
 /** The attributes a seeded control is tested against, in the order an auditor

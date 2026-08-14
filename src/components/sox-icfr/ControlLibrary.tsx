@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import Drawer from '../shared/Drawer';
-import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
+import { GROUP_OPTIONS, groupKeyOf, groupKeysOf, rowCovers, rowEntities, useColumnWidths, type GroupBy } from './registerColumns';
 import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
-  conclusionOf, controlCode, courtFor, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
+  conclusionOf, controlCode, courtFor, entityCell, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
 } from './helpers';
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -91,7 +91,7 @@ type Coverage = 'All' | 'full' | 'partial' | 'none' | 'run' | 'never';
 const LIB_COLS = [
   { key: 'process', w: 130 },
   { key: 'control', w: 330 },
-  { key: 'entity', w: 160 },
+  { key: 'entity', w: 215 },
   { key: 'type', w: 124 },
   { key: 'frequency', w: 116 },
   { key: 'owner', w: 144 },
@@ -182,10 +182,13 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
       <div className="ac-meta">{controlCode(c)} · {c.nature} · {c.frequency}</div>
       {/* The company this row is tested at, on its own line — same as the audit
           register: at another company it is a different control with its own life. */}
-      {c.entity && (
-        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+      {entityCell(c) && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={entityCell(c)!.title}>
           <Building2 size={11} className="text-ink-300 shrink-0" />
-          <span className="truncate font-medium">{c.entity}</span>
+          <span className="truncate font-medium">{entityCell(c)!.label}</span>
+          {entityCell(c)!.more > 0 && (
+            <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>
+          )}
         </div>
       )}
       <div className="ac-div" />
@@ -337,7 +340,7 @@ export default function ControlLibrary() {
   // Column-filter option lists — built from what is actually in front of you, so a
   // filter can never offer a value that returns nothing.
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
-  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
+  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.flatMap(rowEntities))).sort()], [scoped]);
   const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
   // Both names are filterable — you may be looking for what someone is
   // accountable for, or for what they run.
@@ -401,13 +404,13 @@ export default function ControlLibrary() {
     return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
-      if (entity !== 'All' && c.entity !== entity) return false;
+      if (entity !== 'All' && !rowCovers(c, entity)) return false;
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
       if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
       if (!matchesCoverage(c)) return false;
       if (preset && !matchesPreset(c)) return false;
-      if (term && !(`${controlCode(c)} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${controlCode(c)} ${c.description} ${rowEntities(c).join(' ')} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
   }, [scoped, q, process, nature, entity, ctype, frequency, owner, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
@@ -415,7 +418,8 @@ export default function ControlLibrary() {
   const groups = useMemo(() => {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
-    for (const c of filtered) { const k = groupKeyOf(c, groupBy); if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
+    // A shared row files under every company it covers — see groupKeysOf.
+    for (const c of filtered) for (const k of groupKeysOf(c, groupBy)) { if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
@@ -479,11 +483,24 @@ export default function ControlLibrary() {
         ))}
       </div>
 
-      {/* The cascade reaches this lens too: the library is where somebody browses
-          controls without an audit open, and the shortcut is withdrawn there just
-          the same. Same banner, same set — it sets the preset this lens already
-          understands rather than inventing a second filter. Auditor and reviewer
-          only, same as the register and the control page. */}
+      {/* PARKED (user ask, 12 Aug) — the ITGC cascade banner is off the Control
+          Library at this level too. The tab reads "Control Library" whichever
+          component is behind it — this lens outside an audit, ControlRegister
+          inside one — so parking it on one screen and not the other would have
+          made the banner come and go for no reason the user could see. Both are
+          commented out; nothing else changed, so restoring is uncommenting both.
+
+          Still on the audit Dashboard (Overview.tsx), which keeps the cascade
+          readable somewhere. The 'itgc' preset this banner set is still
+          reachable from the preset control.
+
+          Original note — The cascade reaches this lens too: the library is where
+          somebody browses controls without an audit open, and the shortcut is
+          withdrawn there just the same. Same banner, same set — it sets the
+          preset this lens already understands rather than inventing a second
+          filter. Auditor and reviewer only, same as the register and the
+          control page.
+
       {role !== 'risk-owner' && failedItgcs(eng).length > 0 && (
         <div className="mb-4">
           <ItgcCascadeBanner
@@ -494,6 +511,7 @@ export default function ControlLibrary() {
           />
         </div>
       )}
+      */}
 
       {/* an Overview count sent us here with intent — say so, and let it go */}
       {preset && (
@@ -601,8 +619,8 @@ export default function ControlLibrary() {
                           <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess}</div>
                         </td>
                         <td className="text-[0.71875rem] text-ink-700">
-                          {c.entity
-                            ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                          {entityCell(c)
+                            ? <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span>{entityCell(c)!.more > 0 && <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>}</span>
                             : <span className="text-ink-300">—</span>}
                         </td>
                         <td className="text-[0.71875rem] text-ink-600">{c.type}</td>
