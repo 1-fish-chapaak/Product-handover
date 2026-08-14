@@ -110,8 +110,8 @@ export default function UsageSettingsPanel({
 
   return (
     <Modal
-      title="The assumptions behind these numbers"
-      subtitle="The platform cannot compute these four. Two it can measure and suggest; two only the business can set."
+      title="Settings"
+      subtitle="Four settings drive every value claim. Two the platform can measure from your own history and suggest; two only the business can set."
       width="max-w-[680px]"
       onClose={onClose}
       footer={

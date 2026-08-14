@@ -28,18 +28,19 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, Download, SlidersHorizontal } from 'lucide-react';
+import { CalendarRange, Download, IndianRupee, SlidersHorizontal } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { BTN_CTA_OUTLINE } from '../admin/adminTokens';
 import { ANCHOR, COVERAGE_NOTE, HISTORY_START, dataAsOfLabel, formatDate } from '../../data/platform-usage';
-import { approveMemory, pendingMemories, rejectMemory, useMemorySessionVersion } from '../../data/memorySession';
+import { useMemorySessionVersion } from '../../data/memorySession';
 import {
-  aiUsageByArea, controlCoverage, costToRun, createdThisPeriod, exceptionsCaught, myQueue, neverExercised, netValue,
-  perPersonOutcomes, period, periodOptions, priorPeriod, reliability, runsIn, sensitivity, smartLearn,
+  aiUsageByArea, ccm, controlCoverage, costToRun, createdThisPeriod, exceptionsCaught, insights, myQueue,
+  neverExercised, netValue, perPersonOutcomes, period, periodOptions, portfolio, priorPeriod, productActivity,
+  reliability, reportsActivity, riskPicture, runsIn, sampling, sensitivity, smartLearn,
   stuckRuns, valueOf, valueOverTime, volumeOverTime, wastedEffort, workVolume, calibrate,
-  loadSettings, saveSettings,
+  loadSettings, saveSettings, fmtHours, fmtInt, fmtPct,
   type CustomRange, type Persona, type PeriodId, type QueueItem, type Scope, type UsageSettings,
 } from '../../data/platform-usage-metrics';
 import { PageSection } from './usageKit';
@@ -48,8 +49,11 @@ import {
 } from './UsageValueBlocks';
 import { ControlCoverage, ExceptionsCaught, NeverExercisedBlock } from './UsageCoverageBlocks';
 import { MyQueue, PerPersonOutcomes, Reliability, StuckRuns } from './UsageOperationsBlocks';
+import { DashboardsAndAlerts, InsightsGenerated, ReportsMade, SamplingOutcomes } from './UsageProductBlocks';
+import { CcmCoverage, EngagementPortfolioBlock, RiskPictureBlock } from './UsagePortfolioBlocks';
 import { SmartLearn } from './UsageSmartLearn';
 import UsageSettingsPanel from './UsageSettingsPanel';
+import UsagePricingPanel from './UsagePricingPanel';
 import { buildUsageCsv, downloadCsv, type ExportInput } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
 
@@ -79,6 +83,10 @@ export default function PlatformUsageView() {
 
   const [settings, setSettings] = useState<UsageSettings>(() => loadSettings());
   const [editingSettings, setEditingSettings] = useState(false);
+  // PU-19. Entering a price is the one thing that can turn "work avoided" into
+  // net value, so the version counter recomputes every cost figure on save.
+  const [editingPrices, setEditingPrices] = useState(false);
+  const [pricingVersion, setPricingVersion] = useState(0);
 
   /* ── Who is reading, and what they may see ──────────────────────────────── */
 
@@ -127,7 +135,8 @@ export default function PlatformUsageView() {
     [prior, scope, settings],
   );
   const wasted = useMemo(() => wastedEffort(periodRuns), [periodRuns]);
-  const cost = useMemo(() => costToRun(p, scope), [p, scope]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cost = useMemo(() => costToRun(p, scope), [p, scope, pricingVersion]);
   const coverage = useMemo(() => controlCoverage(p, scope), [p, scope]);
   const never = useMemo(() => neverExercised(), []);
   const exceptions = useMemo(() => exceptionsCaught(p, scope), [p, scope]);
@@ -149,6 +158,15 @@ export default function PlatformUsageView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memory = useMemo(() => smartLearn(scope), [scope, memoryVersion]);
   const swing = useMemo(() => sensitivity(periodRuns, settings, p.months), [periodRuns, settings, p.months]);
+  // The rest of the product: what was built on it, what was written up, what was
+  // tested, what the assistant noticed, and the shape of the audit work itself.
+  const product = useMemo(() => productActivity(p, scope, logs, users), [p, scope, logs, users]);
+  const reports = useMemo(() => reportsActivity(p, scope, logs, users), [p, scope, logs, users]);
+  const samples = useMemo(() => sampling(p, scope), [p, scope]);
+  const insightRows = useMemo(() => insights(p, scope), [p, scope]);
+  const risks = useMemo(() => riskPicture(p, scope), [p, scope]);
+  const engagements = useMemo(() => portfolio(p, scope, logs, users), [p, scope, logs, users]);
+  const monitoring = useMemo(() => ccm(p, scope), [p, scope]);
   // The calibration job's output, scoped the same way everything else is.
   const calibration = useMemo(() => calibrate(scope), [scope]);
   const net = netValue(value, cost);
@@ -168,24 +186,38 @@ export default function PlatformUsageView() {
     addToast({ type: 'success', message: 'Saved. Every figure on this page has been recalculated.' });
   };
 
-  const onMemoryDecision = (id: string, decision: 'approve' | 'reject') => {
-    const m = pendingMemories().find(x => x.id === id);
-    if (!m) return;
-    if (decision === 'approve') approveMemory(m, currentUser?.name ?? 'Unknown');
-    else rejectMemory(m, currentUser?.name ?? 'Unknown');
-    logEvent({
-      action: 'Update',
-      module: 'Platform Usage',
-      entity: 'Smart Learn memory',
-      description: `${decision === 'approve' ? 'Approved' : 'Rejected'} a proposed memory: "${m.statement}"`,
-    });
-    addToast({
-      type: 'success',
-      message: decision === 'approve' ? 'Approved. The assistant can use it now.' : 'Rejected. The assistant will not use it.',
-    });
-  };
-
   const onOpenQueueItem = (item: QueueItem) => navigate(item.target.view, item.target.id);
+
+  /* ── What a folded section says ─────────────────────────────────────────── */
+
+  // A folded section is not a hidden one. Each header carries the figures a
+  // reader would otherwise scroll for, so folding costs them a fact rather than
+  // the facts.
+  const auditSummary = [
+    `${fmtPct(coverage.pct)} of controls exercised`,
+    risks.unmappedSevere > 0 ? `${fmtInt(risks.unmappedSevere)} severe risks uncovered` : 'no severe risk uncovered',
+    `${fmtInt(engagements.total)} engagements`,
+    exceptions.total > 0 ? `${fmtInt(exceptions.open)} exceptions open` : 'nothing caught',
+  ].join(' · ');
+
+  const behindSummary = [
+    `${fmtInt(volume[0]?.count ?? 0)} ${(volume[0]?.label ?? 'runs').toLowerCase()}`,
+    `${fmtInt(created.reduce((n, a) => n + a.count, 0))} records created`,
+    `${fmtInt(product.alertsFired)} alerts fired`,
+    `${fmtInt(reports.made)} reports made`,
+  ].join(' · ');
+
+  const teamGapSummary = [
+    `${fmtInt(never.controls.length)} controls never tested`,
+    samples.total > 0 ? `${fmtInt(samples.failed + samples.errored)} validations need a look` : 'no validation ran',
+    monitoring.engagementsOn > 0 ? `${fmtInt(monitoring.engagementsOn)} monitored continuously` : 'nothing monitored continuously',
+  ].join(' · ');
+
+  const teamWorkSummary = [
+    `${fmtInt(people.length)} people`,
+    `${fmtInt(created.reduce((n, a) => n + a.count, 0))} records created`,
+    `${fmtHours(value.hours)} hours saved`,
+  ].join(' · ');
 
   // Both formats carry the same payload, and carry it at the top: whose view,
   // which window, the settings the value figures rest on, and what the page does
@@ -206,6 +238,15 @@ export default function PlatformUsageView() {
     exceptions,
     smartLearn: memory,
     wasted,
+    // Each of these travels only where the view shows it, so an export can never
+    // carry a figure the reader was not entitled to see on screen.
+    product: activePersona === 'auditor' ? null : product,
+    reports: activePersona === 'auditor' ? null : reports,
+    sampling: activePersona === 'auditor' ? null : samples,
+    insights: insightRows,
+    risks: activePersona === 'auditor' ? null : risks,
+    portfolio: activePersona === 'auditor' ? null : engagements,
+    ccm: activePersona === 'auditor' ? null : monitoring,
   });
 
   const stamp = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -254,10 +295,19 @@ export default function PlatformUsageView() {
                   two teams' numbers incomparable, which is worse than one team
                   disagreeing with the rate. */}
               {can('ad_usage') && (
-                <button type="button" onClick={() => setEditingSettings(true)} className={BTN_CTA_OUTLINE}>
-                  <SlidersHorizontal size={14} />
-                  Assumptions
-                </button>
+                <>
+                  {/* Both labels are the spec's own words: "the settings editor"
+                      and "Cost the paid lookups" (PU-19). Nothing on this page is
+                      named anything the document does not name it. */}
+                  <button type="button" onClick={() => setEditingSettings(true)} className={BTN_CTA_OUTLINE}>
+                    <SlidersHorizontal size={14} />
+                    Settings
+                  </button>
+                  <button type="button" onClick={() => setEditingPrices(true)} className={BTN_CTA_OUTLINE}>
+                    <IndianRupee size={14} />
+                    Cost the paid lookups
+                  </button>
+                </>
               )}
               {can('ad_usage_export') && <ExportMenu onCsv={onExportCsv} onPdf={onExportPdf} />}
             </div>
@@ -290,21 +340,46 @@ export default function PlatformUsageView() {
                 <CostToRun cost={cost} />
               </PageSection>
 
-              <PageSection title="What it covered" hint="Where the automation reached, and where it did not">
+              <PageSection
+                title="The audit work"
+                hint="What the platform reached, where the audits stand, and what was caught"
+                summary={auditSummary}
+                collapsible
+                defaultOpen={false}
+              >
                 <ControlCoverage coverage={coverage} />
                 <NeverExercisedBlock
                   data={never}
                   onOpenControls={() => navigate('governance-controls')}
                   onOpenWorkflows={() => navigate('workflow-library')}
                 />
+                <EngagementPortfolioBlock
+                  data={engagements}
+                  periodLabel={p.label}
+                  onOpenEngagement={id => navigate('engagements', id)}
+                  onOpenExceptions={id => navigate('manage-exceptions', id)}
+                  onOpenReports={() => navigate('reports')}
+                />
+                <RiskPictureBlock data={risks} periodLabel={p.label} onOpenRisks={() => navigate('audit-risk-register')} />
                 <ExceptionsCaught data={exceptions} periodLabel={p.label} onOpenException={id => navigate('manage-exceptions', id)} />
+                <SamplingOutcomes data={samples} />
               </PageSection>
 
-              <PageSection title="Behind the numbers" hint="Where the work actually happened">
+              <PageSection
+                title="Behind the numbers"
+                hint="Where the work actually happened"
+                summary={behindSummary}
+                collapsible
+                defaultOpen={false}
+              >
                 <WorkVolume units={volume} series={volumeSeries} />
                 <CreatedThisPeriod areas={created} />
+                <DashboardsAndAlerts data={product} periodLabel={p.label} onOpenDashboards={() => navigate('dashboards')} />
+                <ReportsMade data={reports} periodLabel={p.label} onOpenReports={() => navigate('reports')} />
+                <InsightsGenerated data={insightRows} />
+                <CcmCoverage data={monitoring} />
                 <AiUsageByArea rows={ai} />
-                <SmartLearn data={memory} scopeLabel="Across the whole company" onDecide={onMemoryDecision} onManage={openSmartLearn} />
+                <SmartLearn data={memory} scopeLabel="Across the whole company" onManage={openSmartLearn} />
               </PageSection>
             </>
           )}
@@ -316,21 +391,32 @@ export default function PlatformUsageView() {
                 <Reliability data={reliabilityData} />
               </PageSection>
 
-              <PageSection title="Gaps" hint="Things nothing has checked yet">
+              <PageSection
+                title="Gaps"
+                hint="Things nothing has checked yet"
+                summary={teamGapSummary}
+                collapsible
+                defaultOpen={false}
+              >
                 <NeverExercisedBlock
                   data={never}
                   onOpenControls={() => navigate('governance-controls')}
                   onOpenWorkflows={() => navigate('workflow-library')}
                 />
+                <SamplingOutcomes data={samples} />
+                <CcmCoverage data={monitoring} />
+                <RiskPictureBlock data={risks} periodLabel={p.label} onOpenRisks={() => navigate('audit-risk-register')} />
               </PageSection>
 
-              <PageSection title="Your team">
+              <PageSection title="Your team" summary={teamWorkSummary} collapsible defaultOpen={false}>
                 <PerPersonOutcomes rows={people} team={myTeam ?? ''} />
                 <CreatedThisPeriod areas={created} />
+                <DashboardsAndAlerts data={product} periodLabel={p.label} onOpenDashboards={() => navigate('dashboards')} />
+                <ReportsMade data={reports} periodLabel={p.label} onOpenReports={() => navigate('reports')} />
+                <InsightsGenerated data={insightRows} />
                 <SmartLearn
                   data={memory}
                   scopeLabel={`Memories held for ${myTeam ?? 'your team'}`}
-                  onDecide={onMemoryDecision}
                   onManage={openSmartLearn}
                 />
                 {/* Small, and at the bottom. A team lead cannot act on a rupee
@@ -353,6 +439,7 @@ export default function PlatformUsageView() {
               <PageSection title="What you got through">
                 <WorkVolume units={volume} series={volumeSeries} />
                 <ExceptionsCaught data={exceptions} periodLabel={p.label} onOpenException={id => navigate('manage-exceptions', id)} />
+                <InsightsGenerated data={insightRows} />
                 <HeadlineValue
                   value={value} prior={priorValue} periodLabel={p.label} priorLabel={prior?.label ?? null}
                   settings={settings} showMoney={showMoney} wasted={wasted} netValue={net}
@@ -364,6 +451,22 @@ export default function PlatformUsageView() {
           )}
         </div>
       </div>
+
+      {editingPrices && (
+        <UsagePricingPanel
+          enteredBy={currentUser?.name ?? 'Unknown'}
+          onClose={() => setEditingPrices(false)}
+          onSaved={change => {
+            setPricingVersion(v => v + 1);
+            logEvent({
+              action: 'Update',
+              module: 'Platform Usage',
+              entity: 'Paid lookup cost',
+              description: change,
+            });
+          }}
+        />
+      )}
 
       {editingSettings && (
         <UsageSettingsPanel

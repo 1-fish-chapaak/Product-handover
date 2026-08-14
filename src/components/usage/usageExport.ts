@@ -15,8 +15,9 @@
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
   PERSONA_TITLE, SETTING_LABEL, SOURCE_FIELD, SOURCE_LABEL, fmtHours, fmtInt, fmtMoney, fmtPeople, fmtPct, fmtUsd,
-  type AiAreaRow, type CoverageResult, type CostResult, type CreatedArea, type ExceptionsResult,
-  type NumericSetting, type Period,
+  type AiAreaRow, type CcmResult, type CoverageResult, type CostResult, type CreatedArea, type ExceptionsResult,
+  type InsightsResult, type NumericSetting, type Period, type PortfolioResult, type ProductActivity,
+  type ReportsActivity, type RiskPicture, type SamplingResult,
   type Scope, type SmartLearnResult, type UsageSettings, type ValueResult, type VolumeUnit,
 } from '../../data/platform-usage-metrics';
 
@@ -37,6 +38,14 @@ export interface ExportInput {
   exceptions: ExceptionsResult | null;
   smartLearn: SmartLearnResult | null;
   wasted: { hours: number; runs: number };
+  /** PU-22 to PU-28. Null wherever the view does not show that block. */
+  product: ProductActivity | null;
+  reports: ReportsActivity | null;
+  sampling: SamplingResult | null;
+  insights: InsightsResult | null;
+  risks: RiskPicture | null;
+  portfolio: PortfolioResult | null;
+  ccm: CcmResult | null;
 }
 
 const esc = (v: string | number): string => {
@@ -75,7 +84,7 @@ export function buildUsageCsv(input: ExportInput): string {
   lines.push('', 'What the work was worth');
   lines.push(row('Hours saved', fmtHours(input.value.hours)));
   if (input.showMoney) {
-    lines.push(row('Worth', fmtMoney(input.value.money)));
+    lines.push(row('Money saved', fmtMoney(input.value.money)));
     lines.push(row('People equivalent', fmtPeople(input.value.people)));
   }
   lines.push(row('Runs counted', fmtInt(input.value.runsCounted)));
@@ -87,11 +96,20 @@ export function buildUsageCsv(input: ExportInput): string {
     lines.push('', 'Cost to run');
     if (input.cost.complete) {
       lines.push(row('Paid vendor lookups', fmtMoney(input.cost.lookupMoney ?? 0)));
-      lines.push(row('Runs of workflows that call a paid lookup', fmtInt(input.cost.lookupRuns)));
+      lines.push(row('Invoices that figure is the sum of', fmtInt(input.cost.invoices)));
+      lines.push(row('Months in this window, all invoiced', fmtInt(input.cost.monthsInWindow)));
+      lines.push(row('Recorded calls', fmtInt(input.cost.recordedCalls)));
+      if (input.cost.effectiveRate !== null) {
+        lines.push(row('Derived from your invoices', `${fmtMoney(input.cost.effectiveRate)} per recorded call, not a price anybody quoted`));
+      }
+      if (input.cost.split) {
+        lines.push(row('The same runs priced per API', fmtMoney(input.cost.split.total)));
+        lines.push(row('Gap against the bill', fmtMoney(input.cost.split.gap)));
+      }
     } else {
-      // No volume line either: which workflows are billable is defined by the
-      // price list, so a zero here would be the empty table talking about itself.
-      lines.push(row('Paid vendor lookups', 'Price list not yet loaded, so no cost total exists'));
+      // No total under a total's label: an unfinished window is unfinished.
+      lines.push(row('Paid vendor lookups', `${input.cost.missing ?? 'No invoice entered for this period.'} No cost total exists.`));
+      lines.push(row('Months invoiced', `${fmtInt(input.cost.monthsInvoiced)} of ${fmtInt(input.cost.monthsInWindow)}`));
     }
     lines.push(row('Concierge job cost', fmtUsd(input.cost.conciergeUsd)));
   }
@@ -104,7 +122,7 @@ export function buildUsageCsv(input: ExportInput): string {
   }
 
   if (input.neverExercised) {
-    lines.push('', 'Never checked by anything (ignores the period)');
+    lines.push('', 'Never exercised (ignores the period)');
     lines.push(row('Controls', fmtInt(input.neverExercised.controls.length)));
     for (const c of input.neverExercised.controls) lines.push(row('Control', c));
     lines.push(row('Workflows', fmtInt(input.neverExercised.workflows.length)));
@@ -112,7 +130,7 @@ export function buildUsageCsv(input: ExportInput): string {
   }
 
   if (input.exceptions && input.exceptions.total > 0) {
-    lines.push('', 'What was caught');
+    lines.push('', 'Exceptions caught');
     lines.push(row('Reference', 'Severity', 'Status', 'Workflow', 'Raised'));
     for (const e of input.exceptions.rows) {
       lines.push(row(e.ref, e.severity, e.status, e.workflowName, formatDate(e.openedAt)));
@@ -120,7 +138,7 @@ export function buildUsageCsv(input: ExportInput): string {
   }
 
   // Four rows, never a sum.
-  lines.push('', 'Work volume, in four units that are not addable');
+  lines.push('', 'Work volume by unit, in four units that are not addable');
   lines.push(row('Unit', 'Count', 'What it is'));
   for (const u of input.volume) lines.push(row(u.label, u.count, u.note));
 
@@ -146,8 +164,90 @@ export function buildUsageCsv(input: ExportInput): string {
     }
   }
 
+  if (input.portfolio && input.portfolio.total > 0) {
+    lines.push('', 'Engagements');
+    for (const st of input.portfolio.byStatus) lines.push(row(st.label, st.count));
+    lines.push(row('Recorded changes in this window', fmtInt(input.portfolio.changes)));
+    lines.push(row('Open past the end of the audit period', fmtInt(input.portfolio.slipping.length)));
+    if (input.portfolio.strip.length > 0) {
+      lines.push(row('Engagement', 'Controls tested', 'Of', 'Open exceptions', 'In remediation', 'Report', 'Period ends'));
+      for (const e of input.portfolio.strip) {
+        lines.push(row(e.name, e.controlsTested, e.controlsTotal, e.exceptionsOpen, e.actionPlansOpen, e.report, e.periodEnd));
+      }
+    }
+  }
+
+  if (input.risks) {
+    lines.push('', 'Risks');
+    lines.push(row('Risks recorded', fmtInt(input.risks.total)));
+    lines.push(row('Critical or high with no control covering them', fmtInt(input.risks.unmappedSevere)));
+    lines.push(row('Covered by a control', fmtInt(input.risks.mapped)));
+    lines.push(row('Covered by nothing', fmtInt(input.risks.unmapped)));
+    for (const b of input.risks.byPriority) lines.push(row(`Priority ${b.label}`, b.count));
+    for (const r of input.risks.unmappedList) lines.push(row('Uncovered risk', `${r.id} ${r.name}`, r.priority, r.owner));
+    lines.push(row('Not recorded', 'Whether a risk was typed by a person or drafted by the assistant'));
+  }
+
+  if (input.sampling && input.sampling.total > 0) {
+    lines.push('', 'Sampling');
+    lines.push(row('Passed', fmtInt(input.sampling.passed)));
+    lines.push(row('Failed, the control did not hold', fmtInt(input.sampling.failed)));
+    lines.push(row('Errored, needs a person', fmtInt(input.sampling.errored)));
+    lines.push(row('Still running', fmtInt(input.sampling.inFlight)));
+    lines.push(row('Control', 'Engagement', 'Passed', 'Failed', 'Errored'));
+    for (const c of input.sampling.byControl) lines.push(row(c.control, c.engagement, c.passed, c.failed, c.errored));
+  }
+
+  if (input.ccm && input.ccm.engagementsOn > 0) {
+    lines.push('', 'CCM and automation');
+    lines.push(row('Engagements monitored continuously', fmtInt(input.ccm.engagementsOn)));
+    lines.push(row('Engagements in scope', fmtInt(input.ccm.engagementsTotal)));
+    lines.push(row('Bulk runs in this window', fmtInt(input.ccm.bulkRuns)));
+    lines.push(row('Engagement', 'Expects', 'Actual', 'Validations counted', 'Cadence', 'Approvals', 'Exceptions in a gate now'));
+    for (const r of input.ccm.rows) {
+      lines.push(row(
+        r.engagement, `${fmtInt(r.threshold)}%`, r.actual === null ? 'nothing landed' : fmtPct(r.actual),
+        r.sampleN, r.cadence, r.approvals, r.inGate,
+      ));
+    }
+  }
+
+  if (input.product) {
+    lines.push('', 'Dashboards, widgets and alerts');
+    lines.push(row('Dashboards built', fmtInt(input.product.dashboardsCreated)));
+    lines.push(row('Dashboards changed or shared', fmtInt(input.product.dashboardsChanged)));
+    lines.push(row('Dashboards in the workspace now', fmtInt(input.product.dashboardsTotal)));
+    lines.push(row('Alerts fired', fmtInt(input.product.alertsFired)));
+    lines.push(row('Of those, fired automatically', fmtInt(input.product.automaticFires)));
+    if (input.product.makers.length > 0) {
+      lines.push(row('Dashboard', 'Made by', 'When'));
+      for (const m of input.product.makers) lines.push(row(m.name, m.madeBy ?? 'automatic', formatDate(m.at)));
+    }
+  }
+
+  if (input.reports) {
+    lines.push('', 'Reports');
+    lines.push(row('Made', fmtInt(input.reports.made)));
+    lines.push(row('Recorded activities', fmtInt(input.reports.activity)));
+    lines.push(row('Shared', fmtInt(input.reports.shared)));
+    lines.push(row('Action plans open right now', fmtInt(input.reports.actionPlansOpen)));
+    lines.push(row('Action plans implemented', fmtInt(input.reports.actionPlansClosed)));
+    if (input.reports.list.length > 0) {
+      lines.push(row('Report', 'Made by', 'When'));
+      for (const r of input.reports.list) lines.push(row(r.name, r.madeBy ?? 'automatic', formatDate(r.at)));
+    }
+  }
+
+  if (input.insights && input.insights.perRun + input.insights.consolidated > 0) {
+    lines.push('', 'AI insights');
+    lines.push(row('Written from one run', fmtInt(input.insights.perRun)));
+    lines.push(row('Written across an engagement', fmtInt(input.insights.consolidated)));
+    lines.push(row('Severity', 'From one run', 'Across an engagement'));
+    for (const b of input.insights.bySeverity) lines.push(row(b.severity, b.perRun, b.consolidated));
+  }
+
   if (input.smartLearn?.hasData) {
-    lines.push('', 'What the assistant has learned');
+    lines.push('', 'Smart Learn');
     lines.push(row('Memories in use', fmtInt(input.smartLearn.active)));
     lines.push(row('Recalled in the last 7 days', fmtInt(input.smartLearn.recalls7d)));
     lines.push(row('Due for review', fmtInt(input.smartLearn.dueReview)));

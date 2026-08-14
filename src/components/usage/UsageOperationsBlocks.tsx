@@ -23,7 +23,7 @@ import type { PersonRow, QueueItem, ReliabilityResult, StuckRun } from '../../da
 export function StuckRuns({ runs, onOpenRun }: { runs: StuckRun[]; onOpenRun: (id: string) => void }) {
   return (
     <Block
-      title="Stuck right now"
+      title="Stuck runs"
       hint="Failed, blocked, or paused for more than a day."
     >
       {runs.length === 0 ? (
@@ -76,7 +76,8 @@ export function Reliability({ data }: { data: ReliabilityResult }) {
 
   return (
     <Block
-      title="What keeps failing"
+      title="Reliability"
+      hint="Failure rate per workflow, and the machine time failed runs burned."
       chart={
         data.rows.length === 0 ? (
           <Empty kind="quiet" title="No workflow ran in this window." />
@@ -123,8 +124,8 @@ export function Reliability({ data }: { data: ReliabilityResult }) {
 export function PerPersonOutcomes({ rows, team }: { rows: PersonRow[]; team: string }) {
   return (
     <Block
-      title={`Everyone in ${team}`}
-      hint="Alphabetical, and it stays that way. Nothing here ranks anybody."
+      title="Per-person outcomes"
+      hint={`Everyone in ${team}, alphabetical, and it stays that way. Nothing here ranks anybody.`}
     >
       {rows.length === 0 ? (
         <Empty kind="quiet" title="Nobody is on this team yet." />
@@ -169,8 +170,8 @@ export function MyQueue({ items, onOpen }: { items: QueueItem[]; onOpen: (item: 
 
   return (
     <Block
-      title="Waiting on you"
-      hint="Oldest first. Every item opens what needs doing."
+      title="My queue"
+      hint="Overdue first. Every item opens what needs doing."
     >
       {items.length === 0 ? (
         <Empty kind="quiet" title="You are clear." />

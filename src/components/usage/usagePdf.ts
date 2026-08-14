@@ -115,7 +115,7 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
   const worth: (string | number)[][] = [
     ['Hours saved', fmtHours(value.hours)],
     ...(input.showMoney
-      ? [['Worth (INR)', inr(value.money)], ['People equivalent', value.people.toFixed(1)]]
+      ? [['Money saved (INR)', inr(value.money)], ['People equivalent', value.people.toFixed(1)]]
       : []),
     ['Runs counted', fmtInt(value.runsCounted)],
     ['Rows processed', fmtInt(value.rowsProcessed)],
@@ -127,8 +127,21 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
   if (input.cost) {
     content.push(heading('Cost to run'));
     content.push(table(['', ''], [
-      ['Paid vendor lookups', input.cost.complete ? `INR ${inr(input.cost.lookupMoney ?? 0)}` : 'Price list not yet loaded, so no cost total exists'],
-      ...(input.cost.complete ? [['Runs of workflows that call a paid lookup', fmtInt(input.cost.lookupRuns)]] : []),
+      ['Paid vendor lookups', input.cost.complete
+        ? `INR ${inr(input.cost.lookupMoney ?? 0)}`
+        : `${input.cost.missing ?? 'No invoice entered for this period.'} No cost total exists.`],
+      ...(input.cost.complete
+        ? [
+            ['Invoices that figure is the sum of', fmtInt(input.cost.invoices)],
+            ['Recorded calls', fmtInt(input.cost.recordedCalls)],
+            ...(input.cost.effectiveRate !== null
+              ? [['Derived from your invoices', `INR ${inr(input.cost.effectiveRate)} per recorded call, not a quoted price`]]
+              : []),
+            ...(input.cost.split
+              ? [['The same runs priced per API', `INR ${inr(input.cost.split.total)}, a gap of INR ${inr(input.cost.split.gap)} against the bill`]]
+              : []),
+          ]
+        : [['Months invoiced', `${fmtInt(input.cost.monthsInvoiced)} of ${fmtInt(input.cost.monthsInWindow)}`]]),
       ['Concierge job cost', fmtUsd(input.cost.conciergeUsd)],
     ], [220, '*']));
   }
@@ -142,7 +155,7 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
   }
 
   if (input.neverExercised && (input.neverExercised.controls.length > 0 || input.neverExercised.workflows.length > 0)) {
-    content.push(heading('Never checked by anything'));
+    content.push(heading('Never exercised'));
     content.push({ text: 'This ignores the period. Nothing has ever exercised these.', fontSize: 8, color: MUTED, margin: [0, 0, 0, 6] });
     content.push(table(
       ['Kind', 'Name'],
@@ -155,7 +168,7 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
   }
 
   if (input.exceptions && input.exceptions.total > 0) {
-    content.push(heading('What was caught'));
+    content.push(heading('Exceptions caught'));
     content.push(table(
       ['Reference', 'Severity', 'Status', 'Workflow', 'Raised'],
       input.exceptions.rows.map(e => [e.ref, e.severity, e.status, e.workflowName, formatDate(e.openedAt)]),
@@ -163,7 +176,7 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
     ));
   }
 
-  content.push(heading('Work volume'));
+  content.push(heading('Work volume by unit'));
   content.push({
     text: 'Four different units of work. They are not added together here because the sum would mean nothing.',
     fontSize: 8, color: MUTED, margin: [0, 0, 0, 6],
@@ -201,8 +214,123 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
     ));
   }
 
+  if (input.portfolio && input.portfolio.total > 0) {
+    content.push(heading('Engagements'));
+    content.push(table(
+      ['', ''],
+      [
+        ...input.portfolio.byStatus.map(st => [st.label, fmtInt(st.count)]),
+        ['Recorded changes in this window', fmtInt(input.portfolio.changes)],
+        ['Open past the end of the audit period', fmtInt(input.portfolio.slipping.length)],
+      ],
+      [220, '*'],
+    ));
+    if (input.portfolio.strip.length > 0) {
+      content.push(table(
+        ['Engagement', 'Controls tested', 'Open exceptions', 'Report', 'Period ends'],
+        input.portfolio.strip.map(e => [
+          e.name,
+          `${fmtInt(e.controlsTested)} of ${fmtInt(e.controlsTotal)}`,
+          fmtInt(e.exceptionsOpen),
+          e.report,
+          e.periodEnd,
+        ]),
+        ['*', 80, 75, 60, 70],
+      ));
+    }
+  }
+
+  if (input.risks && input.risks.total > 0) {
+    content.push(heading('Risks'));
+    content.push(table(['', ''], [
+      ['Critical or high with no control covering them', fmtInt(input.risks.unmappedSevere)],
+      ['Risks recorded', fmtInt(input.risks.total)],
+      ['Covered by a control', fmtInt(input.risks.mapped)],
+      ['Covered by nothing', fmtInt(input.risks.unmapped)],
+      ...input.risks.byPriority.map(b => [`Priority ${b.label}`, fmtInt(b.count)]),
+    ], [280, '*']));
+    if (input.risks.unmappedList.length > 0) {
+      content.push(table(
+        ['Uncovered risk', 'Priority', 'Owner'],
+        input.risks.unmappedList.map(r => [`${r.id} ${r.name}`, r.priority, r.owner]),
+        ['*', 60, 110],
+      ));
+    }
+  }
+
+  if (input.sampling && input.sampling.total > 0) {
+    content.push(heading('Sampling'));
+    content.push({
+      text: 'A failed validation says the control did not hold. An errored one says nothing about the control, so somebody has to look.',
+      fontSize: 8, color: MUTED, margin: [0, 0, 0, 6],
+    });
+    content.push(table(
+      ['Control', 'Engagement', 'Passed', 'Failed', 'Errored'],
+      input.sampling.byControl.map(c => [c.control, c.engagement, fmtInt(c.passed), fmtInt(c.failed), fmtInt(c.errored)]),
+      ['*', 140, 45, 45, 45],
+    ));
+  }
+
+  if (input.ccm && input.ccm.engagementsOn > 0) {
+    content.push(heading('CCM and automation'));
+    content.push(table(
+      ['Engagement', 'Expects', 'Actual', 'Validations', 'Cadence', 'In a gate'],
+      input.ccm.rows.map(r => [
+        r.engagement,
+        `${fmtInt(r.threshold)}%`,
+        r.actual === null ? 'nothing landed' : fmtPct(r.actual),
+        fmtInt(r.sampleN),
+        r.cadence,
+        fmtInt(r.inGate),
+      ]),
+      ['*', 50, 75, 60, 55, 50],
+    ));
+  }
+
+  if (input.product) {
+    content.push(heading('Dashboards, widgets and alerts'));
+    content.push(table(['', ''], [
+      ['Dashboards built', fmtInt(input.product.dashboardsCreated)],
+      ['Dashboards changed or shared', fmtInt(input.product.dashboardsChanged)],
+      ['Dashboards in the workspace now', fmtInt(input.product.dashboardsTotal)],
+      ['Alerts fired', fmtInt(input.product.alertsFired)],
+      ['Of those, fired automatically with nobody watching', fmtInt(input.product.automaticFires)],
+    ], [280, '*']));
+    if (input.product.makers.length > 0) {
+      content.push(table(
+        ['Dashboard', 'Made by', 'When'],
+        input.product.makers.map(m => [m.name, m.madeBy ?? 'automatic', formatDate(m.at)]),
+        ['*', 130, 70],
+      ));
+    }
+  }
+
+  if (input.reports) {
+    content.push(heading('Reports'));
+    content.push({
+      text: 'A report edited fifty times is one report and fifty activities. The two are never added together.',
+      fontSize: 8, color: MUTED, margin: [0, 0, 0, 6],
+    });
+    content.push(table(['', ''], [
+      ['Made', fmtInt(input.reports.made)],
+      ['Recorded activities', fmtInt(input.reports.activity)],
+      ['Shared', fmtInt(input.reports.shared)],
+      ['Action plans open right now', fmtInt(input.reports.actionPlansOpen)],
+      ['Action plans implemented', fmtInt(input.reports.actionPlansClosed)],
+    ], [280, '*']));
+  }
+
+  if (input.insights && input.insights.perRun + input.insights.consolidated > 0) {
+    content.push(heading('AI insights'));
+    content.push(table(
+      ['Severity', 'From one run', 'Across an engagement'],
+      input.insights.bySeverity.map(b => [b.severity, fmtInt(b.perRun), fmtInt(b.consolidated)]),
+      [120, 100, '*'],
+    ));
+  }
+
   if (input.smartLearn?.hasData) {
-    content.push(heading('What the assistant has learned'));
+    content.push(heading('Smart Learn'));
     content.push(table(['', ''], [
       ['Memories in use', fmtInt(input.smartLearn.active)],
       ['Recalled in the last 7 days', fmtInt(input.smartLearn.recalls7d)],

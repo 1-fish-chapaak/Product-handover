@@ -66,7 +66,7 @@ export function NeverExercisedBlock({
 
   return (
     <Block
-      title="Never checked by anything"
+      title="Never exercised"
       hint="Ignores the period. Never exercised at all, in the whole record."
     >
       {nothing ? (
@@ -139,7 +139,8 @@ export function ExceptionsCaught({
 }) {
   return (
     <Block
-      title="What was caught"
+      title="Exceptions caught"
+      hint="By severity, with the count still open."
       chart={
         data.total === 0 ? (
           <Empty kind="quiet" title="Nothing was caught in this window." detail="The runs completed and found nothing to raise." />
@@ -158,7 +159,7 @@ export function ExceptionsCaught({
               tone="risk"
             />
             <ul className="mt-4 divide-y divide-canvas-border border-t border-canvas-border">
-              {data.rows.slice(0, 6).map(r => (
+              {data.rows.slice(0, 3).map(r => (
                 <li key={r.id}>
                   <button
                     type="button"
@@ -177,9 +178,9 @@ export function ExceptionsCaught({
                 </li>
               ))}
             </ul>
-            {data.rows.length > 6 && (
+            {data.rows.length > 3 && (
               <p className="mt-2 text-[0.75rem] text-ink-400 tabular-nums">
-                6 newest of {fmtInt(data.rows.length)}. The table has all of them.
+                3 newest of {fmtInt(data.rows.length)}. The table has all of them.
               </p>
             )}
           </>

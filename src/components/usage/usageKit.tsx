@@ -16,7 +16,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { BarChart3, Table2, TrendingDown, TrendingUp } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronRight, Table2, TrendingDown, TrendingUp } from 'lucide-react';
 import type { Accuracy, UsageSettings } from '../../data/platform-usage-metrics';
 import { SETTING_LABEL, SOURCE_FIELD, SOURCE_LABEL, fmtInt, fmtMoney } from '../../data/platform-usage-metrics';
 import type { NumericSetting } from '../../data/platform-usage-metrics';
@@ -24,19 +24,67 @@ import type { NumericSetting } from '../../data/platform-usage-metrics';
 /* ── The spine ───────────────────────────────────────────────────────────── */
 
 /**
- * A named group of blocks.
+ * A named group of blocks, opened or folded away.
  *
- * Eight cards of equal weight is a wall: the eye has nowhere to start and no way
- * to skip. Three named groups give the reader a spine.
+ * Eighteen cards of equal weight is a wall: the eye has nowhere to start and no
+ * way to skip, and the answer to "is the platform earning its keep" ends up
+ * seven screens from the top. So the page opens on the section that answers the
+ * question and folds the rest.
+ *
+ * A folded section is never a hidden section. Its header carries the figures a
+ * reader would otherwise scroll for, so folding costs them a fact, not the
+ * facts: "57% of controls exercised · 4 severe risks uncovered · 13 engagements"
+ * is worth more than the same three numbers a screen apart.
  */
-export function PageSection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function PageSection({
+  title,
+  hint,
+  summary,
+  collapsible = false,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  /** What the section says while folded. Figures, not a description. */
+  summary?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  if (!collapsible) {
+    return (
+      <section className="space-y-4">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-500">{title}</h2>
+          {hint && <p className="text-[0.75rem] text-ink-400">{hint}</p>}
+        </div>
+        {children}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
-      <div className="flex items-baseline gap-3">
-        <h2 className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-500">{title}</h2>
-        {hint && <p className="text-[0.75rem] text-ink-400">{hint}</p>}
-      </div>
-      {children}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="w-full flex items-baseline gap-3 text-left border-b border-canvas-border pb-2 group"
+      >
+        {open
+          ? <ChevronDown size={13} className="shrink-0 text-ink-400 group-hover:text-brand-700 translate-y-0.5" />
+          : <ChevronRight size={13} className="shrink-0 text-ink-400 group-hover:text-brand-700 translate-y-0.5" />}
+        <h2 className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-500 group-hover:text-brand-700">
+          {title}
+        </h2>
+        {(open ? hint : summary ?? hint) && (
+          <p className="text-[0.75rem] text-ink-400 tabular-nums truncate">{open ? hint : summary ?? hint}</p>
+        )}
+      </button>
+      {open && children}
     </section>
   );
 }
@@ -206,8 +254,10 @@ export function Bars({
   const fill = tone === 'risk' ? 'bg-risk-600' : 'bg-brand-600';
   return (
     <ul className="space-y-2.5">
-      {rows.map(r => (
-        <li key={r.label}>
+      {/* Two rows can share a label honestly (one control tested under two
+          engagements), so the position is part of the key. */}
+      {rows.map((r, i) => (
+        <li key={`${r.label}-${i}`}>
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-[0.875rem] text-ink-800 truncate">{r.label}</span>
             <span className="text-[0.875rem] text-ink-900 font-medium tabular-nums shrink-0">{format(r.value)}</span>
@@ -260,6 +310,61 @@ export function DataTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * The list behind a count.
+ *
+ * A number nobody can open is a number nobody can check, so every count on this
+ * page names the things it counted: what they were, who made them, and when.
+ * The list is always in date order. Attribution is a fact on an item, never a
+ * league table, which is why nothing here can be sorted by person.
+ */
+export function Drill({
+  label,
+  hideLabel = 'Hide the list',
+  children,
+}: {
+  label: string;
+  hideLabel?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline"
+      >
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        {open ? hideLabel : label}
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * One made thing in a drill list: what it is, who made it, when.
+ *
+ * A missing maker is not blank. It says automatic, because a row with no person
+ * behind it was written by the scheduled worker and that is a fact worth saying.
+ */
+export function MadeRow({ name, madeBy, when, note }: { name: string; madeBy: string | null; when: string; note?: string }) {
+  return (
+    <li className="py-2">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-[0.875rem] text-ink-800 truncate">{name}</span>
+        <span className="text-[0.75rem] text-ink-400 shrink-0 tabular-nums">{when}</span>
+      </div>
+      <p className="text-[0.75rem] text-ink-500">
+        {madeBy ?? 'automatic, no person involved'}
+        {note && <> · {note}</>}
+      </p>
+    </li>
   );
 }
 

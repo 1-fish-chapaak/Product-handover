@@ -11,7 +11,8 @@
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { ArrowUpRight } from 'lucide-react';
 import ChartAutoSizer from './ChartAutoSizer';
-import { AccuracyTag, Block, DataTable, Empty, RestsOn, Stat } from './usageKit';
+import { AccuracyTag, Block, DataTable, Drill, Empty, MadeRow, RestsOn, Stat } from './usageKit';
+import { formatWhen } from './usageFormat';
 import {
   deltaPct, fmtDuration, fmtHours, fmtInt, fmtMoney, fmtPeople, fmtUsd, plural,
   type AiAreaRow, type CostResult, type CreatedArea, type SensitivityRow, type UsageSettings,
@@ -118,19 +119,50 @@ export function CostToRun({ cost }: { cost: CostResult }) {
   return (
     <Block
       title="Cost to run"
-      footer="Concierge is the one exact cost figure in the product. Chat, the RACM generator and the workflow engine record nothing about what they consumed."
+      footer="Concierge is the one exact cost figure the product records by itself. Chat, the RACM generator and the workflow engine record nothing about what they consumed."
     >
       {cost.complete ? (
-        <div className="flex flex-wrap items-end gap-x-12 gap-y-5 py-1">
-          <Stat size="md" value={fmtMoney(cost.lookupMoney ?? 0)} label={`paid vendor lookups, over ${plural(cost.lookupRuns, 'run', 'runs')}`} />
-          <Stat size="md" value={fmtUsd(cost.conciergeUsd)} label={`Concierge job cost, over ${plural(cost.conciergeJobs, 'job', 'jobs')}`} />
-        </div>
+        <>
+          <div className="flex flex-wrap items-end gap-x-12 gap-y-5 py-1">
+            <Stat
+              size="md"
+              value={fmtMoney(cost.lookupMoney ?? 0)}
+              label={`paid vendor lookups, from ${plural(cost.invoices, 'invoice', 'invoices')}`}
+            />
+            <Stat
+              size="md"
+              value={fmtUsd(cost.conciergeUsd)}
+              label={`Concierge job cost, over ${plural(cost.conciergeJobs, 'job', 'jobs')}`}
+            />
+          </div>
+
+          {/* Context, not a rate card. It says where it came from every time. */}
+          {cost.effectiveRate !== null && (
+            <p className="mt-4 text-[0.75rem] text-ink-500 tabular-nums">
+              That works out at {fmtMoney(cost.effectiveRate)} per recorded call across{' '}
+              {fmtInt(cost.recordedCalls)} {cost.callsAreAllRuns ? 'completed runs' : 'runs of the priced workflows'},
+              derived from your invoices. It is not a price anybody quoted.
+            </p>
+          )}
+
+          {/* Layer 3 against Layer 2. A gap is shown, never reconciled away. */}
+          {cost.split !== null && (
+            <p className="mt-1 text-[0.75rem] tabular-nums text-ink-500">
+              Priced per API the same runs come to {fmtMoney(cost.split.total)},{' '}
+              {Math.abs(cost.split.gap) < 1
+                ? 'which matches the bill.'
+                : <span className="text-high-700">
+                    {fmtMoney(Math.abs(cost.split.gap))} {cost.split.gap > 0 ? 'more' : 'less'} than the bill. Worth a look.
+                  </span>}
+            </p>
+          )}
+        </>
       ) : (
         <>
           <Empty
             kind="unmeasured"
-            title="Price list not yet loaded."
-            detail="A workflow counts as billable exactly when the price list names it. The runs are all recorded, so the day it lands, past periods price themselves."
+            title={cost.missing ?? 'No invoice entered for this period.'}
+            detail="Enter the vendor's monthly bill and this period is costed exactly, backwards through every month you enter."
           />
           {/* The one cost figure that does exist. It is not a total and it is
               never labelled as one. */}
@@ -154,7 +186,7 @@ export function ValueOverTime({ points, showMoney }: { points: ValuePoint[]; sho
 
   return (
     <Block
-      title="Hours saved over time"
+      title="Value over time"
       chart={
         has ? (
           <ChartAutoSizer height={220}>
@@ -177,7 +209,7 @@ export function ValueOverTime({ points, showMoney }: { points: ValuePoint[]; sho
       }
       table={
         <DataTable
-          head={showMoney ? ['Period', 'Hours saved', 'Worth'] : ['Period', 'Hours saved']}
+          head={showMoney ? ['Period', 'Hours saved', 'Money saved'] : ['Period', 'Hours saved']}
           rows={points.map(p => (showMoney ? [p.label, fmtHours(p.hours), fmtMoney(p.money)] : [p.label, fmtHours(p.hours)]))}
         />
       }
@@ -200,7 +232,7 @@ export function WorkVolume({
 
   return (
     <Block
-      title="Work volume"
+      title="Work volume by unit"
       hint="Four units of work. Not addable."
       chart={
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -249,6 +281,12 @@ export function WorkVolume({
  * measure this" state, and it never renders as one.
  */
 export function CreatedThisPeriod({ areas }: { areas: CreatedArea[] }) {
+  // One list across the five areas, in date order, each row saying which area it
+  // belongs to. Five separate lists would be five clicks to answer one question.
+  const made = areas
+    .flatMap(a => a.items.map(i => ({ ...i, area: a.label.replace(/s$/, '').toLowerCase() })))
+    .sort((x, z) => z.at - x.at);
+
   return (
     <Block
       title="Created this period"
@@ -259,6 +297,21 @@ export function CreatedThisPeriod({ areas }: { areas: CreatedArea[] }) {
           <Stat key={a.key} size="sm" value={fmtInt(a.count)} label={a.label} />
         ))}
       </div>
+
+      {made.length > 0 && (
+        <div className="mt-4">
+          <Drill label={`Name the ${plural(made.length, 'record', 'records')}`}>
+            <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+              {made.slice(0, 24).map((m, i) => (
+                <MadeRow key={`${m.name}-${m.at}-${i}`} name={m.name} madeBy={m.madeBy} when={formatWhen(m.at)} note={m.area} />
+              ))}
+            </ul>
+            {made.length > 24 && (
+              <p className="mt-2 text-[0.75rem] text-ink-400 tabular-nums">24 newest of {fmtInt(made.length)}.</p>
+            )}
+          </Drill>
+        </div>
+      )}
     </Block>
   );
 }
@@ -319,9 +372,19 @@ export function AiUsageByArea({ rows }: { rows: AiAreaRow[] }) {
  * signs off the rate has to be a named person.
  */
 export function SettingSensitivity({ rows, onEdit }: { rows: SensitivityRow[]; onEdit?: () => void }) {
+  // The two ends of the table, said as a sentence: the point of this block is
+  // the size of the swing, not the four rows that demonstrate it.
+  const swing = rows.length > 1
+    ? {
+        low: rows[0],
+        high: rows[rows.length - 1],
+        factor: Math.round(rows[0].hours / Math.max(rows[rows.length - 1].hours, 0.01)),
+      }
+    : null;
+
   return (
     <Block
-      title="How much that assumption matters"
+      title="How much one setting matters"
       hint="The same runs, at other review rates."
       action={onEdit && (
         <button
@@ -333,11 +396,25 @@ export function SettingSensitivity({ rows, onEdit }: { rows: SensitivityRow[]; o
         </button>
       )}
     >
+      {/* One sentence open, the whole swing one click away. The lever matters
+          enough to name on the page and not enough to spend a screen on. */}
+      <p className="text-[0.75rem] text-ink-600 tabular-nums">
+        {swing && (
+          <>
+            At {fmtInt(swing.low.rate)} rows an hour this reads {fmtHours(swing.low.hours)} hours, at{' '}
+            {fmtInt(swing.high.rate)} it reads {fmtHours(swing.high.hours)}. One setting, {swing.factor}
+            {'\u00d7'} the headline.
+          </>
+        )}
+      </p>
+
+      <div className="mt-3">
+      <Drill label="Show every rate">
       <div className="overflow-x-auto">
         <table className="w-full text-[0.875rem]">
           <thead>
             <tr className="border-b border-canvas-border">
-              {['If a person checks', 'Hours saved', 'Worth', 'People'].map((h, i) => (
+              {['If a person checks', 'Hours saved', 'Money saved', 'People'].map((h, i) => (
                 <th key={h} scope="col" className={`py-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 ${i === 0 ? 'text-left' : 'text-right'}`}>
                   {h}
                 </th>
@@ -358,6 +435,8 @@ export function SettingSensitivity({ rows, onEdit }: { rows: SensitivityRow[]; o
             ))}
           </tbody>
         </table>
+      </div>
+      </Drill>
       </div>
     </Block>
   );

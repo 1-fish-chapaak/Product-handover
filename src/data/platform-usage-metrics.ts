@@ -1,5 +1,5 @@
 /**
- * Platform Usage — every number on the page, PU-01 to PU-20.
+ * Platform Usage — every number on the page, PU-01 to PU-28.
  *
  * One function per metric, each independently testable, each computed from the
  * records in `platform-usage.ts` and from nothing else. The reasoning for why a
@@ -27,11 +27,16 @@
 
 import {
   ANCHOR, DAY_MS, HISTORY_START, RUNS, CHAT_QUESTIONS, CONCIERGE_JOBS, SOP_RACM_JOBS,
-  TRACED_EXCEPTIONS, BULK_RUN_IDS, REVIEW_RECORDS, WORKFLOW_API_PRICING, billableWorkflowIds,
-  formatDate, type WorkflowRun,
+  TRACED_EXCEPTIONS, BULK_RUN_IDS, REVIEW_RECORDS, loadPricing, loadInvoices, monthsInWindow, billableWorkflowIds,
+  ALERT_FIRES, ALERT_RULE_TOTAL, DASHBOARD_TOTAL, SAMPLE_RUNS, INSIGHT_ROWS, ENGAGEMENT_AUTOMATION,
+  formatDate, parseLibraryDate, teamOfName, type WorkflowRun, type SampleRunStatus,
 } from './platform-usage';
 import { WORKFLOWS } from './mockData';
 import { CONTROL_LIBRARY } from './controlLibrary';
+import { SEED_RISKS } from './riskRegister';
+import { ENGAGEMENTS } from './engagements';
+import { ENGAGEMENT_EXCEPTIONS } from './engagement-exceptions';
+import { ATR_LIBRARY } from './atrLibrary';
 import { liveMemories, pendingMemories } from './memorySession';
 import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 
@@ -518,7 +523,7 @@ export function sensitivity(runs: WorkflowRun[], s: UsageSettings, months: numbe
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface CostResult {
-  /** True only when every component of the cost can be priced. */
+  /** True only when every month in the window has its bill entered. */
   complete: boolean;
   /** Real dollars, from the one place in the product that records them. */
   conciergeUsd: number;
@@ -526,38 +531,63 @@ export interface CostResult {
   /** Runs of workflows that call a paid vendor lookup. Countable today. */
   lookupRuns: number;
   lookupRows: number;
-  /** Priced lookup cost in rupees. null while the price list is empty. */
+  /** The invoiced lookup cost in rupees. Null until the window is covered. */
   lookupMoney: number | null;
+  /** How many bills that figure is the sum of. */
+  invoices: number;
+  monthsInWindow: number;
+  monthsInvoiced: number;
+  /** Rupees per recorded call, derived from the invoices. Never a rate card. */
+  effectiveRate: number | null;
+  /** What that rate was divided by, and whether it is every run or only the priced ones. */
+  recordedCalls: number;
+  callsAreAllRuns: boolean;
+  /** Layer 3, when somebody has split the bill per API: its total and the gap. */
+  split: { total: number; gap: number } | null;
   /** Why the total is incomplete, in the words the tile uses. */
   missing: string | null;
 }
 
 /**
- * PU-04 · Cost to run.
+ * PU-04 · Cost to run, invoice first.
  *
- * Built now, empty until the vendor price list is seeded. The tile is complete
- * or it is absent: a partial figure under a total label is a defect, so this
- * returns `complete: false` and the reason, and the component renders the
- * reason instead of a number.
+ * The lookup cost is the vendor's bill, summed over the months the window
+ * touches. That is the number finance reconciles, it needs no rate card and no
+ * guess about whether a run bills once or five hundred times, and it is exact.
  *
- * Lookup VOLUME is measurable today and is returned either way, because
- * "we made 4,100 billable calls and cannot price them" is a useful sentence and
- * an empty tile is not.
+ * A window is only costed when every month in it has a bill entered. A quarter
+ * with two of its three invoices in is not a cheaper quarter, it is an unfinished
+ * one, so the tile says which months are missing rather than printing a total
+ * that will grow next week.
+ *
+ * The effective rate underneath is context, not a price: the bill divided by the
+ * calls the platform recorded that period. It carries where it came from
+ * everywhere it appears.
  */
 export function costToRun(p: Period, scope: Scope): CostResult {
   const billable = billableWorkflowIds();
-  const runs = runsIn(p, scope).filter(r => r.status === 'complete' && billable.has(r.workflowId));
+  const completed = runsIn(p, scope).filter(r => r.status === 'complete');
+  const runs = billable.size > 0 ? completed.filter(r => billable.has(r.workflowId)) : completed;
   const jobs = CONCIERGE_JOBS.filter(
     j => j.status === 'completed' && within(j.startedAt, p) && inScope(scope, j.team, j.userEmail),
   );
 
-  const priced = WORKFLOW_API_PRICING.length > 0;
-  const lookupMoney = priced
+  const months = monthsInWindow(p.from, p.to);
+  const invoices = loadInvoices().filter(i => months.includes(i.periodMonth));
+  const monthsInvoiced = new Set(invoices.map(i => i.periodMonth)).size;
+  const complete = months.length > 0 && monthsInvoiced === months.length;
+  const invoiced = invoices.reduce((sum, i) => sum + i.amountPaise, 0) / 100;
+
+  // Layer 3, if anybody has split the bill: the same runs priced per API, and
+  // the gap against the bill. Shown, never quietly reconciled away.
+  const pricing = loadPricing();
+  const split = pricing.length > 0
     ? runs.reduce((sum, r) => {
-        const price = WORKFLOW_API_PRICING.find(
+        const at = r.completedAt ?? r.startedAt;
+        const price = pricing.find(
           x => x.workflowId === r.workflowId
-            && x.effectiveFrom <= (r.completedAt ?? r.startedAt)
-            && (x.effectiveTo === null || x.effectiveTo >= (r.completedAt ?? r.startedAt)),
+            && x.effectiveFrom <= at
+            && (x.effectiveTo === null || x.effectiveTo >= at),
         );
         if (!price) return sum;
         const units = price.billingUnit === 'row' ? (r.rowCount ?? 0) : 1;
@@ -565,14 +595,27 @@ export function costToRun(p: Period, scope: Scope): CostResult {
       }, 0)
     : null;
 
+  const missingMonths = months.length - monthsInvoiced;
+
   return {
-    complete: priced,
+    complete,
     conciergeUsd: jobs.reduce((s, j) => s + j.costUsd, 0),
     conciergeJobs: jobs.length,
     lookupRuns: runs.length,
     lookupRows: runs.reduce((s, r) => s + (r.rowCount ?? 0), 0),
-    lookupMoney,
-    missing: priced ? null : 'The vendor price list has not been loaded yet.',
+    lookupMoney: complete ? invoiced : null,
+    invoices: invoices.length,
+    monthsInWindow: months.length,
+    monthsInvoiced,
+    effectiveRate: complete && runs.length > 0 ? invoiced / runs.length : null,
+    recordedCalls: runs.length,
+    callsAreAllRuns: billable.size === 0,
+    split: complete && split !== null ? { total: split, gap: split - invoiced } : null,
+    missing: complete
+      ? null
+      : monthsInvoiced === 0
+        ? 'No invoice entered for this period.'
+        : `${missingMonths} of the ${months.length} months in this window have no invoice entered yet.`,
   };
 }
 
@@ -952,7 +995,13 @@ export function myQueue(userName: string, canApprove = false): QueueItem[] {
  * 14 · PU-21 — what was created this period
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface CreatedArea { key: string; label: string; count: number }
+export interface CreatedArea {
+  key: string;
+  label: string;
+  count: number;
+  /** The records behind the count: what was made, by whom, when. */
+  items: { name: string; madeBy: string | null; at: number }[];
+}
 
 /**
  * The five areas, and the record each one's creations are counted from.
@@ -965,6 +1014,10 @@ export interface CreatedArea { key: string; label: string; count: number }
  */
 const CREATED_AREAS: { key: string; label: string; module: string }[] = [
   { key: 'engagements', label: 'Engagements', module: 'Engagements' },
+  // The spec's "audits" — in this product an audit is scheduled in Audit
+  // Planning and then run as an engagement, so the two are counted apart
+  // rather than one standing in for the other.
+  { key: 'audits', label: 'Audit plans', module: 'Audit Planning' },
   { key: 'racms', label: 'RACMs', module: 'RACM' },
   { key: 'controls', label: 'Controls', module: 'Control Library' },
   { key: 'dashboards', label: 'Dashboards', module: 'Dashboard' },
@@ -996,11 +1049,19 @@ export function createdThisPeriod(p: Period, scope: Scope, logs: AuditLog[], use
     return false; // never on the auditor view: a personal creation count is a tally of somebody
   });
 
-  return CREATED_AREAS.map(a => ({
-    key: a.key,
-    label: a.label,
-    count: mine.filter(l => l.module === a.module).length,
-  }));
+  return CREATED_AREAS.map(a => {
+    const rows = mine.filter(l => l.module === a.module);
+    return {
+      key: a.key,
+      label: a.label,
+      count: rows.length,
+      // A count with no list behind it cannot be checked, so every area names
+      // what it counted, newest first, and never sorts by the person.
+      items: rows
+        .map(l => ({ name: namedThing(l.description), madeBy: l.user, at: parseStamp(l.timestamp) }))
+        .sort((x, z) => z.at - x.at),
+    };
+  });
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1014,8 +1075,6 @@ export interface SmartLearnResult {
   pending: number;
   dueReview: number;
   recalls7d: number;
-  /** The proposals this reader is being asked to decide on. */
-  awaitingMe: { id: string; statement: string; note: string }[];
 }
 
 /**
@@ -1023,7 +1082,9 @@ export interface SmartLearnResult {
  *
  * Recall count and last-recalled are real fields written on every use, so
  * "how often is learned knowledge actually being used" is measured rather than
- * inferred. Pending is shown only to somebody who can approve it.
+ * inferred. Pending is counted only for somebody who can approve it, and it is
+ * a count: the approving itself belongs to the Smart Learn screen, so this
+ * returns no proposals for anyone to act on here.
  */
 export function smartLearn(scope: Scope): SmartLearnResult {
   const wanted = scope.persona === 'auditor'
@@ -1048,14 +1109,550 @@ export function smartLearn(scope: Scope): SmartLearnResult {
     pending: canApprove ? pending.length : 0,
     dueReview: live.filter(m => m.renewDue).length,
     recalls7d,
-    awaitingMe: canApprove
-      ? pending.map(m => ({ id: m.id, statement: m.statement, note: m.pendingNote ?? m.source }))
-      : [],
   };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 16 · Formatting
+ * 16 · PU-22 — dashboards, widgets and the alerts they fire
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** One made thing, and who made it. Sorted by date, never by person. */
+export interface MakerRow { name: string; madeBy: string | null; at: number }
+
+export interface ProductActivity {
+  dashboardsCreated: number;
+  dashboardsChanged: number;
+  /** Live rows right now, the context under a count of new ones. */
+  dashboardsTotal: number;
+  alertsFired: number;
+  /** Of those fires, how many the scheduled worker did with nobody watching. */
+  automaticFires: number;
+  alertRules: number;
+  /** The list behind "dashboards built" — every count on this page opens one. */
+  makers: MakerRow[];
+  fires: { widget: string; dashboard: string; condition: string; at: number; firedBy: string | null }[];
+}
+
+/** `Created dashboard "P2P Spend"` → `P2P Spend`. The log's own wording. */
+const namedThing = (description: string): string => {
+  const quoted = /"([^"]+)"/.exec(description);
+  if (quoted) return quoted[1];
+  return description.replace(/^(Created|Rearranged|Shared|Exported)\s+/i, '').replace(/\s+dashboard.*$/i, '');
+};
+
+/**
+ * PU-22 · What was built on the product, and what fired by itself.
+ *
+ * Dashboards and widgets write a before-and-after event on every change, so
+ * these counts are read off the product's own event log rather than inferred
+ * from the dashboards that happen to survive today. Alert fires sit in the same
+ * family with one difference the page never hides: a scheduled worker wrote
+ * most of them, with no person involved, and those rows say automatic.
+ */
+export function productActivity(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): ProductActivity {
+  const teamOf = new Map(users.map(u => [u.name, u.team]));
+  const mine = (l: AuditLog): boolean => {
+    if (l.module !== 'Dashboard' || l.status !== 'Success') return false;
+    const at = parseStamp(l.timestamp);
+    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
+    return false; // the auditor view never reports on the workspace at large
+  };
+
+  const events = logs.filter(mine);
+  const created = events.filter(l => l.action === 'Create');
+  const fires = ALERT_FIRES.filter(f => {
+    if (f.at < p.from || f.at > p.to) return false;
+    if (scope.persona === 'cfo') return true;
+    // A worker fire belongs to no team, so a team lens counts only the ones
+    // somebody on the team tripped by hand.
+    if (scope.persona === 'head_of_team') return !scope.team || f.team === scope.team;
+    return false;
+  });
+
+  return {
+    dashboardsCreated: created.length,
+    dashboardsChanged: events.filter(l => l.action === 'Update' || l.action === 'Share').length,
+    dashboardsTotal: DASHBOARD_TOTAL,
+    alertsFired: fires.length,
+    automaticFires: fires.filter(f => f.firedBy === null).length,
+    alertRules: ALERT_RULE_TOTAL,
+    makers: created
+      .map(l => ({ name: namedThing(l.description), madeBy: l.user, at: parseStamp(l.timestamp) }))
+      .sort((a, z) => z.at - a.at),
+    fires: fires
+      .map(f => ({ widget: f.widgetName, dashboard: f.dashboardName, condition: f.condition, at: f.at, firedBy: f.firedBy }))
+      .sort((a, z) => z.at - a.at),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 17 · PU-23 — reports made, worked on, shared
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ReportsActivity {
+  made: number;
+  /** Every recorded action on a report, of which making one is a single kind. */
+  activity: number;
+  shared: number;
+  byActivity: { label: string; count: number }[];
+  /** Action plans on issued reports. A live state, not a count for the window. */
+  actionPlansOpen: number;
+  actionPlansClosed: number;
+  list: MakerRow[];
+}
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  Create: 'made',
+  Update: 'edited',
+  Export: 'downloaded',
+  Share: 'shared',
+  Delete: 'deleted',
+};
+
+/**
+ * PU-23 · Reports.
+ *
+ * A report edited fifty times is one report and fifty activities, so the two
+ * numbers sit side by side and are never added together. The action-plan counts
+ * are deliberately not period-filtered: an action plan is open or it is closed
+ * right now, and pretending that state belongs to a window would be the kind of
+ * number that changes when the period selector moves for no reason a reader
+ * could explain.
+ */
+export function reportsActivity(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): ReportsActivity {
+  const teamOf = new Map(users.map(u => [u.name, u.team]));
+  const events = logs.filter(l => {
+    if (l.module !== 'Report' || l.status !== 'Success') return false;
+    const at = parseStamp(l.timestamp);
+    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
+    return false; // reports are a workspace fact, not a personal one
+  });
+
+  const made = events.filter(l => l.action === 'Create');
+  const byAction = new Map<string, number>();
+  events.forEach(l => byAction.set(l.action, (byAction.get(l.action) ?? 0) + 1));
+
+  // The action plans on every issued report, by status. Implemented is closed;
+  // anything else is still somebody's to do.
+  let open = 0;
+  let closed = 0;
+  ATR_LIBRARY.forEach(r =>
+    r.atrData.observations.forEach(o =>
+      o.actionPlans.forEach(a => {
+        if (a.status === 'Implemented') closed += 1;
+        else open += 1;
+      }),
+    ),
+  );
+
+  return {
+    made: made.length,
+    activity: events.length,
+    shared: events.filter(l => l.action === 'Share').length,
+    byActivity: [...byAction.entries()]
+      .map(([action, count]) => ({ label: ACTIVITY_LABEL[action] ?? action.toLowerCase(), count }))
+      .sort((a, z) => z.count - a.count),
+    actionPlansOpen: open,
+    actionPlansClosed: closed,
+    list: made
+      .map(l => ({ name: namedThing(l.description) || l.description.replace(/^Created\s+/, ''), madeBy: l.user, at: parseStamp(l.timestamp) }))
+      .sort((a, z) => z.at - a.at),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 18 · PU-24 — sampling, and how the validations ended
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface SamplingResult {
+  total: number;
+  passed: number;
+  failed: number;
+  /** Not a finding. The check could not be completed and needs a person. */
+  errored: number;
+  inFlight: number;
+  /** Passed as a share of the validations that actually landed. */
+  passRate: number | null;
+  /** One row per engagement and control, which is how the testing actually ran. */
+  byControl: { control: string; engagement: string; passed: number; failed: number; errored: number }[];
+  errors: { control: string; engagement: string; note: string; at: number }[];
+}
+
+/**
+ * PU-24 · Sample validation runs.
+ *
+ * Failed and errored are held apart everywhere, including in the type. A failed
+ * validation says the control did not hold. An errored one says nothing about
+ * the control at all — the evidence would not open, or the sample came back
+ * short — and counting it as a failure invents a deficiency that nobody found.
+ */
+export function sampling(p: Period, scope: Scope): SamplingResult {
+  const rows = SAMPLE_RUNS.filter(s => s.at >= p.from && s.at <= p.to && inScope(scope, s.team, s.userEmail));
+
+  const count = (status: SampleRunStatus): number => rows.filter(s => s.status === status).length;
+  const passed = count('passed');
+  const failed = count('failed');
+  const errored = count('error');
+  const landed = passed + failed;
+
+  // Keyed by engagement and control together: the same control tested under two
+  // engagements is two pieces of testing, and merging them hides which audit the
+  // failures belong to.
+  const byControl = new Map<string, { control: string; engagement: string; passed: number; failed: number; errored: number }>();
+  rows.forEach(s => {
+    const key = `${s.engagementId}::${s.controlId}`;
+    const bucket = byControl.get(key)
+      ?? { control: s.controlName, engagement: s.engagementName, passed: 0, failed: 0, errored: 0 };
+    if (s.status === 'passed') bucket.passed += 1;
+    if (s.status === 'failed') bucket.failed += 1;
+    if (s.status === 'error') bucket.errored += 1;
+    byControl.set(key, bucket);
+  });
+
+  return {
+    total: rows.length,
+    passed,
+    failed,
+    errored,
+    inFlight: count('queued') + count('running'),
+    passRate: landed === 0 ? null : (passed * 100) / landed,
+    byControl: [...byControl.values()]
+      .filter(r => r.passed + r.failed + r.errored > 0)
+      .sort((a, z) => z.failed + z.errored - (a.failed + a.errored) || a.control.localeCompare(z.control)),
+    errors: rows
+      .filter(s => s.status === 'error' && s.note)
+      .map(s => ({ control: s.controlName, engagement: s.engagementName, note: s.note as string, at: s.at }))
+      .sort((a, z) => z.at - a.at),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 19 · PU-25 — the insights the assistant generated
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface InsightsResult {
+  /** Per-run insights. The consolidated ones are counted separately on purpose. */
+  perRun: number;
+  consolidated: number;
+  bySeverity: { severity: Severity; perRun: number; consolidated: number }[];
+  byCategory: { label: string; count: number }[];
+  rows: { title: string; severity: Severity; category: string; engagement: string; kind: string; at: number }[];
+}
+
+/**
+ * PU-25 · Generated insights, split by kind.
+ *
+ * A consolidated insight is the assistant's reading of a whole engagement, and
+ * it summarises per-run insights that are already counted. The two are returned
+ * as separate figures and there is no field holding their sum, so no caller can
+ * accidentally report the same finding twice.
+ */
+export function insights(p: Period, scope: Scope): InsightsResult {
+  const rows = INSIGHT_ROWS.filter(i => {
+    if (i.at < p.from || i.at > p.to) return false;
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || i.team === scope.team;
+    return Boolean(scope.userEmail) && i.userEmail === scope.userEmail;
+  });
+
+  const byCategory = new Map<string, number>();
+  rows.forEach(i => byCategory.set(i.category, (byCategory.get(i.category) ?? 0) + 1));
+
+  return {
+    perRun: rows.filter(i => i.kind === 'per_run').length,
+    consolidated: rows.filter(i => i.kind === 'consolidated').length,
+    bySeverity: SEVERITIES.map(severity => ({
+      severity,
+      perRun: rows.filter(i => i.severity === severity && i.kind === 'per_run').length,
+      consolidated: rows.filter(i => i.severity === severity && i.kind === 'consolidated').length,
+    })),
+    byCategory: [...byCategory.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, z) => z.count - a.count),
+    rows: rows
+      .slice()
+      .sort((a, z) => z.at - a.at)
+      .map(i => ({
+        title: i.title,
+        severity: i.severity,
+        category: i.category,
+        engagement: i.engagementName,
+        kind: i.kind === 'per_run' ? 'from one run' : 'across the engagement',
+        at: i.at,
+      })),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 20 · PU-26 — the risk picture, and what nothing covers
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface RiskPicture {
+  total: number;
+  byPriority: { label: string; count: number }[];
+  byCategory: { label: string; count: number }[];
+  mapped: number;
+  unmapped: number;
+  /** The number a CFO acts on: critical or high, and no control covers it. */
+  unmappedSevere: number;
+  unmappedList: { id: string; name: string; priority: string; category: string; owner: string }[];
+  createdInPeriod: number;
+  /** True when the scope could only be honoured through the risk's owner. */
+  ownerScoped: boolean;
+}
+
+const RISK_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
+
+/**
+ * PU-26 · Risks recorded, prioritised, and covered by nothing.
+ *
+ * A risk is mapped when some control in the library names it, so the mapping is
+ * read off the controls rather than kept as a second number that can drift. The
+ * hero figure is the audit gap: critical or high, and nothing tests it.
+ *
+ * The register records who owns a risk, not which team it belongs to, so a team
+ * lens can only reach the risks owned by somebody on that team. That limit is
+ * returned rather than hidden, because a team reading zero needs to know whether
+ * it means "none of ours" or "we cannot tell".
+ */
+export function riskPicture(p: Period, scope: Scope): RiskPicture {
+  const mine = SEED_RISKS.filter(r => {
+    if (r.status === 'Archived') return false;
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || teamOfName(r.owner) === scope.team;
+    return false; // an auditor is shown their own work, not the whole register
+  });
+
+  const mappedRiskIds = new Set(CONTROL_LIBRARY.flatMap(c => c.mappedRisks ?? []));
+  const unmapped = mine.filter(r => !mappedRiskIds.has(r.id));
+
+  const byCategory = new Map<string, number>();
+  mine.forEach(r => byCategory.set(r.category, (byCategory.get(r.category) ?? 0) + 1));
+
+  return {
+    total: mine.length,
+    byPriority: RISK_PRIORITIES.map(label => ({ label, count: mine.filter(r => r.priority === label).length })),
+    byCategory: [...byCategory.entries()].map(([label, count]) => ({ label, count })).sort((a, z) => z.count - a.count),
+    mapped: mine.length - unmapped.length,
+    unmapped: unmapped.length,
+    unmappedSevere: unmapped.filter(r => r.priority === 'Critical' || r.priority === 'High').length,
+    unmappedList: unmapped
+      .map(r => ({ id: r.id, name: r.name, priority: r.priority, category: r.category, owner: r.owner }))
+      .sort((a, z) => RISK_PRIORITIES.indexOf(a.priority as 'Critical') - RISK_PRIORITIES.indexOf(z.priority as 'Critical')),
+    createdInPeriod: mine.filter(r => {
+      const at = parseLibraryDate(r.createdAt);
+      return at >= p.from && at <= p.to;
+    }).length,
+    ownerScoped: scope.persona === 'head_of_team',
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 21 · PU-27 — the engagement portfolio and its motion
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface EngagementStripRow {
+  id: string;
+  name: string;
+  owner: string;
+  reviewer: string | null;
+  controlsTested: number;
+  controlsTotal: number;
+  exceptionsOpen: number;
+  actionPlansOpen: number;
+  /** none, draft or final — where the writing up has got to. */
+  report: 'none' | 'draft' | 'final';
+  periodEnd: string;
+  /** Days past the end of the audit period, still open. */
+  daysOver: number | null;
+}
+
+export interface PortfolioResult {
+  total: number;
+  byStatus: { label: string; count: number }[];
+  slipping: { name: string; owner: string; periodEnd: string; daysOver: number }[];
+  strip: EngagementStripRow[];
+  /** Recorded changes on engagements inside the window. */
+  changes: number;
+}
+
+/** "2026-03-31" → ms, end of that day. */
+const parseIsoDay = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const t = Date.parse(`${value}T23:59:59Z`);
+  return Number.isNaN(t) ? null : t;
+};
+
+/**
+ * PU-27 · The portfolio, and where each engagement has got to.
+ *
+ * The strip is one row per engagement that is still open, sorted by the end of
+ * its audit period so the soonest sits at the top. Sorting by a date rather
+ * than by an owner is deliberate: a portfolio sorted by person is a league
+ * table of people, which this page does not do.
+ *
+ * Slipping is the plainest honest reading available: the audit period has ended
+ * and the engagement is still open.
+ */
+export function portfolio(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): PortfolioResult {
+  const teamOf = new Map(users.map(u => [u.name, u.team]));
+  const mine = ENGAGEMENTS.filter(e => {
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || teamOfName(e.owner) === scope.team;
+    return false;
+  });
+
+  const openStatuses = new Set(['Active', 'In Progress', 'Review', 'Planned', 'Draft']);
+  const byStatus = new Map<string, number>();
+  mine.forEach(e => byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1));
+
+  const daysOverOf = (e: (typeof ENGAGEMENTS)[number]): number | null => {
+    const end = parseIsoDay(e.endDate);
+    if (end === null || !openStatuses.has(e.status)) return null;
+    const over = Math.floor((ANCHOR - end) / DAY_MS);
+    return over > 0 ? over : null;
+  };
+
+  // Writing up: an issued report covering the engagement's process is the
+  // furthest state the record can prove. No report for the process reads as
+  // none, never as late.
+  const reportedProcesses = new Set(
+    ATR_LIBRARY.map(r => ATR_AREA_PROCESS[r.area] ?? '').filter(Boolean),
+  );
+
+  const strip: EngagementStripRow[] = mine
+    .filter(e => openStatuses.has(e.status))
+    .map(e => {
+      const samples = SAMPLE_RUNS.filter(s => s.engagementId === e.id && s.status !== 'queued' && s.status !== 'running');
+      const exceptions = ENGAGEMENT_EXCEPTIONS.filter(x => x.engagementId === e.id);
+      return {
+        id: e.id,
+        name: e.name,
+        owner: e.owner,
+        reviewer: e.team?.reviewer ?? null,
+        controlsTested: new Set(samples.map(s => s.controlId)).size,
+        controlsTotal: e.controls,
+        exceptionsOpen: exceptions.filter(x => x.status === 'Open').length,
+        actionPlansOpen: exceptions.filter(x => x.status === 'Triaging').length,
+        report: (reportedProcesses.has(e.process) ? 'final' : 'none') as EngagementStripRow['report'],
+        periodEnd: e.periodEnd,
+        daysOver: daysOverOf(e),
+      };
+    })
+    .sort((a, z) => (parseIsoDay(ENGAGEMENTS.find(e => e.id === a.id)?.endDate) ?? 0)
+      - (parseIsoDay(ENGAGEMENTS.find(e => e.id === z.id)?.endDate) ?? 0));
+
+  const changes = logs.filter(l => {
+    if (l.module !== 'Engagements' && l.module !== 'Engagement Execution') return false;
+    const at = parseStamp(l.timestamp);
+    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
+    return false;
+  }).length;
+
+  return {
+    total: mine.length,
+    byStatus: [...byStatus.entries()].map(([label, count]) => ({ label, count })).sort((a, z) => z.count - a.count),
+    slipping: mine
+      .map(e => ({ name: e.name, owner: e.owner, periodEnd: e.periodEnd, daysOver: daysOverOf(e) }))
+      .filter((e): e is { name: string; owner: string; periodEnd: string; daysOver: number } => e.daysOver !== null)
+      .sort((a, z) => z.daysOver - a.daysOver),
+    strip,
+    changes,
+  };
+}
+
+/** Which process an issued report's audit area belongs to. */
+const ATR_AREA_PROCESS: Record<string, string> = {
+  'Procure-to-Pay': 'P2P',
+  'Order-to-Cash': 'O2C',
+  'IT General Controls': 'ITGC',
+  'Record-to-Report': 'R2R',
+  'Source-to-Contract': 'S2C',
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 22 · PU-28 — continuous monitoring, and whether it is holding
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface CcmRow {
+  engagementId: string;
+  engagement: string;
+  cadence: string;
+  threshold: number;
+  /** Null when nothing landed in the window, so there is no rate to compare. */
+  actual: number | null;
+  sampleN: number;
+  approvals: string;
+  /** Exceptions sitting in an approval gate right now, waiting on a person. */
+  inGate: number;
+}
+
+export interface CcmResult {
+  engagementsOn: number;
+  engagementsTotal: number;
+  sharePct: number;
+  rows: CcmRow[];
+  /** Bulk executions in the window, the other thing automation does at scale. */
+  bulkRuns: number;
+}
+
+/**
+ * PU-28 · Continuous monitoring.
+ *
+ * The threshold each engagement expects, against the pass rate it actually
+ * managed, computed from the same sample validations as PU-24 rather than from
+ * a second calculation that could disagree with the block above it.
+ */
+export function ccm(p: Period, scope: Scope): CcmResult {
+  const mine = ENGAGEMENT_AUTOMATION.filter(a => {
+    if (scope.persona === 'cfo') return true;
+    if (scope.persona === 'head_of_team') return !scope.team || a.team === scope.team;
+    return false;
+  });
+
+  const on = mine.filter(a => a.isCcm);
+
+  const rows: CcmRow[] = on.map(a => {
+    const samples = SAMPLE_RUNS.filter(s =>
+      s.engagementId === a.engagementId && s.at >= p.from && s.at <= p.to
+      && (s.status === 'passed' || s.status === 'failed'));
+    const passed = samples.filter(s => s.status === 'passed').length;
+    return {
+      engagementId: a.engagementId,
+      engagement: a.engagementName,
+      cadence: a.cadence,
+      threshold: a.passRateThreshold,
+      actual: samples.length === 0 ? null : (passed * 100) / samples.length,
+      sampleN: samples.length,
+      approvals: `${a.approvalLevelsRiskOwner} risk owner and ${a.approvalLevelsAuditor} auditor approvals`,
+      // Being classified is what moving through a gate looks like in the record.
+      inGate: ENGAGEMENT_EXCEPTIONS.filter(x => x.engagementId === a.engagementId && x.status === 'Triaging').length,
+    };
+  }).sort((a, z) => (a.actual ?? 999) - (z.actual ?? 999));
+
+  const bulkRuns = new Set(
+    RUNS.filter(r => r.bulkRunId && (r.completedAt ?? r.startedAt) >= p.from && (r.completedAt ?? r.startedAt) <= p.to
+      && inScope(scope, r.team, r.userEmail))
+      .map(r => r.bulkRunId),
+  ).size;
+
+  return {
+    engagementsOn: on.length,
+    engagementsTotal: mine.length,
+    sharePct: mine.length === 0 ? 0 : (on.length * 100) / mine.length,
+    rows,
+    bulkRuns,
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 23 · Formatting
  * ────────────────────────────────────────────────────────────────────────── */
 
 const INT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });

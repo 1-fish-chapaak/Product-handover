@@ -1,11 +1,12 @@
 # Platform Usage
 
-System > Platform Usage. Built from `Platform-Usage-Build-Spec.pdf`, the revision that adds
-Smart Learn (PU-20). The earlier five-tab adoption page was deleted, not migrated.
+System > Platform Usage. Built from `Platform-Usage-Build-Spec.pdf`, the 11 Aug 2026
+revision that adds the product blocks PU-22 to PU-28 and rewrites PU-19 as invoice first.
+The earlier five-tab adoption page was deleted, not migrated.
 
 Code:
 - `src/data/platform-usage.ts` — the records: workflow runs, chat, Concierge, SOP to RACM, exceptions traced to their run.
-- `src/data/platform-usage-metrics.ts` — PU-01 to PU-14, the four settings, periods, scopes.
+- `src/data/platform-usage-metrics.ts` — PU-01 to PU-14 and PU-20 to PU-28, the four settings, periods, scopes.
 - `src/components/usage/` — the page, its blocks, and the CSV and PDF exports.
 - `tests/platform-usage.spec.ts` — the build spec's acceptance tests, run against the real page.
 
@@ -19,24 +20,31 @@ library it touched, and what is stuck right now.
 
 ## The one honest gap
 
-The platform can measure what it did and what that was worth. It cannot measure what it
-cost. The paid registry lookups have no price list in the product, chat estimates its own
-token usage from text length rather than measuring it, and the SOP to RACM pipeline records
-nothing about consumption at all.
+The platform can measure what it did and what that was worth. Until somebody enters what the
+vendor billed, it cannot measure what that cost. Chat estimates its own token usage from
+text length rather than measuring it, and the SOP to RACM pipeline records nothing about
+consumption at all.
 
-So the page shows the value side in full and the cost side not at all. There is no net
-figure and no blended "AI cost", anywhere, ever. The one real cost the product records is
-the Concierge job cost, and it appears as itself, labelled as itself, added to nothing.
+So the page ships showing the value side in full and the cost side as an honest empty tile.
+There is no blended "AI cost", anywhere, ever. The one real cost the product records by
+itself is the Concierge job cost, and it appears as itself, labelled as itself, added to
+nothing.
 
-The headline is called **Work avoided** for the same reason: "Net value" would be one real
-number minus an unknown.
+The headline is called **Work avoided** while that is true, because "Net value" would be one
+real number minus an unknown. Enter a month's bill through **Cost the paid lookups** (PU-19)
+and the tile fills, backwards through every month entered, and the hero becomes **Net
+value**. A window is only costed when every month in it has its bill: a quarter with two of
+its three invoices in is an unfinished quarter, not a cheaper one, so the tile names the
+missing months instead of printing a total that will grow next week.
 
 ## Coverage
 
-Four areas of the product write down what happens in them: workflow runs, chat, the
-Concierge tools, and Smart Learn. Creating audits, editing controls, building dashboards and
-producing reports leave no event, so those blocks stay empty until PU-15's event log starts
-accumulating.
+The product writes down more than the first read suggested. Counted today: workflow runs,
+chat, the Concierge tools, Smart Learn, dashboards and the alerts they fire, reports and
+their activity trail, sample validations, generated insights, the risk register, the
+engagement portfolio, continuous monitoring config, and every record created in the window.
+What is still missing is the middle of a record's life: edits, reviews, views and time
+spent, which fill in as PU-15's event log accumulates.
 
 That sentence is on screen, in the export header, and defined once as `COVERAGE_NOTE`. When
 a later release widens coverage, one string changes and every surface follows.
@@ -57,9 +65,12 @@ The scope line always says what you are looking at:
 
 Block order per view, exactly as the spec lays it out:
 
-- **CFO** — Work avoided, Cost to run (only once complete), Value over time, Control coverage, Never exercised, Exceptions caught, Work volume, AI usage by area, Smart Learn.
-- **Head of Team** — Stuck runs, Reliability, Never exercised, Per-person outcomes, Smart Learn (including proposals awaiting their approval), then Work avoided small at the bottom. A team lead cannot act on a rupee figure; they can act on a workflow that failed four times this week with the same error.
-- **Internal Auditor** — My queue, Work volume, Exceptions caught, Work avoided, Value over time, Smart Learn.
+Every block is called what the spec calls it, on screen and in both exports. Nothing on this
+page is named anything the document does not name it.
+
+- **CFO** — Work avoided or Net value, Value over time, How much one setting matters, Cost to run, Control coverage, Never exercised, Engagements, Risks, Exceptions caught, Sampling, Work volume by unit, Created this period, Dashboards widgets and alerts, Reports, AI insights, CCM and automation, AI usage by area, Smart Learn.
+- **Head of Team** — Stuck runs, Reliability, Never exercised, Sampling, CCM and automation, Risks, Per-person outcomes, Created this period, Dashboards widgets and alerts, Reports, AI insights, Smart Learn, then Work avoided small at the bottom. A team lead cannot act on a rupee figure; they can act on a workflow that failed four times this week with the same error.
+- **Internal Auditor** — My queue, Work volume by unit, Exceptions caught, AI insights, Work avoided, Value over time, Smart Learn.
 
 The period selector offers This quarter, This year, Since you started and a custom range.
 "This month" is suppressed while it is the same window as this quarter, because a control
@@ -75,6 +86,27 @@ read their own work.
 
 An auditor reads their own work in hours and never in rupees: "you saved 84 hours" reads as
 an achievement, "you saved ₹1,00,800" reads as someone pricing your work.
+
+## The page opens on the answer, and folds the rest
+
+Eighteen blocks stacked at equal weight was seven screens of scroll on the CFO view, which
+puts the answer to "is the platform earning its keep" nowhere in particular. So each view
+opens on the section that answers its question and folds the others:
+
+| Lens | Open | Folded |
+|---|---|---|
+| CFO | What it was worth | The audit work · Behind the numbers |
+| Head of Team | Needs you now | Gaps · Your team |
+| Internal Auditor | everything, it is one screen and a half | — |
+
+A folded section is not a hidden one. Its header carries the figures a reader would
+otherwise scroll for: `THE AUDIT WORK · 57.1% of controls exercised · 4 severe risks
+uncovered · 13 engagements · 33 exceptions open`. Folding costs a fact, not the facts.
+
+Inside the blocks, long lists show their head and ask before showing the rest: the
+engagement strip opens on the five soonest, the exception list on the three newest, the
+sample chart on the five controls with something to look at. The table view behind every
+chart still holds all of them.
 
 ## The four settings
 
@@ -242,19 +274,80 @@ week" is a seeded count of recall **events** (61), while PU-20's field counts **
 recalled in the window (27). They measure different things, so this tile is labelled
 "Recalled in the last 7 days" for what it actually counts.
 
-An auditor is never shown the pending-approvals list. A proposal they cannot approve is a
-dead end, not information.
+Approving and rejecting a proposed memory happens on the Smart Learn screen and nowhere
+else. This page reports the count and says where the decision is made: a second pair of
+buttons here would be a second place to keep right, and a page that reports should not also
+be a page that acts.
 
-## Built, but showing nothing yet
+## PU-22 to PU-28 — the rest of the product
 
-**PU-04 cost to run** and **PU-05 net value** are built and wired. They stay off screen
-because two of the four cost components have no price: the paid registry lookups need the
-vendor price table (PU-19 step 2), and chat estimates its usage rather than measuring it
-(PU-16). The tile is complete or absent, so the view guards on `cost.complete`.
+Seven blocks that need nothing invented, because the areas behind them already keep records:
 
-`BILLABLE_WORKFLOW_IDS` is the pricing table's key column and is empty: this customer's
-workflow library holds none of the thirteen paid lookups. A workflow is billable exactly
-when the price table holds a row for it, so there is no second list to keep in sync.
+- **PU-22 Dashboards, widgets and alerts.** Built, changed and shared counts come from the product's
+  own event log, so the tile opens the list of who made each dashboard and when. Alert fires
+  are the one event in the family with no person behind them, and those rows say
+  "automatic, no person involved" rather than borrowing the widget's author.
+- **PU-23 Reports.** Made, worked on and shared, held apart. A report edited fifty times is
+  one report and fifty activities, and the two are never added. Action plans are counted as
+  a live state across every issued report, not as a figure for the window, and the block
+  says so.
+- **PU-24 Sampling.** Passed, failed and errored, with errored kept visually and
+  textually separate: a failed validation is a finding, an errored one is a check that could
+  not be completed. The error text is shown verbatim. Counted per engagement and control
+  together, because the same control tested under two engagements is two pieces of testing.
+  Only the controls something went wrong on are charted; the clean ones are one sentence.
+- **PU-25 AI insights.** Per-run and consolidated, side by side, never summed and with no total
+  anywhere in the block, because a consolidated insight summarises per-run ones already
+  counted.
+- **PU-26 Risks.** A risk is covered when some control in the library names it,
+  read off the controls rather than kept as a second number. The hero is the audit gap:
+  critical or high, covered by nothing. The register records an owner and not a team, so a
+  team lens says out loud that it reached the risks through their owner. It records nothing
+  about whether a person or the assistant added a risk, so no origin split is claimed.
+- **PU-27 Engagements.** Status tiles, plus one row per open engagement showing
+  controls tested, open exceptions, what is in remediation and where the writing up has got
+  to. Every cell opens the thing it counts, not just the row. Sorted by the end of the audit
+  period, a date, never by owner. An engagement still
+  open after its audit period ended is reported as exactly that, with the plain note that
+  nothing in the record says whether it is late.
+- **PU-28 CCM and automation.** The threshold each engagement expects against the pass
+  rate it actually managed, computed from the same validations as PU-24 rather than from a
+  second calculation that could disagree with the block above it. Each row also says how many
+  approvals clear an exception there and how many exceptions are sitting in a gate right now.
+
+## PU-21 — what was created
+
+Six areas, each counted from its own creation stamp: engagements, audit plans, RACMs,
+controls, dashboards and reports. The spec's "audits" is the audit plan scheduled in Audit
+Planning, counted apart from the engagement that runs it rather than one standing in for the
+other. The count opens one dated list across all six, each row saying which area it belongs
+to.
+
+## PU-19 — costing the paid lookups, invoice first
+
+**Cost the paid lookups**, next to **Settings**, and CFO only. Both buttons are named in the
+spec's own words: "the settings editor" and PU-19's title.
+
+Three layers, each optional after the first:
+
+**Layer 1** needs nothing entered. The lookup volume is already counted from recorded runs.
+
+**Layer 2 is the primary input: the month's bill.** One row per vendor per month — vendor,
+month, the amount as it appears on the invoice, and a note for credit notes or disputes.
+Summed over a window that is the exact cost, the same number finance reconciles, and it
+needs no rate card and no guess about whether a run bills once or five hundred times. Past
+months can be entered at any time and history fills in behind them. Under the figure the page
+shows the effective rate — the bill divided by the calls recorded in the same window —
+always labelled "derived from your invoices" and never presented as a price anybody quoted.
+
+**Layer 3 is optional: the per-API split.** Only worth filling if the business wants the cost
+split per workflow. The unit has no default on purpose: a run checking five hundred vendors
+usually makes five hundred calls, and guessing that puts the split out by a thousandfold. A
+renegotiated price starts a new row from its date and closes the old one the day before, so
+last quarter's split still reads as last quarter's split. When a split exists, the page prices
+the same runs with it and shows the gap against the bill rather than hiding it.
+
+Every entry and removal writes an audit event, and each bill carries who entered it.
 
 ## Not built
 
