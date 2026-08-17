@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
-import { Bars, Block, DataTable, Empty, Stat } from './usageKit';
+import { Bars, Block, DataTable, Empty, Fig, Stat } from './usageKit';
 import { fmtInt, fmtPct, plural, formatWhen } from './usageFormat';
 import type { CoverageResult, ExceptionsResult, NeverExercised } from '../../data/platform-usage-metrics';
 
@@ -22,6 +22,14 @@ export function ControlCoverage({ coverage }: { coverage: CoverageResult }) {
     <Block
       title="Control coverage"
       hint="A control checked fifty times counts once."
+      lede={
+        coverage.total === 0 ? null : (
+          <>
+            The platform has exercised <Fig>{fmtPct(coverage.pct)}</Fig> of the control library in this window,{' '}
+            <Fig>{fmtInt(coverage.exercised)}</Fig> of {fmtInt(coverage.total)} controls.
+          </>
+        )
+      }
     >
       {coverage.total === 0 ? (
         <Empty kind="quiet" title="There are no controls in the library yet." />
@@ -68,14 +76,21 @@ export function NeverExercisedBlock({
     <Block
       title="Never exercised"
       hint="Ignores the period. Never exercised at all, in the whole record."
+      lede={
+        nothing ? null : (
+          <>
+            <Fig>{plural(data.controls.length, 'control has', 'controls have')}</Fig> never been tested by anything
+            and <Fig>{plural(data.workflows.length, 'workflow has', 'workflows have')}</Fig> never run, in the
+            whole record.
+          </>
+        )
+      }
     >
       {nothing ? (
         <Empty kind="quiet" title="Every control has been checked at least once." />
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-            <Stat size="sm" value={fmtInt(data.controls.length)} label="controls nothing has ever tested" />
-            <Stat size="sm" value={fmtInt(data.workflows.length)} label="workflows that have never run" />
             <button
               type="button"
               onClick={() => setOpen(v => !v)}
@@ -141,6 +156,16 @@ export function ExceptionsCaught({
     <Block
       title="Exceptions caught"
       hint="By severity, with the count still open."
+      lede={
+        data.total === 0 ? null : (
+          <>
+            The runs caught <Fig>{plural(data.total, 'exception', 'exceptions')}</Fig> {periodLabel.toLowerCase()}
+            {data.open > 0
+              ? <>, and <Fig>{fmtInt(data.open)}</Fig> {data.open === 1 ? 'is' : 'are'} still open.</>
+              : <>, and every one of them has been closed.</>}
+          </>
+        )
+      }
       chart={
         data.total === 0 ? (
           <Empty kind="quiet" title="Nothing was caught in this window." detail="The runs completed and found nothing to raise." />

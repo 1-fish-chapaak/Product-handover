@@ -1,13 +1,17 @@
 # Platform Usage
 
-System > Platform Usage. Built from `Platform-Usage-Build-Spec.pdf`, the 11 Aug 2026
-revision that adds the product blocks PU-22 to PU-28 and rewrites PU-19 as invoice first.
-The earlier five-tab adoption page was deleted, not migrated.
+System > Platform Usage. Built from `Platform-Usage-Build-Spec_5.pdf`, the 11 Aug 2026
+revision: the product blocks PU-22 to PU-28, PU-19 as invoice first, the attention strip, a
+sentence at the head of every block, and **no editor anywhere on the page** — the
+assumptions sharpen themselves from the customer's own recorded pace, and the two numbers a
+person types live in Administration behind their own permissions. The earlier five-tab
+adoption page was deleted, not migrated.
 
 Code:
 - `src/data/platform-usage.ts` — the records: workflow runs, chat, Concierge, SOP to RACM, exceptions traced to their run.
 - `src/data/platform-usage-metrics.ts` — PU-01 to PU-14 and PU-20 to PU-28, the four settings, periods, scopes.
-- `src/components/usage/` — the page, its blocks, and the CSV and PDF exports.
+- `src/components/usage/` — the page, its blocks, and the CSV and PDF exports. It reads only.
+- `src/components/admin/UsageAdminSection.tsx` — Administration → Platform Usage: the assumption pin and the vendor bills, each behind its own permission.
 - `tests/platform-usage.spec.ts` — the build spec's acceptance tests, run against the real page.
 
 ## The question the page answers
@@ -31,9 +35,9 @@ itself is the Concierge job cost, and it appears as itself, labelled as itself, 
 nothing.
 
 The headline is called **Work avoided** while that is true, because "Net value" would be one
-real number minus an unknown. Enter a month's bill through **Cost the paid lookups** (PU-19)
-and the tile fills, backwards through every month entered, and the hero becomes **Net
-value**. A window is only costed when every month in it has its bill: a quarter with two of
+real number minus an unknown. If finance enters a month's bill in Administration (PU-19) the
+tile fills, backwards through every month entered, the hero becomes **Net value** and it
+shows the net figure itself. A window is only costed when every month in it has its bill: a quarter with two of
 its three invoices in is an unfinished quarter, not a cheaper one, so the tile names the
 missing months instead of printing a total that will grow next week.
 
@@ -68,7 +72,7 @@ Block order per view, exactly as the spec lays it out:
 Every block is called what the spec calls it, on screen and in both exports. Nothing on this
 page is named anything the document does not name it.
 
-- **CFO** — Work avoided or Net value, Value over time, How much one setting matters, Cost to run, Control coverage, Never exercised, Engagements, Risks, Exceptions caught, Sampling, Work volume by unit, Created this period, Dashboards widgets and alerts, Reports, AI insights, CCM and automation, AI usage by area, Smart Learn.
+- **CFO** — Work avoided or Net value, Cost to run, Value over time, Control coverage, Never exercised, Engagements, Risks, Exceptions caught, Sampling, Work volume by unit, Created this period, Dashboards widgets and alerts, Reports, AI insights, CCM and automation, AI usage by area, Smart Learn.
 - **Head of Team** — Stuck runs, Reliability, Never exercised, Sampling, CCM and automation, Risks, Per-person outcomes, Created this period, Dashboards widgets and alerts, Reports, AI insights, Smart Learn, then Work avoided small at the bottom. A team lead cannot act on a rupee figure; they can act on a workflow that failed four times this week with the same error.
 - **Internal Auditor** — My queue, Work volume by unit, Exceptions caught, AI insights, Work avoided, Value over time, Smart Learn.
 
@@ -87,45 +91,63 @@ read their own work.
 An auditor reads their own work in hours and never in rupees: "you saved 84 hours" reads as
 an achievement, "you saved ₹1,00,800" reads as someone pricing your work.
 
-## The page opens on the answer, and folds the rest
+## The page answers before it asks
 
-Eighteen blocks stacked at equal weight was seven screens of scroll on the CFO view, which
-puts the answer to "is the platform earning its keep" nowhere in particular. So each view
-opens on the section that answers its question and folds the others:
+Every view opens with **Needs your attention**: at most three cards, each a sentence with
+one thing to do. `4 critical and high risks have no control covering them. See them` ·
+`April 2026 has 34 recorded calls and no bill entered yet. Add it` · `Vendor Reconciliation
+has failed 4 times with the same error. Open it`. Nothing is sent anywhere and nothing has
+a threshold to configure: it is a fact already on the page, said early because acting on it
+should not wait for a scroll. When there is nothing, the strip says `Nothing needs you.`
+once and disappears.
 
-| Lens | Open | Folded |
+Then **every block leads with a sentence, not a number**:
+
+> The platform saved the company **2,264 hours** this quarter, up 35% on the previous
+> period, worth **₹27.2 lakh** at the rate you set.
+
+The tiles and the chart sit under it. A reader who reads only the bold sentences
+understands the whole page, and a block cannot open on a tile instead: the sentence is a
+required prop, and the only thing allowed in its place is the block's own empty state.
+
+Long lists show their head and ask before showing the rest: the engagement strip opens on
+the five soonest, the exception list on the three newest, the sample chart on the five
+controls with something to look at. The table view behind every chart still holds all of
+them.
+
+Nothing on this page asks the reader for anything. There is no settings editor and no
+invoice form on it: calibration happens on its own, and the one time the page does ask, it
+asks as an attention card that hands the reader to Administration.
+
+## The four assumptions, and why nobody fills them in
+
+Every value figure on this page is an estimate and **says so**: the hero, the tiles, the
+timeline and both exports all carry the word. Four numbers drive the estimate, and each one
+carries where it came from:
+
+| Assumption | Starting value | Source |
 |---|---|---|
-| CFO | What it was worth | The audit work · Behind the numbers |
-| Head of Team | Needs you now | Gaps · Your team |
-| Internal Auditor | everything, it is one screen and a half | — |
+| Rows a person checks by hand, per hour | 200 | measured from the customer's own pace |
+| Hours one manual control test takes | 4 | measured, when the test records carry times |
+| Blended cost of one auditor hour | ₹1,200 | business-entered, never measurable |
+| Working hours per person, per month | 160 | business-entered, never measurable |
 
-A folded section is not a hidden one. Its header carries the figures a reader would
-otherwise scroll for: `THE AUDIT WORK · 57.1% of controls exercised · 4 severe risks
-uncovered · 13 engagements · 33 exceptions open`. Folding costs a fact, not the facts.
+The two measurable ones **apply themselves**. The calibration job measures the customer's
+recorded pace, and the moment the guards pass (90 days of history, a big enough sample) the
+live value switches to it: the source becomes `measured`, the label changes to "based on your
+team's measured pace", and the switch is written down. There is no confirmation step, because
+at ten thousand people nobody clicks one.
 
-Inside the blocks, long lists show their head and ask before showing the rest: the
-engagement strip opens on the five soonest, the exception list on the three newest, the
-sample chart on the five controls with something to look at. The table view behind every
-chart still holds all of them.
+The review rate swings the headline eightfold across its plausible range. The page does not
+hide that: it keeps "estimated" on every derived figure and the assumptions strip under every
+value block, and the strip opens its own change history in place — who changed what, from
+what to what, when, and under which source label. "Settings changed this quarter: 1" is a
+real, listable figure.
 
-## The four settings
-
-Every value claim rests on four numbers the product cannot measure and the business chooses.
-They are always shown next to the figures they produce, and only `ad_usage` can edit them.
-
-| Setting | Default |
-|---|---|
-| Rows a person checks by hand, per hour | 200 |
-| Blended cost of one auditor hour | ₹1,200 |
-| Working hours per person, per month | 160 |
-| Hours one manual control test takes | 4 |
-
-The review rate swings the headline eightfold across its plausible range, so the editor
-previews the resulting headline **live, before saving**, and every save writes an audit event
-with the old and new values. The assumptions behind the numbers are themselves auditable.
-
-Per-team editing is deliberately not offered: two teams with different review rates have
-hours saved that cannot be compared, and the number stops meaning anything.
+Overriding one is an admin action taken in **Administration → Platform Usage** (permission
+`ad_usage_settings`), and it is rare by design: pinning a value stops the platform improving
+that number by itself, so the screen says so. Per-team values are deliberately not offered —
+two teams with different review rates have hours saved that cannot be compared.
 
 ## The formulas
 
@@ -274,10 +296,12 @@ week" is a seeded count of recall **events** (61), while PU-20's field counts **
 recalled in the window (27). They measure different things, so this tile is labelled
 "Recalled in the last 7 days" for what it actually counts.
 
-Approving and rejecting a proposed memory happens on the Smart Learn screen and nowhere
-else. This page reports the count and says where the decision is made: a second pair of
-buttons here would be a second place to keep right, and a page that reports should not also
-be a page that acts.
+A proposal waiting on the reader is decided here, on the Head of Team view: the spec's
+acceptance line is "memories proposed for my team wait for me, and I can approve or reject
+from here", and somebody who opened the page to see what is stuck should not have to go
+somewhere else to clear the one thing waiting on them. There is no second store behind it —
+the buttons call the same actions the Smart Learn screen calls, so the same audit event is
+written either way. A reader who may not decide a proposal is never shown one.
 
 ## PU-22 to PU-28 — the rest of the product
 
@@ -325,8 +349,13 @@ to.
 
 ## PU-19 — costing the paid lookups, invoice first
 
-**Cost the paid lookups**, next to **Settings**, and CFO only. Both buttons are named in the
-spec's own words: "the settings editor" and PU-19's title.
+Bills are entered in **Administration → Platform Usage**, behind `ad_usage_invoices`, so a
+tenant can hand invoice entry to finance ops without handing over the company-wide numbers it
+feeds. The page itself only reads.
+
+**Invoices are optional, forever.** Without one the cost block still says how many paid
+lookups ran and across how many rows, and simply does not claim a cost. Nothing above it
+depends on a bill: hours and rupees saved are computed from runs, not from what anybody paid.
 
 Three layers, each optional after the first:
 
@@ -347,7 +376,11 @@ renegotiated price starts a new row from its date and closes the old one the day
 last quarter's split still reads as last quarter's split. When a split exists, the page prices
 the same runs with it and shows the gap against the bill rather than hiding it.
 
-Every entry and removal writes an audit event, and each bill carries who entered it.
+The entry manages itself. On the page, the cost tile opens the months behind it — what was billed and
+what was recorded, month by month — and any month with recorded calls and no bill is a named
+row rather than a quiet absence: `April 2026 has 34 recorded calls and no bill entered yet`,
+which is also the attention card at the top of the view. Every entry and removal writes an
+audit event and a change-log row, and each bill carries who entered it.
 
 ## Not built
 

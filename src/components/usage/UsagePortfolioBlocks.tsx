@@ -15,7 +15,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Bars, Block, DataTable, Drill, Empty, Stat } from './usageKit';
+import { Bars, Block, DataTable, Drill, Empty, Fig, Stat } from './usageKit';
 import { fmtInt, fmtPct, plural } from './usageFormat';
 import type { CcmResult, PortfolioResult, RiskPicture } from '../../data/platform-usage-metrics';
 
@@ -34,6 +34,16 @@ export function RiskPictureBlock({
     <Block
       title="Risks"
       hint="Recorded, prioritised, and not covered. A risk is covered when some control in the library names it, and the number to act on is the severe ones nothing tests."
+      lede={
+        data.total === 0 ? null : (
+          <>
+            {data.unmappedSevere > 0
+              ? <><Fig>{plural(data.unmappedSevere, 'critical or high risk has', 'critical and high risks have')}</Fig> no control covering {data.unmappedSevere === 1 ? 'it' : 'them'}</>
+              : <>Every critical and high risk has a control covering it</>}
+            , out of <Fig>{plural(data.total, 'risk', 'risks')}</Fig> recorded.
+          </>
+        )
+      }
       chart={
         data.total === 0 ? (
           <Empty
@@ -146,6 +156,20 @@ export function EngagementPortfolioBlock({
     <Block
       title="Engagements"
       hint="The portfolio and its motion. Where every open engagement has got to, sorted by the end of its audit period, soonest first."
+      lede={
+        data.total === 0 ? null : (
+          <>
+            <Fig>{plural(data.total, 'engagement', 'engagements')}</Fig> at this scope:{' '}
+            {data.byStatus.filter(s => s.count > 0).map((s, i, arr) => (
+              <span key={s.label}>
+                {i > 0 && (i === arr.length - 1 ? ' and ' : ', ')}
+                <Fig>{fmtInt(s.count)}</Fig> {s.label.toLowerCase()}
+              </span>
+            ))}
+            {data.slipping.length > 0 && <>. <Fig>{plural(data.slipping.length, 'one is', 'of them are')}</Fig> still open after the audit period ended</>}.
+          </>
+        )
+      }
       chart={
         data.total === 0 ? (
           <Empty kind="quiet" title="No engagement sits at this scope." />
@@ -255,10 +279,21 @@ function Cell({ children, onClick }: { children: ReactNode; onClick: () => void 
 /* ── PU-28 · Continuous monitoring ───────────────────────────────────────── */
 
 export function CcmCoverage({ data }: { data: CcmResult }) {
+  const short = data.rows.filter(r => r.actual !== null && r.actual < r.threshold).length;
+
   return (
     <Block
       title="CCM and automation"
       hint="Monitoring that runs on a schedule. Continuous monitoring is a mode on an engagement, not a separate feature, and the pass rate here is the same data as the sampling block."
+      lede={
+        data.engagementsOn === 0 ? null : (
+          <>
+            <Fig>{fmtInt(data.engagementsOn)}</Fig> of {fmtInt(data.engagementsTotal)} engagements are monitored
+            continuously, so <Fig>{fmtPct(data.sharePct)}</Fig> of the portfolio re-checks itself on a schedule
+            {short > 0 && <>, and <Fig>{plural(short, 'one is', 'of them are')}</Fig> under the pass rate it expects</>}.
+          </>
+        )
+      }
       chart={
         data.engagementsOn === 0 ? (
           <Empty

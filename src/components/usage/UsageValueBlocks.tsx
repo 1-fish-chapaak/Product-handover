@@ -9,13 +9,12 @@
  */
 
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowUpRight } from 'lucide-react';
 import ChartAutoSizer from './ChartAutoSizer';
-import { AccuracyTag, Block, DataTable, Drill, Empty, MadeRow, RestsOn, Stat } from './usageKit';
+import { AccuracyTag, Block, ChangeList, DataTable, Drill, Empty, Fig, MadeRow, RestsOn, Stat } from './usageKit';
 import { formatWhen } from './usageFormat';
 import {
   deltaPct, fmtDuration, fmtHours, fmtInt, fmtMoney, fmtPeople, fmtUsd, plural,
-  type AiAreaRow, type CostResult, type CreatedArea, type SensitivityRow, type UsageSettings,
+  type AiAreaRow, type CostResult, type CreatedArea, type InvoiceLedger, type UsageSettings,
   type ValuePoint, type ValueResult, type VolumeUnit,
 } from '../../data/platform-usage-metrics';
 
@@ -28,17 +27,21 @@ const BRAND = '#6A12CD';
 export function HeadlineValue({
   value,
   prior,
+  subject,
   periodLabel,
   priorLabel,
   settings,
   showMoney,
   wasted,
   netValue,
+  history,
   compact = false,
-  onEditSettings,
+  onOpenWorkflows,
 }: {
   value: ValueResult;
   prior: ValueResult | null;
+  /** Whose saving it is, in the sentence: the company, a team, or you. */
+  subject: string;
   periodLabel: string;
   priorLabel: string | null;
   settings: UsageSettings;
@@ -47,30 +50,55 @@ export function HeadlineValue({
   wasted: { hours: number; runs: number };
   /** null while the cost side is unknown, which is most of the time. */
   netValue: number | null;
+  /** The changes to the assumptions this figure rests on. */
+  history?: { inPeriod: number; rows: { field: string; from: string | null; to: string | null; source: string | null; by: string; when: string }[] };
   compact?: boolean;
-  onEditSettings?: () => void;
+  /** Where a reader with no runs goes to start one. */
+  onOpenWorkflows?: () => void;
 }) {
   if (value.hours <= 0) {
     return (
-      <Block title="What the platform got through">
-        <Empty kind="quiet" title="No completed runs in this window." />
+      <Block title="What the platform got through" lede={null}>
+        <Empty
+          kind="quiet"
+          title="No completed runs in this window."
+          detail="Nothing has been valued because nothing finished, which is a different fact from a saving of zero."
+          action={onOpenWorkflows ? { label: 'Open the Workflow Library', onClick: onOpenWorkflows } : undefined}
+        />
       </Block>
     );
   }
 
   const hoursDelta = deltaPct(value.hours, prior?.hours ?? null);
+  const move = hoursDelta === null
+    ? null
+    : Math.abs(hoursDelta) < 0.5
+      ? `level with ${priorLabel?.toLowerCase() ?? 'the window before'}`
+      : `${hoursDelta > 0 ? 'up' : 'down'} ${Math.abs(hoursDelta).toFixed(0)}% on ${priorLabel?.toLowerCase() ?? 'the window before'}`;
 
   return (
     <Block
       title={netValue === null ? 'Work avoided' : 'Net value'}
+      lede={
+        <>
+          The platform saved {subject} an estimated <Fig>{fmtHours(value.hours)} hours</Fig>{' '}
+          {periodLabel.toLowerCase()}
+          {move && <>, {move}</>}
+          {showMoney && <>, worth <Fig>{fmtMoney(value.money)}</Fig> at the rate in your settings</>}.
+          {showMoney && netValue !== null && (
+            <> After what the paid lookups cost, that is <Fig>{fmtMoney(netValue)}</Fig> of net value.</>
+          )}
+        </>
+      }
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
           <RestsOn
             settings={settings}
             keys={showMoney
               ? ['manualReviewRate', 'hourlyRate', 'hoursPerPersonPerMonth']
               : ['manualReviewRate']}
-            onEdit={onEditSettings}
+            history={history}
+            periodLabel={periodLabel}
           />
           {wasted.runs > 0 && (
             <span className="tabular-nums">
@@ -84,14 +112,19 @@ export function HeadlineValue({
         <Stat
           size={compact ? 'md' : 'lg'}
           value={`${fmtHours(value.hours)} hours`}
-          label={`saved ${periodLabel.toLowerCase()}`}
+          label={`estimated, saved ${periodLabel.toLowerCase()}`}
           delta={hoursDelta}
           deltaLabel={priorLabel}
         />
         {showMoney && (
           <>
-            <Stat size={compact ? 'sm' : 'md'} value={fmtMoney(value.money)} label="at the hourly rate you set" />
-            <Stat size={compact ? 'sm' : 'md'} value={fmtPeople(value.people)} label="the equivalent of this many people" />
+            <Stat size={compact ? 'sm' : 'md'} value={fmtMoney(value.money)} label="estimated, at the hourly rate in your settings" />
+            <Stat size={compact ? 'sm' : 'md'} value={fmtPeople(value.people)} label="estimated, the equivalent of this many people" />
+            {/* PU-05. The title only reads "net value" when there is one, and
+                when there is one the figure itself is on the hero. */}
+            {netValue !== null && (
+              <Stat size={compact ? 'sm' : 'md'} value={fmtMoney(netValue)} label="net of what the lookups cost" />
+            )}
           </>
         )}
       </div>
@@ -113,12 +146,59 @@ export function HeadlineValue({
  *
  * It is never hidden. Somebody who cannot see a cost figure needs to know
  * whether that is because the platform costs nothing or because nobody has
- * loaded the price list, and those are not the same sentence.
+ * entered a bill, and those are not the same sentence.
+ *
+ * A bill is optional, forever. Without one the block still says how many paid
+ * lookups ran, because that is recorded already, and simply does not claim a
+ * cost. Nothing above it depends on a bill: the hours and rupees saved are
+ * computed from runs, not from what anybody paid.
  */
-export function CostToRun({ cost }: { cost: CostResult }) {
+export function CostToRun({
+  cost,
+  ledger,
+  periodLabel,
+  changes,
+  onEnterInvoice,
+}: {
+  cost: CostResult;
+  /** Month by month: what was billed, and what was recorded. */
+  ledger: InvoiceLedger;
+  periodLabel: string;
+  /** Who entered which bill, and when. */
+  changes: { field: string; from: string | null; to: string | null; source: string | null; by: string; when: string }[];
+  /** Only offered to somebody the tenant has given invoice entry to. */
+  onEnterInvoice?: () => void;
+}) {
   return (
     <Block
       title="Cost to run"
+      lede={
+        cost.complete
+          ? (
+            <>
+              The paid lookups cost <Fig>{fmtMoney(cost.lookupMoney ?? 0)}</Fig> {periodLabel.toLowerCase()}, from{' '}
+              {plural(cost.invoices, 'bill', 'bills')} entered, and Concierge jobs cost{' '}
+              <Fig>{fmtUsd(cost.conciergeUsd)}</Fig>.
+            </>
+          )
+          : (
+            <>
+              <Fig>{plural(cost.lookupRuns, 'paid lookup ran', 'paid lookups ran')}</Fig> {periodLabel.toLowerCase()}
+              {cost.lookupRows > 0 && <> across <Fig>{fmtInt(cost.lookupRows)}</Fig> rows</>}, and no bill has been
+              entered for {ledger.missing.length === 1 ? ledger.missing[0].label : 'every month in this window'}, so
+              the page does not claim a cost. Concierge jobs cost <Fig>{fmtUsd(cost.conciergeUsd)}</Fig>.
+            </>
+          )
+      }
+      action={onEnterInvoice && (
+        <button
+          type="button"
+          onClick={onEnterInvoice}
+          className="h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-600 hover:text-brand-700 hover:border-brand-200"
+        >
+          Enter a bill in Administration
+        </button>
+      )}
       footer="Concierge is the one exact cost figure the product records by itself. Chat, the RACM generator and the workflow engine record nothing about what they consumed."
     >
       {cost.complete ? (
@@ -161,12 +241,23 @@ export function CostToRun({ cost }: { cost: CostResult }) {
         <>
           <Empty
             kind="unmeasured"
-            title={cost.missing ?? 'No invoice entered for this period.'}
-            detail="Enter the vendor's monthly bill and this period is costed exactly, backwards through every month you enter."
+            title={
+              ledger.missing.length === 1
+                ? `${ledger.missing[0].label} has ${plural(ledger.missing[0].recordedCalls, 'recorded call', 'recorded calls')} and no bill entered yet.`
+                : cost.missing ?? 'No invoice entered for this period.'
+            }
+            detail="A bill is optional. Nothing above this block depends on one, and if finance does enter it in Administration the period is costed exactly, backwards through every month entered."
+            action={onEnterInvoice ? { label: "Enter the month's bill in Administration", onClick: onEnterInvoice } : undefined}
           />
-          {/* The one cost figure that does exist. It is not a total and it is
-              never labelled as one. */}
-          <div className="mt-4">
+          {/* Layer 1 needs nothing entered: the calls are counted already. The
+              one cost figure that does exist sits beside them, and it is not a
+              total and is never labelled as one. */}
+          <div className="mt-4 flex flex-wrap items-end gap-x-12 gap-y-5">
+            <Stat
+              size="sm"
+              value={fmtInt(cost.lookupRuns)}
+              label={cost.callsAreAllRuns ? 'completed runs, none of them priced yet' : 'runs of the priced workflows'}
+            />
             <Stat
               size="sm"
               value={fmtUsd(cost.conciergeUsd)}
@@ -175,6 +266,41 @@ export function CostToRun({ cost }: { cost: CostResult }) {
           </div>
         </>
       )}
+
+      {/* The entry manages itself: the tile opens the bills behind it, and the
+          months with recorded calls and no bill are named rather than quietly
+          missing from a total. */}
+      <div className="mt-4 space-y-2">
+        <Drill
+          label={ledger.months.length === 1 ? 'Show the month behind this' : `Show the ${fmtInt(ledger.months.length)} months behind this`}
+          hideLabel="Hide the months"
+        >
+          <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+            {ledger.months.map(m => (
+              <li key={m.month} className="py-2">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-[0.875rem] text-ink-800">{m.label}</span>
+                  <span className={`text-[0.875rem] shrink-0 tabular-nums ${m.amount === null ? 'text-ink-400' : 'text-ink-900 font-medium'}`}>
+                    {m.amount === null ? 'no bill yet' : fmtMoney(m.amount)}
+                  </span>
+                </div>
+                <p className="text-[0.75rem] text-ink-500 tabular-nums">
+                  {plural(m.recordedCalls, 'recorded call', 'recorded calls')}
+                  {m.invoices.map(i => (
+                    <span key={`${i.vendor}-${i.enteredAt}`}> · {i.vendor}, entered by {i.enteredBy}{i.note ? ` · ${i.note}` : ''}</span>
+                  ))}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Drill>
+
+        {changes.length > 0 && (
+          <Drill label={`Show who entered what (${fmtInt(changes.length)})`} hideLabel="Hide the entries">
+            <ChangeList rows={changes} />
+          </Drill>
+        )}
+      </div>
     </Block>
   );
 }
@@ -183,10 +309,22 @@ export function CostToRun({ cost }: { cost: CostResult }) {
 
 export function ValueOverTime({ points, showMoney }: { points: ValuePoint[]; showMoney: boolean }) {
   const has = points.some(p => p.hours > 0);
+  const busiest = has ? points.reduce((a, b) => (b.hours > a.hours ? b : a)) : null;
+  const first = points[0];
+  const last = points[points.length - 1];
 
   return (
     <Block
       title="Value over time"
+      lede={
+        has && busiest && first && last ? (
+          <>
+            The estimated saving ran from <Fig>{fmtHours(first.hours)} hours</Fig> ({first.label}) to{' '}
+            <Fig>{fmtHours(last.hours)}</Fig> ({last.label}), and {busiest.label} was the strongest of them at{' '}
+            <Fig>{fmtHours(busiest.hours)}</Fig>.
+          </>
+        ) : null
+      }
       chart={
         has ? (
           <ChartAutoSizer height={220}>
@@ -219,6 +357,14 @@ export function ValueOverTime({ points, showMoney }: { points: ValuePoint[]; sho
 
 /* ── PU-09 · Work volume, four units, never summed ───────────────────────── */
 
+/** What one of each unit is called, so a count of one reads as English. */
+const UNIT_ONE: Record<string, string> = {
+  runs: 'workflow run',
+  bulk: 'bulk run',
+  chat: 'question asked',
+  concierge: 'Concierge job',
+};
+
 export function WorkVolume({
   units,
   series,
@@ -234,6 +380,17 @@ export function WorkVolume({
     <Block
       title="Work volume by unit"
       hint="Four units of work. Not addable."
+      lede={
+        <>
+          {units.map((u, i) => (
+            <span key={u.key}>
+              {i > 0 && (i === units.length - 1 ? ' and ' : ', ')}
+              <Fig>{fmtInt(u.count)}</Fig> {u.count === 1 ? (UNIT_ONE[u.key] ?? u.label.toLowerCase()) : u.label.toLowerCase()}
+            </span>
+          ))}
+          . Four different units of work, so nothing here adds up to a total.
+        </>
+      }
       chart={
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {units.map(u => (
@@ -286,11 +443,23 @@ export function CreatedThisPeriod({ areas }: { areas: CreatedArea[] }) {
   const made = areas
     .flatMap(a => a.items.map(i => ({ ...i, area: a.label.replace(/s$/, '').toLowerCase() })))
     .sort((x, z) => z.at - x.at);
+  const total = areas.reduce((n, a) => n + a.count, 0);
 
   return (
     <Block
       title="Created this period"
       hint="Records made in this window. Not edits, reviews or time spent."
+      lede={
+        total > 0 ? (
+          <>
+            <Fig>{plural(total, 'record was', 'records were')}</Fig> created in this window, across{' '}
+            <Fig>{plural(areas.filter(a => a.count > 0).length, 'area', 'areas')}</Fig> of the product. Every one of
+            them stamps who made it and when, so the list behind this count names them.
+          </>
+        ) : (
+          <>Nothing was created in this window. That is a real zero, not a gap in what the platform records.</>
+        )
+      }
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
         {areas.map(a => (
@@ -323,6 +492,13 @@ export function AiUsageByArea({ rows }: { rows: AiAreaRow[] }) {
     <Block
       title="AI usage by area"
       hint="No total: one figure is exact, one is an estimate, two areas record nothing."
+      lede={
+        <>
+          The AI did work in <Fig>{fmtInt(rows.filter(r => (r.volume ?? 0) > 0).length)}</Fig> of the{' '}
+          {fmtInt(rows.length)} areas this window. Only Concierge records what a job cost, so there is no
+          total on this table and never will be one until the rest of the product measures its own usage.
+        </>
+      }
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[0.875rem]">
@@ -357,86 +533,6 @@ export function AiUsageByArea({ rows }: { rows: AiAreaRow[] }) {
             ))}
           </tbody>
         </table>
-      </div>
-    </Block>
-  );
-}
-
-/* ── How much one setting matters ────────────────────────────────────────── */
-
-/**
- * The same runs, at four review rates.
- *
- * One setting swings the headline eightfold. Most products hide that; showing it
- * is what makes the rest of the page believable, and it is why the person who
- * signs off the rate has to be a named person.
- */
-export function SettingSensitivity({ rows, onEdit }: { rows: SensitivityRow[]; onEdit?: () => void }) {
-  // The two ends of the table, said as a sentence: the point of this block is
-  // the size of the swing, not the four rows that demonstrate it.
-  const swing = rows.length > 1
-    ? {
-        low: rows[0],
-        high: rows[rows.length - 1],
-        factor: Math.round(rows[0].hours / Math.max(rows[rows.length - 1].hours, 0.01)),
-      }
-    : null;
-
-  return (
-    <Block
-      title="How much one setting matters"
-      hint="The same runs, at other review rates."
-      action={onEdit && (
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-600 hover:text-brand-700 hover:border-brand-200"
-        >
-          Change the rate <ArrowUpRight size={13} />
-        </button>
-      )}
-    >
-      {/* One sentence open, the whole swing one click away. The lever matters
-          enough to name on the page and not enough to spend a screen on. */}
-      <p className="text-[0.75rem] text-ink-600 tabular-nums">
-        {swing && (
-          <>
-            At {fmtInt(swing.low.rate)} rows an hour this reads {fmtHours(swing.low.hours)} hours, at{' '}
-            {fmtInt(swing.high.rate)} it reads {fmtHours(swing.high.hours)}. One setting, {swing.factor}
-            {'\u00d7'} the headline.
-          </>
-        )}
-      </p>
-
-      <div className="mt-3">
-      <Drill label="Show every rate">
-      <div className="overflow-x-auto">
-        <table className="w-full text-[0.875rem]">
-          <thead>
-            <tr className="border-b border-canvas-border">
-              {['If a person checks', 'Hours saved', 'Money saved', 'People'].map((h, i) => (
-                <th key={h} scope="col" className={`py-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 ${i === 0 ? 'text-left' : 'text-right'}`}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.rate} className={`border-b border-canvas-border last:border-0 ${r.isCurrent ? 'bg-brand-50/50' : ''}`}>
-                <td className="py-2 text-ink-800">
-                  {fmtInt(r.rate)} rows an hour
-                  {r.isCurrent && <span className="ml-2 text-[0.75rem] text-brand-700 font-medium">what you have set</span>}
-                </td>
-                <td className="py-2 text-right tabular-nums text-ink-800">{fmtHours(r.hours)}</td>
-                <td className="py-2 text-right tabular-nums text-ink-800">{fmtMoney(r.money)}</td>
-                <td className="py-2 text-right tabular-nums text-ink-800">{fmtPeople(r.people)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      </Drill>
       </div>
     </Block>
   );

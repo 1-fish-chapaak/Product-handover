@@ -17,7 +17,7 @@
  *   two are shown side by side and never summed.
  */
 
-import { Bars, Block, DataTable, Drill, Empty, MadeRow, Stat } from './usageKit';
+import { Bars, Block, DataTable, Drill, Empty, Fig, MadeRow, Stat } from './usageKit';
 import { fmtInt, fmtPct, plural, formatWhen } from './usageFormat';
 import type { InsightsResult, ProductActivity, ReportsActivity, SamplingResult } from '../../data/platform-usage-metrics';
 
@@ -38,6 +38,16 @@ export function DashboardsAndAlerts({
     <Block
       title="Dashboards, widgets and alerts"
       hint="Built and firing. Every change to a dashboard is recorded, and alerts fire on a schedule with nobody watching."
+      lede={
+        nothing ? null : (
+          <>
+            <Fig>{plural(data.dashboardsCreated, 'dashboard was', 'dashboards were')}</Fig> built{' '}
+            {periodLabel.toLowerCase()}, <Fig>{fmtInt(data.dashboardsChanged)}</Fig> changed or shared, and{' '}
+            <Fig>{plural(data.alertsFired, 'alert', 'alerts')}</Fig> fired
+            {data.alertsFired > 0 && <>, <Fig>{fmtInt(data.automaticFires)}</Fig> of them with nobody watching</>}.
+          </>
+        )
+      }
     >
       {nothing ? (
         <Empty
@@ -115,6 +125,15 @@ export function ReportsMade({
     <Block
       title="Reports"
       hint="Created, worked on, shared. A report edited fifty times is one report and fifty activities, and the two are never added together."
+      lede={
+        data.activity === 0 ? null : (
+          <>
+            <Fig>{plural(data.made, 'report was', 'reports were')}</Fig> made {periodLabel.toLowerCase()} and
+            reports were worked on <Fig>{plural(data.activity, 'time', 'times')}</Fig>
+            {data.shared > 0 && <>, with <Fig>{fmtInt(data.shared)}</Fig> shared out</>}.
+          </>
+        )
+      }
       chart={
         data.activity === 0 ? (
           <Empty
@@ -180,6 +199,15 @@ export function SamplingOutcomes({ data }: { data: SamplingResult }) {
     <Block
       title="Sampling"
       hint="Validation runs and their outcomes. A failed one says the control did not hold; an errored one says nothing about the control, so somebody has to look."
+      lede={
+        data.total === 0 ? null : (
+          <>
+            <Fig>{plural(data.passed + data.failed + data.errored, 'validation', 'validations')}</Fig> landed in
+            this window: <Fig>{fmtInt(data.passed)}</Fig> passed, <Fig>{fmtInt(data.failed)}</Fig> failed and{' '}
+            <Fig>{fmtInt(data.errored)}</Fig> errored, which says nothing about the control until somebody looks.
+          </>
+        )
+      }
       chart={
         data.total === 0 ? (
           <Empty kind="quiet" title="No sample was validated in this window." />
@@ -264,6 +292,15 @@ export function InsightsGenerated({ data }: { data: InsightsResult }) {
     <Block
       title="AI insights"
       hint="Generated and by severity. Insights written off one run are kept apart from insights written across a whole engagement, because the second kind summarises the first."
+      lede={
+        nothing ? null : (
+          <>
+            The assistant wrote <Fig>{plural(data.perRun, 'insight', 'insights')}</Fig> off single runs and{' '}
+            <Fig>{fmtInt(data.consolidated)}</Fig> across whole engagements. The two are kept apart because the
+            second kind summarises the first.
+          </>
+        )
+      }
       chart={
         nothing ? (
           <Empty kind="quiet" title="The assistant wrote nothing down in this window." />

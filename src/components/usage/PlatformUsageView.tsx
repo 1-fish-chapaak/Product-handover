@@ -12,12 +12,25 @@
  * Entitlement is resolved from the permissions the signed-in role actually
  * holds, and a view somebody is not entitled to is never offered:
  *
- *   ad_usage         the whole company, the cost block, and the settings editor
+ *   ad_usage         the whole company, and the cost figures
  *   ad_usage_people  their own team, and themselves
  *   ad_usage_self    themselves, and nothing else
  *
  * You can narrow down your own line. You can never look sideways into somebody
  * else's team. Switching shows nobody anything they could not otherwise see.
+ *
+ * The two things a person can type rather than read are permissions of their
+ * own, not part of a view: `ad_usage_settings` for the assumptions, which stay
+ * tenant-wide, and `ad_usage_invoices` for the vendor's bill, which a tenant can
+ * hand to finance ops without handing over the company-wide numbers behind it.
+ *
+ * ## Answers first, machinery never
+ *
+ * Every view opens with at most three attention cards, each a sentence with one
+ * thing to do, and then with blocks that lead with a sentence rather than a
+ * tile. A reader who reads only those sentences understands the whole page.
+ * Settings, calibration and invoices are side doors the page points at when it
+ * needs them; somebody who never opens one still gets the full page.
  *
  * ## What this page will not do
  *
@@ -28,32 +41,34 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, Download, IndianRupee, SlidersHorizontal } from 'lucide-react';
+import { CalendarRange, Download } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { BTN_CTA_OUTLINE } from '../admin/adminTokens';
-import { ANCHOR, COVERAGE_NOTE, HISTORY_START, dataAsOfLabel, formatDate } from '../../data/platform-usage';
-import { useMemorySessionVersion } from '../../data/memorySession';
 import {
-  aiUsageByArea, ccm, controlCoverage, costToRun, createdThisPeriod, exceptionsCaught, insights, myQueue,
-  neverExercised, netValue, perPersonOutcomes, period, periodOptions, portfolio, priorPeriod, productActivity,
-  reliability, reportsActivity, riskPicture, runsIn, sampling, sensitivity, smartLearn,
-  stuckRuns, valueOf, valueOverTime, volumeOverTime, wastedEffort, workVolume, calibrate,
-  loadSettings, saveSettings, fmtHours, fmtInt, fmtPct,
-  type CustomRange, type Persona, type PeriodId, type QueueItem, type Scope, type UsageSettings,
+  ANCHOR, COVERAGE_NOTE, HISTORY_START, dataAsOfLabel, formatDate, recordUsageChange, type UsageChange,
+} from '../../data/platform-usage';
+import { approveMemory, rejectMemory, useMemorySessionVersion } from '../../data/memorySession';
+import type { PlatformMemory } from '../../data/memoryStore';
+import {
+  aiUsageByArea, attentionCards, ccm, changeHistory, controlCoverage, costToRun, createdThisPeriod,
+  exceptionsCaught, insights, invoiceLedger, myQueue, neverExercised, netValue, perPersonOutcomes, period,
+  periodOptions, portfolio, priorPeriod, productActivity, reliability, reportsActivity, riskPicture, runsIn,
+  sampling, smartLearn, stuckRuns, valueOf, valueOverTime, volumeOverTime, wastedEffort, workVolume, calibrate,
+  applyMeasured, loadSettings, saveSettings,
+  type AttentionTarget, type CustomRange, type Persona, type PeriodId, type QueueItem, type Scope,
+  type UsageSettings,
 } from '../../data/platform-usage-metrics';
-import { PageSection } from './usageKit';
+import { AttentionStrip } from './usageKit';
 import {
-  AiUsageByArea, CostToRun, CreatedThisPeriod, HeadlineValue, SettingSensitivity, ValueOverTime, WorkVolume,
+  AiUsageByArea, CostToRun, CreatedThisPeriod, HeadlineValue, ValueOverTime, WorkVolume,
 } from './UsageValueBlocks';
 import { ControlCoverage, ExceptionsCaught, NeverExercisedBlock } from './UsageCoverageBlocks';
 import { MyQueue, PerPersonOutcomes, Reliability, StuckRuns } from './UsageOperationsBlocks';
 import { DashboardsAndAlerts, InsightsGenerated, ReportsMade, SamplingOutcomes } from './UsageProductBlocks';
 import { CcmCoverage, EngagementPortfolioBlock, RiskPictureBlock } from './UsagePortfolioBlocks';
 import { SmartLearn } from './UsageSmartLearn';
-import UsageSettingsPanel from './UsageSettingsPanel';
-import UsagePricingPanel from './UsagePricingPanel';
 import { buildUsageCsv, downloadCsv, type ExportInput } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
 
@@ -74,6 +89,10 @@ function openSmartLearn() {
   window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'knowledge-hub', tab: 'learn' } }));
 }
 
+/** A change log row, as the page says it. */
+const changeRows = (rows: UsageChange[]) =>
+  rows.map(c => ({ field: c.field, from: c.from, to: c.to, source: c.source, by: c.by, when: formatDate(c.at) }));
+
 export default function PlatformUsageView() {
   const { currentUser } = useCurrentUser();
   const { can } = useCan();
@@ -82,16 +101,19 @@ export default function PlatformUsageView() {
   const memoryVersion = useMemorySessionVersion();
 
   const [settings, setSettings] = useState<UsageSettings>(() => loadSettings());
-  const [editingSettings, setEditingSettings] = useState(false);
-  // PU-19. Entering a price is the one thing that can turn "work avoided" into
-  // net value, so the version counter recomputes every cost figure on save.
-  const [editingPrices, setEditingPrices] = useState(false);
-  const [pricingVersion, setPricingVersion] = useState(0);
+  // The two entered numbers are edited in Administration, so the page re-reads
+  // their history when its own automatic calibration writes a row.
+  const [changeVersion, setChangeVersion] = useState(0);
 
   /* ── Who is reading, and what they may see ──────────────────────────────── */
 
   const me = users.find(u => u.email === currentUser?.email);
   const myTeam = me?.team && me.team !== '—' ? me.team : null;
+
+  // This page has no editor on it. Whoever holds the invoice permission is
+  // pointed at Administration when a bill is missing; everybody else is not
+  // asked for anything at all.
+  const canEnterInvoices = can('ad_usage_invoices');
 
   const entitled = useMemo<Persona[]>(() => {
     const out: Persona[] = [];
@@ -112,6 +134,9 @@ export default function PlatformUsageView() {
     }
     return { persona: 'auditor', label: 'only your own work', userEmail: currentUser?.email };
   }, [activePersona, myTeam, currentUser?.email]);
+
+  /** Whose saving it is, inside a sentence. */
+  const subject = activePersona === 'cfo' ? 'the company' : activePersona === 'head_of_team' ? (myTeam ?? 'your team') : 'you';
 
   /* ── The window ─────────────────────────────────────────────────────────── */
 
@@ -135,8 +160,8 @@ export default function PlatformUsageView() {
     [prior, scope, settings],
   );
   const wasted = useMemo(() => wastedEffort(periodRuns), [periodRuns]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const cost = useMemo(() => costToRun(p, scope), [p, scope, pricingVersion]);
+  const cost = useMemo(() => costToRun(p, scope), [p, scope]);
+  const ledger = useMemo(() => invoiceLedger(p, scope), [p, scope]);
   const coverage = useMemo(() => controlCoverage(p, scope), [p, scope]);
   const never = useMemo(() => neverExercised(), []);
   const exceptions = useMemo(() => exceptionsCaught(p, scope), [p, scope]);
@@ -157,7 +182,6 @@ export default function PlatformUsageView() {
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memory = useMemo(() => smartLearn(scope), [scope, memoryVersion]);
-  const swing = useMemo(() => sensitivity(periodRuns, settings, p.months), [periodRuns, settings, p.months]);
   // The rest of the product: what was built on it, what was written up, what was
   // tested, what the assistant noticed, and the shape of the audit work itself.
   const product = useMemo(() => productActivity(p, scope, logs, users), [p, scope, logs, users]);
@@ -169,55 +193,91 @@ export default function PlatformUsageView() {
   const monitoring = useMemo(() => ccm(p, scope), [p, scope]);
   // The calibration job's output, scoped the same way everything else is.
   const calibration = useMemo(() => calibrate(scope), [scope]);
-  const net = netValue(value, cost);
 
-  /* ── Actions ────────────────────────────────────────────────────────────── */
-
-  const onSaveSettings = (next: UsageSettings, changes: string[]) => {
-    setSettings(next);
+  // Applied on its own: once the guards pass, the live value switches to the
+  // customer's measured pace, the label changes with it, and the switch is
+  // written down. Nobody confirms it — at ten thousand people nobody clicks.
+  const calibrated = useRef(false);
+  useEffect(() => {
+    if (calibrated.current) return;
+    const { settings: next, changes } = applyMeasured(settings, calibration);
+    if (changes.length === 0) return;
+    calibrated.current = true;
     saveSettings(next);
-    setEditingSettings(false);
+    setSettings(next);
+    changes.forEach(c => recordUsageChange({
+      entity: 'usage_setting',
+      field: c.field,
+      from: c.from,
+      to: c.to,
+      source: c.source,
+      by: 'The platform, measured automatically',
+      at: ANCHOR,
+    }));
+    setChangeVersion(v => v + 1);
     logEvent({
       action: 'Update',
       module: 'Platform Usage',
-      entity: 'Usage settings',
-      description: `Changed the assumptions behind Platform Usage. ${changes.join('; ')}`,
+      entity: 'Usage assumption',
+      description: `Measured pace applied automatically. ${changes.map(c => `${c.field}: ${c.from} to ${c.to}`).join('; ')}`,
     });
-    addToast({ type: 'success', message: 'Saved. Every figure on this page has been recalculated.' });
+  }, [calibration, settings, logEvent]);
+  const net = netValue(value, cost);
+
+  // The two entered numbers, and who entered them.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const settingChanges = useMemo(() => changeHistory(p, 'usage_setting'), [p, changeVersion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const invoiceChanges = useMemo(() => changeHistory(p, 'vendor_invoice'), [p, changeVersion]);
+  const settingsHistory = {
+    inPeriod: settingChanges.inPeriod.length,
+    rows: changeRows(settingChanges.all),
   };
+
+  /* ── Needs your attention ───────────────────────────────────────────────── */
+
+  const attention = useMemo(
+    () => attentionCards(activePersona, {
+      risks, stuck, never, sampling: samples, memory, queue, ledger,
+      portfolio: engagements, canEnterInvoices,
+    }),
+    [activePersona, risks, stuck, never, samples, memory, queue, ledger, engagements, canEnterInvoices],
+  );
+
+  const onAttention = (id: string) => {
+    const card = attention.find(c => c.id === id);
+    if (!card) return;
+    const go: Record<AttentionTarget, () => void> = {
+      risks: () => navigate('audit-risk-register'),
+      stuck: () => navigate('workflow-library'),
+      invoice: () => navigate('admin-usage'),
+      queue: () => {
+        const first = queue.find(i => i.overdue) ?? queue[0];
+        if (first) navigate(first.target.view, first.target.id);
+      },
+      controls: () => navigate('governance-controls'),
+      sampling: () => navigate('engagements'),
+      memory: openSmartLearn,
+      engagements: () => navigate('engagements'),
+    };
+    go[card.target]();
+  };
+
+  /* ── Actions ────────────────────────────────────────────────────────────── */
 
   const onOpenQueueItem = (item: QueueItem) => navigate(item.target.view, item.target.id);
 
-  /* ── What a folded section says ─────────────────────────────────────────── */
-
-  // A folded section is not a hidden one. Each header carries the figures a
-  // reader would otherwise scroll for, so folding costs them a fact rather than
-  // the facts.
-  const auditSummary = [
-    `${fmtPct(coverage.pct)} of controls exercised`,
-    risks.unmappedSevere > 0 ? `${fmtInt(risks.unmappedSevere)} severe risks uncovered` : 'no severe risk uncovered',
-    `${fmtInt(engagements.total)} engagements`,
-    exceptions.total > 0 ? `${fmtInt(exceptions.open)} exceptions open` : 'nothing caught',
-  ].join(' · ');
-
-  const behindSummary = [
-    `${fmtInt(volume[0]?.count ?? 0)} ${(volume[0]?.label ?? 'runs').toLowerCase()}`,
-    `${fmtInt(created.reduce((n, a) => n + a.count, 0))} records created`,
-    `${fmtInt(product.alertsFired)} alerts fired`,
-    `${fmtInt(reports.made)} reports made`,
-  ].join(' · ');
-
-  const teamGapSummary = [
-    `${fmtInt(never.controls.length)} controls never tested`,
-    samples.total > 0 ? `${fmtInt(samples.failed + samples.errored)} validations need a look` : 'no validation ran',
-    monitoring.engagementsOn > 0 ? `${fmtInt(monitoring.engagementsOn)} monitored continuously` : 'nothing monitored continuously',
-  ].join(' · ');
-
-  const teamWorkSummary = [
-    `${fmtInt(people.length)} people`,
-    `${fmtInt(created.reduce((n, a) => n + a.count, 0))} records created`,
-    `${fmtHours(value.hours)} hours saved`,
-  ].join(' · ');
+  // A proposal is decided where the reader found it. The store writes the same
+  // audit event the Smart Learn screen writes, so there is one record either way.
+  const decidedBy = currentUser?.name ?? 'Unknown';
+  const onApproveMemory = (m: PlatformMemory) => {
+    approveMemory(m, decidedBy);
+    addToast({ type: 'success', message: 'Approved. The assistant can use it from the next question.' });
+  };
+  const onRejectMemory = (m: PlatformMemory) => {
+    rejectMemory(m, decidedBy);
+    addToast({ type: 'success', message: 'Rejected. Nothing was written into the assistant.' });
+  };
 
   // Both formats carry the same payload, and carry it at the top: whose view,
   // which window, the settings the value figures rest on, and what the page does
@@ -274,6 +334,43 @@ export default function PlatformUsageView() {
     }
   };
 
+  /* ── The blocks a view is made of, in the order that view reads them ────── */
+
+  const headline = (compact = false) => (
+    <HeadlineValue
+      compact={compact}
+      value={value} prior={priorValue} subject={subject}
+      periodLabel={p.label} priorLabel={prior?.label ?? null}
+      settings={settings} showMoney={showMoney} wasted={wasted} netValue={net}
+      history={settingsHistory}
+      onOpenWorkflows={() => navigate('workflow-library')}
+    />
+  );
+
+  const neverBlock = (
+    <NeverExercisedBlock
+      data={never}
+      onOpenControls={() => navigate('governance-controls')}
+      onOpenWorkflows={() => navigate('workflow-library')}
+    />
+  );
+
+  const risksBlock = (
+    <RiskPictureBlock data={risks} periodLabel={p.label} onOpenRisks={() => navigate('audit-risk-register')} />
+  );
+
+  const exceptionsBlock = (
+    <ExceptionsCaught data={exceptions} periodLabel={p.label} onOpenException={id => navigate('manage-exceptions', id)} />
+  );
+
+  const dashboardsBlock = (
+    <DashboardsAndAlerts data={product} periodLabel={p.label} onOpenDashboards={() => navigate('dashboards')} />
+  );
+
+  const reportsBlock = (
+    <ReportsMade data={reports} periodLabel={p.label} onOpenReports={() => navigate('reports')} />
+  );
+
   /* ── Render ─────────────────────────────────────────────────────────────── */
 
   return (
@@ -291,24 +388,6 @@ export default function PlatformUsageView() {
                 onPick={id => { setPeriodId(id); if (id !== 'custom') setCustom(null); }}
                 onCustom={range => { setCustom(range); setPeriodId('custom'); }}
               />
-              {/* The settings editor is CFO only. Per-team assumptions would make
-                  two teams' numbers incomparable, which is worse than one team
-                  disagreeing with the rate. */}
-              {can('ad_usage') && (
-                <>
-                  {/* Both labels are the spec's own words: "the settings editor"
-                      and "Cost the paid lookups" (PU-19). Nothing on this page is
-                      named anything the document does not name it. */}
-                  <button type="button" onClick={() => setEditingSettings(true)} className={BTN_CTA_OUTLINE}>
-                    <SlidersHorizontal size={14} />
-                    Settings
-                  </button>
-                  <button type="button" onClick={() => setEditingPrices(true)} className={BTN_CTA_OUTLINE}>
-                    <IndianRupee size={14} />
-                    Cost the paid lookups
-                  </button>
-                </>
-              )}
               {can('ad_usage_export') && <ExportMenu onCsv={onExportCsv} onPdf={onExportPdf} />}
             </div>
           </div>
@@ -326,159 +405,87 @@ export default function PlatformUsageView() {
           <p className="mt-2 text-[0.75rem] text-ink-400">{COVERAGE_NOTE}</p>
         </header>
 
-        <div className="space-y-7 pb-10">
+        {/* The page answers before it asks. At most three, then it gets out of
+            the way. */}
+        <div className="mb-6">
+          <AttentionStrip cards={attention} onAct={onAttention} />
+        </div>
+
+        <div className="space-y-4 pb-10">
           {activePersona === 'cfo' && (
             <>
-              <PageSection title="What it was worth">
-                <HeadlineValue
-                  value={value} prior={priorValue} periodLabel={p.label} priorLabel={prior?.label ?? null}
-                  settings={settings} showMoney={showMoney} wasted={wasted} netValue={net}
-                  onEditSettings={() => setEditingSettings(true)}
-                />
-                <ValueOverTime points={timeline} showMoney={showMoney} />
-                <SettingSensitivity rows={swing} onEdit={() => setEditingSettings(true)} />
-                <CostToRun cost={cost} />
-              </PageSection>
-
-              <PageSection
-                title="The audit work"
-                hint="What the platform reached, where the audits stand, and what was caught"
-                summary={auditSummary}
-                collapsible
-                defaultOpen={false}
-              >
-                <ControlCoverage coverage={coverage} />
-                <NeverExercisedBlock
-                  data={never}
-                  onOpenControls={() => navigate('governance-controls')}
-                  onOpenWorkflows={() => navigate('workflow-library')}
-                />
-                <EngagementPortfolioBlock
-                  data={engagements}
-                  periodLabel={p.label}
-                  onOpenEngagement={id => navigate('engagements', id)}
-                  onOpenExceptions={id => navigate('manage-exceptions', id)}
-                  onOpenReports={() => navigate('reports')}
-                />
-                <RiskPictureBlock data={risks} periodLabel={p.label} onOpenRisks={() => navigate('audit-risk-register')} />
-                <ExceptionsCaught data={exceptions} periodLabel={p.label} onOpenException={id => navigate('manage-exceptions', id)} />
-                <SamplingOutcomes data={samples} />
-              </PageSection>
-
-              <PageSection
-                title="Behind the numbers"
-                hint="Where the work actually happened"
-                summary={behindSummary}
-                collapsible
-                defaultOpen={false}
-              >
-                <WorkVolume units={volume} series={volumeSeries} />
-                <CreatedThisPeriod areas={created} />
-                <DashboardsAndAlerts data={product} periodLabel={p.label} onOpenDashboards={() => navigate('dashboards')} />
-                <ReportsMade data={reports} periodLabel={p.label} onOpenReports={() => navigate('reports')} />
-                <InsightsGenerated data={insightRows} />
-                <CcmCoverage data={monitoring} />
-                <AiUsageByArea rows={ai} />
-                <SmartLearn data={memory} scopeLabel="Across the whole company" onManage={openSmartLearn} />
-              </PageSection>
+              {headline()}
+              <CostToRun
+                cost={cost}
+                ledger={ledger}
+                periodLabel={p.label}
+                changes={changeRows(invoiceChanges.all)}
+                onEnterInvoice={canEnterInvoices ? () => navigate('admin-usage') : undefined}
+              />
+              <ValueOverTime points={timeline} showMoney={showMoney} />
+              <ControlCoverage coverage={coverage} />
+              {neverBlock}
+              <EngagementPortfolioBlock
+                data={engagements}
+                periodLabel={p.label}
+                onOpenEngagement={id => navigate('engagements', id)}
+                onOpenExceptions={id => navigate('manage-exceptions', id)}
+                onOpenReports={() => navigate('reports')}
+              />
+              {risksBlock}
+              {exceptionsBlock}
+              <SamplingOutcomes data={samples} />
+              <WorkVolume units={volume} series={volumeSeries} />
+              <CreatedThisPeriod areas={created} />
+              {dashboardsBlock}
+              {reportsBlock}
+              <InsightsGenerated data={insightRows} />
+              <CcmCoverage data={monitoring} />
+              <AiUsageByArea rows={ai} />
+              <SmartLearn data={memory} scopeLabel="Across the whole company" onManage={openSmartLearn} />
             </>
           )}
 
           {activePersona === 'head_of_team' && (
             <>
-              <PageSection title="Needs you now">
-                <StuckRuns runs={stuck} onOpenRun={() => navigate('workflow-library')} />
-                <Reliability data={reliabilityData} />
-              </PageSection>
-
-              <PageSection
-                title="Gaps"
-                hint="Things nothing has checked yet"
-                summary={teamGapSummary}
-                collapsible
-                defaultOpen={false}
-              >
-                <NeverExercisedBlock
-                  data={never}
-                  onOpenControls={() => navigate('governance-controls')}
-                  onOpenWorkflows={() => navigate('workflow-library')}
-                />
-                <SamplingOutcomes data={samples} />
-                <CcmCoverage data={monitoring} />
-                <RiskPictureBlock data={risks} periodLabel={p.label} onOpenRisks={() => navigate('audit-risk-register')} />
-              </PageSection>
-
-              <PageSection title="Your team" summary={teamWorkSummary} collapsible defaultOpen={false}>
-                <PerPersonOutcomes rows={people} team={myTeam ?? ''} />
-                <CreatedThisPeriod areas={created} />
-                <DashboardsAndAlerts data={product} periodLabel={p.label} onOpenDashboards={() => navigate('dashboards')} />
-                <ReportsMade data={reports} periodLabel={p.label} onOpenReports={() => navigate('reports')} />
-                <InsightsGenerated data={insightRows} />
-                <SmartLearn
-                  data={memory}
-                  scopeLabel={`Memories held for ${myTeam ?? 'your team'}`}
-                  onManage={openSmartLearn}
-                />
-                {/* Small, and at the bottom. A team lead cannot act on a rupee
-                    figure; they can act on a workflow that failed four times. */}
-                <HeadlineValue
-                  compact
-                  value={value} prior={priorValue} periodLabel={p.label} priorLabel={prior?.label ?? null}
-                  settings={settings} showMoney={showMoney} wasted={wasted} netValue={net}
-                />
-              </PageSection>
+              <StuckRuns runs={stuck} onOpenRun={() => navigate('workflow-library')} />
+              <Reliability data={reliabilityData} />
+              {neverBlock}
+              <SamplingOutcomes data={samples} />
+              <CcmCoverage data={monitoring} />
+              {risksBlock}
+              <PerPersonOutcomes rows={people} team={myTeam ?? ''} />
+              <CreatedThisPeriod areas={created} />
+              {dashboardsBlock}
+              {reportsBlock}
+              <InsightsGenerated data={insightRows} />
+              <SmartLearn
+                data={memory}
+                scopeLabel={`Memories held for ${myTeam ?? 'your team'}`}
+                onManage={openSmartLearn}
+                onApprove={onApproveMemory}
+                onReject={onRejectMemory}
+              />
+              {/* Small, and at the bottom. A team lead cannot act on a rupee
+                  figure; they can act on a workflow that failed four times. */}
+              {headline(true)}
             </>
           )}
 
           {activePersona === 'auditor' && (
             <>
-              <PageSection title="Needs you now">
-                <MyQueue items={queue} onOpen={onOpenQueueItem} />
-              </PageSection>
-
-              <PageSection title="What you got through">
-                <WorkVolume units={volume} series={volumeSeries} />
-                <ExceptionsCaught data={exceptions} periodLabel={p.label} onOpenException={id => navigate('manage-exceptions', id)} />
-                <InsightsGenerated data={insightRows} />
-                <HeadlineValue
-                  value={value} prior={priorValue} periodLabel={p.label} priorLabel={prior?.label ?? null}
-                  settings={settings} showMoney={showMoney} wasted={wasted} netValue={net}
-                />
-                <ValueOverTime points={timeline} showMoney={showMoney} />
-                <SmartLearn data={memory} scopeLabel="What it has learned about you" onManage={openSmartLearn} />
-              </PageSection>
+              <MyQueue items={queue} onOpen={onOpenQueueItem} />
+              <WorkVolume units={volume} series={volumeSeries} />
+              {exceptionsBlock}
+              <InsightsGenerated data={insightRows} />
+              {headline()}
+              <ValueOverTime points={timeline} showMoney={showMoney} />
+              <SmartLearn data={memory} scopeLabel="What it has learned about you" onManage={openSmartLearn} />
             </>
           )}
         </div>
       </div>
 
-      {editingPrices && (
-        <UsagePricingPanel
-          enteredBy={currentUser?.name ?? 'Unknown'}
-          onClose={() => setEditingPrices(false)}
-          onSaved={change => {
-            setPricingVersion(v => v + 1);
-            logEvent({
-              action: 'Update',
-              module: 'Platform Usage',
-              entity: 'Paid lookup cost',
-              description: change,
-            });
-          }}
-        />
-      )}
-
-      {editingSettings && (
-        <UsageSettingsPanel
-          settings={settings}
-          calibration={calibration}
-          runs={periodRuns}
-          months={p.months}
-          periodLabel={p.label}
-          onSave={onSaveSettings}
-          onClose={() => setEditingSettings(false)}
-        />
-      )}
     </div>
   );
 }

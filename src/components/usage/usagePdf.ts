@@ -113,9 +113,9 @@ export async function downloadUsagePdf(input: ExportInput, filename: string): Pr
 
   content.push(heading('What the work was worth'));
   const worth: (string | number)[][] = [
-    ['Hours saved', fmtHours(value.hours)],
+    ['Hours saved (estimated)', fmtHours(value.hours)],
     ...(input.showMoney
-      ? [['Money saved (INR)', inr(value.money)], ['People equivalent', value.people.toFixed(1)]]
+      ? [['Money saved, estimated (INR)', inr(value.money)], ['People equivalent (estimated)', value.people.toFixed(1)]]
       : []),
     ['Runs counted', fmtInt(value.runsCounted)],
     ['Rows processed', fmtInt(value.rowsProcessed)],

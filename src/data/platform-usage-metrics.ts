@@ -29,7 +29,8 @@ import {
   ANCHOR, DAY_MS, HISTORY_START, RUNS, CHAT_QUESTIONS, CONCIERGE_JOBS, SOP_RACM_JOBS,
   TRACED_EXCEPTIONS, BULK_RUN_IDS, REVIEW_RECORDS, loadPricing, loadInvoices, monthsInWindow, billableWorkflowIds,
   ALERT_FIRES, ALERT_RULE_TOTAL, DASHBOARD_TOTAL, SAMPLE_RUNS, INSIGHT_ROWS, ENGAGEMENT_AUTOMATION,
-  formatDate, parseLibraryDate, teamOfName, type WorkflowRun, type SampleRunStatus,
+  formatDate, parseLibraryDate, teamOfName, loadUsageChanges, startOfMonthUtc,
+  type WorkflowRun, type SampleRunStatus, type UsageChange, type VendorInvoice,
 } from './platform-usage';
 import { WORKFLOWS } from './mockData';
 import { CONTROL_LIBRARY } from './controlLibrary';
@@ -38,6 +39,7 @@ import { ENGAGEMENTS } from './engagements';
 import { ENGAGEMENT_EXCEPTIONS } from './engagement-exceptions';
 import { ATR_LIBRARY } from './atrLibrary';
 import { liveMemories, pendingMemories } from './memorySession';
+import type { PlatformMemory } from './memoryStore';
 import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -46,13 +48,6 @@ import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 
 /** The three questions the page answers, in the spec's names. */
 export type Persona = 'cfo' | 'head_of_team' | 'auditor';
-
-/** The question each reader came with. */
-export const PERSONA_QUESTION: Record<Persona, string> = {
-  cfo: 'Is this paying for itself?',
-  head_of_team: 'Is anything stuck?',
-  auditor: "What's waiting on me?",
-};
 
 /** What the view is called in an export, where it identifies the file. */
 export const PERSONA_TITLE: Record<Persona, string> = {
@@ -98,8 +93,8 @@ export type SettingSource = 'default' | 'measured' | 'manual';
 /** What each source is called on screen, in the export, and in the audit event. */
 export const SOURCE_LABEL: Record<SettingSource, string> = {
   default: 'starting value',
-  measured: "measured from your team's last 90 days",
-  manual: 'set by hand',
+  measured: "based on your team's measured pace",
+  manual: 'pinned by an admin',
 };
 
 /**
@@ -160,6 +155,49 @@ export function loadSettings(): UsageSettings {
 
 export function saveSettings(next: UsageSettings): void {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+}
+
+/**
+ * The measured pace is applied on its own.
+ *
+ * The calibration job measures what it can from the customer's own timestamps,
+ * and once the guards pass the live value switches to it: source becomes
+ * `measured`, the label changes, and the change is written down. There is no
+ * confirmation step, because at ten thousand people nobody clicks one. A value
+ * an admin has pinned is never overwritten — that is the whole point of pinning.
+ *
+ * Returns the settings to use, and the changes worth recording. A caller that
+ * gets an empty change list has nothing to write down.
+ */
+export function applyMeasured(
+  current: UsageSettings,
+  calibration: Calibration,
+): { settings: UsageSettings; changes: { field: string; from: string; to: string; source: string }[] } {
+  const changes: { field: string; from: string; to: string; source: string }[] = [];
+  let next = current;
+
+  const consider = (
+    key: NumericSetting,
+    sourceField: 'manualReviewRateSource' | 'manualControlTestSource',
+    suggestion: Suggestion | null,
+  ) => {
+    if (!suggestion) return;
+    // Pinned stays pinned. Already measured at this value has nothing to say.
+    if (next[sourceField] === 'manual') return;
+    if (next[key] === suggestion.value && next[sourceField] === 'measured') return;
+    changes.push({
+      field: SETTING_LABEL[key],
+      from: String(next[key]),
+      to: String(suggestion.value),
+      source: SOURCE_LABEL.measured,
+    });
+    next = { ...next, [key]: suggestion.value, [sourceField]: 'measured' };
+  };
+
+  consider('manualReviewRate', 'manualReviewRateSource', calibration.reviewRate);
+  consider('manualControlTestHours', 'manualControlTestSource', calibration.controlTestHours);
+
+  return { settings: next, changes };
 }
 
 /* ── Calibration — the platform measuring its own assumption ─────────────── */
@@ -469,55 +507,6 @@ export function valueOverTime(p: Period, scope: Scope, s: UsageSettings): ValueP
   });
 }
 
-/**
- * One real run, told as a sentence.
- *
- * Most people have never been shown where a saved hour comes from, so the page
- * does the arithmetic once, out loud, on a run that actually happened.
- */
-export interface WorkedExample {
-  workflowName: string;
-  when: number;
-  rowCount: number;
-  machineMinutes: number;
-  manualHours: number;
-  savedHours: number;
-}
-
-export function workedExample(p: Period, scope: Scope, s: UsageSettings): WorkedExample | null {
-  const candidates = runsIn(p, scope)
-    .filter(r => r.status === 'complete' && (r.rowCount ?? 0) > 0)
-    .sort((a, b) => (b.rowCount ?? 0) - (a.rowCount ?? 0));
-  const r = candidates[0];
-  if (!r || r.rowCount === null) return null;
-  const manualHours = r.rowCount / s.manualReviewRate;
-  return {
-    workflowName: r.workflowName,
-    when: r.completedAt ?? r.startedAt,
-    rowCount: r.rowCount,
-    machineMinutes: r.durationSecs / 60,
-    manualHours,
-    savedHours: manualHours - r.durationSecs / 3600,
-  };
-}
-
-/**
- * How much one setting matters.
- *
- * The same runs, priced at four review rates. One setting swings the headline
- * eightfold, and the page shows that rather than hiding it — whoever signs the
- * setting owns the number.
- */
-export interface SensitivityRow { rate: number; hours: number; money: number; people: number; isCurrent: boolean }
-
-export function sensitivity(runs: WorkflowRun[], s: UsageSettings, months: number): SensitivityRow[] {
-  const rates = Array.from(new Set([100, 200, 400, 800, s.manualReviewRate])).sort((a, b) => a - b);
-  return rates.map(rate => {
-    const v = valueOf(runs, { ...s, manualReviewRate: rate }, months);
-    return { rate, hours: v.hours, money: v.money, people: v.people, isCurrent: rate === s.manualReviewRate };
-  });
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
  * 6 · PU-04 and PU-05 — cost, and net value
  * ────────────────────────────────────────────────────────────────────────── */
@@ -627,6 +616,76 @@ export function costToRun(p: Period, scope: Scope): CostResult {
  */
 export const netValue = (value: ValueResult, cost: CostResult): number | null =>
   cost.complete && cost.lookupMoney !== null ? value.money - cost.lookupMoney : null;
+
+/* ── The list behind the cost tile, and the bills nobody has entered ─────── */
+
+/**
+ * One month of the window: what was billed, and what was recorded.
+ *
+ * A month with recorded calls and no bill is not a cheap month, it is an
+ * unfinished one, and it says so by name. That is what stops a forgotten
+ * invoice being discovered in a board meeting instead of on this page.
+ */
+export interface InvoiceMonth {
+  month: number;
+  label: string;
+  invoices: VendorInvoice[];
+  /** Rupees billed for the month. Null when no bill has been entered. */
+  amount: number | null;
+  /** Runs of the paid lookups recorded that month, bill or no bill. */
+  recordedCalls: number;
+}
+
+export interface InvoiceLedger {
+  months: InvoiceMonth[];
+  /** Months with recorded calls and no bill, oldest first. */
+  missing: InvoiceMonth[];
+  entered: number;
+}
+
+const MONTH_LABEL = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+export function invoiceLedger(p: Period, scope: Scope): InvoiceLedger {
+  const billable = billableWorkflowIds();
+  const completed = runsIn(p, scope).filter(r => r.status === 'complete');
+  const calls = billable.size > 0 ? completed.filter(r => billable.has(r.workflowId)) : completed;
+  const all = loadInvoices();
+
+  const months: InvoiceMonth[] = monthsInWindow(p.from, p.to).map(month => {
+    const invoices = all.filter(i => i.periodMonth === month);
+    return {
+      month,
+      label: MONTH_LABEL.format(new Date(month)),
+      invoices,
+      amount: invoices.length > 0 ? invoices.reduce((s, i) => s + i.amountPaise, 0) / 100 : null,
+      recordedCalls: calls.filter(r => startOfMonthUtc(r.completedAt ?? r.startedAt) === month).length,
+    };
+  });
+
+  return {
+    months,
+    missing: months.filter(m => m.amount === null && m.recordedCalls > 0),
+    entered: months.reduce((n, m) => n + m.invoices.length, 0),
+  };
+}
+
+/* ── PU-18 · the assumptions have their own history ──────────────────────── */
+
+export interface ChangeHistory {
+  /** Changes made inside the window, newest first. */
+  inPeriod: UsageChange[];
+  all: UsageChange[];
+}
+
+/**
+ * Who changed an entered number, from what to what, when, and under which
+ * source label. "Settings changed this period: 2" is a real, listable figure,
+ * so it opens its list like every other count on the page.
+ */
+export function changeHistory(p: Period, entity: UsageChange['entity']): ChangeHistory {
+  const all = loadUsageChanges().filter(c => c.entity === entity);
+  return { all, inPeriod: all.filter(c => c.at >= p.from && c.at <= p.to) };
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
  * 7 · PU-06 and PU-07 — what the automation reached
@@ -1075,6 +1134,8 @@ export interface SmartLearnResult {
   pending: number;
   dueReview: number;
   recalls7d: number;
+  /** The proposals this reader may decide. Empty for anybody who may not. */
+  proposals: PlatformMemory[];
 }
 
 /**
@@ -1082,9 +1143,8 @@ export interface SmartLearnResult {
  *
  * Recall count and last-recalled are real fields written on every use, so
  * "how often is learned knowledge actually being used" is measured rather than
- * inferred. Pending is counted only for somebody who can approve it, and it is
- * a count: the approving itself belongs to the Smart Learn screen, so this
- * returns no proposals for anyone to act on here.
+ * inferred. Proposals come back only for somebody who may actually decide them,
+ * so a reader who cannot approve never sees a queue that is not theirs.
  */
 export function smartLearn(scope: Scope): SmartLearnResult {
   const wanted = scope.persona === 'auditor'
@@ -1109,6 +1169,7 @@ export function smartLearn(scope: Scope): SmartLearnResult {
     pending: canApprove ? pending.length : 0,
     dueReview: live.filter(m => m.renewDue).length,
     recalls7d,
+    proposals: canApprove ? pending : [],
   };
 }
 
@@ -1652,7 +1713,177 @@ export function ccm(p: Period, scope: Scope): CcmResult {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 23 · Formatting
+ * 23 · Needs your attention
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The page answers before it asks.
+ *
+ * At most three cards, each a sentence with one thing to do. They are not
+ * alerts: nothing is sent anywhere, nothing has a threshold anybody configures,
+ * and every card is a fact already on the page said early because acting on it
+ * cannot wait for a scroll. When there is nothing, the strip says so once and
+ * disappears rather than sitting there empty.
+ */
+export type AttentionTarget =
+  | 'risks' | 'stuck' | 'invoice' | 'queue' | 'controls' | 'sampling' | 'memory' | 'engagements';
+
+export interface AttentionCard {
+  id: string;
+  /** One sentence, said the way a person would say it. */
+  text: string;
+  actionLabel: string;
+  target: AttentionTarget;
+}
+
+/** Everything the strip reads. All of it is already computed for the page. */
+export interface AttentionInput {
+  risks: RiskPicture;
+  stuck: StuckRun[];
+  never: NeverExercised;
+  sampling: SamplingResult;
+  memory: SmartLearnResult;
+  queue: QueueItem[];
+  ledger: InvoiceLedger;
+  portfolio: PortfolioResult;
+  canEnterInvoices: boolean;
+}
+
+const AT_MOST = 3;
+
+export function attentionCards(persona: Persona, x: AttentionInput): AttentionCard[] {
+  const cards: AttentionCard[] = [];
+
+  /** The same workflow, stuck more than once, with one error between them. */
+  const repeated = (() => {
+    const groups = new Map<string, { name: string; error: string; n: number }>();
+    x.stuck.forEach(r => {
+      const key = `${r.workflowName}|${r.error}`;
+      const found = groups.get(key);
+      if (found) found.n += 1;
+      else groups.set(key, { name: r.workflowName, error: r.error, n: 1 });
+    });
+    return Array.from(groups.values()).filter(g => g.n > 1).sort((a, z) => z.n - a.n)[0] ?? null;
+  })();
+
+  const uncovered = (): AttentionCard | null =>
+    x.risks.unmappedSevere > 0
+      ? {
+          id: 'risks',
+          text: `${plural(x.risks.unmappedSevere, 'critical or high risk has', 'critical and high risks have')} no control covering ${x.risks.unmappedSevere === 1 ? 'it' : 'them'}.`,
+          actionLabel: 'See them',
+          target: 'risks',
+        }
+      : null;
+
+  const stuckCard = (): AttentionCard | null => {
+    if (repeated) {
+      return {
+        id: 'stuck-repeat',
+        text: `${repeated.name} has failed ${repeated.n} times with the same error.`,
+        actionLabel: 'Open it',
+        target: 'stuck',
+      };
+    }
+    return x.stuck.length > 0
+      ? {
+          id: 'stuck',
+          text: `${plural(x.stuck.length, 'run is', 'runs are')} stuck and nothing is moving ${x.stuck.length === 1 ? 'it' : 'them'} on.`,
+          actionLabel: 'Open them',
+          target: 'stuck',
+        }
+      : null;
+  };
+
+  const bill = (): AttentionCard | null => {
+    const month = x.ledger.missing[0];
+    if (!month || !x.canEnterInvoices) return null;
+    return {
+      id: 'invoice',
+      text: `${month.label} has ${plural(month.recordedCalls, 'recorded call', 'recorded calls')} and no bill entered yet.`,
+      actionLabel: 'Add it in Administration',
+      target: 'invoice',
+    };
+  };
+
+  const untested = (): AttentionCard | null =>
+    x.never.controls.length > 0
+      ? {
+          id: 'controls',
+          text: `${plural(x.never.controls.length, 'control has', 'controls have')} never been tested by anything, in the whole record.`,
+          actionLabel: 'Name them',
+          target: 'controls',
+        }
+      : null;
+
+  const needsAPerson = (): AttentionCard | null =>
+    x.sampling.errored > 0
+      ? {
+          id: 'sampling',
+          text: `${plural(x.sampling.errored, 'validation', 'validations')} errored, so ${x.sampling.errored === 1 ? 'it says' : 'they say'} nothing about the control until somebody looks.`,
+          actionLabel: 'See them',
+          target: 'sampling',
+        }
+      : null;
+
+  const proposals = (): AttentionCard | null =>
+    x.memory.pending > 0
+      ? {
+          id: 'memory',
+          text: `${plural(x.memory.pending, 'memory is', 'memories are')} waiting on you to approve or reject.`,
+          actionLabel: 'Open Smart Learn',
+          target: 'memory',
+        }
+      : null;
+
+  const slipping = (): AttentionCard | null =>
+    x.portfolio.slipping.length > 0
+      ? {
+          id: 'engagements',
+          text: `${plural(x.portfolio.slipping.length, 'engagement is', 'engagements are')} still open after the audit period ended.`,
+          actionLabel: 'See them',
+          target: 'engagements',
+        }
+      : null;
+
+  const overdue = x.queue.filter(i => i.overdue).length;
+  const mine = (): AttentionCard | null => {
+    if (overdue > 0) {
+      return {
+        id: 'queue-overdue',
+        text: `${plural(overdue, 'thing has', 'things have')} been waiting on you a week or more.`,
+        actionLabel: 'Open the oldest',
+        target: 'queue',
+      };
+    }
+    return x.queue.length > 0
+      ? {
+          id: 'queue',
+          text: `${plural(x.queue.length, 'thing is', 'things are')} waiting on you.`,
+          actionLabel: 'Open the queue',
+          target: 'queue',
+        }
+      : null;
+  };
+
+  // Order is the priority: what a reader of this view should act on first.
+  const order = persona === 'cfo'
+    ? [uncovered, bill, untested, slipping]
+    : persona === 'head_of_team'
+      ? [stuckCard, needsAPerson, proposals, untested]
+      : [mine, proposals];
+
+  order.forEach(make => {
+    if (cards.length >= AT_MOST) return;
+    const card = make();
+    if (card) cards.push(card);
+  });
+
+  return cards;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 24 · Formatting
  * ────────────────────────────────────────────────────────────────────────── */
 
 const INT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });

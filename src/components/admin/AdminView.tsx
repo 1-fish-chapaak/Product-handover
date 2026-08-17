@@ -15,14 +15,14 @@ import {
   Users, User, Shield, ScrollText,
   UserPlus, Plus, Download, ArrowRight,
   ChevronDown, Pencil, Trash2, X, Check, Crown, Send, UserCheck, UserX, Gauge, UserMinus,
-  Brain, Lock, CircleSlash, Undo2,
+  Brain, Lock, CircleSlash, Undo2, SlidersHorizontal,
 } from 'lucide-react';
 import { MEMORY_STORE, KIND_META, SCOPE_META } from '../../data/memoryStore';
 import {
   useMemorySessionVersion, allMemories, decisionFor, forgetMemory, undoForget,
 } from '../../data/memorySession';
 import { PERMISSION_GROUPS } from '../../data/rbac';
-import { useCurrentUser } from '../../context/CurrentUserContext';
+import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData, useAuditLog, type AuditLog, type AdminTeam, type AdminUser, type UserStatus } from '../../context/AdminDataContext';
 import SmartTable, { type Column } from '../shared/SmartTable';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -34,6 +34,7 @@ import ConfirmationModal from '../shared/ConfirmationModal';
 import EmptyState from '../shared/EmptyState';
 import { useToast } from '../shared/Toast';
 import { RolesWorkspace, CreateRoleModal, type RoleSeed } from './RolesWorkspace';
+import UsageAdminSection from './UsageAdminSection';
 import {
   FIELD_LABEL, FIELD_INPUT, BTN_CANCEL, BTN_PRIMARY,
   BTN_CTA_PRIMARY, BTN_CTA_OUTLINE, BTN_ROW, type Stat,
@@ -48,7 +49,7 @@ interface Props {
  *  (search left · filters/CTA right) → content. People & Teams are two views of
  *  one "Members" tab, toggled by a segmented switch above the (unchanged) People
  *  / Teams screens. */
-type SectionId = 'members' | 'roles' | 'memory' | 'logs';
+type SectionId = 'members' | 'roles' | 'memory' | 'usage' | 'logs';
 type MembersView = 'people' | 'teams';
 
 const STATUS_MAP: Record<UserStatus, string> = {
@@ -2192,9 +2193,13 @@ function MemoryGovernanceSection({ onOpenLogs }: { onOpenLogs: () => void }) {
 }
 
 export default function AdminView({ activeTab }: Props) {
+  const { canAny } = useCan();
   // Map sidebar view ids onto the flat three-tab shell. People & Teams both land
   // on the Members tab; a 'teams' deep-link opens Members on the Teams view.
-  const initialSection: SectionId = activeTab === 'logs' ? 'logs' : activeTab === 'roles' ? 'roles' : 'members';
+  const initialSection: SectionId = activeTab === 'logs' ? 'logs'
+    : activeTab === 'roles' ? 'roles'
+      : activeTab === 'usage' ? 'usage'
+        : 'members';
   const initialMembersView: MembersView = activeTab === 'teams' ? 'teams' : 'people';
 
   const prefersReduced = useReducedMotion();
@@ -2224,6 +2229,11 @@ export default function AdminView({ activeTab }: Props) {
     { id: 'members', label: 'Users & Teams', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
     { id: 'memory', label: 'Memory', icon: Brain },
+    // Platform Usage reads; the two numbers a person types live here, each
+    // behind its own permission. A role holding neither never sees the tab.
+    ...(canAny(['ad_usage_settings', 'ad_usage_invoices'])
+      ? [{ id: 'usage' as SectionId, label: 'Platform Usage', icon: SlidersHorizontal }]
+      : []),
     { id: 'logs', label: 'Audit Log', icon: ScrollText },
   ];
 
@@ -2323,6 +2333,17 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
           >
             <RolesWorkspace key={`roles-${roleFocusNonce}`} initialRoleId={roleFocusId} onCreateRole={openCreateRole} />
+          </motion.div>
+        ) : section === 'usage' ? (
+          <motion.div
+            key="usage"
+            className="pt-4"
+            initial={prefersReduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReduced ? undefined : { opacity: 0 }}
+            transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <UsageAdminSection onOpenLogs={() => setSection('logs')} />
           </motion.div>
         ) : section === 'memory' ? (
           <motion.div

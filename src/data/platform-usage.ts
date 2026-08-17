@@ -687,6 +687,62 @@ export function monthsInWindow(from: number, to: number): number[] {
   return out;
 }
 
+/* ── The change log behind every entered number ──────────────────────────── */
+
+/**
+ * The inputs are themselves counted.
+ *
+ * Two numbers on this page are typed rather than measured: the four assumptions
+ * and the vendor's monthly bill. Both are the kind of number an audit committee
+ * asks about six months later, so both keep their own record: who changed what,
+ * from what to what, when, and where the new value came from. The assumptions
+ * strip and the cost tile each open their own history, under the same rule as
+ * every other number on the page.
+ */
+export type UsageChangeEntity = 'usage_setting' | 'vendor_invoice';
+
+export interface UsageChange {
+  entity: UsageChangeEntity;
+  /** What changed, in the words the page uses for it. */
+  field: string;
+  /** Null when the thing did not exist before, which is most bills. */
+  from: string | null;
+  to: string | null;
+  /** starting value / measured / set by hand, for a setting. Null for a bill. */
+  source: string | null;
+  by: string;
+  at: number;
+}
+
+const CHANGES_KEY = 'irame.platformUsage.changes.v1';
+
+/** Every change entered here, newest first. Ships empty. */
+export function loadUsageChanges(): UsageChange[] {
+  try {
+    const raw = localStorage.getItem(CHANGES_KEY);
+    if (!raw) return [];
+    const saved = JSON.parse(raw) as UsageChange[];
+    return Array.isArray(saved) ? saved.slice().sort((a, z) => z.at - a.at) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordUsageChange(next: UsageChange): UsageChange[] {
+  const held = loadUsageChanges();
+  // The same change, to the same field, from and to the same value, at the same
+  // moment is one change written twice. A history that says a number moved
+  // twice when it moved once is worse than no history.
+  const already = held.some(
+    c => c.entity === next.entity && c.field === next.field && c.from === next.from
+      && c.to === next.to && c.at === next.at,
+  );
+  if (already) return held;
+  const rows = [next, ...held].sort((a, z) => z.at - a.at);
+  try { localStorage.setItem(CHANGES_KEY, JSON.stringify(rows)); } catch { /* storage unavailable */ }
+  return rows;
+}
+
 /* ── Layer 3 · the optional per-API split ────────────────────────────────── */
 
 const PRICING_KEY = 'irame.platformUsage.pricing.v1';

@@ -82,10 +82,10 @@ export function buildUsageCsv(input: ExportInput): string {
   for (const [k, v] of exportHeader(input)) lines.push(row(k, v));
 
   lines.push('', 'What the work was worth');
-  lines.push(row('Hours saved', fmtHours(input.value.hours)));
+  lines.push(row('Hours saved (estimated)', fmtHours(input.value.hours)));
   if (input.showMoney) {
-    lines.push(row('Money saved', fmtMoney(input.value.money)));
-    lines.push(row('People equivalent', fmtPeople(input.value.people)));
+    lines.push(row('Money saved (estimated)', fmtMoney(input.value.money)));
+    lines.push(row('People equivalent (estimated)', fmtPeople(input.value.people)));
   }
   lines.push(row('Runs counted', fmtInt(input.value.runsCounted)));
   lines.push(row('Rows processed', fmtInt(input.value.rowsProcessed)));

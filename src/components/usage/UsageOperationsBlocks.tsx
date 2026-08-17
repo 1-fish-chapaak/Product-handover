@@ -13,7 +13,7 @@
  */
 
 import { AlertTriangle, ArrowRight } from 'lucide-react';
-import { Bars, Block, DataTable, Empty, Stat } from './usageKit';
+import { Bars, Block, DataTable, Empty, Fig } from './usageKit';
 import { fmtDuration, fmtInt, fmtPct, plural } from './usageFormat';
 import { formatDateTime } from '../../data/platform-usage';
 import type { PersonRow, QueueItem, ReliabilityResult, StuckRun } from '../../data/platform-usage-metrics';
@@ -21,18 +21,38 @@ import type { PersonRow, QueueItem, ReliabilityResult, StuckRun } from '../../da
 /* ── PU-11 · What is stuck right now ─────────────────────────────────────── */
 
 export function StuckRuns({ runs, onOpenRun }: { runs: StuckRun[]; onOpenRun: (id: string) => void }) {
+  const oldest = runs.reduce((h, r) => Math.max(h, r.ageHours), 0);
+  // The same workflow failing twice with one error between them is one problem,
+  // not two, and saying so is the difference between a count and a lead.
+  const repeated = (() => {
+    const groups = new Map<string, { name: string; n: number }>();
+    runs.forEach(r => {
+      const key = `${r.workflowName}|${r.error}`;
+      const found = groups.get(key);
+      if (found) found.n += 1;
+      else groups.set(key, { name: r.workflowName, n: 1 });
+    });
+    return Array.from(groups.values()).filter(g => g.n > 1).sort((a, z) => z.n - a.n)[0] ?? null;
+  })();
+
   return (
     <Block
       title="Stuck runs"
       hint="Failed, blocked, or paused for more than a day."
+      lede={
+        runs.length === 0 ? null : (
+          <>
+            <Fig>{plural(runs.length, 'run is', 'runs are')}</Fig> stuck right now, the oldest for{' '}
+            <Fig>{plural(Math.round(oldest), 'hour', 'hours')}</Fig>
+            {repeated && <>, and {repeated.name} has failed <Fig>{fmtInt(repeated.n)}</Fig> times with the same error</>}.
+          </>
+        )
+      }
     >
       {runs.length === 0 ? (
         <Empty kind="quiet" title="Nothing is stuck." />
       ) : (
         <>
-          <div className="flex items-end gap-10 mb-4">
-            <Stat size="md" value={fmtInt(runs.length)} label={runs.length === 1 ? 'run needs a look' : 'runs need a look'} />
-          </div>
           <ul className="divide-y divide-canvas-border border-t border-canvas-border">
             {runs.slice(0, 12).map(r => (
               <li key={r.id} className="py-3">
@@ -78,6 +98,16 @@ export function Reliability({ data }: { data: ReliabilityResult }) {
     <Block
       title="Reliability"
       hint="Failure rate per workflow, and the machine time failed runs burned."
+      lede={
+        data.rows.length === 0 ? null : failing.length === 0 ? (
+          <>Every run of the <Fig>{plural(data.rows.length, 'workflow', 'workflows')}</Fig> that ran in this window completed.</>
+        ) : (
+          <>
+            <Fig>{plural(failing.length, 'workflow', 'workflows')}</Fig> failed at least once, and failed runs
+            burned <Fig>{fmtDuration(data.wastedHours)}</Fig> of machine time that is never counted as saved.
+          </>
+        )
+      }
       chart={
         data.rows.length === 0 ? (
           <Empty kind="quiet" title="No workflow ran in this window." />
@@ -126,6 +156,16 @@ export function PerPersonOutcomes({ rows, team }: { rows: PersonRow[]; team: str
     <Block
       title="Per-person outcomes"
       hint={`Everyone in ${team}, alphabetical, and it stays that way. Nothing here ranks anybody.`}
+      lede={
+        rows.length === 0 ? null : (
+          <>
+            <Fig>{plural(rows.length, 'person', 'people')}</Fig> on {team} started{' '}
+            <Fig>{plural(rows.reduce((n, r) => n + r.runs, 0), 'run', 'runs')}</Fig> in this window and found{' '}
+            <Fig>{plural(rows.reduce((n, r) => n + r.exceptions, 0), 'exception', 'exceptions')}</Fig>. The list is
+            alphabetical, and there is no share, rank or average anywhere in it.
+          </>
+        )
+      }
     >
       {rows.length === 0 ? (
         <Empty kind="quiet" title="Nobody is on this team yet." />
@@ -172,15 +212,19 @@ export function MyQueue({ items, onOpen }: { items: QueueItem[]; onOpen: (item: 
     <Block
       title="My queue"
       hint="Overdue first. Every item opens what needs doing."
+      lede={
+        items.length === 0 ? null : (
+          <>
+            <Fig>{plural(items.length, 'thing is', 'things are')}</Fig> waiting on you
+            {overdue > 0 && <>, and <Fig>{fmtInt(overdue)}</Fig> of {items.length === 1 ? 'them' : 'those'} {overdue === 1 ? 'has' : 'have'} been waiting a week or more</>}.
+          </>
+        )
+      }
     >
       {items.length === 0 ? (
         <Empty kind="quiet" title="You are clear." />
       ) : (
         <>
-          <div className="flex items-end gap-10 mb-4">
-            <Stat size="md" value={fmtInt(items.length)} label={items.length === 1 ? 'thing waiting on you' : 'things waiting on you'} />
-            {overdue > 0 && <Stat size="sm" value={fmtInt(overdue)} label="open for a week or more" />}
-          </div>
           <ul className="divide-y divide-canvas-border border-t border-canvas-border">
             {items.map(i => (
               <li key={`${i.kind}-${i.id}`}>
