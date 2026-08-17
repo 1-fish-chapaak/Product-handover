@@ -1295,25 +1295,32 @@ function alturaPathControl(controls: Control[]): Control[] {
  *                  so this one stays a material weakness and drives the audit's
  *                  ICFR conclusion to "not effective"
  *   Order 3        Significant Deficiency in its own right
- *   Order 4        a Deficiency that AGGREGATES with the one above — same group,
- *                  combined ₹6.4 Cr against a ₹2.4 Cr band
+ *   Order 4        a Deficiency that AGGREGATES with the one above — same line
+ *                  item, combined ₹6.4 Cr against a ₹2.4 Cr band
+ *   Fixed 1-4      four Significant Deficiencies of ₹4 Cr on one line item that
+ *                  together clear the ₹12 Cr materiality — the group grades a
+ *                  Material Weakness and raises all four (alturaPpeAggregation)
  *   Fixed 4        clearly trivial (₹45 L, under the ₹60 L floor) and closed —
  *                  logged, and deliberately never aggregated
- *   ITGC 0         a Significant Deficiency on its own exposure that AGGREGATES
- *                  to a Material Weakness — and the one finding whose real cost
- *                  is not a number at all: a failed IT general control withdraws
+ *   ITGC 0         a Significant Deficiency on its own exposure that a PRUDENT
+ *                  OFFICIAL raises to a Material Weakness — and the one finding
+ *                  whose real cost is not a number at all: a failed ITGC withdraws
  *                  "test of one" from every automated and IT-dependent control in
  *                  the engagement (helpers.itgcHolds), so it is paid for in work
  *                  that comes back rather than in rupees that moved
  *
- * The five are also spread down the exception lifecycle, one per stage, so the
- * tab shows the whole journey rather than five rows all sitting at the start:
- *   DEF-A-01  Rating review    graded, waiting on the reviewer to confirm it
- *   DEF-A-02  Planning         rating confirmed, owner writing the plan
+ * They are also spread down the exception lifecycle rather than left in a column
+ * all sitting at the start, so the tab shows the whole journey:
+ *   DEF-A-01  Identified       raised, the auditor is still sizing it
+ *   DEF-A-02  Rating review    graded, waiting on the reviewer to confirm it
  *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
  *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
  *   DEF-A-05  Closed           passed its retest and countersigned
  *   DEF-A-06  Planning         the ITGC — rating confirmed, owner writing the plan
+ *   DEF-A-07  Identified       PP&E — being sized, and already raised by its group
+ *   DEF-A-08  Rating review    PP&E
+ *   DEF-A-09  Rating review    PP&E
+ *   DEF-A-10  Planning         PP&E — confirmed at the grade the GROUP reaches
  *
  * Priced against Altura's own thresholds, not the flagship's: materiality
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
@@ -1616,13 +1623,27 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       magnitude: 68_000_000,
       // Deliberately NO indicator. On its own ₹6.8 Cr is a Significant
       // Deficiency — above Altura's ₹2.4 Cr band, below the ₹12 Cr materiality.
-      // It grades a Material Weakness anyway, because rule 6 combines it with
-      // every other live exception failing on Accuracy and the group clears
-      // materiality several times over. That is the engine doing its job, and it
-      // is a truer answer than an indicator hand-set here: an access failure this
-      // wide is material because of what it sits on top of, not because someone
-      // typed that it was.
+      //
+      // It used to reach Material Weakness through rule 6, back when exceptions
+      // grouped by process and assertion: this one was combined with everything
+      // else failing on Accuracy and the total cleared materiality. Aggregation
+      // groups on the FS LINE ITEM now (13 Aug 2026), and an ITGC exception
+      // deliberately joins no line-item group — it does not land on one number,
+      // it withdraws reliance across the engagement (helpers.joinsNoDerivedGroup).
+      // So the grade it used to arrive at by arithmetic has to be reached the way
+      // an auditor would actually reach it.
+      //
+      // Rule 7, and not an indicator. Typing an indicator here would say the
+      // engagement HAS a reportable condition of that kind, which is a statement
+      // about the facts; what is true is that a named person judged this access
+      // failure material for what it sits on top of. That is judgment, it is
+      // recorded as judgment, and it carries the sentence it was made in.
       mwIndicators: [],
+      prudentOverride: {
+        to: 'Material Weakness',
+        rationale: 'Eleven standing conflicts across the ERP and procurement platforms leave one person able to post and release a payment unchallenged. A prudent official would not accept that as merely significant on the strength of its own ₹6.8 Cr — every automated and IT-dependent control in the engagement stands on this one holding.',
+        by: 'J. Fernandes', at: '02 Jul 2026',
+      },
       aggregationGroup: 'IT general controls',
       ratingConfirm: { grade: 'Material Weakness', by: 'J. Fernandes', at: '02 Jul 2026' },
       remediation: {
@@ -1639,7 +1660,170 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     });
   }
 
+  out.push(...alturaPpeAggregation(controls, fail));
+
   return out;
+}
+
+/**
+ * Four exceptions on the fixed asset cycle, each a significant deficiency on its
+ * own and a MATERIAL WEAKNESS once they are read together.
+ *
+ * This is the case aggregation exists for, and it is the one case a demo cannot
+ * improvise: it needs four separate control failures landing on ONE line item,
+ * each sized below materiality and above the band, drawn from four DIFFERENT
+ * populations. ₹4 Cr each against Altura's ₹12 Cr materiality — individually
+ * Significant Deficiency (over the ₹2.4 Cr band), ₹16 Cr together, which clears
+ * materiality and rolls back down to raise all four members.
+ *
+ * Fixed Assets is the process that makes it clean. Every one of its controls
+ * lands on property, plant & equipment and nothing else, and no other finding in
+ * the seed touches that line item — so the group is exactly these four, and the
+ * grade it reaches is the arithmetic rather than an indicator somebody set.
+ *
+ * Two things this has to get right, or it silently proves nothing:
+ *
+ *  · FOUR POPULATIONS, NOT ONE. combinedExposure takes the LARGEST inside a
+ *    population and adds ACROSS them, because a control failing twice on one
+ *    extract is one hole and not two. The generated seed gives every control in
+ *    a process the same population_full_period.xlsx under the same filter, which
+ *    is one population by that rule — four members would have totalled ₹4 Cr and
+ *    graded nothing. So each control is put on the extract it would really
+ *    stand on: a capex register, a capitalisation listing, the depreciation run,
+ *    the disposal log. That is also simply truer than one file behind everything.
+ *
+ *  · NO STALE CONFIRMATION. reconcileConfirmations is a mutation-time sweep and
+ *    does not run on seed load, so a confirmation seeded here has to already
+ *    agree with what the engine computes on arrival. Only one of the four is
+ *    confirmed, and at Material Weakness — the grade the group actually reaches.
+ *    Take two members away and it becomes stale for real: that is the reset the
+ *    sweep is for, and it is now something to demonstrate rather than describe.
+ *
+ * The automated control (index 1) is made manual here, because the exposure has
+ * to be placeable against a file and an automated control carries no population
+ * at all — every other process keeps its automated row untouched. Index 4, the
+ * one control the live seed leaves untested in every process, is not touched:
+ * a finding against an untested control is a contradiction, and specs walk into
+ * that row precisely because nothing has happened to it.
+ */
+function alturaPpeAggregation(
+  controls: Control[],
+  fail: (c: Control, track: 'design' | 'operating') => void,
+): Deficiency[] {
+  const fa = controls.filter(c => c.process === 'Fixed Assets');
+  const [capex, lives, deprec, disposals] = fa;
+  if (!capex || !lives || !deprec || !disposals) return [];
+
+  /** Put a control on the extract it would really be tested from. Only the first
+   *  source moves — a second file is a different thing (an assisting table), and
+   *  it answers a different question. */
+  const standOn = (c: Control, file: string, criteria: string) => {
+    const pop = c.operating.population;
+    if (!pop) return;
+    c.operating = {
+      ...c.operating,
+      population: {
+        ...pop, sourceFile: file, criteria,
+        sources: (pop.sources ?? []).map((s, i) => (i === 0
+          ? { ...s, file, criteria, ...(s.draw ? { draw: { ...s.draw, prompt: s.draw.prompt?.replace(pop.sourceFile ?? '', file) } } : {}) }
+          : s)),
+      },
+    };
+  };
+
+  /** Every drawn item says which file it came from. Without that a control with
+   *  more than one source cannot place its exposure at all — populationIdentity
+   *  reads the failed items to decide, and an untagged item names no file. */
+  const drawnFrom = (c: Control, prefix: string) => {
+    const s = c.operating.sampling;
+    if (!s) return;
+    c.operating = {
+      ...c.operating,
+      sampling: { ...s, samples: s.samples.map((it, i) => ({ ...it, ref: `${prefix}-26-${101 + i}`, sourceId: 'src-1' })) },
+    };
+  };
+
+  // The capitalisation control is generated Automated, which means no population
+  // and therefore no way to place ₹4 Cr against a file. A reviewer checking the
+  // life an asset was commissioned on is a manual control anyway.
+  lives.nature = 'Manual';
+  lives.frequency = 'Monthly';
+  lives.controlActivity = activityOf(lives.owner, lives.subProcess === 'General' ? 'Fixed Assets' : lives.subProcess, 'Monthly', 'Manual');
+  lives.operating = manualTrack(
+    'Effective', lives.operating.steps,
+    sampling(25, 'Standard sample — moderate reliance.', 'Random'),
+    2014, 'SAP — asset accounting', 'capitalisations_fy26.xlsx',
+  );
+
+  standOn(capex, 'capex_additions_register_fy26.xlsx', 'Capex additions posted to the asset register in the period');
+  standOn(lives, 'capitalisations_fy26.xlsx', 'Assets capitalised in the period, by asset class');
+  standOn(deprec, 'depreciation_run_fy26.xlsx', 'Monthly depreciation runs posted in the period');
+  standOn(disposals, 'disposals_register_fy26.xlsx', 'Disposals recorded in the period');
+  drawnFrom(capex, 'CAP');
+  drawnFrom(lives, 'CPT');
+  drawnFrom(deprec, 'DEP');
+
+  fail(capex, 'operating');
+  fail(lives, 'operating');
+  fail(deprec, 'operating');
+  // The disposal control already failed its OPERATING track for DEF-A-05, which
+  // was a timing error, remediated and closed. This is the design of the same
+  // control failing — a different question, and the reason a control can carry
+  // more than one finding.
+  fail(disposals, 'design');
+
+  const CR4 = 40_000_000;
+
+  return [
+    {
+      id: 'DEF-A-07', controlId: capex.id, track: 'operating', reportRef: '4.7',
+      description: 'Eleven of twenty-five capex additions were posted with no delegation-of-authority approval on file. Four of the eleven were above the ₹50 L board limit.',
+      rootCause: 'The asset master is created from the purchase order rather than from the approval, so an addition posts the moment goods are received. The approval is filed against the project afterwards, and nothing in the posting asks whether one exists.',
+      failedSamples: ['CAP-26-104', 'CAP-26-111', 'CAP-26-119'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      // Freshly raised and still with the auditor. On its own the panel reads
+      // Significant Deficiency; the group underneath it reads Material Weakness,
+      // which is the whole demonstration in one screen.
+      status: 'Identified',
+    },
+    {
+      id: 'DEF-A-08', controlId: lives.id, track: 'operating', reportRef: '4.8',
+      description: 'Assets capitalised in the period took the useful life of the class they were purchased under rather than the one they were commissioned as; nine inverters are being depreciated over twenty-five years against a twelve-year life.',
+      rootCause: 'Useful life is inherited from the purchase order\'s material group and never revisited at commissioning, so an asset bought under a generic plant code keeps that code\'s life for the whole of its time on the register.',
+      failedSamples: ['CPT-26-107', 'CPT-26-113', 'CPT-26-122'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Rating review',
+    },
+    {
+      id: 'DEF-A-09', controlId: deprec.id, track: 'operating', reportRef: '4.9',
+      description: 'The monthly depreciation run was reviewed on the total charge alone. Three months were signed while the register carried commissioned assets with no depreciation start date, which a total could never have shown.',
+      rootCause: 'The review compares this month\'s charge with last month\'s and asks about the movement, so an asset that never started depreciating produces no movement to ask about — the check cannot see the thing it exists for.',
+      failedSamples: ['DEP-26-103', 'DEP-26-115'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Rating review',
+    },
+    {
+      id: 'DEF-A-10', controlId: disposals.id, track: 'design', reportRef: '4.10',
+      description: 'The disposal approval threshold is applied to each asset line rather than to the disposal event, so a substation sold as one package of forty-one assets cleared without approval at any level.',
+      rootCause: 'Approval is evaluated per asset record because that is the unit the register holds, and a sale is not a record — nothing in the design groups the lines being retired into the transaction they belong to.',
+      failedSamples: ['FA-DSP-0287'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      // Confirmed at the grade the GROUP reaches, not the one this exception
+      // reaches alone — which is the point of confirming after aggregation and
+      // not before. It is also the confirmation the sweep will drop the moment
+      // the group falls back under materiality.
+      ratingConfirm: { grade: 'Material Weakness', by: REVIEWER, at: '07 Aug 2026' },
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Planning',
+    },
+  ];
 }
 
 /**
@@ -1811,6 +1995,12 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // flagship-only and the scope page falls back to the three threshold fields.
     materialityBasis: undefined,
     id: meta.id,
+    // PP&E carries Altura's fixed asset cycle, and that cycle is scoped — so the
+    // line item is in scope here whatever the flagship's own worksheet says. An
+    // aggregation group standing on an account the same engagement calls "Out"
+    // would read as a data error, and this is the engagement that has one (see
+    // alturaPpeAggregation). Altura only, like every other finding in this file.
+    accounts: rich ? base.accounts.map(a => (a.id === 'a5' ? { ...a, inScope: true, process: 'Fixed Assets' } : a)) : base.accounts,
     code: meta.code ?? base.code,
     name: meta.name ?? base.name,
     periodStart: meta.periodStart ?? base.periodStart,
@@ -1913,6 +2103,10 @@ const ACCOUNTS_FOR_PROCESS: Record<string, string[]> = {
   Treasury: ['a4', 'a1'],
   'Order to Cash': ['a3'],
   'Record to Report': ['a5'],
+  // The one process whose whole reason for existing is a single line item, which
+  // is what makes it the clean case: four separate control failures on the fixed
+  // asset cycle land on PP&E and nowhere else. See alturaPpeAggregation.
+  'Fixed Assets': ['a5'],
   Inventory: ['a2'],
 };
 

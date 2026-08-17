@@ -206,7 +206,7 @@ export function populationIdentity(d: Deficiency, eng: IcfrEngagement): string |
   const only = sources.length === 1 ? sources[0] : undefined;
   const use = src ?? only;
   if (!use?.file) return null;
-  return `${use.file} ${use.criteria ?? ''}`;
+  return `${use.file}\u0000${use.criteria ?? ''}`;
 }
 
 export function combinedExposure(members: Deficiency[], eng: IcfrEngagement): { total: number; unverified: boolean } {
@@ -217,7 +217,7 @@ export function combinedExposure(members: Deficiency[], eng: IcfrEngagement): { 
     if (id === null) unverified = true;
     // Unplaceable figures each get a partition of their own, keyed so they can
     // never merge with anything — including each other.
-    const key = id ?? ` unplaced:${d.id}:${i}`;
+    const key = id ?? `\u0000unplaced:${d.id}:${i}`;
     partitions.set(key, Math.max(partitions.get(key) ?? 0, d.magnitude));
   });
   return { total: Array.from(partitions.values()).reduce((a, b) => a + b, 0), unverified };

@@ -132,9 +132,13 @@ function buildParitySeed(): SoxProgramme {
   const qualIds = new Set(QUAL_PICKS.map(q => q.captionId));
   const inScope = CAPTIONS.filter(c => c.balance >= pm || qualIds.has(c.id));
   const racms = deriveRacms(inScope, qualIds, ENTITIES);
+  // [controls, concluded effective]. Fixed Assets carries the four exceptions
+  // that aggregate to a material weakness on PP&E (alturaPpeAggregation), so all
+  // four of its tested controls are ineffective and the fifth is untested —
+  // a summary reading "4 effective" would contradict the register underneath it.
   const CONTROLS: Record<string, [number, number]> = {
     Treasury: [5, 4],
-    'Fixed Assets': [5, 4],
+    'Fixed Assets': [5, 0],
     'Procure to Pay': [5, 4],
     'Order to Cash': [5, 4],
   };
