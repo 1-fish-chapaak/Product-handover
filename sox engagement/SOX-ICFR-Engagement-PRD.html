@@ -24,6 +24,15 @@
   .callout .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #0e7490; display:block; margin-bottom: 3px; }
   code { background: #f4f2f7; color: #9d2235; padding: 2px 6px; border-radius: 4px; font-size: 11.5px;
          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .eq { font-family: "Latin Modern Math", Cambria, Georgia, serif; font-size: 15px; text-align: center;
+        background: #faf8fe; border: 1px solid #e8e2f5; border-radius: 8px; padding: 14px 12px; margin: 10px 0 8px;
+        page-break-inside: avoid; }
+  .eq i { font-style: italic; }
+  .fx { display: inline-block; vertical-align: -0.85em; text-align: center; margin: 0 4px; }
+  .fx .n { display: block; border-bottom: 1.4px solid #4a4459; padding: 0 10px 3px; }
+  .fx .d { display: block; padding: 3px 10px 0; }
+  .where { font-size: 11.5px; color: #4a4459; margin: 0 0 14px; }
+  .where b { font-family: "Latin Modern Math", Cambria, Georgia, serif; font-style: italic; font-weight: 600; }
   ul, ol { margin: 7px 0 12px; padding-left: 21px; }
   li { margin: 4px 0; }
   .step { background: #fbfaff; border: 1px solid #e9e3f7; border-left: 3px solid #7c3aed; border-radius: 0 8px 8px 0; padding: 11px 15px; margin: 9px 0; }
@@ -955,7 +964,7 @@ The working paper generates from the testing that has already happened. Nobody w
 <h4>The rule at each step</h4>
 <ol>
 <li><b>Raised.</b> Created from the failed control, never by hand, so every finding traces back to a real conclusion.</li>
-<li><b>Size it.</b> The root cause starts blank and must be written before the finding can be sized. It has to say <b>why it happened</b>, the mechanism rather than the count. <span class="q">"The payment run releases on the first authorisation and queues the second as an after the fact review"</span> is a cause. "9 of 40 payments failed" is not. A rating of significant or worse then blocks everything until the reviewer confirms it, because a wrong rating must not drive weeks of remediation.</li>
+<li><b>Size it.</b> While the finding is being sized the panel is live and editable, headed <span class="q">"Severity inputs, recomputed live vs the ground rules"</span>. From the next step it becomes read only, headed <span class="q">"Severity, evaluated by the auditor"</span>, and it also carries a <b>gap nature</b>, for example <span class="q">"Operating failure, manual control"</span> or <span class="q">"Design gap, manual control"</span>. The root cause starts blank and must be written before the finding can be sized. It has to say <b>why it happened</b>, the mechanism rather than the count. <span class="q">"The payment run releases on the first authorisation and queues the second as an after the fact review"</span> is a cause. "9 of 40 payments failed" is not. A rating of significant or worse then blocks everything until the reviewer confirms it, because a wrong rating must not drive weeks of remediation.</li>
 <li><b>Plan the fix.</b> The owner writes it and names a date. The auditor judges it against the root cause and can reject with a mandatory reason, but <b>never writes or executes it</b>.</li>
 <li><b>Fix and submit.</b> The owner does the work, attaches proof, and is the only one who can declare it ready.</li>
 <li><b>Retest.</b> On a fresh sample drawn <b>only from after the fix landed</b>. Anything earlier came out of the broken control and proves nothing about the repair.</li>
@@ -995,7 +1004,7 @@ The working paper generates from the testing that has already happened. Nobody w
 <tr><td><b>Exposure</b></td><td><b>What could have slipped through while the control was broken, not the error you found.</b> The most misunderstood field in the product</td></tr>
 <tr><td><b>MW indicators</b></td><td>Five red flags, such as fraud by senior management</td></tr>
 <tr><td><b>Compensating control</b></td><td>Another control partly covering the same risk</td></tr>
-<tr><td><b>Prudent override</b></td><td>Auditor judgement that it is worse than the maths says</td></tr>
+<tr><td><b>Prudent official</b></td><td>Auditor judgement that it is worse than the maths says. Where the grade is already material weakness the screen says so: <span class="q">"already at the top of the ladder, nothing to raise."</span></td></tr>
 </table>
 
 <h3>The seven rules, in order</h3>
@@ -1007,8 +1016,8 @@ The working paper generates from the testing that has already happened. Nobody w
 <tr><td>4</td><td>Likelihood more than remote?</td><td>Remote caps it at <b>Deficiency</b>, however large</td></tr>
 <tr><td>5</td><td>Exposure ladder</td><td>At or above materiality gives material weakness. At or above the significant band gives significant. Below gives deficiency</td></tr>
 <tr><td>2b</td><td>Apply the cap</td><td>Lowers material weakness to significant by one step, never to nothing</td></tr>
-<tr><td>6</td><td>Aggregation</td><td>Combine with findings sharing a process, assertion or root cause, then re run the ladder. <b>Can only raise</b></td></tr>
-<tr><td>7</td><td>Prudent override</td><td>The auditor may raise with a mandatory reason. Never lower</td></tr>
+<tr><td>6</td><td>Aggregation</td><td>Combine with findings sharing an <b>account line item</b> or an assertion, then re run the ladder. <b>Can only raise.</b> A material weakness indicator or an ITGC exception does not aggregate on one account</td></tr>
+<tr><td>7</td><td>Prudent official</td><td>The auditor may raise with a mandatory reason. Never lower</td></tr>
 </table>
 
 <div class="callout">
@@ -1018,12 +1027,12 @@ No field stores a hand set grade. Change an input and the grade recomputes.</p>
 
 <div class="callout">
 <p><span class="lbl">R10.2 The engine shows its working</span>
-Every rule prints a line, <b>including rules that did nothing</b>. On one live deficiency the cap lowered material weakness to significant, and aggregation across three related findings totalling ₹36.40 Cr then raised it back.</p>
+Every rule the engine reached prints a line, <b>including rules that changed nothing</b>, and the reader can see where it stopped. A finding carrying an indicator prints two lines and stops: the indicator that decided it, then <span class="q">"No cap available, an indicator cannot be argued down by another control."</span> Rules the engine never reached are not shown, because a rule that did not run is not part of the reasoning.</p>
 </div>
 
 <div class="callout">
-<p><span class="lbl">R10.3 Nothing ever clears a deficiency</span>
-Rules raise a grade or cap it by one step. No input makes a deficiency disappear.</p>
+<p><span class="lbl">R10.3 A failed control never leaves the register</span>
+Only one rule lowers a grade, the compensating control, and it drops it by one step. Nothing takes it to zero. <span class="q">"Capping Material Weakness to Significant Deficiency, never clears the exception."</span></p>
 </div>
 
 <div class="callout">
@@ -1033,60 +1042,68 @@ Materiality and the significant deficiency band are set per audit and can be edi
 
 <h2>11 · Confidence scores</h2>
 <p>Seven read outs, four on the engagement and three on a control. All computed live from the evidence. None is stored, so none can drift or be set by hand.</p>
+<p>Every one is a percentage of the same shape, a count of what is done over a count of what there is.</p>
+
+<div class="eq"><i>score</i> = <span class="fx"><span class="n">done</span><span class="d">total</span></span> × 100</div>
 
 <h3>Engagement level</h3>
 
-<h4>RACM completeness</h4>
+<h4>1. RACM completeness</h4>
 <p>Is the matrix approved to test against?</p>
-<p><code>rows approved ÷ in scope controls × 100</code> &nbsp; reads <code>{approved}/{total} rows approved · {n} remarks open</code></p>
-<p>One RACM row is one control, so the denominator is the scope itself. A remark is a blocker with a named condition, not a half approval, so it sits beside the score and is never netted off it.</p>
+<div class="eq"><i>C</i><sub>racm</sub> = <span class="fx"><span class="n"><i>a</i></span><span class="d"><i>n</i></span></span> × 100</div>
+<p class="where"><b>a</b> = RACM rows approved &nbsp;·&nbsp; <b>n</b> = controls in scope &nbsp;·&nbsp; reads <code>{a}/{n} rows approved · {r} remarks open</code></p>
+<p>One RACM row is one control, so the denominator is the scope itself. A remark is a blocker with a named condition, not a half approval, so <i>r</i> sits beside the score and never enters <i>a</i>.</p>
 
-<h4>Control effectiveness</h4>
+<h4>2. Control effectiveness</h4>
 <p>Are the controls working?</p>
-<p><code>controls concluded effective ÷ in scope controls × 100</code> &nbsp; reads <code>{effective}/{total} controls effective · {n} ineffective</code></p>
-<p>Effective needs <b>both</b> tracks effective. Either one ineffective sinks the control. Colour is not proportional here: <b>any</b> ineffective control turns this red whatever the percentage says.</p>
+<div class="eq"><i>C</i><sub>eff</sub> = <span class="fx"><span class="n"><i>e</i></span><span class="d"><i>n</i></span></span> × 100 &nbsp;&nbsp; and red whenever <i>x</i> &gt; 0</div>
+<p class="where"><b>e</b> = controls where <i>both</i> tracks concluded effective &nbsp;·&nbsp; <b>x</b> = controls concluded ineffective &nbsp;·&nbsp; reads <code>{e}/{n} controls effective · {x} ineffective</code></p>
+<p>Either track ineffective sinks the control, so <i>e</i> counts agreement between the two. Colour is not proportional here: one ineffective control turns it red whatever the percentage says.</p>
 
-<h4>Sample testing</h4>
+<h4>3. Sample testing</h4>
 <p>How much of the testing ground is covered?</p>
-<p><code>operating checks run ÷ operating checks total, summed across the register × 100</code> &nbsp; reads <code>{done}/{total} checks done</code></p>
-<p>Summed across the register, so each control weighs by its own check count.</p>
+<div class="eq"><i>C</i><sub>samp</sub> = <span class="fx"><span class="n">Σ <i>d</i><sub>i</sub></span><span class="d">Σ <i>t</i><sub>i</sub></span></span> × 100 &nbsp;&nbsp; where <i>t</i><sub>i</sub> = <i>s</i><sub>i</sub> × <i>k</i><sub>i</sub></div>
+<p class="where"><b>d</b><sub>i</sub> = checks run on control <i>i</i> &nbsp;·&nbsp; <b>t</b><sub>i</sub> = checks the control has &nbsp;·&nbsp; <b>s</b><sub>i</sub> = sample size &nbsp;·&nbsp; <b>k</b><sub>i</sub> = attributes &nbsp;·&nbsp; sums run over every control in scope</p>
+<p>The two sums are taken before the division, not after, so each control weighs by its own check count. Where no sample has been drawn yet, <i>t</i><sub>i</sub> falls back to <i>k</i><sub>i</sub> so the denominator is never zero.</p>
 
-<h4>Engagement completeness</h4>
+<h4>4. Engagement completeness</h4>
 <p>How much is finished?</p>
-<p><code>Σ milestone credits ÷ in scope controls × 100</code> &nbsp; reads <code>{done}/{total} controls finished · {n} blocked</code></p>
-<p>Each control is worth exactly <b>1.0</b>, split across five milestones.</p>
-<table>
-<tr><th>Milestone</th><th>Weight</th></tr>
-<tr><td>RACM row approved</td><td>0.10</td></tr>
-<tr><td>Test of Design concluded</td><td>0.25</td></tr>
-<tr><td>Test of Operating Effectiveness concluded</td><td>0.30</td></tr>
-<tr><td>Working paper countersigned</td><td>0.25</td></tr>
-<tr><td>No open deficiency</td><td>0.10</td></tr>
-</table>
-<p>A short form automated control has no operating track to conclude, so its 0.30 moves to design instead of leaving it stuck below 1.0.</p>
+<div class="eq"><i>C</i><sub>comp</sub> = <span class="fx"><span class="n">Σ <i>m</i><sub>i</sub></span><span class="d"><i>n</i></span></span> × 100 &nbsp;&nbsp; where 0 ≤ <i>m</i><sub>i</sub> ≤ 1</div>
+<div class="eq"><i>m</i><sub>i</sub> = 0.10<i>r</i> + 0.25<i>g</i> + 0.30<i>o</i> + 0.25<i>c</i> + 0.10<i>f</i></div>
+<p class="where"><b>m</b><sub>i</sub> = milestone credit for control <i>i</i>, each term 1 when done and 0 when not &nbsp;·&nbsp; <b>r</b> RACM row approved &nbsp;·&nbsp; <b>g</b> design concluded &nbsp;·&nbsp; <b>o</b> operating concluded &nbsp;·&nbsp; <b>c</b> paper countersigned &nbsp;·&nbsp; <b>f</b> no open deficiency</p>
+<p>The five weights sum to 1, so every control is worth exactly one whole unit however far along it is. A short form automated control has no operating track to conclude, so its 0.30 moves onto <i>g</i> instead of leaving it stuck below 1.</p>
 
 <h3>Control level</h3>
 
-<h4>Control completeness</h4>
+<h4>5. Control completeness</h4>
 <p>Is the evidence file complete? <b>Blocks concluding design.</b></p>
-<p><code>required elements evidenced or waived ÷ required elements × 100</code> &nbsp; reads <code>{done}/{total} required elements evidenced</code></p>
-<p>Optional elements are out of the denominator entirely. A <b>waived</b> element counts as done, because a recorded judgement with a mandatory reason is not a missing file.</p>
+<div class="eq"><i>C</i><sub>ctrl</sub> = <span class="fx"><span class="n"><i>q</i></span><span class="d"><i>Q</i></span></span> × 100</div>
+<p class="where"><b>Q</b> = design elements marked required &nbsp;·&nbsp; <b>q</b> = of those, evidenced or waived &nbsp;·&nbsp; reads <code>{q}/{Q} required elements evidenced</code></p>
+<p>Optional elements are outside <i>Q</i> entirely, so attaching extras cannot move the score. A waived element counts inside <i>q</i>, because a recorded judgement with a mandatory reason is not a missing file.</p>
 
-<h4>Evidence validated</h4>
+<h4>6. Evidence validated</h4>
 <p>Have the operating checks run? <b>Blocks concluding operating.</b></p>
-<p><code>operating checks run ÷ operating checks total × 100</code> &nbsp; reads <code>{done}/{total} operating checks run</code></p>
-<p>Same counting rule as Sample testing, but for one control. That one says how much ground is covered, this one says where the shortfall sits.</p>
+<div class="eq"><i>C</i><sub>val</sub> = <span class="fx"><span class="n"><i>d</i></span><span class="d"><i>t</i></span></span> × 100 &nbsp;&nbsp; where <i>t</i> = <i>s</i> × <i>k</i></div>
+<p class="where">Same terms as score 3, for one control instead of the register</p>
+<p>Score 3 says how much ground is covered across the audit. This one says where the shortfall sits.</p>
 
-<h4>TOD coverage confidence</h4>
+<h4>7. TOD coverage confidence</h4>
 <p>How well does the design hold up? Does not block.</p>
-<p><code>design considerations passing ÷ all design considerations × 100</code> &nbsp; reads <code>{passed}/{total} considerations pass</code></p>
-<p>An overridden pass counts as a pass. The auditor's recorded judgement is the answer, whatever the tool thought. Untested drags this down exactly as hard as failed, because an untested check gives no confidence either way. It is the only quality measure of the three, and it gates nothing.</p>
+<div class="eq"><i>C</i><sub>tod</sub> = <span class="fx"><span class="n"><i>p</i></span><span class="d"><i>D</i></span></span> × 100</div>
+<p class="where"><b>D</b> = design considerations on the control &nbsp;·&nbsp; <b>p</b> = of those, passing &nbsp;·&nbsp; reads <code>{p}/{D} considerations pass</code></p>
+<p>An overridden pass counts inside <i>p</i>, because the auditor's recorded judgement is the answer. Untested and failed both sit outside it, so an untested check drags the score down exactly as hard as a failed one. It is the only quality measure of the seven, and it gates nothing.</p>
+
+<h3>Colour</h3>
+<p>One rule, applied to every score.</p>
+<div class="eq">colour(<i>x</i>) = red if <i>x</i> &lt; 40, &nbsp; amber if <i>x</i> &lt; <i>G</i>, &nbsp; green if <i>x</i> ≥ <i>G</i></div>
+<p class="where"><b>G</b> = 100 for a gating score, 80 for the rest &nbsp;·&nbsp; scores 5 and 6 gate, so nothing but 100 is green on them</p>
 
 <!-- ==========================================================================
      FINISHING THE YEAR. COMMENTED OUT, NOT DELETED.
      Restore by removing this wrapper, re adding the contents entry,
      and renumbering Glossary back to 13.
      ==========================================================================
+
 <h2>12 · Finishing the year</h2>
 
 <h3>Roll forward</h3>
