@@ -15,10 +15,11 @@ import { test, expect, type Page } from './_helpers';
 
 const KEYS = [
   'irame.platformUsage.settings.v3',
-  'irame.platformUsage.invoices.v2',
-  'irame.platformUsage.prices.v2',
-  'irame.platformUsage.changes.v2',
+  'irame.platformUsage.changes.v3',
 ];
+
+/** The platform-side config key. No screen writes it; a test stands in for ops. */
+const CONTRACT_KEY = 'irame.platformUsage.contract.v1';
 
 async function openUsageAs(page: Page, userId: string) {
   await page.addInitScript(([id, keys]) => {
@@ -42,7 +43,14 @@ async function openAdminUsage(page: Page) {
     window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
       detail: { kind: 'control', id: '', view: 'admin-usage' },
     })));
-  await expect(page.getByRole('heading', { name: "The vendor's monthly bill" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'The assumptions behind every value figure' })).toBeVisible();
+}
+
+/** A workspace whose contract has not been loaded yet. */
+async function withNoContract(page: Page) {
+  await page.addInitScript(key => {
+    try { window.localStorage.setItem(key as string, '[]'); } catch { /* private mode */ }
+  }, CONTRACT_KEY);
 }
 
 /** One block, matched on its own heading. */
@@ -133,44 +141,68 @@ test.describe('the page answers before it asks', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 test.describe('value and cost', () => {
-  test('the hero reads Work avoided while no bill is entered, and never Net value', async ({ page }) => {
+  test('the cost appears from the contract, and says where it came from', async ({ page }) => {
+    await openUsageAs(page, 'u-admin');
+    const cost = block(page, 'Cost to run');
+    await expect(cost).toBeVisible();
+    await expect(cost).toContainText('as per your contract');
+    await expect(cost).toContainText('Charged by your contract');
+    // Nothing on the page asks anybody for a price or a bill.
+    await expect(cost.getByRole('button', { name: /enter|save|add|bill|price/i })).toHaveCount(0);
+    await expect(cost.locator('input')).toHaveCount(0);
+  });
+
+  test('the hero is Net value once the contract prices it, and shows the deduction', async ({ page }) => {
+    await openUsageAs(page, 'u-admin');
+    const value = block(page, 'Net value');
+    await expect(value).toBeVisible();
+    await expect(value).toContainText('of work avoided, less');
+  });
+
+  test('with no contract loaded the hero is Work avoided and the cost block is honestly empty', async ({ page }) => {
+    await withNoContract(page);
     await openUsageAs(page, 'u-admin');
     const value = block(page, 'Work avoided');
     await expect(value).toBeVisible();
     await expect(value).toContainText('of work avoided');
-    await expect(value).toContainText('the vendor\'s bill for this window has not been entered');
     await expect(page.getByRole('heading', { name: 'Net value' })).toHaveCount(0);
+
+    const cost = block(page, 'Cost to run');
+    await expect(cost).toContainText('Your contract prices have not been loaded yet');
+    await expect(cost).toContainText('paid lookups');
+    // The absence is stated, never printed as a zero cost.
+    await expect(cost).not.toContainText('₹0');
   });
 
-  test('the cost tile is absent rather than partial, and names the months it is missing', async ({ page }) => {
+  test('the contract rows behind the figure are named, with the price and the unit', async ({ page }) => {
     await openUsageAs(page, 'u-admin');
     const cost = block(page, 'Cost to run');
-    await expect(cost).toContainText('What they cost is not known here yet');
-    await expect(cost).toContainText('no bill entered');
-    await expect(cost).toContainText(/recorded lookups|paid lookups/);
+    await cost.scrollIntoViewIfNeeded();
+    await cost.getByRole('button', { name: /The contract rows behind this figure/ }).click();
+    await expect(cost).toContainText('irame operations');
+    await expect(cost).toContainText(/per (run|row)/);
   });
 
-  test('entering a bill costs the window exactly and turns the hero into Net value', async ({ page }) => {
+  test('a per-run API charges once for a run, not once per row', async ({ page }) => {
     await openUsageAs(page, 'u-admin');
-    await openAdminUsage(page);
-    await page.fill('#bill-vendor', 'Signzy');
-    await page.fill('#bill-month', '2026-04');
-    await page.fill('#bill-amount', '68400');
-    await page.getByRole('button', { name: /Enter this bill/ }).click();
-
-    await page.evaluate(() =>
-      window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
-        detail: { kind: 'control', id: '', view: 'platform-usage' },
-      })));
-    const value = block(page, 'Net value');
-    await expect(value).toBeVisible();
-    await expect(value).toContainText('₹68,400');
-    await expect(block(page, 'Cost to run')).toContainText('The vendor billed ₹68,400');
+    const cost = block(page, 'Cost to run');
+    await cost.scrollIntoViewIfNeeded();
+    await cost.getByRole('button', { name: /What each API charged/ }).click();
+    const row = cost.locator('tbody tr', { hasText: 'CIN API Check' }).first();
+    await expect(row).toContainText('per run');
+    const cells = await row.locator('td').allInnerTexts();
+    // Columns: API, successful calls, runs, price, charged. A per-run API's charge
+    // is its runs times its price, which is far less than its calls times price.
+    const calls = Number(cells[1].replace(/[^0-9]/g, ''));
+    const runs = Number(cells[2].replace(/[^0-9]/g, ''));
+    const charged = Number(cells[4].replace(/[^0-9.]/g, ''));
+    expect(runs).toBeLessThan(calls);
+    expect(Math.round(charged)).toBe(Math.round(runs * 12));
   });
 
   test('every value figure shows the assumptions it rests on, and where they came from', async ({ page }) => {
     await openUsageAs(page, 'u-admin');
-    const value = block(page, 'Work avoided');
+    const value = block(page, 'Net value');
     await expect(value).toContainText('rows a person checks by hand in an hour');
     await expect(value).toContainText("based on your team's measured pace");
     await expect(value).toContainText('for one auditor hour');
@@ -183,6 +215,31 @@ test.describe('value and cost', () => {
     await expect(drill).toBeVisible();
     await drill.click();
     await expect(page.getByText('the platform, on its own').first()).toBeVisible();
+  });
+});
+
+test.describe('nobody at the customer types a number', () => {
+  test('Administration states the assumptions and the contract, and offers no input at all', async ({ page }) => {
+    await openUsageAs(page, 'u-admin');
+    await openAdminUsage(page);
+
+    await expect(page.getByRole('heading', { name: 'What your contract charges' })).toBeVisible();
+    await expect(page.getByText('Read only. These are contract terms, not settings.')).toBeVisible();
+    await expect(page.getByText(/Read only\. A different value is set in configuration/)).toBeVisible();
+
+    // No field, no pin, no save, anywhere on the screen.
+    await expect(page.locator('main input, main select, main textarea')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Pin$/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Save this price|Enter this bill/ })).toHaveCount(0);
+  });
+
+  test('the contract is versioned, so a renegotiation does not rewrite an old window', async ({ page }) => {
+    await openUsageAs(page, 'u-admin');
+    await openAdminUsage(page);
+    const rows = page.locator('tbody tr', { hasText: 'PAN Basic API Check' });
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('to');
+    await expect(rows.nth(1)).toContainText('onwards');
   });
 });
 
@@ -387,8 +444,10 @@ test('the CSV export carries the scope, the window, the assumptions and the cove
   expect(csv).toContain('What this covers,');
   expect(csv).toContain('Assumptions behind every value figure');
   expect(csv).toContain('Work volume by unit (four units, never summed)');
-  // An unpriced cost is an empty cell with its reason, never a zero.
-  expect(csv).toMatch(/Billed by the vendor \(INR\),,no bill entered/);
+  // The cost comes from the contract, and the contract itself is in the file.
+  expect(csv).toContain('Your contract prices');
+  expect(csv).toMatch(/Charged by your contract \(INR\),\d+/);
+  expect(csv).toMatch(/irame operations/);
 });
 
 /* ──────────────────────────────────────────────────────────────────────────

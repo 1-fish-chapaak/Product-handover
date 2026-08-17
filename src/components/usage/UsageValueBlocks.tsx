@@ -13,9 +13,9 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Tooltip, XAxis, YAxis } from 'recharts';
 import { ArrowRight } from 'lucide-react';
-import { formatDate, formatMonth } from '../../data/platform-usage';
+import { formatDate } from '../../data/platform-usage';
 import {
-  fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtOneDp, fmtPaise, fmtPct, fmtUsd,
+  fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtOneDp, fmtPaise, fmtRate, fmtUsd,
   deltaPct, grainFor, priorLabel,
   type AiUsageRow, type ChangeHistory, type CostToRun, type CreatedCount, type LookupVolume,
   type NetValue, type Period, type Scope, type TimeBucket, type UsageSettings, type ValueFigures,
@@ -116,11 +116,19 @@ export function HeadlineValue({
           <p className="mt-2 text-[0.875rem] text-ink-700">
             {net.cost === null ? (
               <>
-                {fmtMoney(net.workAvoided)} of work avoided. Nothing is deducted yet: the vendor's bill for this
-                window has not been entered, so the page will not print a cost it does not have.
+                {fmtMoney(net.workAvoided)} of work avoided. Nothing is deducted yet: your contract prices have
+                not been loaded, so the page will not print a cost it does not have.
               </>
             ) : (
-              <>{fmtMoney(net.workAvoided)} of work avoided, less {fmtMoneyExact(net.cost)} the vendor billed for the lookups.</>
+              <>
+                {fmtMoney(net.workAvoided)} of work avoided, less {fmtMoneyExact(net.cost)} the paid lookups cost
+                as per your contract
+                {cost.unpriced.length > 0 && (
+                  <>. {fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))} calls sit on APIs your
+                    contract does not price yet, so they are counted and charged nothing</>
+                )}
+                .
+              </>
             )}
           </p>
         </div>
@@ -156,8 +164,8 @@ export function HeadlineValue({
               value={cost.lookupRupees === null ? '—' : fmtMoneyExact(cost.lookupRupees)}
               label="Cost to run"
               sub={cost.lookupRupees === null
-                ? `${fmtInt(cost.lookupCalls)} paid lookups recorded, no bill entered`
-                : `${fmtInt(cost.lookupCalls)} paid lookups, billed`}
+                ? `${fmtInt(cost.lookupCalls)} paid lookups recorded, contract not loaded`
+                : `${fmtInt(cost.lookupCalls)} paid lookups, at your contract price`}
             />
             <button type="button" onClick={onOpenCost} className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
               What this covers <ArrowRight size={12} />
@@ -259,128 +267,136 @@ export function ValueOverTime({
 /**
  * Cost to run.
  *
- * Invoice first: the lookup cost is the sum of the bills finance entered, which
- * is the same number finance reconciles. A window missing one of its bills names
- * the months rather than printing a total that will grow next week.
+ * The volume the platform recorded, priced at the customer's own contract. Those
+ * prices are set by irame when the deal is signed, so the figure simply appears
+ * and says where it came from: as per your contract. There is no price form, no
+ * bill screen and no override anywhere in the product, because none of these
+ * numbers is the customer's to type.
  *
- * The Concierge job cost is the one price the product records by itself. It is
- * in dollars, and it is shown as itself, added to nothing — a rupee total with a
+ * Where the contract does not price an API yet, those calls are named rather than
+ * charged at a guess, and the total says it is short. With no contract loaded at
+ * all the figure is absent rather than zero.
+ *
+ * The Concierge job cost is the one price the product records by itself. It is in
+ * dollars, and it is shown as itself, added to nothing: a rupee total with a
  * silent conversion in it would be the blended figure this page refuses to draw.
  */
 export function CostToRunBlock({
   cost,
   lookups,
   period,
-  canEnterInvoices,
-  onEnterInvoice,
 }: {
   cost: CostToRun;
   lookups: LookupVolume;
   period: Period;
-  canEnterInvoices: boolean;
-  onEnterInvoice: () => void;
 }) {
-  const missing = cost.missingMonths;
+  if (cost.noContract) {
+    return (
+      <Block id="cost" title="Cost to run" lede={null}>
+        <Empty
+          kind="unmeasured"
+          title="Your contract prices have not been loaded yet."
+          detail={`The platform recorded ${fmtInt(cost.lookupCalls)} paid lookups ${period.phrase}. What they cost is set in your contract, and it is seeded by irame rather than entered here, so this stays empty until it arrives. Nothing on the value side of this page depends on it.`}
+        />
+      </Block>
+    );
+  }
 
   return (
     <Block
       id="cost"
       title="Cost to run"
       lede={
-        cost.lookupRupees !== null ? (
-          <>
-            The vendor billed <Fig>{fmtMoneyExact(cost.lookupRupees)}</Fig> for the{' '}
-            <Fig>{fmtInt(cost.lookupCalls)}</Fig> paid lookups in this window, which works out at{' '}
-            <Fig>{lookups.effectiveRatePaise === null ? 'nothing we can divide yet' : fmtPaise(lookups.effectiveRatePaise)}</Fig>{' '}
-            a lookup, derived from your own invoices.
-          </>
-        ) : (
-          <>
-            The platform made <Fig>{fmtInt(cost.lookupCalls)}</Fig> paid lookups in this window. What they cost is
-            not known here yet, because {missing.length === 1 ? 'one month has no bill entered' : `${fmtInt(missing.length)} months have no bill entered`}.
-          </>
-        )
-      }
-      hint="The paid lookups are the platform's most literal cost: an outside vendor bills the company for each successful verification."
-      footer={
         <>
-          The Concierge job cost is recorded in dollars by the tools themselves and is shown as itself, never
-          converted into this total at a rate nobody entered.
+          The <Fig>{fmtInt(cost.lookupCalls)}</Fig> paid lookups {period.phrase} cost{' '}
+          <Fig>{fmtMoneyExact(cost.lookupRupees ?? 0)}</Fig> as per your contract, which works out at{' '}
+          <Fig>{lookups.effectiveRatePaise === null ? 'nothing we can divide yet' : fmtRate(lookups.effectiveRatePaise)}</Fig>{' '}
+          a lookup across every API.
+          {cost.unpriced.length > 0 && (
+            <>
+              {' '}
+              <Fig>{fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))}</Fig> of those calls are on
+              APIs your contract does not price yet, so they are counted here and charged nothing.
+            </>
+          )}
         </>
       }
+      hint="The paid lookups are the platform's most literal cost: an outside vendor bills for each successful verification, at the price agreed in your contract."
+      footer="Prices and billing units are contract terms, set by irame when the deal is signed and versioned every time they change. The Concierge job cost is recorded in dollars by the tools themselves and is shown as itself, never converted into this total at a rate nobody agreed."
     >
       <StatRow>
         <Stat
-          value={cost.lookupRupees === null ? '—' : fmtMoneyExact(cost.lookupRupees)}
-          label="Billed by the vendor"
-          sub={cost.lookupRupees === null ? 'no bill entered for this window' : `${fmtInt(cost.invoices.length)} ${cost.invoices.length === 1 ? 'invoice' : 'invoices'} entered`}
+          value={fmtMoneyExact(cost.lookupRupees ?? 0)}
+          label="Charged by your contract"
+          sub={cost.complete
+            ? `every recorded call is priced`
+            : `${fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))} calls not priced by the contract yet`}
         />
-        <Stat value={fmtInt(cost.lookupCalls)} label="Paid lookups recorded" sub={`${fmtInt(lookups.failed)} failed, which the vendor does not charge for`} />
+        <Stat value={fmtInt(cost.lookupCalls)} label="Paid lookups recorded" sub={`${fmtInt(lookups.failed)} failed, which are not charged`} />
         <Stat value={fmtUsd(cost.conciergeUsd)} label="Concierge job cost" sub={`${fmtInt(cost.conciergeJobs)} jobs, ${fmtInt(cost.conciergeUnpriced)} of which record no cost`} />
         <Stat value={fmtInt(lookups.personalDataCalls)} label="Lookups touching personal data" sub="passports, PAN, provident fund, driving licences" />
       </StatRow>
 
-      {missing.length > 0 && (
+      {cost.unpriced.length > 0 && (
         <div className="mt-4 rounded-lg border border-dashed border-canvas-border bg-canvas px-4 py-3">
           <p className="text-[0.875rem] text-ink-700">
-            {missing.map(m => m.label).join(', ')} {missing.length === 1 ? 'has' : 'have'} recorded lookups and no bill:{' '}
-            {missing.map(m => `${m.label}, ${fmtInt(m.calls)} calls`).join(' · ')}.
+            Not priced by your contract yet:{' '}
+            {cost.unpriced.map(row => `${row.name}, ${fmtInt(row.calls)} calls`).join(' · ')}.
           </p>
           <p className="mt-1 text-[0.75rem] text-ink-500">
-            The month stays uncosted until the bill arrives. The months around it still show.
+            Those calls are counted and charged nothing. Adding them is a contract change on our side, so there
+            is nothing for you to enter.
           </p>
-          {canEnterInvoices && (
-            <button type="button" onClick={onEnterInvoice} className="mt-2 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
-              Enter a bill in Administration <ArrowRight size={12} />
-            </button>
-          )}
         </div>
       )}
 
       {lookups.rows.length > 0 && (
         <div className="mt-4">
-          <Drill label={`Which lookups ran: ${fmtInt(lookups.rows.length)} APIs`} hideLabel="Hide the lookups">
+          <Drill label={`What each API charged: ${fmtInt(lookups.rows.length)} APIs`} hideLabel="Hide the APIs">
             <DataTable
-              head={['API', 'Successful calls', 'Failed', 'Personal data', 'Price entered']}
+              head={['API', 'Successful calls', 'Runs', 'Your contract price', 'Charged']}
               rows={lookups.rows.map(row => [
                 row.name,
                 fmtInt(row.calls),
-                fmtInt(row.failed),
-                row.personalData ? 'yes' : 'no',
-                row.pricePaise === null ? 'not priced' : `${fmtPaise(row.pricePaise)} per ${row.billingUnit}`,
+                fmtInt(row.batches),
+                row.pricePaise === null
+                  ? 'not in your contract'
+                  : `${fmtRate(row.pricePaise)} per ${row.billingUnit}`,
+                row.chargedPaise === null ? 'nothing' : fmtPaise(row.chargedPaise),
               ])}
             />
             <p className="mt-2 text-[0.75rem] text-ink-500">
-              Per-API prices are optional. Without them the bill still costs the window exactly; with them the
-              cost can be split per API. Whether a vendor charges once per run or once per row differs by API and
-              is read from each one's stored program.
+              An API charged per row charges for every successful call. One charged per run charges once for the
+              whole run, however many rows it checked. Which of the two applies is a contract term, verified once
+              against the workflow's own program.
             </p>
           </Drill>
         </div>
       )}
 
-      {cost.invoices.length > 0 && (
+      {cost.prices.length > 0 && (
         <div className="mt-3">
-          <Drill label={`Bills entered for this window: ${fmtInt(cost.invoices.length)}`} hideLabel="Hide the bills">
+          <Drill label={`The contract rows behind this figure: ${fmtInt(cost.prices.length)}`} hideLabel="Hide the contract">
             <MadeList>
-              {cost.invoices.map(inv => (
+              {cost.prices.map(row => (
                 <MadeRow
-                  key={`${inv.vendor}-${inv.periodMonth}`}
-                  name={`${formatMonth(inv.periodMonth)}, ${inv.vendor}, ${fmtPaise(inv.amountPaise)}`}
-                  madeBy={inv.enteredBy}
-                  when={formatDate(inv.enteredAt)}
-                  note={inv.note ?? undefined}
+                  key={`${row.lookupId}-${row.effectiveFrom}`}
+                  name={`${row.apiName}, ${fmtRate(row.pricePaise)} per ${row.billingUnit}`}
+                  madeBy={row.setBy}
+                  when={formatDate(row.effectiveFrom)}
+                  note={row.effectiveTo === null
+                    ? `${row.vendor} · in force`
+                    : `${row.vendor} · until ${formatDate(row.effectiveTo)}`}
                 />
               ))}
             </MadeList>
+            <p className="mt-2 text-[0.75rem] text-ink-500">
+              A renegotiation opens a new row rather than rewriting the old one, so a price change this month
+              never moves last month's figure.
+            </p>
           </Drill>
         </div>
       )}
-
-      <p className="mt-3 text-[0.75rem] text-ink-500">
-        {period.label} · {fmtPct(0)} of this figure comes from a rate card. Every cost here is a number entered
-        from the vendor's own bill.
-      </p>
     </Block>
   );
 }

@@ -2193,7 +2193,7 @@ function MemoryGovernanceSection({ onOpenLogs }: { onOpenLogs: () => void }) {
 }
 
 export default function AdminView({ activeTab }: Props) {
-  const { canAny } = useCan();
+  const { can } = useCan();
   // Map sidebar view ids onto the flat three-tab shell. People & Teams both land
   // on the Members tab; a 'teams' deep-link opens Members on the Teams view.
   const initialSection: SectionId = activeTab === 'logs' ? 'logs'
@@ -2229,9 +2229,9 @@ export default function AdminView({ activeTab }: Props) {
     { id: 'members', label: 'Users & Teams', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
     { id: 'memory', label: 'Memory', icon: Brain },
-    // Platform Usage reads; the two numbers a person types live here, each
-    // behind its own permission. A role holding neither never sees the tab.
-    ...(canAny(['ad_usage_settings', 'ad_usage_invoices'])
+    // Platform Usage reads. This tab states the assumptions and the contract
+    // prices behind its figures; there is nothing to fill in on it.
+    ...(can('ad_usage_settings')
       ? [{ id: 'usage' as SectionId, label: 'Platform Usage', icon: SlidersHorizontal }]
       : []),
     { id: 'logs', label: 'Audit Log', icon: ScrollText },

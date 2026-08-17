@@ -1,13 +1,15 @@
 # Platform Usage
 
-System > Platform Usage. Built fresh from `Platform-Usage-Build-Spec_6.pdf` (11 Aug 2026):
-three lenses on one page, PU-01 to PU-28, the attention strip, a sentence at the head of every
-block, and **no editor anywhere on the page**. The assumptions behind the value figures measure
-themselves from the customer's own recorded pace, and the one number a person types, the vendor's
-monthly bill, lives in Administration behind its own permission.
+System > Platform Usage. Built fresh from the build spec: three lenses on one page, PU-01 to
+PU-28, the attention strip, a sentence at the head of every block, and **nothing anywhere in the
+product for a customer to fill in**. The assumptions behind the value figures measure themselves
+from the customer's own recorded pace. The lookup prices are contract terms, set by irame when
+the deal is signed and seeded platform-side, so the cost simply appears and says "as per your
+contract".
 
-The page was re-authored from a blank sheet against this revision of the spec. Nothing was
-migrated from the earlier build.
+The page was re-authored from a blank sheet against the 11 Aug 2026 revision, then updated for
+the 17 Aug revision of PU-19, which changed the pricing model: prices are ours to set, not the
+customer's to enter. Nothing was migrated from the earlier build.
 
 Code:
 
@@ -19,8 +21,8 @@ Code:
   calibration job, the windows, the scopes, the attention strip, and one `snapshot()` the page
   and both exports read so they can never diverge.
 - `src/components/usage/` the page, its blocks, and the CSV and PDF exports. It reads only.
-- `src/components/admin/UsageAdminSection.tsx` Administration > Platform Usage: the assumptions
-  ledger and the vendor's bills, each behind its own permission.
+- `src/components/admin/UsageAdminSection.tsx` Administration > Platform Usage: a read only
+  statement of the assumptions, the contract prices and the audit trail behind both. No inputs.
 - `tests/platform-usage.spec.ts` the spec's acceptance tests, run against the real page.
 
 ## The question the page answers
@@ -31,23 +33,39 @@ Not "is anyone logging in". The page reports how much work the platform did inst
 what that work was worth in hours, rupees and people, how much of the control library it touched,
 and what is stuck right now.
 
-## The one honest gap
+## Cost: the contract, not a form
 
-The platform can measure what it did and what that was worth. Until somebody enters what the
-vendor billed, it cannot measure what that cost. Chat estimates its own token usage from text
-length rather than measuring it, and the SOP to RACM pipeline records nothing about consumption at
-all.
+Lookup prices are part of what was sold. So they are seeded platform-side by irame operations when
+the deal is signed, as versioned rows: the API, the vendor, whether the vendor bills per run or per
+row, the charge, and the date it came into force. `CONTRACT_PRICES` in `platform-usage.ts` is that
+seed, and `loadContractPrices()` reads a platform-side override if one has been pushed. No screen
+in the product writes either, because none exists to.
 
-So the page ships showing the value side in full and the cost side as an honest empty tile. There
-is no blended "AI cost", anywhere, ever. The one real price the product records by itself is the
-Concierge job cost, and it appears as itself, in the currency it was recorded in, added to nothing.
+The cost on the page is then the volume the platform recorded, priced at that contract, labelled
+**as per your contract**. Two properties matter:
 
-The hero is called **Work avoided** while that is true, because "Net value" would be one real
-number minus an unknown. Enter a month's bill in Administration (PU-19 layer 2) and the tile fills,
-backwards through every month entered, the hero becomes **Net value**, and it shows the net figure
-itself. A window is only costed when every month in it has its bill: a quarter with two of its
-three invoices in is an unfinished quarter rather than a cheaper one, so the tile names the missing
-months instead of printing a total that will grow next week.
+- **The billing unit changes the number.** Per row charges for every successful call. Per run
+  charges once for a whole run however many rows it checked, which is why lookup calls carry a
+  `batchId`. On this seed the CIN check makes 45 calls in 5 runs and charges 5 times ₹12, not 45
+  times. Reading that term the wrong way puts the figure out by a factor of a thousand.
+- **A price change never moves an old window.** Rows are versioned, so January is charged at the
+  January price and February at the renegotiated one. The seed carries that renegotiation (PAN
+  Basic drops from ₹1.75 to ₹1.50 on 1 Feb 2026) precisely so the behaviour is visible.
+
+Where the contract does not price an API yet, those calls are counted, named on screen, and charged
+nothing. That is ours to fix rather than the customer's, so it is stated in the block and is
+deliberately not an attention card: a card whose only action is "ask your vendor manager" is not an
+action. On this seed the Email API check is priced from 1 Mar 2026 only, so earlier calls sit in
+that state.
+
+With no contract loaded at all the hero reads **Work avoided** and the cost block says so plainly.
+It never prints a zero cost. Once prices exist the hero becomes **Net value**: work avoided less
+what the contract charged.
+
+Chat estimates its own token usage from text length rather than measuring it, and the SOP to RACM
+pipeline records nothing about consumption at all, so there is no blended "AI cost" anywhere, ever.
+The one price the product records by itself is the Concierge job cost, and it appears as itself, in
+the currency it was recorded in, added to nothing.
 
 ## Coverage
 
@@ -134,6 +152,7 @@ something to look at. The table behind every chart still holds all of them.
 
 ## The four assumptions, and why nobody fills them in
 
+
 Four numbers are needed that automation alone cannot supply.
 
 | Setting | Starting value | Measurable |
@@ -151,10 +170,11 @@ and an audit row is written. There is no confirmation step, because at 10,000 em
 clicks. On this seed the job finds **231 rows an hour** and **3.5 hours a manual test**, from 96 and
 33 records.
 
-The two money numbers can never be measured. They run on their labelled defaults. An administrator
-can pin any of the four in Administration, which is rare by design: pinning stops the platform
-improving that number by itself, so the screen says so rather than presenting a pin as the normal
-way to work. Settings are tenant wide, because per team values make teams impossible to compare.
+The two money numbers can never be measured. They run on their labelled defaults. There is no pin
+field and no settings form anywhere in the product: if a tenant genuinely needs a different value it
+is set in configuration by support, arrives as a stored `manual` source, and is labelled as such on
+every figure it feeds. Settings are tenant wide, because per team values make teams impossible to
+compare.
 
 Every figure that rests on a setting prints that setting underneath, with where it came from. The
 strip opens its own change history, so "assumptions changed in April 2026 so far: 2" is a real,
@@ -177,6 +197,13 @@ is a ranking through the back door and is banned too.
 `Empty kind="quiet"` is a designed zero ("No samples were validated for the company in this
 window"). `Empty kind="unmeasured"` is dashed and italic ("The assistant has not learned anything
 about you yet"). Four zeros that look measured would be a lie about a feature that is switched off.
+
+## Permissions
+
+`ad_usage` / `ad_usage_people` / `ad_usage_self` are the three lenses. `ad_usage_export` gates the
+two exports. `ad_usage_settings` is the right to READ the assumptions and the contract prices in
+Administration, with their sources and audit trail. `ad_usage_invoices` is gone: nothing in the
+product enters a bill.
 
 ## Where the numbers come from
 
@@ -204,15 +231,17 @@ guaranteed to carry the rupee glyph.
 
 Four places. Each one is a decision, not an omission.
 
-1. **The Concierge job cost is not added into "cost to run".** PU-04 sums it with the lookup
-   invoices, but the product records it in dollars and nobody has entered a rate to convert it. A
-   silent conversion is the blended figure section 3 forbids, so the dollar figure is shown as
-   itself, next to the rupee total, added to nothing. Two of the six tools set their total to `0.0`
-   literally, so their jobs are counted as unpriced rather than as free.
-2. **Assumptions can be pinned in Administration.** Section 5 says no screen offers an input field
-   for these numbers, and no screen on Platform Usage does. Decision 2 and `PUT /settings` both
-   assume a permission that can set them, so the pin lives in Administration behind
-   `ad_usage_settings`, labelled as the rare thing it is.
+1. **The Concierge job cost is not added into "cost to run".** PU-04 sums it with the lookup cost,
+   but the product records it in dollars and nobody has agreed a rate to convert it. A silent
+   conversion is the blended figure section 3 forbids, so the dollar figure is shown as itself, next
+   to the rupee total, added to nothing. Two of the six tools set their total to `0.0` literally, so
+   their jobs are counted as unpriced rather than as free.
+2. **The vendor invoice layer is not a customer screen.** PU-19 still documents a `vendor_invoices`
+   table, but the same section now says the customer never sees a price form, a pin field or an
+   invoice screen, and that cost is volume times the contract price. Two cost sources on one page
+   would leave a reader asking which one is true, so the customer page has one: the contract.
+   Reconciling what the vendor actually billed against what the contract says is an irame side job,
+   on the platform console rather than in the tenant's product.
 3. **Stuck runs are scoped to the window.** PU-11's query has no time bound, but a run that failed
    three months ago is not stuck, it was dealt with. The block counts failed, blocked and long
    paused runs inside the selected window, and says so.
@@ -232,11 +261,14 @@ Driven in the real app, not read off the source, at 1560 by 1100:
   their own view and still get a full page. No console errors on any of them.
 - Both windows on the CFO view: weekly buckets for April so far, monthly buckets for since you
   started. The chart draws through `ChartAutoSizer`, with every bar labelled with its own figure.
-- Chart to table toggle, four drill lists, the attention cards, and the deep links out to
-  Administration, the risk register and an engagement.
-- The whole cost flow: enter ₹68,400 for April 2026 in Administration, and the hero turns into Net
-  value at ₹16.8 lakh, the attention card disappears, and the cost lede reads
-  "The vendor billed ₹68,400 for the 988 paid lookups in this window, which works out at ₹69 a
-  lookup, derived from your own invoices".
-- CSV (266 lines, header intact) and PDF (58 KB) both download.
-- `tests/platform-usage.spec.ts`, `tsc --noEmit`, and `eslint` on every file in the feature.
+- Chart to table toggle, every drill list on the page, the attention cards, and the deep links out
+  to the risk register, an engagement and the workflow library.
+- The cost flow both ways. With the contract seeded the hero reads Net value and the cost lede reads
+  "The 999 paid lookups in April 2026 so far cost ₹2,721 as per your contract, which works out at
+  ₹2.72 a lookup across every API"; the per API drill shows CIN charging 5 runs times ₹12 rather
+  than 45 calls times ₹12. With the contract cleared the hero reads Work avoided and the cost block
+  says the prices have not been loaded yet, with no zero printed anywhere.
+- Administration → Platform Usage renders zero inputs, selects and textareas, and no Pin button.
+- CSV and PDF both download, with the contract rows in both.
+- `tests/platform-usage.spec.ts` (31 tests), `tsc --noEmit`, and `eslint` on every file in the
+  feature.

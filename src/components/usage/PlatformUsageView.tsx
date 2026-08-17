@@ -115,7 +115,6 @@ export default function PlatformUsageView() {
   const myTeam = me?.team && me.team !== '—' ? me.team : null;
   const myName = me?.name ?? currentUser?.name ?? '';
 
-  const canEnterInvoices = can('ad_usage_invoices');
   const canExport = can('ad_usage_export');
 
   const entitled = useMemo<Persona[]>(() => {
@@ -171,23 +170,18 @@ export default function PlatformUsageView() {
   const cards = useMemo(
     () => attentionCards(scope, period, {
       risks: data.risks,
-      cost: data.cost,
       stuck: data.stuck,
       never: data.never,
       queue: data.queue,
       sampling: data.sampling,
       smartLearn: data.learn,
-    }, { invoices: canEnterInvoices }),
-    [scope, period, data, canEnterInvoices],
+    }),
+    [scope, period, data],
   );
 
   /* ── Acting on a card ───────────────────────────────────────────────────── */
 
   const onAct = (card: AttentionCard) => {
-    if (card.target === 'invoice') {
-      navigate('admin-usage');
-      return;
-    }
     if (card.target === 'memory') {
       scrollToBlock('memory');
       return;
@@ -267,13 +261,7 @@ export default function PlatformUsageView() {
     <>
       <BlockGroup title="What it was worth">
         {headline}
-        <CostToRunBlock
-          cost={data.cost}
-          lookups={data.lookups}
-          period={period}
-          canEnterInvoices={canEnterInvoices}
-          onEnterInvoice={() => navigate('admin-usage')}
-        />
+        <CostToRunBlock cost={data.cost} lookups={data.lookups} period={period} />
         {valueOverTime}
       </BlockGroup>
 

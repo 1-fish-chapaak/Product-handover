@@ -717,13 +717,23 @@ export const PAID_LOOKUPS: PaidLookup[] = [
   { id: 'pl-13', name: 'Email API Check', verifies: 'Email address exists', personalData: true },
 ];
 
-/** One successful verification call, which is what a vendor charges for. */
+/**
+ * One verification call, which is what a vendor charges for.
+ *
+ * `batchId` is the run the call belongs to. It matters because the billing unit
+ * is a contract term: an API billed per row charges for every one of these, and
+ * an API billed per run charges once for the whole batch however many rows it
+ * checked. Getting that wrong puts the cost out by a factor of a thousand, which
+ * is why the unit is a term we hold rather than something anybody guesses.
+ */
 export interface LookupCall {
   id: string;
   lookupId: string;
   lookupName: string;
   at: number;
   actor: Actor;
+  /** The run this call was made inside. */
+  batchId: string;
   /** A charge applies only when the call succeeds. */
   status: 'complete' | 'failed';
 }
@@ -732,6 +742,7 @@ function buildLookupCalls(): LookupCall[] {
   const r = mulberry32(0x70_61_69); // "pai"
   const out: LookupCall[] = [];
   let seq = 0;
+  let batch = 0;
   // The heavier checks (PAN, GST, three-way vendor verification) run far more
   // often than a passport check, so the mix is weighted rather than flat.
   const weights = [9, 5, 4, 3, 8, 3, 3, 2, 1, 1, 1, 2, 6];
@@ -743,21 +754,33 @@ function buildLookupCalls(): LookupCall[] {
     const expected = (dow === 0 || dow === 6 ? 3 : 46) * trend;
     let count = Math.floor(expected);
     if (r() < expected - count) count += 1;
-    for (let i = 0; i < count; i++) {
+    // Verification runs in batches: one run of a workflow checks a file of
+    // vendors, which is several hundred calls, not one.
+    let made = 0;
+    while (made < count) {
       const at = workingMoment(dayMs, r);
-      if (at > ANCHOR) continue;
       let t = r() * total;
       let idx = 0;
       while (idx < weights.length - 1 && t > weights[idx]) { t -= weights[idx]; idx += 1; }
-      seq += 1;
-      out.push({
-        id: `lk-${String(seq).padStart(6, '0')}`,
-        lookupId: PAID_LOOKUPS[idx].id,
-        lookupName: PAID_LOOKUPS[idx].name,
-        at,
-        actor: pickActor(r),
-        status: r() < 0.04 ? 'failed' : 'complete',
-      });
+      const lookup = PAID_LOOKUPS[idx];
+      const actor = pickActor(r);
+      batch += 1;
+      const batchId = `lkb-${String(batch).padStart(5, '0')}`;
+      const size = Math.min(count - made, 1 + Math.floor(r() * 24));
+      for (let i = 0; i < size; i++) {
+        if (at > ANCHOR) break;
+        seq += 1;
+        out.push({
+          id: `lk-${String(seq).padStart(6, '0')}`,
+          lookupId: lookup.id,
+          lookupName: lookup.name,
+          at: at + i * 1_400,
+          actor,
+          batchId,
+          status: r() < 0.04 ? 'failed' : 'complete',
+        });
+      }
+      made += size;
     }
   }
   return out;
@@ -781,7 +804,7 @@ export const LOOKUP_CALLS: LookupCall[] = buildLookupCalls();
  */
 export interface AuditEventRow {
   id: string;
-  entityType: 'dashboard' | 'widget' | 'widget_alert' | 'usage_setting' | 'vendor_invoice';
+  entityType: 'dashboard' | 'widget' | 'widget_alert' | 'usage_setting' | 'contract_price';
   entityName: string;
   verb: 'create' | 'update' | 'delete' | 'fire';
   at: number;
@@ -1512,62 +1535,121 @@ export const CREATED_RECORDS: CreatedRecord[] = (() => {
 })();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * PU-19 The vendor's bill, and the optional per-API price sheet
+ * PU-19 The contract prices, set by irame when the deal is signed
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * One month's bill from one vendor.
+ * What one verification call costs, as the contract says.
  *
- * The primary cost input, and the only one a person is asked for. Somebody
- * filling a price form does not reliably know whether a lookup bills per run or
- * per row; what finance knows with certainty is the number on the bill. So the
- * bill is the input, exact by definition, and everything else is derived from it
- * or optional.
+ * Nobody at the customer sets these. Lookup prices are part of what was sold, so
+ * irame's own operations seed them platform-side when the deal is signed: the
+ * API, whether the vendor bills per run or per row, the charge, and the date it
+ * came into force. The customer's page reads them and says "as per your
+ * contract"; there is no price form, no pin field and no bill screen anywhere in
+ * the product, because none of these numbers is theirs to type.
  *
- * Ships empty. Without a bill the page still counts the lookups and simply does
- * not claim a cost.
+ * Rows are versioned rather than edited. A renegotiation closes the row in force
+ * and opens a new one, so last quarter's cost stays what it was when it was
+ * reported.
+ *
+ * The billing unit is the one term that has to be right: an API billed per row
+ * charges for every call, and one billed per run charges once for a batch of
+ * several hundred. It is verified once against the workflow's stored program at
+ * signature, by our own ops, and never guessed here.
  */
-export interface VendorInvoice {
-  vendor: string;
-  /** First of the month the bill covers. */
-  periodMonth: number;
-  amountPaise: number;
-  note: string | null;
-  enteredBy: string;
-  enteredAt: number;
-}
-
-/** One API's price, versioned so a renegotiation never rewrites last quarter. */
-export interface LookupPrice {
+export interface ContractPrice {
   lookupId: string;
   vendor: string;
   apiName: string;
-  /** Whether the vendor bills once per run or once per row. Check 4. */
+  /** A contract term, verified against the workflow's stored program. */
   billingUnit: 'run' | 'row';
   pricePaise: number;
   effectiveFrom: number;
   effectiveTo: number | null;
-  enteredBy: string;
-  enteredAt: number;
+  /** Who seeded it, which is always irame operations. */
+  setBy: string;
+  setAt: number;
 }
 
-/** What a person changed, so the entered numbers are auditable too. */
-export type UsageChangeEntity = 'usage_setting' | 'vendor_invoice' | 'lookup_price';
+/**
+ * The contract on this workspace.
+ *
+ * Placeholder terms for the demo tenant, seeded the way irame operations would
+ * seed a signed contract. Real numbers arrive with the real contract; the shape
+ * and the flow are what matter here. The two renegotiated rows are deliberate:
+ * they prove the versioning holds, and that a March figure does not move when an
+ * April price does.
+ */
+const SIGNED_AT = Date.UTC(2025, 8, 15, 10, 0, 0);
+const OPS = 'irame operations';
+
+export const CONTRACT_PRICES: ContractPrice[] = [
+  { lookupId: 'pl-01', vendor: 'Signzy', apiName: 'PAN Basic API Check', billingUnit: 'row', pricePaise: 175, effectiveFrom: SIGNED_AT, effectiveTo: Date.UTC(2026, 0, 31), setBy: OPS, setAt: SIGNED_AT },
+  // Renegotiated from 1 Feb 2026. The older row stays, so October's cost stays October's.
+  { lookupId: 'pl-01', vendor: 'Signzy', apiName: 'PAN Basic API Check', billingUnit: 'row', pricePaise: 150, effectiveFrom: Date.UTC(2026, 1, 1), effectiveTo: null, setBy: OPS, setAt: Date.UTC(2026, 0, 20, 11, 0, 0) },
+  { lookupId: 'pl-02', vendor: 'Signzy', apiName: 'PAN Details API', billingUnit: 'row', pricePaise: 300, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-03', vendor: 'Signzy', apiName: 'PAN to GST API', billingUnit: 'row', pricePaise: 400, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-04', vendor: 'Signzy', apiName: 'PAN to MSME Basic API Check', billingUnit: 'row', pricePaise: 350, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-05', vendor: 'Signzy', apiName: 'GST API Check', billingUnit: 'row', pricePaise: 200, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-06', vendor: 'Signzy', apiName: 'MSME API Check', billingUnit: 'row', pricePaise: 250, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-07', vendor: 'Karza', apiName: 'CIN API Check', billingUnit: 'run', pricePaise: 1_200, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-08', vendor: 'Karza', apiName: 'Vaahan API Check', billingUnit: 'row', pricePaise: 600, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-09', vendor: 'Karza', apiName: 'UAN Advanced v4 API', billingUnit: 'row', pricePaise: 900, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-10', vendor: 'Karza', apiName: 'Passport API Check', billingUnit: 'row', pricePaise: 800, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-11', vendor: 'Karza', apiName: 'Voter ID API Check', billingUnit: 'row', pricePaise: 500, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  { lookupId: 'pl-12', vendor: 'Karza', apiName: 'Driving License API Check', billingUnit: 'row', pricePaise: 550, effectiveFrom: SIGNED_AT, effectiveTo: null, setBy: OPS, setAt: SIGNED_AT },
+  // Priced from 1 Mar 2026 only: the email check was added to the contract later,
+  // so the calls before that date sit in the page's honest unpriced state.
+  { lookupId: 'pl-13', vendor: 'Signzy', apiName: 'Email API Check', billingUnit: 'row', pricePaise: 40, effectiveFrom: Date.UTC(2026, 2, 1), effectiveTo: null, setBy: OPS, setAt: Date.UTC(2026, 1, 24, 9, 0, 0) },
+];
+
+/**
+ * The contract the page should read.
+ *
+ * Config, not input. The seeded contract above is what ships; a platform-side
+ * override can replace it wholesale (that is how a signed contract reaches a
+ * tenant, and how a tenant with no contract loaded yet is represented). Nothing
+ * in the product's UI writes this key: there is no screen that can.
+ */
+const CONTRACT_KEY = 'irame.platformUsage.contract.v1';
+
+export function loadContractPrices(): ContractPrice[] {
+  try {
+    const raw = localStorage.getItem(CONTRACT_KEY);
+    if (!raw) return CONTRACT_PRICES;
+    const rows = JSON.parse(raw) as ContractPrice[];
+    return Array.isArray(rows) ? rows : CONTRACT_PRICES;
+  } catch {
+    return CONTRACT_PRICES;
+  }
+}
+
+/** The price in force for one API on one day, or null when it was not priced. */
+export function priceInForce(lookupId: string, at: number, prices = loadContractPrices()): ContractPrice | null {
+  return prices.find(row => row.lookupId === lookupId
+    && row.effectiveFrom <= at
+    && (row.effectiveTo === null || row.effectiveTo >= at)) ?? null;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The audit trail behind the numbers nobody types
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** What changed, so the numbers behind the figures are auditable too. */
+export type UsageChangeEntity = 'usage_setting' | 'contract_price';
 
 export interface UsageChange {
   entity: UsageChangeEntity;
   field: string;
   from: string | null;
   to: string | null;
-  /** default, measured or manual — which kind of number this now is. */
+  /** default, measured or manual: which kind of number this now is. */
   source: string | null;
   by: string;
   at: number;
 }
 
-const INVOICES_KEY = 'irame.platformUsage.invoices.v2';
-const PRICES_KEY = 'irame.platformUsage.prices.v2';
-const CHANGES_KEY = 'irame.platformUsage.changes.v2';
+const CHANGES_KEY = 'irame.platformUsage.changes.v3';
 
 function readJson<T>(key: string): T[] {
   try {
@@ -1582,64 +1664,35 @@ function writeJson<T>(key: string, rows: T[]): void {
   try { localStorage.setItem(key, JSON.stringify(rows)); } catch { /* private mode */ }
 }
 
-/** Every bill entered, oldest month first. */
-export function loadInvoices(): VendorInvoice[] {
-  return readJson<VendorInvoice>(INVOICES_KEY).sort((a, b) => a.periodMonth - b.periodMonth);
-}
-
-/** Enter, or correct, one month's bill. Re-entering a month replaces it. */
-export function saveInvoice(next: VendorInvoice): VendorInvoice[] {
-  const rows = loadInvoices().filter(r => !(r.vendor === next.vendor && r.periodMonth === next.periodMonth));
-  rows.push(next);
-  rows.sort((a, b) => a.periodMonth - b.periodMonth);
-  writeJson(INVOICES_KEY, rows);
-  return rows;
-}
-
-export function removeInvoice(vendor: string, periodMonth: number): VendorInvoice[] {
-  const rows = loadInvoices().filter(r => !(r.vendor === vendor && r.periodMonth === periodMonth));
-  writeJson(INVOICES_KEY, rows);
-  return rows;
-}
-
-/** Every per-API price in force. Optional, forever. */
-export function loadPrices(): LookupPrice[] {
-  return readJson<LookupPrice>(PRICES_KEY).sort((a, b) => a.effectiveFrom - b.effectiveFrom);
-}
-
 /**
- * Add a price row.
+ * Every change to a number behind a figure, newest first.
  *
- * A renegotiation starts a new row and closes the old one rather than rewriting
- * it, so last quarter's split stays what it was when it was reported.
+ * Two kinds reach this list. The calibration job writes one whenever it moves an
+ * assumption to the customer's own measured pace. Every contract price row is one
+ * too, because a price that changed last month explains a cost that changed last
+ * month, and the customer is entitled to see that without asking anybody.
  */
-export function savePrice(next: Omit<LookupPrice, 'effectiveTo'>): LookupPrice[] {
-  const rows = loadPrices();
-  for (const row of rows) {
-    if (row.lookupId === next.lookupId && row.effectiveTo === null && row.effectiveFrom < next.effectiveFrom) {
-      row.effectiveTo = next.effectiveFrom - DAY_MS;
-    }
-  }
-  rows.push({ ...next, effectiveTo: null });
-  rows.sort((a, b) => a.effectiveFrom - b.effectiveFrom);
-  writeJson(PRICES_KEY, rows);
-  return rows;
-}
-
-export function removePrice(lookupId: string, effectiveFrom: number): LookupPrice[] {
-  const rows = loadPrices().filter(r => !(r.lookupId === lookupId && r.effectiveFrom === effectiveFrom));
-  writeJson(PRICES_KEY, rows);
-  return rows;
-}
-
-/** Every change to an entered or calibrated number, newest first. */
 export function loadUsageChanges(): UsageChange[] {
-  return readJson<UsageChange>(CHANGES_KEY).sort((a, b) => b.at - a.at);
+  const entered = readJson<UsageChange>(CHANGES_KEY);
+  const contract: UsageChange[] = loadContractPrices().map(row => ({
+    entity: 'contract_price',
+    field: row.apiName,
+    from: null,
+    to: `${(row.pricePaise / 100).toFixed(2)} rupees per ${row.billingUnit}`,
+    source: row.effectiveTo === null ? 'in force' : 'superseded',
+    by: row.setBy,
+    at: row.setAt,
+  }));
+  return [...entered, ...contract].sort((a, b) => b.at - a.at);
 }
 
-/** Record one change. The inputs behind the numbers are auditable too. */
+/** Record one change. Used by the calibration job, never by a form. */
 export function recordUsageChange(next: UsageChange): UsageChange[] {
-  const rows = [next, ...loadUsageChanges()];
-  writeJson(CHANGES_KEY, rows);
-  return rows;
+  const rows = readJson<UsageChange>(CHANGES_KEY);
+  // The job runs on every page open; the same measurement is one change, not one
+  // a day, so an identical row at the same instant is not written twice.
+  if (!rows.some(row => row.entity === next.entity && row.field === next.field && row.to === next.to && row.at === next.at)) {
+    writeJson(CHANGES_KEY, [next, ...rows]);
+  }
+  return loadUsageChanges();
 }

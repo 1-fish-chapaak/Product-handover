@@ -145,20 +145,33 @@ function buildDoc(data: UsageSnapshot): Record<string, unknown> {
 
   content.push(heading('What it cost to run'));
   content.push(sentence(
-    data.cost.lookupRupees === null
-      ? `The vendor's bill has not been entered for ${data.cost.missingMonths.map(m => m.label).join(', ') || 'this window'}, `
-        + `so no cost is claimed. ${fmtInt(data.cost.lookupCalls)} paid lookups were recorded.`
-      : `The vendor billed ${fmtInt(data.cost.lookupRupees)} INR for ${fmtInt(data.cost.lookupCalls)} paid lookups.`,
+    data.cost.noContract
+      ? `The contract prices for this workspace have not been loaded yet, so no cost is claimed. `
+        + `${fmtInt(data.cost.lookupCalls)} paid lookups were recorded.`
+      : `${fmtInt(data.cost.lookupCalls)} paid lookups cost ${fmtInt(data.cost.lookupRupees ?? 0)} INR, as per your contract.`,
   ));
   content.push(table(
     ['Figure', 'Value'],
     [
-      ['Billed by the vendor, INR', data.cost.lookupRupees === null ? 'no bill entered' : fmtInt(data.cost.lookupRupees)],
+      ['Charged by your contract, INR', data.cost.lookupRupees === null ? 'contract not loaded' : fmtInt(data.cost.lookupRupees)],
       ['Paid lookups recorded', fmtInt(data.cost.lookupCalls)],
+      ['Not priced by the contract yet', fmtInt(data.cost.unpriced.reduce((sum, row) => sum + row.calls, 0)) + ' calls'],
       ['Concierge job cost, USD', fmtOneDp(data.cost.conciergeUsd)],
       [data.net.headline + ', INR', data.net.net === null ? fmtInt(data.net.workAvoided) + ' of work avoided' : fmtInt(data.net.net)],
     ],
   ));
+  if (data.cost.prices.length > 0) {
+    content.push(table(
+      ['Your contract price', 'Charged per', 'Charge, INR', 'In force from'],
+      data.cost.prices.map(price => [
+        price.apiName,
+        price.billingUnit,
+        fmtOneDp(price.pricePaise / 100),
+        formatDate(price.effectiveFrom),
+      ]),
+      ['*', 'auto', 'auto', 'auto'],
+    ));
+  }
 
   content.push(heading('Value over time'));
   content.push(table(

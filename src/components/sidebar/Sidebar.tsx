@@ -170,9 +170,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     { view: 'admin-users', perm: 'ad_users_manage' },
     { view: 'admin-roles', perm: 'ad_roles_manage' },
     { view: 'admin-logs', perm: 'ad_logs' },
-    // The Platform Usage tab: the two numbers a person types for that page.
+    // The Platform Usage tab: the assumptions and contract prices that page rests
+    // on, read only.
     { view: 'admin-usage', perm: 'ad_usage_settings' },
-    { view: 'admin-usage', perm: 'ad_usage_invoices' },
   ];
   const adminVisible = adminTabPerms.some(t => can(t.perm));
   const firstAdminView: View = (adminTabPerms.find(t => can(t.perm))?.view) ?? 'admin-users';

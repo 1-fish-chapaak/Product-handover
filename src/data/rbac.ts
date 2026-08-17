@@ -82,7 +82,7 @@ export type PermissionKey =
   | 'mem_view' | 'mem_approve' | 'mem_admin'
   // Admin (existing 2 + new 4 + usage)
   | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_self' | 'ad_usage_export'
-  | 'ad_usage_settings' | 'ad_usage_invoices';
+  | 'ad_usage_settings';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -193,12 +193,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     // and never a comparison, so it is safe to hold on its own.
     { key: 'ad_usage_self',   name: 'My Own Usage',     desc: 'See your own queue, runs and hours saved in Platform Usage' },
     { key: 'ad_usage_export', name: 'Export Usage',     desc: 'Export platform usage as CSV' },
-    // The two entered numbers on Platform Usage are permissions of their own,
-    // not a persona. Settings stay tenant-wide, because per-team assumptions
-    // make two teams' numbers incomparable; invoice entry can go to finance ops
-    // without giving them the company-wide view behind it.
-    { key: 'ad_usage_settings', name: 'Usage Settings',   desc: 'Change the assumptions every value figure on Platform Usage rests on' },
-    { key: 'ad_usage_invoices', name: 'Enter Vendor Bills', desc: "Enter the vendor's monthly bill that costs the paid lookups" },
+    // Nothing on Platform Usage is a number a customer types. The assumptions
+    // measure themselves from the workspace's own pace, and the lookup prices are
+    // contract terms irame seeds when the deal is signed. This permission is the
+    // right to READ both, with their sources and their audit trail.
+    { key: 'ad_usage_settings', name: 'Usage Assumptions',   desc: 'See the assumptions and contract prices every Platform Usage figure rests on' },
   ]},
 ];
 

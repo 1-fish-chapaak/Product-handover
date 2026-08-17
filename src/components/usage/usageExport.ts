@@ -13,7 +13,7 @@
  */
 
 import {
-  COVERAGE_NOTE, dataAsOfLabel, formatDate, formatMonth,
+  COVERAGE_NOTE, dataAsOfLabel, formatDate,
 } from '../../data/platform-usage';
 import {
   PERSONA_TITLE, SETTING_SHORT, SOURCE_FIELD, SOURCE_LABEL,
@@ -75,18 +75,20 @@ export function buildUsageCsv(
   push('Rows worked through', data.value.rows, data.priorValue ? data.priorValue.rows : null);
   push('Machine time (hours)', fmtOneDp(data.value.machineHours), null);
 
-  section('Cost to run (entered, not estimated)');
+  section('Cost to run (your contract, not an estimate)');
   push('Figure', 'Value', 'Note');
   push(
-    'Billed by the vendor (INR)',
+    'Charged by your contract (INR)',
     data.cost.lookupRupees === null ? null : Math.round(data.cost.lookupRupees),
-    data.cost.lookupRupees === null
-      ? `no bill entered for ${data.cost.missingMonths.map(m => m.label).join(', ') || 'this window'}`
-      : `${data.cost.invoices.length} invoices entered`,
+    data.cost.noContract
+      ? 'your contract prices have not been loaded yet'
+      : data.cost.complete
+        ? 'every recorded call is priced by the contract'
+        : `${data.cost.unpriced.reduce((sum, row) => sum + row.calls, 0)} calls are on APIs the contract does not price yet`,
   );
   push('Paid lookups recorded', data.cost.lookupCalls, `${data.lookups.failed} failed, which are not charged`);
   push('Concierge job cost (USD)', fmtOneDp(data.cost.conciergeUsd), 'recorded in dollars by the tools, never converted here');
-  push('Net value (INR)', data.net.net === null ? null : Math.round(data.net.net), data.net.headline === 'Net value' ? 'work avoided less the vendor bill' : 'not computed while any bill is missing');
+  push('Net value (INR)', data.net.net === null ? null : Math.round(data.net.net), data.net.headline === 'Net value' ? 'work avoided less what the contract charged' : 'not computed while the contract prices are missing');
 
   section('Value over time');
   push('Bucket', 'Runs', 'Rows', 'Hours saved', 'Worth (INR)');
@@ -207,12 +209,22 @@ export function buildUsageCsv(
   }
 
   section('Paid lookups');
-  push('API', 'Successful calls', 'Failed', 'Touches personal data', 'Price entered');
+  push('API', 'Successful calls', 'Runs', 'Failed', 'Touches personal data', 'Contract price (paise)', 'Charged per', 'Charged (INR)');
   for (const line of data.lookups.rows) {
-    push(line.name, line.calls, line.failed, line.personalData ? 'yes' : 'no', line.pricePaise === null ? null : line.pricePaise);
+    push(
+      line.name, line.calls, line.batches, line.failed, line.personalData ? 'yes' : 'no',
+      line.pricePaise, line.billingUnit, line.chargedPaise === null ? null : line.chargedPaise / 100,
+    );
   }
-  for (const invoice of data.cost.invoices) {
-    push(`Bill: ${formatMonth(invoice.periodMonth)} ${invoice.vendor}`, invoice.amountPaise / 100, null, null, invoice.enteredBy);
+  section('Your contract prices');
+  push('API', 'Vendor', 'Charged per', 'Charge (INR)', 'In force from', 'Until', 'Set by');
+  for (const price of data.cost.prices) {
+    push(
+      price.apiName, price.vendor, price.billingUnit, price.pricePaise / 100,
+      formatDate(price.effectiveFrom),
+      price.effectiveTo === null ? 'in force' : formatDate(price.effectiveTo),
+      price.setBy,
+    );
   }
 
   section("What the assistant has learned");
@@ -222,7 +234,7 @@ export function buildUsageCsv(
   push('Used in the last seven days', data.learn.usedThisWeek);
 
   if (data.changes.rows.length > 0) {
-    section('Changes to the assumptions and the entered bills');
+    section('Changes to the numbers behind the figures');
     push('What changed', 'From', 'To', 'Where it came from', 'Who', 'When');
     for (const change of data.changes.rows) {
       push(change.field, change.from, change.to, change.source, change.by, formatDate(change.at));

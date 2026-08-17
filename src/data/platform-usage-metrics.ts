@@ -33,10 +33,10 @@ import {
   CONCIERGE_JOBS, CREATED_RECORDS, DAY_MS, ENGAGEMENT_ROWS, HISTORY_START, HOUR_MS,
   INSIGHTS, LOOKUP_CALLS, NEVER_RUN_WORKFLOWS, PAID_LOOKUPS, REPORT_ACTIVITY,
   REPORT_RECORDS, REPORT_SHARES, REVIEW_RECORDS, RISK_ROWS, RUNS, SAMPLE_RUNS,
-  SOP_RACM_JOBS, TRACED_EXCEPTIONS, formatDayMonth, formatMonth, formatShortMonth, loadInvoices,
-  loadPrices, loadUsageChanges, monthsInWindow, recordUsageChange, startOfMonthUtc,
-  teamOfName, type AuditEventRow, type CreatedKind, type CreatedRecord, type LookupPrice,
-  type RunStatus, type TracedException, type VendorInvoice, type WorkflowRun,
+  SOP_RACM_JOBS, TRACED_EXCEPTIONS, formatDayMonth, formatMonth, formatShortMonth,
+  loadContractPrices, loadUsageChanges, monthsInWindow, priceInForce, recordUsageChange,
+  startOfMonthUtc, teamOfName, type AuditEventRow, type ContractPrice, type CreatedKind,
+  type CreatedRecord, type LookupCall, type RunStatus, type TracedException, type WorkflowRun,
 } from './platform-usage';
 import { CONTROL_LIBRARY } from './controlLibrary';
 import { WORKFLOWS } from './mockData';
@@ -87,6 +87,16 @@ export const fmtMoneyExact = (rupees: number): string => `₹${INT_FMT.format(Ma
 
 export const fmtPaise = (paise: number): string => fmtMoneyExact(paise / 100);
 
+/**
+ * A unit price, to the paisa.
+ *
+ * A contract rate of one rupee seventy five printed as "₹2" is a different
+ * contract, so a price keeps its paise. A whole rupee still prints whole, because
+ * "₹12.00" reads as a machine talking.
+ */
+export const fmtRate = (paise: number): string =>
+  paise % 100 === 0 ? fmtMoneyExact(paise / 100) : `₹${(paise / 100).toFixed(2)}`;
+
 export const fmtPct = (pct: number): string => `${ONE_DP.format(pct)}%`;
 
 /** Dollars, because the one cost the product records by itself is in dollars. */
@@ -116,7 +126,9 @@ export interface UsageSettings {
   measuredReviewRate: number | null;
   measuredControlTestHours: number | null;
   measuredAt: number | null;
-  measuredSampleN: number | null;
+  /** How many records each rate was measured from. Two rates, two samples. */
+  measuredReviewSampleN: number | null;
+  measuredControlTestSampleN: number | null;
   measuredFrom: number | null;
   updatedBy: string | null;
   updatedAt: number | null;
@@ -135,7 +147,8 @@ export const SETTING_DEFAULTS: UsageSettings = {
   measuredReviewRate: null,
   measuredControlTestHours: null,
   measuredAt: null,
-  measuredSampleN: null,
+  measuredReviewSampleN: null,
+  measuredControlTestSampleN: null,
   measuredFrom: null,
   updatedBy: null,
   updatedAt: null,
@@ -195,58 +208,15 @@ const settingValue = (key: NumericSetting, value: number): string =>
   key === 'hourlyRate' ? fmtMoneyExact(value) : key === 'manualControlTestHours' ? `${fmtOneDp(value)} hrs` : fmtInt(value);
 
 /**
- * Pin a value over whatever the platform would have used.
+ * A value set by hand, outside the product.
  *
- * Rare by design: pinning stops the platform improving the number by itself, so
- * the screen that offers it says so. Audited like every other entered number.
+ * The two measurable numbers look after themselves and the two money ones run on
+ * their labelled defaults, so nothing in the UI writes any of them: there is no
+ * pin field and no settings form anywhere. If a tenant genuinely needs a
+ * different value, it is set in configuration by support or engineering, arrives
+ * as a stored `manual` source, and is labelled as such on every figure it feeds.
+ * The audit row is written by whatever sets it.
  */
-export function pinSetting(key: NumericSetting, value: number, by: string): UsageSettings {
-  const current = loadSettings();
-  const sourceField = SOURCE_FIELD[key];
-  const next: UsageSettings = {
-    ...current,
-    [key]: value,
-    [sourceField]: 'manual',
-    updatedBy: by,
-    updatedAt: ANCHOR,
-  } as UsageSettings;
-  recordUsageChange({
-    entity: 'usage_setting',
-    field: SETTING_SHORT[key],
-    from: settingValue(key, current[key]),
-    to: settingValue(key, value),
-    source: SOURCE_LABEL.manual,
-    by,
-    at: ANCHOR,
-  });
-  return persistSettings(next);
-}
-
-/** Hand a pinned number back to the platform. */
-export function unpinSetting(key: NumericSetting, by: string): UsageSettings {
-  const current = loadSettings();
-  const measured = key === 'manualReviewRate' ? current.measuredReviewRate
-    : key === 'manualControlTestHours' ? current.measuredControlTestHours : null;
-  const value = measured ?? SETTING_DEFAULTS[key];
-  const source: SettingSource = measured !== null ? 'measured' : 'default';
-  const next = {
-    ...current,
-    [key]: value,
-    [SOURCE_FIELD[key]]: source,
-    updatedBy: by,
-    updatedAt: ANCHOR,
-  } as UsageSettings;
-  recordUsageChange({
-    entity: 'usage_setting',
-    field: SETTING_SHORT[key],
-    from: settingValue(key, current[key]),
-    to: settingValue(key, value),
-    source: SOURCE_LABEL[source],
-    by,
-    at: ANCHOR,
-  });
-  return persistSettings(next);
-}
 
 /* ── The calibration job ─────────────────────────────────────────────────── */
 
@@ -337,12 +307,17 @@ export function applyCalibration(settings: UsageSettings): UsageSettings {
   let next = { ...settings };
   let changed = false;
 
-  const apply = (key: NumericSetting, measurement: Measurement | null, store: 'measuredReviewRate' | 'measuredControlTestHours') => {
+  const apply = (
+    key: NumericSetting,
+    measurement: Measurement | null,
+    store: 'measuredReviewRate' | 'measuredControlTestHours',
+    sampleStore: 'measuredReviewSampleN' | 'measuredControlTestSampleN',
+  ) => {
     if (!measurement) return;
     next[store] = measurement.value;
     next.measuredAt = ANCHOR;
-    next.measuredSampleN = measurement.sampleN;
-    next.measuredFrom = measurement.from;
+    next[sampleStore] = measurement.sampleN;
+    next.measuredFrom = Math.min(next.measuredFrom ?? measurement.from, measurement.from);
     const sourceField = SOURCE_FIELD[key];
     // A pinned value is a deliberate decision by a person. The job never
     // overrides it; it keeps measuring underneath so unpinning has somewhere
@@ -363,8 +338,8 @@ export function applyCalibration(settings: UsageSettings): UsageSettings {
     changed = true;
   };
 
-  apply('manualReviewRate', found.reviewRate, 'measuredReviewRate');
-  apply('manualControlTestHours', found.controlTestHours, 'measuredControlTestHours');
+  apply('manualReviewRate', found.reviewRate, 'measuredReviewRate', 'measuredReviewSampleN');
+  apply('manualControlTestHours', found.controlTestHours, 'measuredControlTestHours', 'measuredControlTestSampleN');
 
   return changed || next.measuredAt !== settings.measuredAt ? persistSettings(next) : settings;
 }
@@ -605,65 +580,101 @@ export function deltaPct(now: number, before: number | null): number | null {
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface CostToRun {
-  /** The vendor's bills for the window, exact, in rupees. Null when unpriced. */
+  /** What the contract charges for the calls in this window, in rupees. */
   lookupRupees: number | null;
-  /** Calls the platform recorded, whether or not anyone has priced them. */
+  /** Successful calls the platform recorded, priced or not. */
   lookupCalls: number;
-  /** Months in the window with recorded calls and no bill entered. */
-  missingMonths: { at: number; label: string; calls: number }[];
-  invoices: VendorInvoice[];
+  /** Calls made against an API the contract does not price, and when. */
+  unpriced: { name: string; calls: number }[];
+  /** The contract rows the figure was computed from. */
+  prices: ContractPrice[];
   /** The one cost the product records by itself, in the currency it records. */
   conciergeUsd: number;
   conciergeJobs: number;
   /** Jobs whose pipeline never wrote a cost, so they are counted, not priced. */
   conciergeUnpriced: number;
-  /** True when every month in the window has its bill. */
+  /** True when every recorded call in the window has a contract price behind it. */
   complete: boolean;
+  /** True when no contract has been loaded for this workspace at all. */
+  noContract: boolean;
+}
+
+/**
+ * What one API charged over a window, at the price in force on each call's own day.
+ *
+ * The billing unit is the whole ballgame. Per row charges for every successful
+ * call. Per run charges once for the batch, however many rows it checked, so a
+ * run of four hundred vendors is one charge and not four hundred. Reading it the
+ * wrong way puts the figure out by a factor of a thousand, which is why it is a
+ * contract term rather than anybody's assumption.
+ */
+function chargeFor(calls: LookupCall[], prices: ContractPrice[]): { paise: number; priced: number; unpriced: number } {
+  let paise = 0;
+  let priced = 0;
+  let unpriced = 0;
+  const chargedBatches = new Set<string>();
+
+  for (const call of calls) {
+    if (call.status !== 'complete') continue;
+    const price = priceInForce(call.lookupId, call.at, prices);
+    if (!price) { unpriced += 1; continue; }
+    priced += 1;
+    if (price.billingUnit === 'row') {
+      paise += price.pricePaise;
+      continue;
+    }
+    // Per run: the batch is charged once, on the price in force when it ran.
+    if (chargedBatches.has(call.batchId)) continue;
+    chargedBatches.add(call.batchId);
+    paise += price.pricePaise;
+  }
+
+  return { paise, priced, unpriced };
 }
 
 /**
  * Cost to run (PU-04).
  *
- * Invoice first. The lookup cost is the sum of the bills finance entered, which
- * is exact by definition and reconciles with what the vendor charged. A window
- * missing one of its bills is an unfinished window, not a cheaper one, so the
- * figure stays absent and the months that are missing are named — a partial
- * total under a complete-sounding label is a defect, not a rounding.
+ * The lookup cost is the volume the platform recorded, priced at the customer's
+ * own contract: irame sets those prices when the deal is signed, so the figure
+ * simply appears and is labelled "as per your contract". Nobody at the customer
+ * types a price, a bill or an override.
+ *
+ * Where the contract does not price an API the calls are counted and named rather
+ * than charged at a guess, and the window is not called complete. With no
+ * contract loaded at all the figure is absent, not zero.
  *
  * The Concierge job cost is the only money the product records on its own. It is
  * recorded in dollars, and it is returned separately rather than converted at a
- * rate nobody has entered or added into a rupee total. Section 3 of the spec
- * forbids a blended figure, and a silent conversion is one.
+ * rate nobody has entered or added into a rupee total. Section 3 forbids a
+ * blended figure, and a silent conversion is one.
  */
 export function costToRun(p: Period): CostToRun {
-  const invoices = loadInvoices().filter(inv => inv.periodMonth >= startOfMonthUtc(p.from) && inv.periodMonth <= p.to);
-  const callsInWindow = LOOKUP_CALLS.filter(c => c.status === 'complete' && c.at >= p.from && c.at <= p.to);
+  const prices = loadContractPrices();
+  const callsInWindow = LOOKUP_CALLS.filter(c => c.at >= p.from && c.at <= p.to);
+  const complete = callsInWindow.filter(c => c.status === 'complete');
+  const charge = chargeFor(callsInWindow, prices);
 
-  const byMonth = new Map<number, number>();
-  for (const call of callsInWindow) {
-    const m = startOfMonthUtc(call.at);
-    byMonth.set(m, (byMonth.get(m) ?? 0) + 1);
-  }
-
-  const billed = new Set(invoices.map(inv => inv.periodMonth));
-  const missingMonths = monthsInWindow(p.from, p.to)
-    .filter(m => (byMonth.get(m) ?? 0) > 0 && !billed.has(m))
-    .map(m => ({ at: m, label: formatMonth(m), calls: byMonth.get(m) ?? 0 }));
-
-  const complete = missingMonths.length === 0 && invoices.length > 0;
+  const unpriced = PAID_LOOKUPS
+    .map(lookup => ({
+      name: lookup.name,
+      calls: complete.filter(c => c.lookupId === lookup.id && priceInForce(c.lookupId, c.at, prices) === null).length,
+    }))
+    .filter(row => row.calls > 0);
 
   const conciergeInWindow = CONCIERGE_JOBS.filter(j => j.at >= p.from && j.at <= p.to && j.status === 'completed');
   const priced = conciergeInWindow.filter(j => j.costWiring === 'priced' && j.llmCostUsd !== null);
 
   return {
-    lookupRupees: complete ? invoices.reduce((s, inv) => s + inv.amountPaise, 0) / 100 : null,
-    lookupCalls: callsInWindow.length,
-    missingMonths,
-    invoices,
+    lookupRupees: prices.length === 0 ? null : charge.paise / 100,
+    lookupCalls: complete.length,
+    unpriced,
+    prices: prices.filter(row => row.effectiveFrom <= p.to && (row.effectiveTo === null || row.effectiveTo >= p.from)),
     conciergeUsd: priced.reduce((s, j) => s + (j.llmCostUsd ?? 0), 0),
     conciergeJobs: conciergeInWindow.length,
     conciergeUnpriced: conciergeInWindow.length - priced.length,
-    complete,
+    complete: prices.length > 0 && charge.unpriced === 0,
+    noContract: prices.length === 0,
   };
 }
 
@@ -1681,41 +1692,60 @@ export function ccm(p: Period, scope: Scope): Ccm {
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface LookupVolume {
-  rows: { name: string; calls: number; failed: number; personalData: boolean; pricePaise: number | null; billingUnit: string | null }[];
+  rows: {
+    name: string;
+    calls: number;
+    failed: number;
+    /** Batches, which is what a per-run API charges for. */
+    batches: number;
+    personalData: boolean;
+    pricePaise: number | null;
+    billingUnit: 'run' | 'row' | null;
+    /** What this API charged over the window, at its contract price. */
+    chargedPaise: number | null;
+  }[];
   calls: number;
   failed: number;
   personalDataCalls: number;
-  /** Invoice total divided by recorded calls. Derived, and labelled as such. */
+  /** The contract cost divided by the calls it covered. Says what it is. */
   effectiveRatePaise: number | null;
-  prices: LookupPrice[];
+  prices: ContractPrice[];
 }
 
 /**
- * Lookup volume, and what it works out at (PU-19).
+ * Lookup volume, and what the contract charges for it (PU-19).
  *
- * Volume needs nothing new: the calls are recorded today. The rate is derived
- * from the bill divided by the calls that month, and it is labelled as derived
- * from the customer's own invoices — never presented as a contract price, and
- * never read from a rate card outside the product.
+ * Volume needs nothing new: the calls are recorded today. The charge is that
+ * volume at the contract price in force on each call's own day, which is why a
+ * renegotiation in February does not move January's figure. The rate shown next
+ * to it is the contract cost divided by the calls it covered, and it is described
+ * as exactly that rather than as a rate card anybody can quote.
  */
 export function lookupVolume(p: Period): LookupVolume {
   const calls = LOOKUP_CALLS.filter(c => c.at >= p.from && c.at <= p.to);
   const complete = calls.filter(c => c.status === 'complete');
-  const prices = loadPrices().filter(pr => pr.effectiveFrom <= p.to && (pr.effectiveTo === null || pr.effectiveTo >= p.from));
+  const prices = loadContractPrices();
   const cost = costToRun(p);
 
   const rows = PAID_LOOKUPS.map(lookup => {
     const mine = calls.filter(c => c.lookupId === lookup.id);
-    const price = prices.find(pr => pr.lookupId === lookup.id) ?? null;
+    const mineComplete = mine.filter(c => c.status === 'complete');
+    // The row shows the price in force at the end of the window, because that is
+    // the one a reader can check against their contract today. The charge itself
+    // is computed per call, at whatever was in force then.
+    const price = priceInForce(lookup.id, p.to, prices);
+    const charge = chargeFor(mine, prices);
     return {
       name: lookup.name,
-      calls: mine.filter(c => c.status === 'complete').length,
-      failed: mine.filter(c => c.status === 'failed').length,
+      calls: mineComplete.length,
+      failed: mine.length - mineComplete.length,
+      batches: new Set(mineComplete.map(c => c.batchId)).size,
       personalData: lookup.personalData,
       pricePaise: price?.pricePaise ?? null,
       billingUnit: price?.billingUnit ?? null,
+      chargedPaise: charge.priced === 0 ? null : charge.paise,
     };
-  }).filter(r => r.calls + r.failed > 0).sort((a, b) => b.calls - a.calls);
+  }).filter(r => r.calls + r.failed > 0).sort((a, b) => (b.chargedPaise ?? 0) - (a.chargedPaise ?? 0) || b.calls - a.calls);
 
   return {
     rows,
@@ -1725,27 +1755,36 @@ export function lookupVolume(p: Period): LookupVolume {
     effectiveRatePaise: cost.lookupRupees !== null && complete.length > 0
       ? Math.round((cost.lookupRupees * 100) / complete.length)
       : null,
-    prices,
+    prices: cost.prices,
   };
 }
 
-/** Every month with recorded calls, and whether its bill is in. */
-export function invoiceLedger(): { at: number; label: string; calls: number; invoice: VendorInvoice | null }[] {
-  const invoices = loadInvoices();
-  const byMonth = new Map<number, number>();
+/**
+ * The contract, month by month, against the volume it priced.
+ *
+ * The customer cannot change any of this, so the ledger is a statement rather
+ * than a form: what ran, what it charged, and which calls the contract does not
+ * cover yet.
+ */
+export function contractLedger(): { at: number; label: string; calls: number; chargedPaise: number; unpricedCalls: number }[] {
+  const prices = loadContractPrices();
+  const byMonth = new Map<number, LookupCall[]>();
   for (const call of LOOKUP_CALLS) {
-    if (call.status !== 'complete') continue;
     const m = startOfMonthUtc(call.at);
-    byMonth.set(m, (byMonth.get(m) ?? 0) + 1);
+    byMonth.set(m, [...(byMonth.get(m) ?? []), call]);
   }
   return Array.from(byMonth.entries())
     .sort((a, b) => b[0] - a[0])
-    .map(([at, calls]) => ({
-      at,
-      label: formatMonth(at),
-      calls,
-      invoice: invoices.find(inv => inv.periodMonth === at) ?? null,
-    }));
+    .map(([at, calls]) => {
+      const charge = chargeFor(calls, prices);
+      return {
+        at,
+        label: formatMonth(at),
+        calls: calls.filter(c => c.status === 'complete').length,
+        chargedPaise: charge.paise,
+        unpricedCalls: charge.unpriced,
+      };
+    });
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1776,7 +1815,7 @@ export function changeHistory(p: Period): ChangeHistory {
  * The attention strip
  * ────────────────────────────────────────────────────────────────────────── */
 
-export type AttentionTarget = 'risks' | 'invoice' | 'stuck' | 'controls' | 'queue' | 'sampling' | 'memory';
+export type AttentionTarget = 'risks' | 'stuck' | 'controls' | 'queue' | 'sampling' | 'memory';
 
 export interface AttentionCard {
   id: string;
@@ -1791,22 +1830,24 @@ export interface AttentionCard {
  * At most three cards, each a sentence with one thing to do. Nothing here is
  * sent anywhere and nothing has a threshold to configure: every card is a fact
  * already on the page, said early because acting on it should not wait for a
- * scroll. Cards a reader cannot act on are not shown to them — a card whose
- * action is "ask somebody else" is not an action.
+ * scroll.
+ *
+ * Cards a reader cannot act on are not shown to them, which is why an API the
+ * contract does not price yet is not one. That is ours to fix, not theirs: it is
+ * stated plainly in the cost block instead of being handed to somebody with no
+ * way to act on it.
  */
 export function attentionCards(
   scope: Scope,
   p: Period,
   data: {
     risks: RiskPicture;
-    cost: CostToRun;
     stuck: StuckRun[];
     never: NeverExercised;
     queue: QueueItem[];
     sampling: Sampling;
     smartLearn: SmartLearn;
   },
-  can: { invoices: boolean },
 ): AttentionCard[] {
   const cards: AttentionCard[] = [];
 
@@ -1855,16 +1896,6 @@ export function attentionCards(
       target: 'risks',
       text: `${fmtInt(data.risks.unmappedSevere.length)} critical and high ${data.risks.unmappedSevere.length === 1 ? 'risk has' : 'risks have'} no control covering ${data.risks.unmappedSevere.length === 1 ? 'it' : 'them'}.`,
       actionLabel: 'See which',
-    });
-  }
-
-  if (scope.persona === 'cfo' && can.invoices && data.cost.missingMonths.length > 0) {
-    const month = data.cost.missingMonths[0];
-    cards.push({
-      id: 'invoice',
-      target: 'invoice',
-      text: `${month.label} has ${fmtInt(month.calls)} recorded lookups and no bill entered, so nothing in this window is costed.`,
-      actionLabel: 'Enter it in Administration',
     });
   }
 
