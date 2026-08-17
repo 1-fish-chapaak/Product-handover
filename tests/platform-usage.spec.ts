@@ -38,14 +38,6 @@ async function openUsageAs(page: Page, userId: string) {
   await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toBeVisible();
 }
 
-async function openAdminUsage(page: Page) {
-  await page.evaluate(() =>
-    window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
-      detail: { kind: 'control', id: '', view: 'admin-usage' },
-    })));
-  await expect(page.getByRole('heading', { name: 'The assumptions behind every value figure' })).toBeVisible();
-}
-
 /** A workspace whose contract has not been loaded yet. */
 async function withNoContract(page: Page) {
   await page.addInitScript(key => {
@@ -219,27 +211,39 @@ test.describe('value and cost', () => {
 });
 
 test.describe('nobody at the customer types a number', () => {
-  test('Administration states the assumptions and the contract, and offers no input at all', async ({ page }) => {
+  test('the page offers no input of any kind, and states its own assumptions', async ({ page }) => {
     await openUsageAs(page, 'u-admin');
-    await openAdminUsage(page);
 
-    await expect(page.getByRole('heading', { name: 'What your contract charges' })).toBeVisible();
-    await expect(page.getByText('Read only. These are contract terms, not settings.')).toBeVisible();
-    await expect(page.getByText(/Read only\. A different value is set in configuration/)).toBeVisible();
+    // Every block open, so a field hiding inside a drill would be caught too.
+    const drills = page.locator('[data-usage-block] button[aria-expanded="false"]');
+    for (let i = await drills.count(); i > 0; i--) {
+      await drills.first().click().catch(() => { /* it opened something else */ });
+    }
 
-    // No field, no pin, no save, anywhere on the screen.
-    await expect(page.locator('main input, main select, main textarea')).toHaveCount(0);
+    // The period selector's custom range is the page's only input, and it is
+    // closed until asked for. Nothing else on the page takes a value.
+    await expect(page.locator('[data-usage-block] input, [data-usage-block] select, [data-usage-block] textarea')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Pin$/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Save this price|Enter this bill/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Save this price|Enter this bill|Enter a bill/ })).toHaveCount(0);
+
+    // And the numbers it rests on are stated under the figures they produce.
+    await expect(block(page, 'Net value')).toContainText('rows a person checks by hand in an hour');
   });
 
   test('the contract is versioned, so a renegotiation does not rewrite an old window', async ({ page }) => {
     await openUsageAs(page, 'u-admin');
-    await openAdminUsage(page);
-    const rows = page.locator('tbody tr', { hasText: 'PAN Basic API Check' });
+    // A window that spans the renegotiation, so both rows are behind the figure.
+    // A window that does not is charged by one row, which is the point of them.
+    await page.getByRole('button', { name: 'Since you started', exact: true }).click();
+    const cost = block(page, 'Cost to run');
+    await cost.scrollIntoViewIfNeeded();
+    await cost.getByRole('button', { name: /The contract rows behind this figure/ }).click();
+    const rows = cost.locator('li', { hasText: 'PAN Basic API Check' });
+    // Two rows for one API: the one that was in force, and the one that replaced
+    // it. Both are readable, and neither can be edited from here.
     await expect(rows).toHaveCount(2);
-    await expect(rows.first()).toContainText('to');
-    await expect(rows.nth(1)).toContainText('onwards');
+    await expect(cost).toContainText('until');
+    await expect(cost).toContainText('in force');
   });
 });
 

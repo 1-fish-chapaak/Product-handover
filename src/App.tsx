@@ -1224,8 +1224,6 @@ function AppInner() {
         return <AdminView activeTab="roles" />;
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
-      case 'admin-usage':
-        return <AdminView activeTab="usage" />;
 
       case 'platform-usage':
         return <PlatformUsageView />;

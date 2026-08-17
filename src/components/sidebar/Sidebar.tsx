@@ -170,9 +170,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     { view: 'admin-users', perm: 'ad_users_manage' },
     { view: 'admin-roles', perm: 'ad_roles_manage' },
     { view: 'admin-logs', perm: 'ad_logs' },
-    // The Platform Usage tab: the assumptions and contract prices that page rests
-    // on, read only.
-    { view: 'admin-usage', perm: 'ad_usage_settings' },
   ];
   const adminVisible = adminTabPerms.some(t => can(t.perm));
   const firstAdminView: View = (adminTabPerms.find(t => can(t.perm))?.view) ?? 'admin-users';
@@ -201,7 +198,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   /* View group helpers for active detection */
   const workflowViews: View[] = ['workflow-templates', 'workflow-detail', 'workflow-library', 'workflow-executor'];
   const aiConciergeViews: View[] = ['ai-concierge', 'ai-concierge-forensics', 'ai-concierge-table-extractor'];
-  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs', 'admin-usage'];
+  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
   return (
     // In-flow rail — animating its width reflows the page, so expanding (hover

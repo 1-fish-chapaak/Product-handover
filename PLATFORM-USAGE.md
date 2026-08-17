@@ -1,8 +1,10 @@
 # Platform Usage
 
 System > Platform Usage. Built fresh from the build spec: three lenses on one page, PU-01 to
-PU-28, the attention strip, a sentence at the head of every block, and **nothing anywhere in the
-product for a customer to fill in**. The assumptions behind the value figures measure themselves
+PU-28, the attention strip, a sentence at the head of every block, and **no input anywhere on the
+page or anywhere else in the product**. There is no Administration screen for it either: the page
+states its own assumptions under the figures they produce, and its own contract prices under the
+cost they produce. The assumptions behind the value figures measure themselves
 from the customer's own recorded pace. The lookup prices are contract terms, set by irame when
 the deal is signed and seeded platform-side, so the cost simply appears and says "as per your
 contract".
@@ -21,8 +23,6 @@ Code:
   calibration job, the windows, the scopes, the attention strip, and one `snapshot()` the page
   and both exports read so they can never diverge.
 - `src/components/usage/` the page, its blocks, and the CSV and PDF exports. It reads only.
-- `src/components/admin/UsageAdminSection.tsx` Administration > Platform Usage: a read only
-  statement of the assumptions, the contract prices and the audit trail behind both. No inputs.
 - `tests/platform-usage.spec.ts` the spec's acceptance tests, run against the real page.
 
 ## The question the page answers
@@ -176,6 +176,11 @@ is set in configuration by support, arrives as a stored `manual` source, and is 
 every figure it feeds. Settings are tenant wide, because per team values make teams impossible to
 compare.
 
+All of it is readable from the page itself. The assumptions strip sits under every value figure with
+each number's source next to it and its change history one click away, and the contract rows sit in
+the cost block's own drill. That is why there is no Administration screen: a second surface would
+have restated what the figures already say, one click further from them.
+
 Every figure that rests on a setting prints that setting underneath, with where it came from. The
 strip opens its own change history, so "assumptions changed in April 2026 so far: 2" is a real,
 listable figure.
@@ -201,9 +206,9 @@ about you yet"). Four zeros that look measured would be a lie about a feature th
 ## Permissions
 
 `ad_usage` / `ad_usage_people` / `ad_usage_self` are the three lenses. `ad_usage_export` gates the
-two exports. `ad_usage_settings` is the right to READ the assumptions and the contract prices in
-Administration, with their sources and audit trail. `ad_usage_invoices` is gone: nothing in the
-product enters a bill.
+two exports. That is the whole list. `ad_usage_invoices` went with the bill screen and
+`ad_usage_settings` went with the Administration tab: neither gated anything once the page carried
+its own assumptions strip and contract drill.
 
 ## Where the numbers come from
 
@@ -236,12 +241,13 @@ Four places. Each one is a decision, not an omission.
    conversion is the blended figure section 3 forbids, so the dollar figure is shown as itself, next
    to the rupee total, added to nothing. Two of the six tools set their total to `0.0` literally, so
    their jobs are counted as unpriced rather than as free.
-2. **The vendor invoice layer is not a customer screen.** PU-19 still documents a `vendor_invoices`
-   table, but the same section now says the customer never sees a price form, a pin field or an
-   invoice screen, and that cost is volume times the contract price. Two cost sources on one page
-   would leave a reader asking which one is true, so the customer page has one: the contract.
-   Reconciling what the vendor actually billed against what the contract says is an irame side job,
-   on the platform console rather than in the tenant's product.
+2. **The vendor invoice layer is not a customer screen, and neither is anything else.** PU-19 still
+   documents a `vendor_invoices` table, but the same section now says the customer never sees a price
+   form, a pin field or an invoice screen, and that cost is volume times the contract price. Two cost
+   sources on one page would leave a reader asking which one is true, so the customer page has one:
+   the contract. Reconciling what the vendor actually billed against what the contract says is an
+   irame side job, on the platform console rather than in the tenant's product. The page has no
+   Administration screen at all for the same reason.
 3. **Stuck runs are scoped to the window.** PU-11's query has no time bound, but a run that failed
    three months ago is not stuck, it was dealt with. The block counts failed, blocked and long
    paused runs inside the selected window, and says so.
@@ -268,7 +274,8 @@ Driven in the real app, not read off the source, at 1560 by 1100:
   ₹2.72 a lookup across every API"; the per API drill shows CIN charging 5 runs times ₹12 rather
   than 45 calls times ₹12. With the contract cleared the hero reads Work avoided and the cost block
   says the prices have not been loaded yet, with no zero printed anywhere.
-- Administration → Platform Usage renders zero inputs, selects and textareas, and no Pin button.
+- With every drill on the page open, it renders zero inputs, selects and textareas outside the
+  period selector's own custom range, and no Pin button.
 - CSV and PDF both download, with the contract rows in both.
 - `tests/platform-usage.spec.ts` (31 tests), `tsc --noEmit`, and `eslint` on every file in the
   feature.
