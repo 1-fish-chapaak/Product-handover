@@ -126,6 +126,51 @@ test.describe('the page answers before it asks', () => {
     await page.getByRole('button', { name: 'See which' }).first().click();
     await expect(block(page, 'Risks')).toBeInViewport({ timeout: 4000 });
   });
+
+  /**
+   * Every card, on every lens, has to end somewhere.
+   *
+   * The CFO's view carries no stuck block, so its repeated-failure card used to
+   * scroll to an element that was not there and silently do nothing. A card that
+   * does nothing is worse than no card, so each one is clicked here and has to
+   * either bring its block into view or leave the page for the thing itself.
+   */
+  for (const [userId, lensName] of [['u-admin', 'CFO'], ['u-admin', 'Head of Team'], ['u-auditor', null]] as const) {
+    test(`every attention card on the ${lensName ?? 'Internal Auditor'} view leads somewhere`, async ({ page }) => {
+      await openUsageAs(page, userId);
+      if (lensName) await lens(page, lensName).click();
+
+      const cards = page.locator('section[aria-label="Needs your attention"] li');
+      const count = await cards.count();
+      expect(count).toBeGreaterThan(0);
+
+      for (let i = 0; i < count; i++) {
+        // A fresh page per card: one card's navigation must not eat the next.
+        if (i > 0) {
+          await page.evaluate(() =>
+            window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
+              detail: { kind: 'control', id: '', view: 'platform-usage' },
+            })));
+          await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toBeVisible();
+          if (lensName) await lens(page, lensName).click();
+        }
+
+        await page.locator('section[aria-label="Needs your attention"] li').nth(i).locator('button').click();
+        await page.waitForTimeout(900);
+
+        const stillHere = await page.getByRole('heading', { name: 'Platform Usage', level: 1 }).count();
+        if (stillHere === 0) continue; // it left the page for the record itself
+
+        // It stayed, so one of the page's own blocks must now be at the top.
+        const atTop = await page.locator('[data-usage-block]').evaluateAll(blocks =>
+          blocks.some(el => {
+            const rect = el.getBoundingClientRect();
+            return el.id !== '' && rect.top > -60 && rect.top < 420;
+          }));
+        expect(atTop).toBe(true);
+      }
+    });
+  }
 });
 
 /* ──────────────────────────────────────────────────────────────────────────

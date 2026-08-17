@@ -136,6 +136,13 @@ the page, said early because acting on it should not wait for a scroll. A card w
 reader cannot take is not shown to them. With nothing to say the strip says `Nothing needs you.`
 once and gets out of the way.
 
+Every card has to end somewhere, and the label says which. When the reader's view carries the block
+the card is about, acting on it scrolls there. When it does not, the card leaves the page for the
+record itself and says so: the CFO's view has no stuck block, so its repeated-failure card reads
+"Open the run history" and goes to the run, rather than scrolling to an element that is not there.
+Each card carries its `data-attention-target`, and a test clicks every card on every lens and fails
+if one neither scrolls its block into view nor leaves the page.
+
 Then **every block leads with a sentence, not a number**:
 
 > The platform saved the company **1,458 hrs** in April 2026 so far, up **1.9%** on the previous 21

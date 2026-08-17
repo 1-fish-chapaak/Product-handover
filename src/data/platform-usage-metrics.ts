@@ -1822,6 +1822,13 @@ export interface AttentionCard {
   target: AttentionTarget;
   text: string;
   actionLabel: string;
+  /**
+   * The record the card is about, when there is one.
+   *
+   * A card whose block is not on this view has to leave the page to be acted on,
+   * and it should land on the thing itself rather than on a module's front door.
+   */
+  focusId?: string;
 }
 
 /**
@@ -1873,20 +1880,28 @@ export function attentionCards(
   }
 
   // A repeated failure is the most actionable fact on the page, so it leads.
+  //
+  // Only the head of team's view carries the stuck block, so only they stay on
+  // the page when they act on this. A CFO leaves for the run itself, and the
+  // label says so: an action that reads like a scroll and turns out to be a
+  // navigation is a small lie, and one nobody can debug from the outside.
+  const staysOnPage = scope.persona === 'head_of_team';
   const repeated = data.stuck.filter(s => s.repeats > 1).sort((a, b) => b.repeats - a.repeats)[0];
   if (repeated) {
     cards.push({
       id: 'stuck',
       target: 'stuck',
       text: `${repeated.workflow} has failed ${fmtInt(repeated.repeats)} times with the same error.`,
-      actionLabel: 'See what it says',
+      actionLabel: staysOnPage ? 'See what it says' : 'Open the run history',
+      focusId: repeated.id,
     });
   } else if (data.stuck.length > 0) {
     cards.push({
       id: 'stuck',
       target: 'stuck',
       text: `${fmtInt(data.stuck.length)} ${data.stuck.length === 1 ? 'run is' : 'runs are'} stuck and nobody has picked ${data.stuck.length === 1 ? 'it' : 'them'} up.`,
-      actionLabel: 'See them',
+      actionLabel: staysOnPage ? 'See them' : 'Open the run history',
+      focusId: data.stuck[0]?.id,
     });
   }
 

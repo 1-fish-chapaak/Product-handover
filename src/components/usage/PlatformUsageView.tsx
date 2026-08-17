@@ -56,7 +56,8 @@ import {
 import {
   PERSONA_QUESTION, PERSONA_TITLE, applyCalibration, attentionCards, loadSettings,
   period as buildPeriod, periodOptions, snapshot, volumeOverTime,
-  type AttentionCard, type CustomRange, type Persona, type PeriodId, type QueueItem, type Scope,
+  type AttentionCard, type AttentionTarget, type CustomRange, type Persona, type PeriodId,
+  type QueueItem, type Scope,
   type UsageSettings,
 } from '../../data/platform-usage-metrics';
 import { AttentionStrip, BlockGroup } from './usageKit';
@@ -78,10 +79,36 @@ const LENS_SCOPE: Record<Persona, string> = {
   auditor: 'Just me',
 };
 
-/** Where an attention card sends the reader. */
+/**
+ * Which block on this page an attention card is about.
+ *
+ * Not every target has a block on every view: the stuck runs live on the head of
+ * team's view only, for instance. So a card knows both where it would scroll and
+ * where to send a reader whose view does not carry that block.
+ */
+const CARD_BLOCK: Record<AttentionTarget, string> = {
+  stuck: 'stuck',
+  risks: 'risks',
+  controls: 'never',
+  sampling: 'sampling',
+  queue: 'queue',
+  memory: 'memory',
+};
+
+/** Scroll to a block this view definitely renders. */
 function scrollToBlock(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+/** Where the fact itself lives, when the page cannot show it on this view. */
+const CARD_ELSEWHERE: Record<AttentionTarget, string> = {
+  stuck: 'workflow-library',
+  risks: 'audit-risk-register',
+  controls: 'governance-controls',
+  sampling: 'engagements',
+  queue: 'my-queue',
+  memory: 'knowledge-hub',
+};
 
 /** Deep links out to the thing that needs doing, the way the palette does. */
 function navigate(view: string, id = '') {
@@ -181,12 +208,24 @@ export default function PlatformUsageView() {
 
   /* ── Acting on a card ───────────────────────────────────────────────────── */
 
+  /**
+   * Acting on a card.
+   *
+   * It scrolls to the block when this view has one, and leaves for the thing
+   * itself when it does not. A card that silently does nothing is worse than no
+   * card, so there is no path here that ends in neither.
+   */
   const onAct = (card: AttentionCard) => {
-    if (card.target === 'memory') {
-      scrollToBlock('memory');
+    const block = document.getElementById(CARD_BLOCK[card.target]);
+    if (block) {
+      block.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-    scrollToBlock(card.target === 'controls' ? 'never' : card.target);
+    if (card.target === 'memory') {
+      openSmartLearn();
+      return;
+    }
+    navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
   };
 
   const onOpenQueueItem = (item: QueueItem) => navigate(item.target.view, item.target.id ?? '');
