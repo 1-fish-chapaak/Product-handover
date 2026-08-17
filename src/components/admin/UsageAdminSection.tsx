@@ -1,67 +1,55 @@
 /**
  * Administration → Platform Usage.
  *
- * Platform Usage is a page that reads. It has no editor on it: the assumptions
- * behind its value figures improve on their own from the customer's own recorded
- * pace, and the vendor's bill is a finance job, not a reader's job. Both of the
- * things a person can type therefore live here, behind their own permissions —
- * a tenant can hand invoice entry to finance ops without handing over the
- * company-wide numbers it feeds.
+ * Platform Usage is a page that reads. It has no editor on it, so the two things
+ * a person can type live here, each behind its own permission: a tenant can hand
+ * bill entry to finance ops without handing over the company wide numbers it
+ * feeds.
  *
- * ## Assumptions
+ * ## The assumptions
  *
  * Nobody has to fill anything in. The four numbers ship with labelled starting
- * values and the two measurable ones switch to the customer's measured pace the
- * moment the guards pass, silently and audited. An admin can pin a value over
- * that, which is rare and is meant to be: pinning stops the platform improving
- * the number by itself, so the screen says so rather than presenting the pin as
- * the normal way to work.
+ * values, and the two the platform can measure switch to the customer's own
+ * recorded pace the moment the guards pass: ninety days of history and enough
+ * records, outliers trimmed. That happens on its own and writes an audit row.
+ *
+ * An administrator can pin a value over the top. It is rare and it is meant to
+ * be, because pinning stops the platform improving the number by itself, so the
+ * screen says that rather than presenting a pin as the normal way to work.
  *
  * ## The vendor's bill
  *
- * Optional, forever. Without a bill the page still shows how many paid lookups
+ * Optional, forever. Without a bill the page still counts how many paid lookups
  * ran and simply does not claim a cost; the hours and rupees saved never depend
- * on it. With one, the period is costed exactly and history fills in behind it.
+ * on it. With one, the window is costed exactly and history fills in behind it.
+ * The list shows its own gaps, so a forgotten bill is visible here rather than
+ * discovered in a board meeting.
  */
 
 import { useMemo, useState } from 'react';
-import { IndianRupee, SlidersHorizontal, Trash2 } from 'lucide-react';
-import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
-import { useAuditLog } from '../../context/AdminDataContext';
+import { ArrowRight, Check, Info, Pin, PinOff, Trash2 } from 'lucide-react';
+import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
-import { BTN_CTA_OUTLINE, FIELD_INPUT, FIELD_LABEL } from './adminTokens';
+import EmptyState from '../shared/EmptyState';
+import { FIELD_INPUT, FIELD_LABEL, FIELD_SELECT, BTN_CTA_PRIMARY, BTN_ROW } from './adminTokens';
 import {
-  ANCHOR, addInvoice, addPrice, formatDate, isoDay, loadInvoices, loadPricing, loadUsageChanges,
-  recordUsageChange, removeInvoice, removePrice, startOfMonthUtc,
-  type VendorInvoice, type WorkflowApiPrice,
+  ANCHOR, PAID_LOOKUPS, formatDate, formatMonth, loadInvoices, loadPrices,
+  loadUsageChanges, removeInvoice, removePrice, saveInvoice, savePrice, startOfMonthUtc,
+  type LookupPrice, type VendorInvoice,
 } from '../../data/platform-usage';
 import {
-  SETTING_LABEL, SOURCE_FIELD, SOURCE_LABEL, applyMeasured, calibrate, fmtInt, loadSettings, saveSettings,
-  type NumericSetting, type SettingSource, type UsageSettings,
+  MEASURABLE, SETTING_LABEL, SETTING_SHORT, SOURCE_FIELD, SOURCE_LABEL,
+  calibrate, fmtInt, fmtMoneyExact, fmtOneDp, fmtPaise, invoiceLedger, loadSettings, pinSetting, unpinSetting,
+  type NumericSetting, type UsageSettings,
 } from '../../data/platform-usage-metrics';
-import { WORKFLOWS } from '../../data/mockData';
 
-const KEYS: NumericSetting[] = [
-  'manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth',
-];
-
-const HELP: Record<NumericSetting, string> = {
-  manualReviewRate: 'The single biggest lever here. Halve it and every saving figure doubles.',
-  manualControlTestHours: 'Used only by runs that test a control and produce no rows.',
-  hourlyRate: 'A blended rate, in rupees. It turns hours into money and does nothing else.',
-  hoursPerPersonPerMonth: 'What turns hours into a number of people.',
+/** The month a date input gives back, as the first of that month in UTC. */
+const monthValueToMs = (value: string): number | null => {
+  const m = /^(\d{4})-(\d{2})$/.exec(value);
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, 1) : null;
 };
 
-/** Money to the paisa. A rate of one rupee seventy five printed as "2" is a different contract. */
-const RUPEES = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
-const rupees = (paise: number): string => RUPEES.format(paise / 100);
-
-const MONTH_FMT = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-const monthLabel = (ms: number): string => MONTH_FMT.format(new Date(ms));
-const monthValue = (ms: number): string => new Date(ms).toISOString().slice(0, 7);
-
-const priceLine = (row: WorkflowApiPrice): string =>
-  `${rupees(row.pricePaise)} per ${row.billingUnit === 'row' ? 'row checked' : 'run'}`;
+const msToMonthValue = (ms: number): string => new Date(ms).toISOString().slice(0, 7);
 
 export default function UsageAdminSection({ onOpenLogs }: { onOpenLogs: () => void }) {
   const { can } = useCan();
@@ -69,505 +57,462 @@ export default function UsageAdminSection({ onOpenLogs }: { onOpenLogs: () => vo
   const canInvoices = can('ad_usage_invoices');
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-[1.0625rem] font-bold text-ink-900">Platform Usage</h2>
-          <p className="mt-1 text-[0.8125rem] text-ink-500 max-w-2xl">
-            The two numbers a person types rather than reads. Everything else on the Platform Usage page is
-            computed from what the product already records, and every change made here lands in the audit
-            log's <span className="font-semibold text-ink-700">Platform Usage</span> module.
-          </p>
-        </div>
-        <button onClick={onOpenLogs} className={BTN_CTA_OUTLINE}>
-          Usage audit trail
-        </button>
-      </div>
-
-      {canSettings && <Assumptions />}
+    <div className="space-y-10">
+      {canSettings && <Assumptions onOpenLogs={onOpenLogs} />}
       {canInvoices && <VendorBills />}
-
+      {canInvoices && <PerApiPrices />}
       {!canSettings && !canInvoices && (
-        <p className="text-[0.8125rem] text-ink-500">
-          Your role does not hold either of the two Platform Usage permissions, so there is nothing to change
-          here.
-        </p>
+        <EmptyState
+          icon={Info}
+          title="Nothing here needs you"
+          body="Platform Usage looks after its own numbers. The two a person can set are behind permissions your role does not hold."
+        />
       )}
     </div>
   );
 }
 
-/* ── PU-18 · the four assumptions ────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────────
+ * The four assumptions
+ * ────────────────────────────────────────────────────────────────────────── */
 
-function Assumptions() {
+function Assumptions({ onOpenLogs }: { onOpenLogs: () => void }) {
   const { currentUser } = useCurrentUser();
-  const logEvent = useAuditLog();
   const { addToast } = useToast();
-
-  // The stored value already carries whatever the calibration job applied on
-  // its own, so this screen reads the same numbers the page reads.
   const [settings, setSettings] = useState<UsageSettings>(() => loadSettings());
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [version, setVersion] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const measurement = useMemo(() => calibrate(), []);
 
-  const calibration = useMemo(() => calibrate({ persona: 'cfo', label: 'the whole company' }), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const history = useMemo(() => loadUsageChanges().filter(c => c.entity === 'usage_setting'), [version]);
+  const by = currentUser?.name ?? 'an administrator';
 
-  const sourceOf = (k: NumericSetting): SettingSource | null => {
-    const field = SOURCE_FIELD[k];
-    return field ? settings[field] : null;
+  const pin = (key: NumericSetting) => {
+    const raw = Number(drafts[key]);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      addToast({ type: 'error', message: 'Enter a number above zero.' });
+      return;
+    }
+    setSettings(pinSetting(key, raw, by));
+    setDrafts(prev => ({ ...prev, [key]: '' }));
+    addToast({ type: 'success', message: 'Pinned. Platform Usage recalculates from this value, and stops measuring it.' });
   };
 
-  const measuredFor = (k: NumericSetting) =>
-    k === 'manualReviewRate' ? calibration.reviewRate
-      : k === 'manualControlTestHours' ? calibration.controlTestHours
-        : null;
-
-  const reasonFor = (k: NumericSetting) =>
-    k === 'manualReviewRate' ? calibration.reviewRateReason
-      : k === 'manualControlTestHours' ? calibration.controlTestHoursReason
-        : null;
-
-  const write = (next: UsageSettings, field: string, from: string, to: string, source: string) => {
-    saveSettings(next);
-    setSettings(next);
-    recordUsageChange({
-      entity: 'usage_setting',
-      field,
-      from,
-      to,
-      source,
-      by: currentUser?.name ?? 'Unknown',
-      at: ANCHOR,
-    });
-    setVersion(v => v + 1);
-    logEvent({
-      action: 'Update',
-      module: 'Platform Usage',
-      entity: 'Usage assumption',
-      description: `${field}: ${from} to ${to} (${source})`,
-    });
+  const unpin = (key: NumericSetting) => {
+    setSettings(unpinSetting(key, by));
+    addToast({ type: 'success', message: 'Unpinned. The platform measures this one from your own records again.' });
   };
 
-  /** Pinning stops the platform improving the number by itself. */
-  const pin = (k: NumericSetting) => {
-    const value = Number(draft[k]);
-    if (!Number.isFinite(value) || value <= 0 || value === settings[k]) return;
-    const field = SOURCE_FIELD[k];
-    const next: UsageSettings = { ...settings, [k]: value, ...(field ? { [field]: 'manual' as SettingSource } : {}) };
-    write(next, SETTING_LABEL[k], String(settings[k]), String(value), SOURCE_LABEL.manual);
-    setDraft(d => ({ ...d, [k]: '' }));
-    addToast({ type: 'success', message: 'Pinned. Platform Usage recalculates from this value.' });
-  };
-
-  /** Unpinning hands the number back to the calibration job. */
-  const unpin = (k: NumericSetting) => {
-    const field = SOURCE_FIELD[k];
-    if (!field) return;
-    const released: UsageSettings = { ...settings, [field]: 'default' as SettingSource };
-    const { settings: next, changes } = applyMeasured(released, calibration);
-    const to = String(next[k]);
-    write(
-      next,
-      SETTING_LABEL[k],
-      String(settings[k]),
-      to,
-      changes.length > 0 ? SOURCE_LABEL.measured : SOURCE_LABEL.default,
-    );
-    addToast({ type: 'success', message: 'Unpinned. The platform measures this one again.' });
-  };
+  const keys: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
 
   return (
-    <section className="mb-8">
-      <div className="mb-2 flex items-center gap-1.5">
-        <SlidersHorizontal size={13} className="text-evidence-700" />
-        <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-800">The four assumptions</h3>
-      </div>
-      <p className="mb-3 text-[0.8125rem] text-ink-500 max-w-2xl">
-        Every value figure on Platform Usage is an estimate and says so. Two of these four the platform
-        measures from your own recorded pace and applies on its own once there is enough history; the two
-        money ones no platform can measure, so they stay yours. Pinning a value is rare: it stops the
-        platform improving that number by itself.
-      </p>
+    <section>
+      <header className="mb-4">
+        <h3 className="text-[1.125rem] font-semibold text-ink-900">The assumptions behind every value figure</h3>
+        <p className="mt-1 text-[0.875rem] text-ink-500 max-w-[80ch] leading-relaxed">
+          Two of these the platform measures from your own recorded pace, so they need nobody's attention. The
+          other two are money, which no platform can measure, so they stay yours. Pinning a value is rare: it
+          stops the platform improving that number by itself.
+        </p>
+      </header>
 
       <div className="rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
-        {KEYS.map(k => {
-          const source = sourceOf(k);
-          const measured = measuredFor(k);
-          const reason = reasonFor(k);
-          return (
-            <div key={k} className="px-4 py-3.5">
-              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-                <div className="min-w-0">
-                  <p className="text-[0.875rem] font-medium text-ink-900">{SETTING_LABEL[k]}</p>
-                  <p className="mt-0.5 text-[0.75rem] text-ink-500 max-w-[62ch]">{HELP[k]}</p>
-                  <p className="mt-1 text-[0.75rem] text-ink-400">
-                    <span className="tabular-nums text-ink-700 font-medium">{fmtInt(settings[k])}</span>
-                    {source && <> · {SOURCE_LABEL[source]}</>}
-                    {!source && <> · {SOURCE_LABEL.default}, and no platform can measure this one</>}
-                  </p>
-                  {measured && source !== 'manual' && (
-                    <p className="mt-1 text-[0.75rem] text-ink-500 tabular-nums">
-                      Measured at {fmtInt(measured.value)} across {fmtInt(measured.sampleN)} timed reviews in the
-                      last {measured.windowDays} days.
-                    </p>
-                  )}
-                  {!measured && reason && <p className="mt-1 text-[0.75rem] text-ink-400">{reason}</p>}
-                </div>
+        {keys.map(key => {
+          const source = settings[SOURCE_FIELD[key]] as 'default' | 'measured' | 'manual';
+          const measurable = MEASURABLE.includes(key);
+          const measured = key === 'manualReviewRate' ? settings.measuredReviewRate : key === 'manualControlTestHours' ? settings.measuredControlTestHours : null;
+          const value = key === 'hourlyRate' ? fmtMoneyExact(settings[key]) : key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : fmtInt(settings[key]);
 
-                <div className="flex items-end gap-2 shrink-0">
-                  <div>
-                    <label className={FIELD_LABEL} htmlFor={`pin-${k}`}>Pin a value</label>
-                    <input
-                      id={`pin-${k}`}
-                      type="number"
-                      min={1}
-                      value={draft[k] ?? ''}
-                      placeholder={String(settings[k])}
-                      onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))}
-                      className={`${FIELD_INPUT} tabular-nums w-32`}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => pin(k)}
-                    disabled={!draft[k]}
-                    className="h-9 px-3 rounded-md border border-canvas-border text-[0.8125rem] font-medium text-ink-700 hover:text-brand-700 hover:border-brand-200 disabled:opacity-40"
-                  >
-                    Pin
-                  </button>
-                  {source === 'manual' && (
-                    <button
-                      type="button"
-                      onClick={() => unpin(k)}
-                      className="h-9 px-3 rounded-md text-[0.8125rem] font-medium text-brand-700 hover:underline"
-                    >
-                      Unpin
-                    </button>
-                  )}
+          return (
+            <div key={key} className="px-5 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[0.875rem] font-semibold text-ink-900">{SETTING_SHORT[key]}</p>
+                  <p className="mt-0.5 text-[0.75rem] text-ink-500">{SETTING_LABEL[key]}</p>
                 </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[1.25rem] font-semibold text-ink-900 tabular-nums leading-none">{value}</p>
+                  <p className="mt-1 text-[0.75rem] text-ink-500">{SOURCE_LABEL[source]}</p>
+                </div>
+              </div>
+
+              <p className="mt-2 text-[0.75rem] text-ink-500 max-w-[80ch]">
+                {measurable ? (
+                  source === 'manual' ? (
+                    <>
+                      Pinned, so the platform is not applying what it measures. It still measures underneath:{' '}
+                      {measured === null ? 'nothing yet' : `${fmtOneDp(measured)} from your own records`}.
+                    </>
+                  ) : source === 'measured' ? (
+                    <>
+                      Measured from {fmtInt(settings.measuredSampleN ?? 0)} of your own records
+                      {settings.measuredFrom ? `, from ${formatDate(settings.measuredFrom)}` : ''}
+                      {settings.measuredAt ? `, last checked ${formatDate(settings.measuredAt)}` : ''}. It updates itself weekly.
+                    </>
+                  ) : (
+                    <>
+                      Still the shipped starting value.{' '}
+                      {measurement.blockedBy
+                        ? `The platform cannot measure it yet: ${measurement.blockedBy}.`
+                        : 'It switches to your measured pace as soon as the guards pass.'}
+                    </>
+                  )
+                ) : (
+                  <>
+                    No platform can measure this one, so it runs on its labelled default until somebody decides
+                    otherwise. Whatever it is set to, it is the same for every team, because per team values
+                    would make teams impossible to compare.
+                  </>
+                )}
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <div>
+                  <label className={FIELD_LABEL} htmlFor={`pin-${key}`}>Pin a value</label>
+                  <input
+                    id={`pin-${key}`}
+                    inputMode="decimal"
+                    value={drafts[key] ?? ''}
+                    onChange={e => setDrafts(prev => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={String(settings[key])}
+                    className={`${FIELD_INPUT} w-40 tabular-nums`}
+                  />
+                </div>
+                <button type="button" onClick={() => pin(key)} className={BTN_ROW}>
+                  <Pin size={13} /> Pin
+                </button>
+                {source === 'manual' && (
+                  <button type="button" onClick={() => unpin(key)} className={BTN_ROW}>
+                    <PinOff size={13} /> Unpin
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {history.length > 0 && (
+      <p className="mt-3 text-[0.75rem] text-ink-500 flex items-start gap-1.5">
+        <Info size={13} className="mt-0.5 shrink-0" />
+        <span>
+          Every change here, and every measurement the platform applies on its own, writes a row with the old
+          value, the new value and where it came from.{' '}
+          <button type="button" onClick={onOpenLogs} className="font-medium text-brand-700 hover:underline">
+            Open the audit log
+          </button>
+          .
+        </span>
+      </p>
+    </section>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The vendor's monthly bill (PU-19 layer 2)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function VendorBills() {
+  const { currentUser } = useCurrentUser();
+  const { addToast } = useToast();
+  const [invoices, setInvoices] = useState<VendorInvoice[]>(() => loadInvoices());
+  const [vendor, setVendor] = useState('');
+  const [month, setMonth] = useState(() => msToMonthValue(startOfMonthUtc(ANCHOR)));
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+
+  // Both read the store rather than the state, so the entered bills are the
+  // dependency even though neither call takes them as an argument.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ledger = useMemo(() => invoiceLedger(), [invoices]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const changes = useMemo(() => loadUsageChanges().filter(c => c.entity === 'vendor_invoice'), [invoices]);
+
+  const submit = () => {
+    const periodMonth = monthValueToMs(month);
+    const rupees = Number(amount);
+    if (!vendor.trim()) {
+      addToast({ type: 'error', message: 'Say who billed us.' });
+      return;
+    }
+    if (periodMonth === null) {
+      addToast({ type: 'error', message: 'Pick the month the bill covers.' });
+      return;
+    }
+    if (!Number.isFinite(rupees) || rupees <= 0) {
+      addToast({ type: 'error', message: 'Enter the amount on the bill.' });
+      return;
+    }
+    setInvoices(saveInvoice({
+      vendor: vendor.trim(),
+      periodMonth,
+      amountPaise: Math.round(rupees * 100),
+      note: note.trim() || null,
+      enteredBy: currentUser?.name ?? 'an administrator',
+      enteredAt: ANCHOR,
+    }));
+    setAmount('');
+    setNote('');
+    addToast({ type: 'success', message: `${formatMonth(periodMonth)} is now costed exactly, on Platform Usage.` });
+  };
+
+  const remove = (invoice: VendorInvoice) => {
+    setInvoices(removeInvoice(invoice.vendor, invoice.periodMonth));
+    addToast({ type: 'success', message: 'Removed. That month goes back to showing lookups without a cost.' });
+  };
+
+  const missing = ledger.filter(row => row.invoice === null);
+
+  return (
+    <section>
+      <header className="mb-4">
+        <h3 className="text-[1.125rem] font-semibold text-ink-900">The vendor's monthly bill</h3>
+        <p className="mt-1 text-[0.875rem] text-ink-500 max-w-[80ch] leading-relaxed">
+          One number a month, the one finance already knows with certainty. With it, the paid lookups on Platform
+          Usage are costed to the paisa. Without it the page still counts the lookups and claims no cost, so this
+          is optional forever. Past months can be entered at any time and the history fills in behind them.
+        </p>
+      </header>
+
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className={FIELD_LABEL} htmlFor="bill-vendor">Who billed us</label>
+            <input id="bill-vendor" value={vendor} onChange={e => setVendor(e.target.value)} className={FIELD_INPUT} placeholder="The verification vendor" />
+          </div>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="bill-month">Month the bill covers</label>
+            <input
+              id="bill-month"
+              type="month"
+              value={month}
+              max={msToMonthValue(ANCHOR)}
+              onChange={e => setMonth(e.target.value)}
+              className={`${FIELD_INPUT} tabular-nums`}
+            />
+          </div>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="bill-amount">Amount on the bill, in rupees</label>
+            <input
+              id="bill-amount"
+              inputMode="decimal"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className={`${FIELD_INPUT} tabular-nums`}
+              placeholder="68400"
+            />
+          </div>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="bill-note">Anything worth saying</label>
+            <input id="bill-note" value={note} onChange={e => setNote(e.target.value)} className={FIELD_INPUT} placeholder="A credit note, a dispute" />
+          </div>
+        </div>
         <div className="mt-3">
-          <h4 className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">Every change</h4>
-          <ul className="mt-1 divide-y divide-canvas-border border-t border-canvas-border">
-            {history.map((c, i) => (
-              <li key={`${c.field}-${c.at}-${i}`} className="py-2">
-                <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-[0.8125rem] text-ink-800">
-                    {c.field} <span className="tabular-nums text-ink-600">· {c.from} to {c.to}</span>
-                  </span>
-                  <span className="text-[0.75rem] text-ink-400 shrink-0 tabular-nums">{formatDate(c.at)}</span>
-                </div>
-                <p className="text-[0.75rem] text-ink-500">{c.by}{c.source && <> · {c.source}</>}</p>
+          <button type="button" onClick={submit} className={BTN_CTA_PRIMARY}>
+            <Check size={15} /> Enter this bill
+          </button>
+        </div>
+      </div>
+
+      {missing.length > 0 && (
+        <div className="mt-4 rounded-xl border border-dashed border-canvas-border bg-canvas px-5 py-4">
+          <p className="text-[0.875rem] font-semibold text-ink-900">Months with lookups and no bill</p>
+          <ul className="mt-2 space-y-1">
+            {missing.slice(0, 6).map(row => (
+              <li key={row.at} className="text-[0.875rem] text-ink-700 tabular-nums">
+                {row.label}: {fmtInt(row.calls)} calls recorded, no bill yet
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-[0.75rem] text-ink-500">
+            Each of these months stays uncosted on Platform Usage until its bill arrives. The months around it
+            still show.
+          </p>
         </div>
+      )}
+
+      {invoices.length > 0 && (
+        <div className="mt-4 overflow-x-auto rounded-xl border border-canvas-border bg-canvas-elevated">
+          <table className="w-full text-[0.875rem]">
+            <thead>
+              <tr className="border-b border-canvas-border">
+                {['Month', 'Vendor', 'Amount', 'Calls that month', 'Works out at', 'Entered by', ''].map(head => (
+                  <th key={head} scope="col" className="px-4 py-2.5 text-left text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ledger.filter(row => row.invoice !== null).map(row => {
+                const invoice = row.invoice as VendorInvoice;
+                return (
+                  <tr key={`${invoice.vendor}-${invoice.periodMonth}`} className="border-b border-canvas-border last:border-0">
+                    <td className="px-4 py-2.5 text-ink-800">{row.label}</td>
+                    <td className="px-4 py-2.5 text-ink-800">{invoice.vendor}</td>
+                    <td className="px-4 py-2.5 text-ink-800 tabular-nums">{fmtPaise(invoice.amountPaise)}</td>
+                    <td className="px-4 py-2.5 text-ink-800 tabular-nums">{fmtInt(row.calls)}</td>
+                    <td className="px-4 py-2.5 text-ink-600 tabular-nums">
+                      {row.calls === 0 ? 'no calls recorded' : `${fmtPaise(Math.round(invoice.amountPaise / row.calls))} a call, derived from this bill`}
+                    </td>
+                    <td className="px-4 py-2.5 text-ink-600">{invoice.enteredBy}, {formatDate(invoice.enteredAt)}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button type="button" onClick={() => remove(invoice)} className={BTN_ROW}>
+                        <Trash2 size={13} /> Remove
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {changes.length > 0 && (
+        <p className="mt-3 text-[0.75rem] text-ink-500">
+          {fmtInt(changes.length)} {changes.length === 1 ? 'change' : 'changes'} to the bills are on the record, the
+          newest by {changes[0].by} on {formatDate(changes[0].at)}.
+        </p>
       )}
     </section>
   );
 }
 
-/* ── PU-19 · the vendor's bill, and the optional per-API split ───────────── */
+/* ──────────────────────────────────────────────────────────────────────────
+ * Per API prices (PU-19 layer 3, optional)
+ * ────────────────────────────────────────────────────────────────────────── */
 
-function VendorBills() {
+function PerApiPrices() {
   const { currentUser } = useCurrentUser();
-  const logEvent = useAuditLog();
-  const enteredBy = currentUser?.name ?? 'Unknown';
-
-  const [invoices, setInvoices] = useState<VendorInvoice[]>(() => loadInvoices());
+  const { addToast } = useToast();
+  const [prices, setPrices] = useState<LookupPrice[]>(() => loadPrices());
+  const [lookupId, setLookupId] = useState(PAID_LOOKUPS[0].id);
   const [vendor, setVendor] = useState('');
-  const [month, setMonth] = useState(() => monthValue(ANCHOR));
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
-  const [splitOpen, setSplitOpen] = useState(false);
+  const [unit, setUnit] = useState<'run' | 'row'>('run');
+  const [price, setPrice] = useState('');
+  const [from, setFrom] = useState(() => new Date(ANCHOR).toISOString().slice(0, 10));
 
-  const billAmount = Number(amount);
-  const billValid = vendor.trim() !== '' && Number.isFinite(billAmount) && billAmount > 0;
-
-  const log = (description: string) =>
-    logEvent({ action: 'Update', module: 'Platform Usage', entity: 'Paid lookup cost', description });
-
-  const addBill = () => {
-    if (!billValid) return;
-    const parsed = Date.parse(`${month}-01T00:00:00Z`);
-    if (Number.isNaN(parsed)) return;
-    const periodMonth = startOfMonthUtc(parsed);
-    const paise = Math.round(billAmount * 100);
-    setInvoices(addInvoice({
-      vendor: vendor.trim(),
-      periodMonth,
-      amountPaise: paise,
-      note: note.trim() || null,
-      enteredBy,
+  const submit = () => {
+    const rupees = Number(price);
+    const effectiveFrom = Date.parse(`${from}T00:00:00Z`);
+    if (!Number.isFinite(rupees) || rupees <= 0) {
+      addToast({ type: 'error', message: 'Enter the charge for one successful call.' });
+      return;
+    }
+    if (Number.isNaN(effectiveFrom)) {
+      addToast({ type: 'error', message: 'Pick the date this price starts.' });
+      return;
+    }
+    const lookup = PAID_LOOKUPS.find(l => l.id === lookupId);
+    setPrices(savePrice({
+      lookupId,
+      vendor: vendor.trim() || 'the verification vendor',
+      apiName: lookup?.name ?? lookupId,
+      billingUnit: unit,
+      pricePaise: Math.round(rupees * 100),
+      effectiveFrom,
+      enteredBy: currentUser?.name ?? 'an administrator',
       enteredAt: ANCHOR,
     }));
-    recordUsageChange({
-      entity: 'vendor_invoice',
-      field: `${monthLabel(periodMonth)} · ${vendor.trim()}`,
-      from: null,
-      to: rupees(paise),
-      source: null,
-      by: enteredBy,
-      at: ANCHOR,
-    });
-    log(`Entered ${vendor.trim()}'s bill for ${monthLabel(periodMonth)}: ${rupees(paise)}`);
-    setAmount('');
-    setNote('');
+    setPrice('');
+    addToast({ type: 'success', message: 'Saved. A renegotiation later starts a new row rather than rewriting this one.' });
   };
-
-  const dropBill = (i: VendorInvoice) => {
-    setInvoices(removeInvoice(i.vendor, i.periodMonth));
-    recordUsageChange({
-      entity: 'vendor_invoice',
-      field: `${monthLabel(i.periodMonth)} · ${i.vendor}`,
-      from: rupees(i.amountPaise),
-      to: 'removed',
-      source: null,
-      by: enteredBy,
-      at: ANCHOR,
-    });
-    log(`Removed ${i.vendor}'s bill for ${monthLabel(i.periodMonth)}`);
-  };
-
-  /* Layer 3 · the optional per-API split */
-
-  const [prices, setPrices] = useState<WorkflowApiPrice[]>(() => loadPricing());
-  const [workflowId, setWorkflowId] = useState<string>(WORKFLOWS[0]?.id ?? '');
-  const [apiVendor, setApiVendor] = useState('');
-  const [apiName, setApiName] = useState('');
-  const [unit, setUnit] = useState<'run' | 'row' | ''>('');
-  const [priceText, setPriceText] = useState('');
-  const [from, setFrom] = useState(() => isoDay(ANCHOR));
-
-  const nameOf = useMemo(() => new Map(WORKFLOWS.map(w => [w.id, w.name])), []);
-  const pricedNow = useMemo(() => {
-    const live = new Set<string>();
-    prices.forEach(r => { if (r.effectiveTo === null) live.add(r.workflowId); });
-    return live;
-  }, [prices]);
-
-  const priceAmount = Number(priceText);
-  const priceValid = workflowId !== '' && unit !== '' && Number.isFinite(priceAmount) && priceAmount > 0;
-
-  const addApiPrice = () => {
-    if (!priceValid) return;
-    const effectiveFrom = Date.parse(`${from}T00:00:00Z`);
-    if (Number.isNaN(effectiveFrom)) return;
-    const name = nameOf.get(workflowId) ?? workflowId;
-    setPrices(addPrice({
-      workflowId,
-      vendor: apiVendor.trim() || 'Not named',
-      apiName: apiName.trim() || name,
-      billingUnit: unit,
-      pricePaise: Math.round(priceAmount * 100),
-      effectiveFrom,
-    }));
-    log(`Split "${name}" at ${rupees(Math.round(priceAmount * 100))} per ${unit === 'row' ? 'row' : 'run'} from ${formatDate(effectiveFrom)}`);
-    setPriceText('');
-    setApiVendor('');
-    setApiName('');
-    setUnit('');
-  };
-
-  const dropApiPrice = (r: WorkflowApiPrice) => {
-    setPrices(removePrice(r.workflowId, r.effectiveFrom));
-    log(`Removed the per API price on "${nameOf.get(r.workflowId) ?? r.workflowId}" from ${formatDate(r.effectiveFrom)}`);
-  };
-
-  const billed = invoices.reduce((sum, i) => sum + i.amountPaise, 0);
 
   return (
     <section>
-      <div className="mb-2 flex items-center gap-1.5">
-        <IndianRupee size={13} className="text-evidence-700" />
-        <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-800">The vendor's bill</h3>
-      </div>
-      <p className="mb-3 text-[0.8125rem] text-ink-500 max-w-2xl">
-        Optional, forever. Without a bill Platform Usage still shows how many paid lookups ran and simply does
-        not claim a cost, and the hours and rupees saved never depend on it. With one, the period is costed
-        exactly, backwards through every month entered, and it is the same number finance reconciles.
-      </p>
+      <header className="mb-4">
+        <h3 className="text-[1.125rem] font-semibold text-ink-900">Prices per API, if the split matters</h3>
+        <p className="mt-1 text-[0.875rem] text-ink-500 max-w-[80ch] leading-relaxed">
+          Only needed to split the cost per API. The bill above already costs the window exactly, so this is a
+          refinement rather than a requirement. One thing to get right: whether the vendor charges once per run
+          or once per row, which differs by API and has to be read from each one's stored program. Getting it
+          wrong puts the figure out by a factor of a thousand.
+        </p>
+      </header>
 
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className={FIELD_LABEL} htmlFor="bill-vendor">Vendor</label>
-            <input id="bill-vendor" value={vendor} onChange={e => setVendor(e.target.value)} className={FIELD_INPUT} placeholder="Who billed us" />
+            <label className={FIELD_LABEL} htmlFor="price-api">API</label>
+            <select id="price-api" value={lookupId} onChange={e => setLookupId(e.target.value)} className={FIELD_SELECT}>
+              {PAID_LOOKUPS.map(lookup => <option key={lookup.id} value={lookup.id}>{lookup.name}</option>)}
+            </select>
           </div>
           <div>
-            <label className={FIELD_LABEL} htmlFor="bill-month">Month</label>
-            <input id="bill-month" type="month" value={month} onChange={e => setMonth(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} />
-            <p className="mt-1 text-[0.75rem] text-ink-500">Past months can be entered at any time.</p>
+            <label className={FIELD_LABEL} htmlFor="price-vendor">Who bills us</label>
+            <input id="price-vendor" value={vendor} onChange={e => setVendor(e.target.value)} className={FIELD_INPUT} placeholder="The verification vendor" />
           </div>
           <div>
-            <label className={FIELD_LABEL} htmlFor="bill-amount">Amount in rupees</label>
-            <input
-              id="bill-amount" type="number" min={0} step="0.01" value={amount}
-              onChange={e => setAmount(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} placeholder="0.00"
-            />
+            <label className={FIELD_LABEL} htmlFor="price-unit">Charged per</label>
+            <select id="price-unit" value={unit} onChange={e => setUnit(e.target.value as 'run' | 'row')} className={FIELD_SELECT}>
+              <option value="run">run</option>
+              <option value="row">row</option>
+            </select>
           </div>
           <div>
-            <label className={FIELD_LABEL} htmlFor="bill-note">Note</label>
-            <input id="bill-note" value={note} onChange={e => setNote(e.target.value)} className={FIELD_INPUT} placeholder="Credit note, dispute, anything worth saying" />
+            <label className={FIELD_LABEL} htmlFor="price-amount">Charge for one success, in rupees</label>
+            <input id="price-amount" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} placeholder="1.75" />
           </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={addBill}
-              disabled={!billValid}
-              className="h-9 px-3.5 rounded-md bg-brand-600 text-white text-[0.875rem] font-medium hover:bg-brand-700 disabled:opacity-40 disabled:hover:bg-brand-600"
-            >
-              Enter this bill
-            </button>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="price-from">In force from</label>
+            <input id="price-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} />
           </div>
         </div>
+        <div className="mt-3">
+          <button type="button" onClick={submit} className={BTN_CTA_PRIMARY}>
+            <Check size={15} /> Save this price
+          </button>
+        </div>
+      </div>
 
-        {invoices.length === 0 ? (
-          <p className="mt-4 text-[0.8125rem] text-ink-500">
-            No bill entered yet, so Platform Usage says the period has no invoice rather than showing a cost
-            built from a guess.
-          </p>
-        ) : (
-          <>
-            <ul className="mt-4 divide-y divide-canvas-border border-t border-canvas-border">
-              {invoices.map(i => (
-                <li key={`${i.vendor}-${i.periodMonth}`} className="py-2.5 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] text-ink-900 tabular-nums">
-                      {monthLabel(i.periodMonth)} · {rupees(i.amountPaise)}
-                    </p>
-                    <p className="text-[0.75rem] text-ink-500">
-                      {i.vendor} · entered by {i.enteredBy}
-                      {i.note && <> · {i.note}</>}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => dropBill(i)}
-                    aria-label={`Remove ${i.vendor}'s bill for ${monthLabel(i.periodMonth)}`}
-                    className="shrink-0 h-7 w-7 grid place-items-center rounded-md border border-canvas-border text-ink-500 hover:text-risk-700 hover:border-risk-200"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </li>
+      {prices.length > 0 && (
+        <div className="mt-4 overflow-x-auto rounded-xl border border-canvas-border bg-canvas-elevated">
+          <table className="w-full text-[0.875rem]">
+            <thead>
+              <tr className="border-b border-canvas-border">
+                {['API', 'Vendor', 'Charged per', 'Charge', 'In force', 'Entered by', ''].map(head => (
+                  <th key={head} scope="col" className="px-4 py-2.5 text-left text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {prices.map(row => (
+                <tr key={`${row.lookupId}-${row.effectiveFrom}`} className="border-b border-canvas-border last:border-0">
+                  <td className="px-4 py-2.5 text-ink-800">{row.apiName}</td>
+                  <td className="px-4 py-2.5 text-ink-800">{row.vendor}</td>
+                  <td className="px-4 py-2.5 text-ink-800">{row.billingUnit}</td>
+                  <td className="px-4 py-2.5 text-ink-800 tabular-nums">{fmtPaise(row.pricePaise)}</td>
+                  <td className="px-4 py-2.5 text-ink-600 tabular-nums">
+                    {formatDate(row.effectiveFrom)}
+                    {row.effectiveTo === null ? ' onwards' : ` to ${formatDate(row.effectiveTo)}`}
+                  </td>
+                  <td className="px-4 py-2.5 text-ink-600">{row.enteredBy}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrices(removePrice(row.lookupId, row.effectiveFrom));
+                        addToast({ type: 'success', message: 'Removed.' });
+                      }}
+                      className={BTN_ROW}
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  </td>
+                </tr>
               ))}
-            </ul>
-            <p className="mt-3 text-[0.75rem] text-ink-500 tabular-nums">
-              {fmtInt(invoices.length)} {invoices.length === 1 ? 'bill' : 'bills'} entered, {rupees(billed)} in
-              total. A window is costed once every month in it has its bill.
-            </p>
-          </>
-        )}
-      </div>
-
-      {/* Layer 3, and it says out loud that it is optional. */}
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={() => setSplitOpen(v => !v)}
-          className="text-[0.8125rem] font-medium text-brand-700 hover:underline"
-        >
-          {splitOpen ? 'Hide the per API split' : 'Split the bill per API (optional)'}
-        </button>
-
-        {splitOpen && (
-          <div className="mt-3 rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-4">
-            <p className="text-[0.75rem] text-ink-500 max-w-[70ch]">
-              Only worth filling if the business wants the cost split per workflow. The unit has no default on
-              purpose: a run checking 500 vendors usually makes 500 calls, and guessing that puts the split out
-              by a thousandfold. The bill above needs none of this.
-            </p>
-
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
-              <div className="sm:col-span-2">
-                <label className={FIELD_LABEL} htmlFor="price-workflow">Workflow</label>
-                <select id="price-workflow" value={workflowId} onChange={e => setWorkflowId(e.target.value)} className={FIELD_INPUT}>
-                  {WORKFLOWS.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}{pricedNow.has(w.id) ? ' (split)' : ''}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="price-vendor">Vendor</label>
-                <input id="price-vendor" value={apiVendor} onChange={e => setApiVendor(e.target.value)} className={FIELD_INPUT} placeholder="Who bills us" />
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="price-api">What it verifies</label>
-                <input id="price-api" value={apiName} onChange={e => setApiName(e.target.value)} className={FIELD_INPUT} placeholder="PAN, GST, vehicle" />
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="price-unit">Billed per</label>
-                <select id="price-unit" value={unit} onChange={e => setUnit(e.target.value as 'run' | 'row' | '')} className={FIELD_INPUT}>
-                  <option value="">Pick one</option>
-                  <option value="run">Run, one call however many rows</option>
-                  <option value="row">Row, one call for every row checked</option>
-                </select>
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="price-amount">Price in rupees</label>
-                <input
-                  id="price-amount" type="number" min={0} step="0.01" value={priceText}
-                  onChange={e => setPriceText(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} placeholder="0.00"
-                />
-                <p className="mt-1 text-[0.75rem] text-ink-500">Charged on a call that succeeds.</p>
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="price-from">In force from</label>
-                <input id="price-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${FIELD_INPUT} tabular-nums`} />
-                <p className="mt-1 text-[0.75rem] text-ink-500">Runs before this date keep the price in force then.</p>
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={addApiPrice}
-                  disabled={!priceValid}
-                  className="h-9 px-3.5 rounded-md border border-canvas-border text-[0.875rem] font-medium text-ink-700 hover:text-brand-700 hover:border-brand-200 disabled:opacity-40"
-                >
-                  Add this price
-                </button>
-              </div>
-            </div>
-
-            {prices.length > 0 && (
-              <>
-                <ul className="mt-4 divide-y divide-canvas-border border-t border-canvas-border">
-                  {prices.map(r => (
-                    <li key={`${r.workflowId}-${r.effectiveFrom}`} className="py-2.5 flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-[0.875rem] text-ink-900">{nameOf.get(r.workflowId) ?? r.workflowId}</p>
-                        <p className="text-[0.75rem] text-ink-500 tabular-nums">
-                          {priceLine(r)} · {r.vendor} · {r.apiName} · from {formatDate(r.effectiveFrom)}
-                          {r.effectiveTo !== null && <> to {formatDate(r.effectiveTo)}</>}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => dropApiPrice(r)}
-                        aria-label={`Remove the price on ${nameOf.get(r.workflowId) ?? r.workflowId}`}
-                        className="shrink-0 h-7 w-7 grid place-items-center rounded-md border border-canvas-border text-ink-500 hover:text-risk-700 hover:border-risk-200"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 text-[0.75rem] text-ink-500 tabular-nums">
-                  {fmtInt(pricedNow.size)} of {fmtInt(WORKFLOWS.length)} workflows are split. Platform Usage
-                  compares that split against the bill and says so when the two disagree.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            </tbody>
+          </table>
+          <p className="px-4 py-2.5 text-[0.75rem] text-ink-500 border-t border-canvas-border">
+            An API with a price row here is a billable one. There is no second list to keep in sync.{' '}
+            <span className="inline-flex items-center gap-1">
+              A per API total should reconcile against the bill for the same month
+              <ArrowRight size={12} />
+            </span>{' '}
+            and a mismatch is worth showing rather than hiding.
+          </p>
+        </div>
+      )}
     </section>
   );
 }

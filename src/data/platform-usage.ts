@@ -1,113 +1,162 @@
 /**
- * Platform Usage — the record of what the platform did.
+ * Platform Usage — the records the platform already keeps.
  *
- * This module is the record, not the reading of it. It holds the four things
- * the product actually writes down — workflow runs, chat questions, Concierge
- * jobs and SOP-to-RACM jobs — plus the two tables the page needs and the
- * product does not have yet: the assumption settings and the vendor price list.
- * Every figure on the page is computed from these records in
- * `platform-usage-metrics.ts`. Nothing here reads a metric, and nothing here is
- * written by the page: Platform Usage only ever reads.
+ * Built from `Platform-Usage-Build-Spec_6.pdf` (11 Aug 2026). Part 2 of that
+ * document is a survey of what the product writes down as it works, and this
+ * module is that survey turned into data: workflow runs, chat questions,
+ * Concierge jobs, SOP-to-RACM jobs, sample validations, generated insights, the
+ * before-and-after event log behind dashboards and alerts, the reports trail,
+ * the risk register, the engagement portfolio and its automation config.
  *
- * ## What is recorded, and what is not
+ * Two rules hold this file together.
  *
- * Four areas of the product write down what happens in them. Everything else —
- * creating audits, editing controls, building dashboards, producing reports —
- * leaves no event at all, so this module cannot report on it and the page says
- * so in one plain line. That line is COVERAGE_NOTE, defined once here: when the
- * product event log is extended, one string changes and screen, CSV and PDF all
- * follow.
+ * **It composes, it does not invent.** Every record is derived from a table the
+ * rest of the product already renders — the Workflow Library's own run counts,
+ * the Control Library's own controls, the exception register, the engagement
+ * list, the report list, the risk register, the dashboard catalog, the member
+ * list. When Platform Usage says "14 controls in the library" it counts the same
+ * fourteen rows the Control Library screen draws, so two screens can never
+ * disagree in front of the same reader.
  *
- * ## Measured, estimated, not measured, no record
+ * **It is a fixed seed, not a clock.** ANCHOR is Tue 21 Apr 2026, the newest
+ * moment anything in this product has happened. History runs back to 1 Oct 2025
+ * so the longest window the page offers still has an equal window behind it to
+ * compare against. A fixed-seed PRNG, no `Date.now()`, no `Math.random()`: every
+ * reload, screenshot and test sees the identical history.
  *
- * These are four different facts and the page never blurs them, so the record
- * layer keeps them apart at the source:
- *
- *   measured      run durations, row counts, Concierge job cost, memory recalls
- *   estimated     chat token usage — the product counts characters divided by
- *                 four, a stopgap built to stop runaway conversations, not to
- *                 bill for them
- *   not measured  SOP-to-RACM consumption, workflow AI consumption
- *   no record     everything else in the product
- *
- * ## Where the history comes from
- *
- * Runs are generated, but they are bound to the rest of the product rather than
- * invented beside it:
- *
- *  · a workflow runs exactly as many times as the Workflow Library says it has
- *    (`WORKFLOWS[i].runs`), ending on the date the library shows as its last
- *    run, so the two screens can never disagree;
- *  · a run's control comes from the Control Library's own `linkedWorkflowIds`,
- *    so coverage is a fact about the real library rather than a number of its
- *    own;
- *  · every actor is a member of the roster who is allowed to run workflows, and
- *    a member's history stops when their access did;
- *  · exceptions are the real register's rows, each traced back to the run of its
- *    workflow that was newest when it opened.
- *
- * It is deterministic — fixed-seed PRNG, no Date.now(), no Math.random() — so
- * every reload, test and screenshot sees the same history. The window ends at
- * ANCHOR, Tue 21 Apr 2026, the horizon the rest of the product's records sit on.
+ * The costs are the exception to the first rule, because there is nothing to
+ * compose from: the product records no money except one Concierge column, so the
+ * vendor's monthly bill is entered by a person (PU-19) and lives in
+ * localStorage next to the audited change log for it.
  */
 
 import { WORKFLOWS } from './mockData';
+import { GENERATED_REPORTS, SHARED_REPORTS } from './mockData';
 import { CONTROL_LIBRARY } from './controlLibrary';
-import { ENGAGEMENT_EXCEPTIONS, type EngagementException } from './engagement-exceptions';
-import { CONCIERGE_TOOLS } from './conciergeTools';
-import { MY_DASHBOARDS, SHARED_DASHBOARDS } from './dashboards';
+import { SEED_RISKS } from './riskRegister';
 import { ENGAGEMENTS } from './engagements';
+import { ENGAGEMENT_EXCEPTIONS } from './engagement-exceptions';
+import { MY_DASHBOARDS, SHARED_DASHBOARDS } from './dashboards';
+import { PROCESS_HUB_RACMS } from './racmRegistry';
 import { SEED_USERS } from '../context/AdminDataContext';
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 1 · The coverage note
+ * The one line that says what this page does and does not count
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The one plain line a page called "Platform Usage" has to carry, or it is read
- * as covering everything. It is written once, here, and every surface renders
- * this string rather than its own wording.
+ * The coverage note.
+ *
+ * Defined once, rendered on screen and in both exports, so when a later release
+ * widens what is counted one string changes and every surface follows. Section 8
+ * of the spec puts this string in the API response for exactly that reason.
  */
 export const COVERAGE_NOTE =
-  'Counts runs, chat, Concierge, Smart Learn, dashboards and alerts, reports, sampling, insights, ' +
-  'risks, engagements and items created. Edits and reviews appear as the event log fills.';
+  'Counts workflow runs, chat questions, Concierge jobs, sample validations, generated insights, '
+  + 'dashboards and the alerts they fire, reports and their activity, the risk register, the '
+  + 'engagement portfolio, continuous monitoring, and everything created in the window. '
+  + 'It does not count edits, reviews, views or time spent inside a record, and it prices '
+  + 'nothing the vendor has not billed.';
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 2 · Time
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── Time ────────────────────────────────────────────────────────────────── */
 
 export const DAY_MS = 86_400_000;
 export const HOUR_MS = 3_600_000;
 
 /** The newest moment in the record — Tue 21 Apr 2026, 18:00 UTC. */
 export const ANCHOR = Date.UTC(2026, 3, 21, 18, 0, 0);
-/** The oldest — Wed 1 Oct 2025, so the longest window has a prior window. */
+
+/** The oldest — Wed 1 Oct 2025, so the longest window has a window behind it. */
 export const HISTORY_START = Date.UTC(2025, 9, 1, 0, 0, 0);
 
-const DATE_FMT = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-});
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const DATETIME_FMT = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  hour12: false, timeZone: 'UTC',
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC',
 });
+const MONTH_FMT = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const SHORT_MONTH_FMT = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' });
+const DAY_MONTH_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 export const formatDate = (ms: number): string => DATE_FMT.format(new Date(ms));
 export const formatDateTime = (ms: number): string => DATETIME_FMT.format(new Date(ms));
+export const formatMonth = (ms: number): string => MONTH_FMT.format(new Date(ms));
+export const formatShortMonth = (ms: number): string => SHORT_MONTH_FMT.format(new Date(ms));
+export const formatDayMonth = (ms: number): string => DAY_MONTH_FMT.format(new Date(ms));
 export const isoDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 /**
- * How old the data is. The build rule is "real time": a run that finished two
- * minutes ago is in, and the scope line says the age of the record rather than
- * leaving the reader to assume it is live.
+ * How old the numbers are, said on every view.
+ *
+ * The seed does not move, so the page says the date of the newest record it can
+ * find rather than "updated 4 minutes ago". A freshness claim a mock cannot keep
+ * is a lying label.
  */
 export const dataAsOfLabel = (): string => `Data as of ${formatDate(ANCHOR)}`;
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 3 · Deterministic randomness
- * ────────────────────────────────────────────────────────────────────────── */
+/** First of the month a moment falls in, UTC. */
+export const startOfMonthUtc = (ms: number): number => {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+};
 
-/** mulberry32 — small, fast, evenly spread. Fixed seed means fixed history. */
+/** Every month a window touches, first of month, oldest first. */
+export function monthsInWindow(from: number, to: number): number[] {
+  const out: number[] = [];
+  let m = startOfMonthUtc(from);
+  while (m <= to) {
+    out.push(m);
+    const d = new Date(m);
+    m = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+  }
+  return out;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+};
+
+/**
+ * "Apr 15, 2026" to a moment.
+ *
+ * The Workflow Library, Control Library, report list and RACM registry all write
+ * their dates this way, and this page reads all four.
+ */
+export function parseLibraryDate(value: string): number | null {
+  const m = /^([A-Z][a-z]{2})\s+(\d{1,2}),\s+(\d{4})$/.exec(value.trim());
+  if (!m) return null;
+  const month = MONTH_INDEX[m[1]];
+  if (month === undefined) return null;
+  return Date.UTC(Number(m[3]), month, Number(m[2]), 12, 0, 0);
+}
+
+/** ISO "2026-04-01" to a moment. */
+export function parseIsoDate(value: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0) : null;
+}
+
+/**
+ * "4h ago" / "2 days ago" / "3d ago" to a moment before the anchor.
+ *
+ * Several of the product's seeds carry relative times because they are rendered
+ * as relative times. Reading them against the anchor keeps them on the same
+ * calendar as everything else here.
+ */
+export function parseRelative(value: string): number | null {
+  const m = /^(\d+)\s*(m|min|mins|minutes?|h|hrs?|hours?|d|days?|w|weeks?|mo|months?)\s+ago$/i.exec(value.trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unit = m[2].toLowerCase();
+  if (unit.startsWith('m') && !unit.startsWith('mo')) return ANCHOR - n * 60_000;
+  if (unit.startsWith('h')) return ANCHOR - n * HOUR_MS;
+  if (unit.startsWith('d')) return ANCHOR - n * DAY_MS;
+  if (unit.startsWith('w')) return ANCHOR - n * 7 * DAY_MS;
+  return ANCHOR - n * 30 * DAY_MS;
+}
+
+/* ── Deterministic randomness ────────────────────────────────────────────── */
+
+/** mulberry32 — small, evenly spread, and a fixed seed means a fixed history. */
 function mulberry32(seed: number): () => number {
   let a = seed;
   return () => {
@@ -122,1131 +171,1475 @@ function mulberry32(seed: number): () => number {
 const vary = (base: number, spread: number, r: () => number): number =>
   Math.max(1, Math.round(base * (1 - spread + r() * spread * 2)));
 
-/** Business hours on weekdays, thinning to almost nothing at the weekend. */
+/** Nobody runs a workflow at 3am. Business hours on weekdays, thin at weekends. */
 function workingMoment(dayMs: number, r: () => number): number {
   const dow = new Date(dayMs).getUTCDay();
   const weekend = dow === 0 || dow === 6;
-  const hour = weekend ? 10 + Math.floor(r() * 4) : 8 + Math.floor(r() * 10);
+  const hour = weekend ? 10 + Math.floor(r() * 4) : 9 + Math.floor(r() * 9);
   return dayMs + hour * HOUR_MS + Math.floor(r() * 60) * 60_000;
 }
 
 const startOfDay = (ms: number): number => Math.floor(ms / DAY_MS) * DAY_MS;
+const HISTORY_DAYS = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 4 · The records
+ * Who does the work
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Roles that can run a workflow. Only these members ever appear as an actor. */
+const RUNNER_ROLES = new Set(['role-admin', 'role-enabler', 'role-auditor']);
+
+export interface Actor { name: string; email: string; team: string; weight: number }
+
+/**
+ * The people whose work this page reports.
+ *
+ * Every actor is a real member of the People list. An event by somebody who is
+ * not on that list can never be attributed, and its work would silently vanish
+ * from the page. A member who is suspended or inactive still appears in history
+ * — their work happened — but they do not pick up new runs.
+ */
+const ACTORS: Actor[] = SEED_USERS
+  .filter(u => RUNNER_ROLES.has(u.roleId))
+  .map((u, i) => ({
+    name: u.name,
+    email: u.email,
+    team: u.team && u.team !== '—' ? u.team : 'Unassigned',
+    // A heavier weight means more of the runs. Admins and enablers drive the
+    // automation; auditors run fewer, larger jobs.
+    weight: u.status === 'Active' ? (u.roleId === 'role-auditor' ? 2 : 3) + (i % 2) : 1,
+  }));
+
+const ACTOR_WEIGHT_TOTAL = ACTORS.reduce((s, a) => s + a.weight, 0);
+
+function pickActor(r: () => number): Actor {
+  let t = r() * ACTOR_WEIGHT_TOTAL;
+  for (const a of ACTORS) {
+    t -= a.weight;
+    if (t <= 0) return a;
+  }
+  return ACTORS[ACTORS.length - 1];
+}
+
+const TEAM_BY_NAME = new Map(SEED_USERS.map(u => [u.name, u.team && u.team !== '—' ? u.team : null]));
+const EMAIL_BY_NAME = new Map(SEED_USERS.map(u => [u.name, u.email]));
+
+/** Which team a named person is on, or null when they are on none. */
+export const teamOfName = (name: string): string | null => TEAM_BY_NAME.get(name) ?? null;
+/** A named person's address, for scoping a view to one member. */
+export const emailOfName = (name: string): string | null => EMAIL_BY_NAME.get(name) ?? null;
+
+/** Every team with at least one member, alphabetical. */
+export const TEAMS: string[] = Array.from(
+  new Set(SEED_USERS.map(u => u.team).filter((t): t is string => Boolean(t) && t !== '—')),
+).sort();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * §2.1 Workflow runs — the backbone
  * ────────────────────────────────────────────────────────────────────────── */
 
 /** A run's stored outcome. Paused for more than 24 hours reads as stuck. */
 export type RunStatus = 'complete' | 'failed' | 'blocked' | 'paused';
 
 /**
- * One execution of one workflow — the backbone record.
+ * One execution of one workflow.
  *
- * Everything the headline rests on is computed from these fields and nothing
- * else. `rowCount` is null when the run has no row output at all: either it
- * never finished, or it is a control test whose result is that the control held
- * or it did not.
+ * This is the record every value figure on the page is computed from: how many
+ * rows it worked through, how long the engine took, whether it finished, and
+ * which control it belongs to. `rowCount` is null on a control test — a control
+ * test has no row output, and it replaces a manual test rather than a manual
+ * review, so it is valued differently (PU-01).
  */
 export interface WorkflowRun {
   id: string;
   workflowId: string;
   workflowName: string;
-  /** The control this run exercised, via the Control Library's own link. */
+  /** The control this run exercises, when the library links one. */
   controlId: string | null;
   controlName: string | null;
-  userEmail: string;
-  userName: string;
-  team: string;
-  startedAt: number;
-  /** null while a run is open — a blocked or paused run never completed. */
-  completedAt: number | null;
-  durationSecs: number;
-  rowCount: number | null;
   status: RunStatus;
-  /** The engine's own error text. Shown verbatim, never summarised. */
-  executionError: string | null;
-  /** Set when this run was one leg of a bulk execution. */
-  bulkRunId: string | null;
-  /** Last state change — what "paused for over 24 hours" is measured from. */
-  updatedAt: number;
-}
-
-/** One question asked of the chat assistant, and the work behind the answer. */
-export interface ChatQuestion {
-  id: string;
-  userEmail: string;
-  team: string;
-  askedAt: number;
-  /** Assistant steps taken — the stored agent actions behind the answer. */
-  steps: number;
-  /** ESTIMATED. The product counts characters divided by four. */
-  tokensIn: number;
-  tokensOut: number;
-  /** Whether the answer was frozen into the workflow library. */
-  savedAsWorkflow: boolean;
-  /** The program behind the answer is stored, so the answer can be re-run. */
-  reproducible: boolean;
-}
-
-/** One Concierge background job — the only record with a real cost on it. */
-export interface ConciergeJob {
-  id: string;
-  toolId: string;
-  toolTitle: string;
-  userEmail: string;
-  team: string;
-  startedAt: number;
+  /** Rows the run worked through. Null on a control test. */
+  rowCount: number | null;
   durationSecs: number;
-  status: 'completed' | 'failed';
-  /** Real dollars billed by the model provider for this job. */
-  costUsd: number;
-}
-
-/** One SOP-to-RACM generation. Records the result, nothing about spend. */
-export interface SopRacmJob {
-  id: string;
-  userEmail: string;
-  team: string;
   startedAt: number;
-  status: 'completed' | 'failed';
-  /** A cache hit skips the AI entirely, so job count says nothing about spend. */
-  cached: boolean;
+  /** Null while a run is still blocked or paused. */
+  completedAt: number | null;
+  /** When the row was last written — what makes a paused run stuck. */
+  updatedAt: number;
+  actor: Actor;
+  /** Set when the run was part of a bulk execution. */
+  bulkRunId: string | null;
+  /** The engine's own words. Shown verbatim, never summarised. */
+  error: string | null;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 5 · Who can run a workflow
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** Roles holding `wf_run`. Only these members ever appear as a run's actor. */
-const RUNNER_ROLES = new Set(['role-admin', 'role-enabler', 'role-auditor']);
-
-interface Actor { email: string; name: string; team: string; weight: number }
-
 /**
- * The pool of actors, in roster order. Invited, suspended, locked and inactive
- * members are left out: a member's history stops when their access did.
+ * How much data each workflow chews through, how fast the engine is, and how
+ * often it falls over.
  *
- * The weights make some people busier than others. They are never surfaced as a
- * ranking — nothing on this page sorts people by output — they only stop the
- * history reading as a rota.
+ * `perMonth` is the Workflow Library's own run count, which that screen presents
+ * as recent activity, so it is read here as runs in the last thirty days and
+ * played back across the calendar. `controlTest` marks the two workflows that
+ * stand in for a manual control test and produce no rows.
  */
-const ACTORS: Actor[] = SEED_USERS
-  .filter(u => u.status === 'Active' && RUNNER_ROLES.has(u.roleId) && u.team !== '—')
-  .map((u, i) => ({
-    email: u.email,
-    name: u.name,
-    team: u.team,
-    weight: [5, 4, 3, 3, 2, 2, 1, 1, 1][i % 9],
-  }));
-
-function pickActor(r: () => number): Actor {
-  const total = ACTORS.reduce((s, a) => s + a.weight, 0);
-  let n = r() * total;
-  for (const a of ACTORS) { n -= a.weight; if (n <= 0) return a; }
-  return ACTORS[ACTORS.length - 1];
+interface RunProfile {
+  rows: number;
+  /** Engine seconds per thousand rows, on top of a fixed start-up cost. */
+  secsPerThousand: number;
+  failRate: number;
+  controlTest?: boolean;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 6 · Workflow profiles and control links
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Workflows that test a control instead of processing rows.
- *
- * They complete with no row output: the answer is that the control held, or it
- * did not. Each such run stands in for one manual control test, which is what
- * makes `manualControlTestHours` a live setting rather than an inert one. Both
- * are the library's Compliance and Monitoring types, checking on a schedule.
- */
-const CONTROL_TEST_WORKFLOWS = new Set(['wf-006', 'wf-008']);
-
-/** How much data each workflow chews through, and how long its engine takes.
- *  The run COUNT is deliberately absent — that comes from the library. */
-const WORKFLOW_PROFILE: Record<string, { rows: number; secs: number }> = {
-  'wf-001': { rows: 9_000, secs: 110 },
-  'wf-002': { rows: 1_400, secs: 25 },
-  'wf-003': { rows: 4_200, secs: 48 },
-  'wf-004': { rows: 26_000, secs: 240 },
-  'wf-005': { rows: 18_000, secs: 175 },
-  'wf-006': { rows: 850, secs: 18 },
-  'wf-007': { rows: 31_000, secs: 280 },
-  'wf-008': { rows: 5_400, secs: 65 },
-  'wf-009': { rows: 7_200, secs: 80 },
-  'wf-010': { rows: 11_000, secs: 125 },
+const RUN_PROFILE: Record<string, RunProfile> = {
+  'wf-001': { rows: 4_200, secsPerThousand: 7, failRate: 0.02 },
+  'wf-002': { rows: 600, secsPerThousand: 9, failRate: 0 },
+  'wf-003': { rows: 1_100, secsPerThousand: 6, failRate: 0.015 },
+  'wf-004': { rows: 2_300, secsPerThousand: 11, failRate: 0 },
+  'wf-005': { rows: 8_000, secsPerThousand: 5, failRate: 0.045 },
+  'wf-006': { rows: 0, secsPerThousand: 0, failRate: 0, controlTest: true },
+  'wf-007': { rows: 2_800, secsPerThousand: 8, failRate: 0.089 },
+  'wf-008': { rows: 0, secsPerThousand: 0, failRate: 0.01, controlTest: true },
+  'wf-009': { rows: 700, secsPerThousand: 7, failRate: 0.02 },
+  'wf-010': { rows: 1_900, secsPerThousand: 6, failRate: 0.03 },
+  'wf-011': { rows: 850, secsPerThousand: 9, failRate: 0.06 },
 };
 
-/** Control lookup, straight off the Control Library's own workflow links. */
+/** The control each workflow exercises, straight off the Control Library. */
 const CONTROL_FOR_WORKFLOW: Record<string, { id: string; name: string }> = (() => {
-  const map: Record<string, { id: string; name: string }> = {};
-  CONTROL_LIBRARY.forEach(c => {
-    (c.linkedWorkflowIds ?? []).forEach(wfId => { map[wfId] ??= { id: c.controlId, name: c.name }; });
-  });
-  return map;
+  const out: Record<string, { id: string; name: string }> = {};
+  for (const c of CONTROL_LIBRARY) {
+    for (const wfId of c.linkedWorkflowIds ?? []) out[wfId] = { id: c.controlId, name: c.name };
+  }
+  return out;
 })();
 
-/** Engine errors, verbatim. A stuck run shows one of these, never a summary. */
+/**
+ * Engine errors, verbatim.
+ *
+ * These are the strings the page shows a team lead. They are written the way an
+ * engine writes them, because a summarised error is an error nobody can fix —
+ * PU-11 forbids truncating them.
+ */
 const ERRORS = [
-  'DataSourceTimeout: SAP ERP AP module did not respond within 120s',
-  'SchemaMismatch: expected column "PO_REFERENCE", found "PO_REF" in source Invoice Archive',
-  'AuthError: connector credentials for Vendor Master expired on 12 Apr 2026',
-  'RowLimitExceeded: source returned 1,204,882 rows, limit is 1,000,000',
-  'NullKeyError: 412 rows had no invoice number and could not be matched',
-  'ConnectionReset: bank remittance SFTP dropped after 38,204 of 91,000 rows',
+  'Match validation failed at step 4 — missing GRN reference for PO 4500118842',
+  'Data source timed out after 120s — SAP_FI connection pool exhausted',
+  'Column "invoice_date" not found in Invoice_Master.xlsx — schema changed on 14 Apr',
+  'Vendor master lookup returned 503 from the registry service',
+  'Tolerance rule rejected: expected numeric, received "N/A" on 214 rows',
+  'Out of memory at row 61,004 — split the file and re-run',
 ];
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 7 · The generator
- * ────────────────────────────────────────────────────────────────────────── */
-
-const MONTHS: Record<string, number> = {
-  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
-};
-
-/** "Apr 15, 2026" → ms. The Workflow Library's own date format. */
-export function parseLibraryDate(value: string): number {
-  const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/.exec(value.trim());
-  if (!m) return ANCHOR;
-  return Date.UTC(Number(m[3]), MONTHS[m[1]] ?? 0, Number(m[2]), 11, 0, 0);
-}
+/** What a run is waiting on when it is paused rather than failed. */
+const WAITING = [
+  'Waiting on input — a reviewer must confirm 3 flagged matches',
+  'Waiting on input — the AP owner has not chosen a tolerance',
+];
 
 function buildRuns(): WorkflowRun[] {
-  const r = mulberry32(0x9f1c2a7d);
+  const r = mulberry32(0x50_55_31); // "PU1"
   const runs: WorkflowRun[] = [];
   let seq = 0;
 
   for (const wf of WORKFLOWS) {
-    const profile = WORKFLOW_PROFILE[wf.id];
+    const profile = RUN_PROFILE[wf.id];
     if (!profile) continue;
     const control = CONTROL_FOR_WORKFLOW[wf.id] ?? null;
-    const lastRun = parseLibraryDate(wf.lastRun);
-    const controlTest = CONTROL_TEST_WORKFLOWS.has(wf.id);
+    // The library's count is the last thirty days. Spread that pace across the
+    // whole history, with a gentle upward trend so "up on last period" is a
+    // fact about the seed rather than an accident of it.
+    const perDay = wf.runs / 30;
 
-    // Spread back from the library's last-run date and squeezed toward the
-    // recent end: the platform has been used more each quarter, not evenly.
-    for (let i = 0; i < wf.runs; i++) {
-      const share = wf.runs === 1 ? 0 : i / (wf.runs - 1);
-      const dayMs = Math.round(lastRun - Math.pow(share, 1.7) * (lastRun - HISTORY_START));
-      const startedAt = workingMoment(startOfDay(dayMs), r);
+    for (let day = 0; day < HISTORY_DAYS; day++) {
+      const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+      const dow = new Date(dayMs).getUTCDay();
+      const weekend = dow === 0 || dow === 6;
+      const trend = 0.72 + (day / HISTORY_DAYS) * 0.56; // 0.72 → 1.28
+      const expected = perDay * trend * (weekend ? 0.15 : 1.2);
+      let count = Math.floor(expected);
+      if (r() < expected - count) count += 1;
 
-      const roll = r();
-      const status: RunStatus =
-        roll < 0.055 ? 'failed' : roll < 0.075 ? 'blocked' : roll < 0.085 ? 'paused' : 'complete';
-      const complete = status === 'complete';
-      const actor = pickActor(r);
-      const durationSecs = vary(profile.secs, 0.35, r);
-      // A run that completed and found nothing to process did work no person
-      // would have had to do either, so it is worth nothing and says so.
-      const emptyRun = complete && !controlTest && r() < 0.03;
+      for (let i = 0; i < count; i++) {
+        const startedAt = workingMoment(dayMs, r);
+        if (startedAt > ANCHOR) continue;
+        const rowCount = profile.controlTest ? null : vary(profile.rows, 0.35, r);
+        const durationSecs = profile.controlTest
+          ? vary(95, 0.4, r)
+          : Math.max(8, Math.round(18 + ((rowCount ?? 0) / 1000) * profile.secsPerThousand * (0.8 + r() * 0.5)));
 
-      runs.push({
-        id: `run-${String(++seq).padStart(4, '0')}`,
-        workflowId: wf.id,
-        workflowName: wf.name,
-        controlId: control?.id ?? null,
-        controlName: control?.name ?? null,
-        userEmail: actor.email,
-        userName: actor.name,
-        team: actor.team,
-        startedAt,
-        completedAt: complete ? startedAt + durationSecs * 1000 : null,
-        durationSecs: complete ? durationSecs : Math.round(durationSecs * r()),
-        rowCount: controlTest ? null : complete ? (emptyRun ? 0 : vary(profile.rows, 0.4, r)) : null,
-        status,
-        executionError: complete ? null : ERRORS[Math.floor(r() * ERRORS.length)],
-        bulkRunId: null,
-        updatedAt: complete ? startedAt + durationSecs * 1000 : startedAt + Math.floor(r() * 6) * HOUR_MS,
-      });
+        // Outcome. Failures carry the engine's text; a handful of the newest
+        // runs are still waiting on a person, which is what "stuck" means.
+        let status: RunStatus = 'complete';
+        let error: string | null = null;
+        const roll = r();
+        if (roll < profile.failRate) {
+          status = 'failed';
+          // A repeated error is the fact a team lead acts on, so a workflow
+          // mostly fails for one reason rather than scattering across six. The
+          // same mapping fault four times in a week is one afternoon's work; six
+          // different faults is a different problem, and the page should be able
+          // to tell them apart.
+          const own = Number(wf.id.slice(3)) % ERRORS.length;
+          error = ERRORS[r() < 0.82 ? own : (own + 1 + Math.floor(r() * (ERRORS.length - 1))) % ERRORS.length];
+        }
+
+        const completedAt = status === 'complete' ? startedAt + durationSecs * 1000 : null;
+        seq += 1;
+        runs.push({
+          id: `run-${String(seq).padStart(5, '0')}`,
+          workflowId: wf.id,
+          workflowName: wf.name,
+          controlId: control?.id ?? null,
+          controlName: control?.name ?? null,
+          status,
+          rowCount,
+          durationSecs,
+          startedAt,
+          completedAt,
+          updatedAt: completedAt ?? startedAt + durationSecs * 1000,
+          actor: pickActor(r),
+          bulkRunId: null,
+          error,
+        });
+      }
     }
   }
 
-  // Bulk executions — several workflows fired at once against one sample. A
-  // different unit of work, never added to the single-run count.
-  const b = mulberry32(0x3b4d51e9);
-  const bulkable = WORKFLOWS.filter(w => WORKFLOW_PROFILE[w.id]);
-  for (let n = 0; n < 10; n++) {
-    const bulkRunId = `bulk-${String(n + 1).padStart(3, '0')}`;
-    const dayMs = HISTORY_START + Math.floor(b() * ((ANCHOR - HISTORY_START) / DAY_MS)) * DAY_MS;
-    const startedAt = workingMoment(startOfDay(dayMs), b);
-    const actor = pickActor(b);
-    const legs = 3 + Math.floor(b() * 3);
+  runs.sort((a, b) => a.startedAt - b.startedAt);
 
-    for (let l = 0; l < legs; l++) {
-      const wf = bulkable[Math.floor(b() * bulkable.length)];
-      const profile = WORKFLOW_PROFILE[wf.id];
-      const control = CONTROL_FOR_WORKFLOW[wf.id] ?? null;
-      const failed = b() < 0.08;
-      const durationSecs = vary(Math.round(profile.secs * 0.3), 0.3, b);
-      const legStart = startedAt + l * 90_000;
-
-      runs.push({
-        id: `run-${String(++seq).padStart(4, '0')}`,
-        workflowId: wf.id,
-        workflowName: wf.name,
-        controlId: control?.id ?? null,
-        controlName: control?.name ?? null,
-        userEmail: actor.email,
-        userName: actor.name,
-        team: actor.team,
-        startedAt: legStart,
-        completedAt: failed ? null : legStart + durationSecs * 1000,
-        durationSecs,
-        rowCount: failed ? null : vary(Math.round(profile.rows * 0.18), 0.3, b),
-        status: failed ? 'failed' : 'complete',
-        executionError: failed ? ERRORS[Math.floor(b() * ERRORS.length)] : null,
-        bulkRunId,
-        updatedAt: legStart + durationSecs * 1000,
-      });
+  /* Bulk executions. A bulk run is one unit of work that fires several
+   * workflows, and the spec is explicit that a bulk job and a single run are
+   * never added together, so the runs carry the bulk id and the bulk runs are
+   * counted on their own. */
+  const rb = mulberry32(0x62_75_6c); // "bul"
+  let bulk = 0;
+  for (let i = 0; i < runs.length; i++) {
+    if (rb() < 0.06) {
+      bulk += 1;
+      const id = `bulk-${String(bulk).padStart(3, '0')}`;
+      for (let j = i; j < Math.min(i + 3 + Math.floor(rb() * 3), runs.length); j++) runs[j].bulkRunId = id;
+      i += 4;
     }
   }
 
-  return runs.sort((a, z) => a.startedAt - z.startedAt);
+  /* The stuck tail. Two runs waiting on a person for more than a day and one
+   * blocked by a permission, all inside the newest week, so the Head of Team
+   * view opens on something real. */
+  const recent = runs.filter(x => x.startedAt > ANCHOR - 6 * DAY_MS && x.status === 'complete');
+  const stall = (run: WorkflowRun, status: RunStatus, note: string, hoursAgo: number) => {
+    run.status = status;
+    run.completedAt = null;
+    run.startedAt = ANCHOR - hoursAgo * HOUR_MS;
+    run.updatedAt = run.startedAt + HOUR_MS;
+    run.error = note;
+  };
+  const waitA = recent.find(x => x.workflowId === 'wf-010');
+  const waitB = recent.find(x => x.workflowId === 'wf-001' && x !== waitA);
+  const blocked = recent.find(x => x.workflowId === 'wf-005');
+  if (waitA) stall(waitA, 'paused', WAITING[0], 26);
+  if (waitB) stall(waitB, 'paused', WAITING[1], 41);
+  if (blocked) stall(blocked, 'blocked', 'Blocked — the data source credential expired on 19 Apr', 30);
+
+  /* One mapping fault, four times in a week. This is the shape the page exists
+   * to surface: a team lead cannot act on "six runs failed", but they can act on
+   * one workflow failing four times for one reason, because fixing that mapping
+   * clears most of the queue. */
+  const repeats = runs
+    .filter(x => x.workflowId === 'wf-007' && x.status === 'complete' && x.startedAt > ANCHOR - 7 * DAY_MS)
+    .slice(0, 4);
+  for (const run of repeats) {
+    run.status = 'failed';
+    run.completedAt = null;
+    run.error = ERRORS[0];
+  }
+
+  return runs;
 }
 
 /** Every workflow execution the platform has recorded. */
 export const RUNS: WorkflowRun[] = buildRuns();
 
 /** The bulk executions, as a unit of their own. */
-export const BULK_RUN_IDS: string[] = Array.from(
-  new Set(RUNS.map(r => r.bulkRunId).filter((x): x is string => x !== null)),
-);
+export const BULK_RUNS: { id: string; at: number; runCount: number }[] = (() => {
+  const byId = new Map<string, { id: string; at: number; runCount: number }>();
+  for (const run of RUNS) {
+    if (!run.bulkRunId) continue;
+    const row = byId.get(run.bulkRunId);
+    if (row) { row.runCount += 1; row.at = Math.min(row.at, run.startedAt); }
+    else byId.set(run.bulkRunId, { id: run.bulkRunId, at: run.startedAt, runCount: 1 });
+  }
+  return Array.from(byId.values()).sort((a, b) => a.at - b.at);
+})();
+
+/** Workflows the library holds that have never run, ever (PU-07). */
+export const NEVER_RUN_WORKFLOWS: string[] = WORKFLOWS
+  .filter(wf => !RUNS.some(run => run.workflowId === wf.id))
+  .map(wf => wf.name)
+  .sort();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * §2.2 Chat — every question, and the work behind the answer
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One question asked of the assistant.
+ *
+ * `tokens` is the product's own estimate: the code divides the text length by
+ * four to stop a runaway conversation, and its own comment calls that a stopgap.
+ * It is carried here because the page shows it, and shown only ever with the
+ * word "estimated" next to it (PU-12, PU-16).
+ */
+export interface ChatQuestion {
+  id: string;
+  at: number;
+  actor: Actor;
+  /** Abilities the assistant used to answer — the recorded step count. */
+  steps: number;
+  /** Estimated, not measured. Text length over four. */
+  tokens: number;
+  /** Whether the answer's program was frozen into the workflow library. */
+  savedAsWorkflow: boolean;
+  /** Every answer stores the program behind it, so every answer can be re-run. */
+  rerunnable: true;
+}
 
 function buildChat(): ChatQuestion[] {
-  const r = mulberry32(0x11a7f30b);
+  const r = mulberry32(0x63_68_74); // "cht"
   const out: ChatQuestion[] = [];
-  const days = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
-  for (let d = 0; d < days; d++) {
-    const dayMs = HISTORY_START + d * DAY_MS;
+  let seq = 0;
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
     const dow = new Date(dayMs).getUTCDay();
     const weekend = dow === 0 || dow === 6;
-    // Chat has grown across the window: a later day gets more questions.
-    const growth = 0.55 + (d / days) * 1.1;
-    const asks = weekend ? (r() < 0.35 ? 1 : 0) : Math.round((1 + r() * 3) * growth);
-    for (let i = 0; i < asks; i++) {
-      const actor = pickActor(r);
-      const steps = 3 + Math.floor(r() * 10);
+    const trend = 0.6 + (day / HISTORY_DAYS) * 0.9;
+    const expected = (weekend ? 0.4 : 3.4) * trend;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      seq += 1;
       out.push({
-        id: `chat-${out.length + 1}`,
-        userEmail: actor.email,
-        team: actor.team,
-        askedAt: workingMoment(dayMs, r),
-        steps,
-        tokensIn: vary(1_400 * steps, 0.4, r),
-        tokensOut: vary(320 * steps, 0.4, r),
-        savedAsWorkflow: r() < 0.06,
-        // The program behind the answer is stored on every question, so every
-        // answer can be re-run and checked. For an audit product that is the
-        // point, not a technical detail.
-        reproducible: true,
+        id: `qna-${String(seq).padStart(5, '0')}`,
+        at,
+        actor: pickActor(r),
+        steps: 3 + Math.floor(r() * 7),
+        tokens: vary(2_400, 0.55, r),
+        savedAsWorkflow: r() < 0.08,
+        rerunnable: true,
       });
     }
   }
   return out;
 }
 
+/** Every question asked of the assistant. */
 export const CHAT_QUESTIONS: ChatQuestion[] = buildChat();
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * §2.3 Concierge — the only place the product records money
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * How each Concierge tool handles cost, read off the spec's own table of the
+ * worker code. Three tools price every AI call. One has no cost code at all.
+ * Two set the total to zero literally, which is not the same as costing nothing
+ * — so those jobs are recorded as unpriced rather than as free.
+ */
+type CostWiring = 'priced' | 'none' | 'hardcoded-zero';
+
+const CONCIERGE_COST_WIRING: Record<string, CostWiring> = {
+  'table': 'priced',
+  'medical-report-reader': 'priced',
+  'insights-anomaly': 'priced',
+  'forensics': 'none',
+  'image-analytics': 'hardcoded-zero',
+  'speech-auditor': 'hardcoded-zero',
+  // The RACM generator is the SOP-to-RACM pipeline; it records nothing about
+  // consumption at all, so it is kept as its own record type below.
+};
+
+const CONCIERGE_TITLE: Record<string, string> = {
+  'table': 'Table Extractor',
+  'medical-report-reader': 'Medical Report Reader',
+  'insights-anomaly': 'Insights & Anomaly Report',
+  'forensics': 'Document Forensics',
+  'image-analytics': 'Image Analytics',
+  'speech-auditor': 'Speech Auditor',
+};
+
+/** One Concierge background job. The only record in the product with a price. */
+export interface ConciergeJob {
+  id: string;
+  toolId: string;
+  toolTitle: string;
+  at: number;
+  actor: Actor;
+  status: 'completed' | 'failed';
+  durationSecs: number;
+  /** Dollars the AI calls actually cost, when the pipeline prices them. */
+  llmCostUsd: number | null;
+  /** How the number got there, so a zero is never read as free. */
+  costWiring: CostWiring;
+}
+
 function buildConcierge(): ConciergeJob[] {
-  const r = mulberry32(0x77c0de11);
-  // The RACM Generator is the SOP-to-RACM pipeline, counted separately: it is
-  // the one tool that records nothing about what it consumed.
-  const tools = CONCIERGE_TOOLS.filter(t => t.id !== 'racm-generator');
+  const r = mulberry32(0x63_6f_6e); // "con"
   const out: ConciergeJob[] = [];
-  const days = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
-  for (let d = 0; d < days; d++) {
-    if (r() > 0.42) continue;
-    const dayMs = HISTORY_START + d * DAY_MS;
-    const tool = tools[Math.floor(r() * tools.length)];
-    const actor = pickActor(r);
-    const failed = r() < 0.07;
-    out.push({
-      id: `cj-${out.length + 1}`,
-      toolId: tool.id,
-      toolTitle: tool.title,
-      userEmail: actor.email,
-      team: actor.team,
-      startedAt: workingMoment(dayMs, r),
-      durationSecs: vary(240, 0.7, r),
-      status: failed ? 'failed' : 'completed',
-      costUsd: failed ? 0 : Number((0.04 + r() * 1.35).toFixed(4)),
-    });
+  const tools = Object.keys(CONCIERGE_COST_WIRING);
+  let seq = 0;
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const dow = new Date(dayMs).getUTCDay();
+    // Concierge ships behind a flag, so the volume is modest by design.
+    const expected = dow === 0 || dow === 6 ? 0.08 : 0.85;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      const toolId = tools[Math.floor(r() * tools.length)];
+      const wiring = CONCIERGE_COST_WIRING[toolId];
+      const failed = r() < 0.07;
+      seq += 1;
+      out.push({
+        id: `cj-${String(seq).padStart(4, '0')}`,
+        toolId,
+        toolTitle: CONCIERGE_TITLE[toolId],
+        at,
+        actor: pickActor(r),
+        status: failed ? 'failed' : 'completed',
+        durationSecs: vary(210, 0.6, r),
+        llmCostUsd: failed ? null : wiring === 'priced' ? Math.round(vary(74, 0.7, r)) / 100 : wiring === 'hardcoded-zero' ? 0 : null,
+        costWiring: wiring,
+      });
+    }
   }
   return out;
 }
 
+/** Every Concierge job the platform has run. */
 export const CONCIERGE_JOBS: ConciergeJob[] = buildConcierge();
 
+/* ── §2.4 SOP to RACM — records the result, nothing about spend ──────────── */
+
+/**
+ * One SOP-to-RACM generation.
+ *
+ * Seven AI stages on the strongest reasoning model, no time limit, and no record
+ * of duration, usage or cost. It also caches: a document processed before skips
+ * the AI entirely, so counting jobs says nothing at all about spend. Both facts
+ * are carried on the record because the page has to say them.
+ */
+export interface SopRacmJob {
+  id: string;
+  at: number;
+  actor: Actor;
+  document: string;
+  status: 'complete' | 'failed';
+  risksGenerated: number;
+  controlsGenerated: number;
+  /** True when the pipeline skipped the AI and reused an earlier result. */
+  cacheHit: boolean;
+}
+
+const SOP_DOCUMENTS = [
+  'SOP_Accounts Receivable.pptx', 'Sample SOP.docx', 'Testing RACM (4).xlsx',
+  'Agrawal Metals - Fixed Assets - SOP.pdf', 'P2P Vendor Payment SOP v4.docx',
+  'ITGC Access Management SOP.pdf', 'Financial Close Procedures.docx',
+];
+
 function buildSopRacm(): SopRacmJob[] {
-  const r = mulberry32(0x2c9ab410);
+  const r = mulberry32(0x73_6f_70); // "sop"
   const out: SopRacmJob[] = [];
-  const days = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
-  for (let d = 0; d < days; d++) {
-    if (r() > 0.13) continue;
-    const dayMs = HISTORY_START + d * DAY_MS;
-    const actor = pickActor(r);
+  let seq = 0;
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    if (r() > 0.16) continue;
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const at = workingMoment(dayMs, r);
+    if (at > ANCHOR) continue;
+    seq += 1;
+    const cacheHit = r() < 0.45;
     out.push({
-      id: `sop-${out.length + 1}`,
-      userEmail: actor.email,
-      team: actor.team,
-      startedAt: workingMoment(dayMs, r),
-      status: r() < 0.05 ? 'failed' : 'completed',
-      cached: r() < 0.45,
+      id: `sop-${String(seq).padStart(3, '0')}`,
+      at,
+      actor: pickActor(r),
+      document: SOP_DOCUMENTS[Math.floor(r() * SOP_DOCUMENTS.length)],
+      status: r() < 0.05 ? 'failed' : 'complete',
+      risksGenerated: vary(8, 0.5, r),
+      controlsGenerated: vary(19, 0.4, r),
+      cacheHit,
     });
   }
   return out;
 }
 
+/** Every SOP-to-RACM generation. */
 export const SOP_RACM_JOBS: SopRacmJob[] = buildSopRacm();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 7b · Manual review records — what calibration measures against
+ * §2.5 The paid lookups — the calls an outside vendor bills us for
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * One piece of review work a person did by hand, with a clock on it.
+ * The verification APIs the platform calls, from the spec's own list.
  *
- * This is the record the settings calibration reads: how many rows a person
- * actually got through, and how long it actually took them, from the platform's
- * own timestamps rather than from anybody's opinion. In the backend these are
- * the exception rows' `assigned_at` and `resolved_at` columns plus the rows
- * reviewed. Whether those columns are usable is an open question for
- * engineering; until it is answered this generator stands in for them, and the
- * day the real columns land this whole section is deleted and the calibration
- * reads the table instead. Nothing else in the module changes.
+ * These are the most literal cost the product has: a vendor bills the company
+ * for each successful lookup. Their calling code lives inside a database column,
+ * which is why the list comes from the business rather than from a code search,
+ * and why the billing unit — one call per run, or one per row — is still an open
+ * question the spec puts at half a day of reading (check 4).
  *
- * The spans are deliberately messy. Some reviews are interrupted, some sit over
- * a weekend, and a couple are the person who forgot to close the record on
- * Friday. That is what makes the trimming in the calibration do real work
- * instead of being decoration.
+ * The page counts the calls today. It prices them only when somebody enters the
+ * vendor's bill (PU-19), and it never shows a rate from outside the product.
  */
-export interface ReviewRecord {
+export interface PaidLookup {
   id: string;
-  userEmail: string;
-  team: string;
-  assignedAt: number;
-  resolvedAt: number;
-  rowsReviewed: number;
+  /** The workflow name, as the customer's library shows it. */
+  name: string;
+  verifies: string;
+  /** Whether the lookup returns personal identity data (decision 5). */
+  personalData: boolean;
 }
 
-function buildReviews(): ReviewRecord[] {
-  const r = mulberry32(0x4d17be03);
-  const out: ReviewRecord[] = [];
-  const days = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
-
-  for (let d = 0; d < days; d++) {
-    const dayMs = HISTORY_START + d * DAY_MS;
-    const dow = new Date(dayMs).getUTCDay();
-    if (dow === 0 || dow === 6) continue;
-
-    const reviews = 1 + Math.floor(r() * 3);
-    for (let i = 0; i < reviews; i++) {
-      const actor = pickActor(r);
-      const assignedAt = workingMoment(dayMs, r);
-      const rowsReviewed = 40 + Math.floor(r() * 560);
-      // The person's own pace, which varies by person and by day.
-      const paceRows = 150 + r() * 110;
-      let hours = rowsReviewed / paceRows;
-      // One in twelve was left open far longer than the work took — the record
-      // says two days, the review took forty minutes. Calibration has to survive
-      // these rather than average them in.
-      if (r() < 0.08) hours += 8 + r() * 40;
-      out.push({
-        id: `rev-${out.length + 1}`,
-        userEmail: actor.email,
-        team: actor.team,
-        assignedAt,
-        resolvedAt: assignedAt + Math.round(hours * HOUR_MS),
-        rowsReviewed,
-      });
-    }
-  }
-  return out;
-}
-
-/** Every hand review the platform has a clock on. */
-export const REVIEW_RECORDS: ReviewRecord[] = buildReviews();
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 8 · The vendor price list — PU-19
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * One priced vendor lookup.
- *
- * `billingUnit` is the whole ballgame: a run that checks 500 vendors almost
- * certainly makes 500 billable calls rather than one, and the answer lives
- * inside each workflow's stored program. Getting it wrong puts the cost figure
- * out by a factor of a thousand, so it is a per-workflow field with no default.
- *
- * The rows are versioned by date, so renegotiating a contract never rewrites
- * last quarter's cost.
- */
-export interface WorkflowApiPrice {
-  workflowId: string;
-  vendor: string;
-  apiName: string;
-  billingUnit: 'run' | 'row';
-  pricePaise: number;
-  effectiveFrom: number;
-  effectiveTo: number | null;
-}
-
-/**
- * The per-API price list, empty until somebody splits a bill.
- *
- * Layer 3, and optional: the invoices above already give an exact cost. This
- * only exists for a business that wants that cost split per workflow, and its
- * per-workflow total for a month should reconcile against the invoice for the
- * same month. A gap between them is a flag worth showing rather than hiding.
- *
- * A workflow is billable exactly when this table holds a row for it — there is
- * no second flag and no separate list to keep in sync. It ships empty because
- * the vendor price list has not been supplied, so cost to run has nothing to
- * price and says exactly that. It is not a placeholder for a future feature:
- * the plumbing is built, and the moment a row lands here every past period is
- * priced from runs already recorded.
- *
- * The rows a CFO enters are held per browser rather than in this array, so the
- * shipped default stays empty and the entered prices survive a reload.
- */
-export const WORKFLOW_API_PRICING: WorkflowApiPrice[] = [];
-
-/* ── Layer 2 · the month's bill, which is what the business actually knows ── */
-
-/**
- * One vendor invoice for one month.
- *
- * The primary cost input, and deliberately the dullest one. Nobody filling a
- * price form reliably knows a per-API rate, or whether a workflow bills once a
- * run or once a row. What they know with certainty is the number on the bill,
- * so that is the number the page asks for: one row per vendor per month, summed
- * over the window, exact and reconcilable against what finance paid.
- *
- * Past months can be entered at any time and history fills in behind them.
- */
-export interface VendorInvoice {
-  vendor: string;
-  /** First of the month, UTC. One invoice per vendor per month. */
-  periodMonth: number;
-  amountPaise: number;
-  /** Credit notes, disputes, anything the figure needs said next to it. */
-  note: string | null;
-  enteredBy: string;
-  enteredAt: number;
-}
-
-const INVOICES_KEY = 'irame.platformUsage.invoices.v1';
-
-/** Every invoice entered, oldest month first. Ships empty. */
-export function loadInvoices(): VendorInvoice[] {
-  try {
-    const raw = localStorage.getItem(INVOICES_KEY);
-    if (!raw) return [];
-    const saved = JSON.parse(raw) as VendorInvoice[];
-    return Array.isArray(saved) ? saved.slice().sort((a, z) => a.periodMonth - z.periodMonth) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistInvoices(rows: VendorInvoice[]): void {
-  try { localStorage.setItem(INVOICES_KEY, JSON.stringify(rows)); } catch { /* storage unavailable */ }
-}
-
-/** Enter, or correct, one month's bill. Re-entering a month replaces it. */
-export function addInvoice(next: VendorInvoice): VendorInvoice[] {
-  const rows = [
-    ...loadInvoices().filter(r => !(r.vendor === next.vendor && r.periodMonth === next.periodMonth)),
-    next,
-  ].sort((a, z) => a.periodMonth - z.periodMonth || a.vendor.localeCompare(z.vendor));
-  persistInvoices(rows);
-  return rows;
-}
-
-export function removeInvoice(vendor: string, periodMonth: number): VendorInvoice[] {
-  const rows = loadInvoices().filter(r => !(r.vendor === vendor && r.periodMonth === periodMonth));
-  persistInvoices(rows);
-  return rows;
-}
-
-/** First of the month a moment falls in, UTC. */
-export const startOfMonthUtc = (ms: number): number => {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-};
-
-/** Every month the window touches, first of month, oldest first. */
-export function monthsInWindow(from: number, to: number): number[] {
-  const out: number[] = [];
-  let m = startOfMonthUtc(from);
-  while (m <= to) {
-    out.push(m);
-    const d = new Date(m);
-    m = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
-  }
-  return out;
-}
-
-/* ── The change log behind every entered number ──────────────────────────── */
-
-/**
- * The inputs are themselves counted.
- *
- * Two numbers on this page are typed rather than measured: the four assumptions
- * and the vendor's monthly bill. Both are the kind of number an audit committee
- * asks about six months later, so both keep their own record: who changed what,
- * from what to what, when, and where the new value came from. The assumptions
- * strip and the cost tile each open their own history, under the same rule as
- * every other number on the page.
- */
-export type UsageChangeEntity = 'usage_setting' | 'vendor_invoice';
-
-export interface UsageChange {
-  entity: UsageChangeEntity;
-  /** What changed, in the words the page uses for it. */
-  field: string;
-  /** Null when the thing did not exist before, which is most bills. */
-  from: string | null;
-  to: string | null;
-  /** starting value / measured / set by hand, for a setting. Null for a bill. */
-  source: string | null;
-  by: string;
-  at: number;
-}
-
-const CHANGES_KEY = 'irame.platformUsage.changes.v1';
-
-/** Every change entered here, newest first. Ships empty. */
-export function loadUsageChanges(): UsageChange[] {
-  try {
-    const raw = localStorage.getItem(CHANGES_KEY);
-    if (!raw) return [];
-    const saved = JSON.parse(raw) as UsageChange[];
-    return Array.isArray(saved) ? saved.slice().sort((a, z) => z.at - a.at) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function recordUsageChange(next: UsageChange): UsageChange[] {
-  const held = loadUsageChanges();
-  // The same change, to the same field, from and to the same value, at the same
-  // moment is one change written twice. A history that says a number moved
-  // twice when it moved once is worse than no history.
-  const already = held.some(
-    c => c.entity === next.entity && c.field === next.field && c.from === next.from
-      && c.to === next.to && c.at === next.at,
-  );
-  if (already) return held;
-  const rows = [next, ...held].sort((a, z) => z.at - a.at);
-  try { localStorage.setItem(CHANGES_KEY, JSON.stringify(rows)); } catch { /* storage unavailable */ }
-  return rows;
-}
-
-/* ── Layer 3 · the optional per-API split ────────────────────────────────── */
-
-const PRICING_KEY = 'irame.platformUsage.pricing.v1';
-
-/** Every price row in force, entered ones included. */
-export function loadPricing(): WorkflowApiPrice[] {
-  try {
-    const raw = localStorage.getItem(PRICING_KEY);
-    if (!raw) return WORKFLOW_API_PRICING;
-    const saved = JSON.parse(raw) as WorkflowApiPrice[];
-    return Array.isArray(saved) ? [...WORKFLOW_API_PRICING, ...saved] : WORKFLOW_API_PRICING;
-  } catch {
-    return WORKFLOW_API_PRICING;
-  }
-}
-
-function persistPricing(rows: WorkflowApiPrice[]): void {
-  try { localStorage.setItem(PRICING_KEY, JSON.stringify(rows)); } catch { /* storage unavailable */ }
-}
-
-/**
- * Price one workflow's lookup from a given date.
- *
- * A renegotiated price never rewrites the old one: the row in force is closed
- * the day before the new one starts, and both stay. That is what makes last
- * quarter's cost still read as last quarter's cost after a contract changes.
- */
-export function addPrice(next: Omit<WorkflowApiPrice, 'effectiveTo'>): WorkflowApiPrice[] {
-  const entered = loadPricing().filter(r => !WORKFLOW_API_PRICING.includes(r));
-  const closed = entered.map(r =>
-    r.workflowId === next.workflowId && r.effectiveTo === null && r.effectiveFrom < next.effectiveFrom
-      ? { ...r, effectiveTo: next.effectiveFrom - DAY_MS }
-      : r);
-  // Re-entering a price for the same start date replaces that row rather than
-  // stacking two prices on one day, which no cost calculation could resolve.
-  const rows = [
-    ...closed.filter(r => !(r.workflowId === next.workflowId && r.effectiveFrom === next.effectiveFrom)),
-    { ...next, effectiveTo: null },
-  ].sort((a, z) => a.workflowId.localeCompare(z.workflowId) || a.effectiveFrom - z.effectiveFrom);
-  persistPricing(rows);
-  return loadPricing();
-}
-
-/** Remove one entered price row. The shipped list can never be edited away. */
-export function removePrice(workflowId: string, effectiveFrom: number): WorkflowApiPrice[] {
-  const entered = loadPricing()
-    .filter(r => !WORKFLOW_API_PRICING.includes(r))
-    .filter(r => !(r.workflowId === workflowId && r.effectiveFrom === effectiveFrom));
-  persistPricing(entered);
-  return loadPricing();
-}
-
-/** Billable means "has a price row". One list, one truth. */
-export const billableWorkflowIds = (): Set<string> =>
-  new Set(loadPricing().map(p => p.workflowId));
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 9 · Exceptions, traced back to the run that raised them
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** The exception register carries the engagement-side workflow ids. */
-const EXCEPTION_WORKFLOW_MAP: Record<string, string> = {
-  wf1: 'wf-007', wf2: 'wf-001', wf3: 'wf-003', wf4: 'wf-002',
-};
-
-/** "4h ago" / "3d ago" / "15m ago" → a moment before the anchor. */
-function parseOpened(value: string): number {
-  const m = /^(\d+)([mhd])\s+ago$/.exec(value.trim());
-  if (!m) return ANCHOR;
-  const n = Number(m[1]);
-  const unit = m[2] === 'm' ? 60_000 : m[2] === 'h' ? HOUR_MS : DAY_MS;
-  return ANCHOR - n * unit;
-}
-
-/**
- * An exception with the run that raised it.
- *
- * The link is the one thing the page needs and the database may not have. Where
- * it exists, every counted exception traces to its run; where it does not, the
- * exception still counts and simply has no run to open. The page never drops a
- * real finding because the plumbing behind it is thin.
- */
-export interface TracedException {
-  exception: EngagementException;
-  openedAt: number;
-  runId: string | null;
-  workflowId: string | null;
-  team: string | null;
-  userEmail: string | null;
-}
-
-function traceExceptions(): TracedException[] {
-  return ENGAGEMENT_EXCEPTIONS.map(e => {
-    const openedAt = parseOpened(e.opened);
-    const wfId = EXCEPTION_WORKFLOW_MAP[e.workflowId] ?? null;
-    const run = wfId
-      ? RUNS.filter(x => x.workflowId === wfId && x.startedAt <= openedAt).pop() ?? null
-      : null;
-    return {
-      exception: e,
-      openedAt,
-      runId: run?.id ?? null,
-      workflowId: wfId,
-      team: run?.team ?? null,
-      userEmail: run?.userEmail ?? null,
-    };
-  });
-}
-
-export const TRACED_EXCEPTIONS: TracedException[] = traceExceptions();
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 10 · Who a name belongs to
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * The team a person is on, by name.
- *
- * The rest of the product stores a person's name on the thing they made — the
- * dashboard's creator, the engagement's owner, the report's author. A team lens
- * needs the team behind that name, and the roster is the only place it exists.
- * A name that is not on the roster returns null and is never claimed by a team:
- * an engagement owned by somebody outside the platform belongs to nobody's
- * team, and saying otherwise would put another team's work on a lead's screen.
- */
-const TEAM_BY_NAME: Map<string, string> = new Map(
-  SEED_USERS.filter(u => u.team && u.team !== '—').map(u => [u.name, u.team]),
-);
-
-export const teamOfName = (name: string): string | null => TEAM_BY_NAME.get(name) ?? null;
-
-const EMAIL_BY_NAME: Map<string, string> = new Map(SEED_USERS.map(u => [u.name, u.email]));
-
-export const emailOfName = (name: string): string | null => EMAIL_BY_NAME.get(name) ?? null;
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 11 · Alerts, and the worker that fires them — PU-22
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * One alert firing on a dashboard widget.
- *
- * Dashboards and widgets already write a before-and-after event on every
- * create, update and delete, and Platform Usage counts those from the product's
- * own event log. An alert firing is the one event in that family with no person
- * behind it: a background worker checks the widget on a schedule and writes the
- * event itself. That is why `firedBy` is nullable rather than pointing at
- * whoever built the widget, and why the page labels those rows automatic. A
- * fire attributed to a person who was asleep at the time is a lie the reader
- * cannot detect.
- */
-export interface AlertFire {
-  id: string;
-  at: number;
-  dashboardId: string;
-  dashboardName: string;
-  widgetName: string;
-  /** What tripped, in the words the alert itself uses. */
-  condition: string;
-  /** Null when the scheduled worker fired it, which is most of the time. */
-  firedBy: string | null;
-  team: string | null;
-}
-
-/** The widgets that carry an alert, and what each one watches. */
-const ALERT_RULES: { dashboardId: string; widget: string; condition: string; perMonth: number }[] = [
-  { dashboardId: 'p2p', widget: 'Duplicate invoice flags', condition: 'Duplicate flags above 25 in a day', perMonth: 4 },
-  { dashboardId: 'p2p', widget: 'Invoices without a PO', condition: 'More than 2% of invoices have no purchase order', perMonth: 3 },
-  { dashboardId: 'grc', widget: 'Controls failing', condition: 'A key control fails two runs in a row', perMonth: 2 },
-  { dashboardId: 'grc', widget: 'Open deficiencies', condition: 'Open deficiencies above 10', perMonth: 2 },
-  { dashboardId: 'o2c', widget: 'Credit limit overrides', condition: 'An override above 10 lakh with no approver', perMonth: 3 },
-  { dashboardId: 'shared-2', widget: 'Overdue action plans', condition: 'An action plan is past its due date', perMonth: 5 },
+export const PAID_LOOKUPS: PaidLookup[] = [
+  { id: 'pl-01', name: 'PAN Basic API Check', verifies: 'PAN exists and the name matches', personalData: true },
+  { id: 'pl-02', name: 'PAN Details API', verifies: 'Full PAN details', personalData: true },
+  { id: 'pl-03', name: 'PAN to GST API', verifies: 'GSTINs linked to a PAN', personalData: true },
+  { id: 'pl-04', name: 'PAN to MSME Basic API Check', verifies: 'MSME or Udyam linked to a PAN', personalData: true },
+  { id: 'pl-05', name: 'GST API Check', verifies: 'GST registration and status', personalData: false },
+  { id: 'pl-06', name: 'MSME API Check', verifies: 'MSME or Udyam registration', personalData: false },
+  { id: 'pl-07', name: 'CIN API Check', verifies: 'Company registration at the MCA', personalData: false },
+  { id: 'pl-08', name: 'Vaahan API Check', verifies: 'Vehicle registration', personalData: true },
+  { id: 'pl-09', name: 'UAN Advanced v4 API', verifies: 'Provident-fund account', personalData: true },
+  { id: 'pl-10', name: 'Passport API Check', verifies: 'Passport', personalData: true },
+  { id: 'pl-11', name: 'Voter ID API Check', verifies: 'Voter ID', personalData: true },
+  { id: 'pl-12', name: 'Driving License API Check', verifies: 'Driving licence', personalData: true },
+  { id: 'pl-13', name: 'Email API Check', verifies: 'Email address exists', personalData: true },
 ];
 
-const DASHBOARD_BY_ID: Map<string, { name: string; creator: string }> = new Map(
-  [...MY_DASHBOARDS, ...SHARED_DASHBOARDS].map(d => [d.id, { name: d.name, creator: d.creator }]),
-);
+/** One successful verification call, which is what a vendor charges for. */
+export interface LookupCall {
+  id: string;
+  lookupId: string;
+  lookupName: string;
+  at: number;
+  actor: Actor;
+  /** A charge applies only when the call succeeds. */
+  status: 'complete' | 'failed';
+}
 
-function buildAlertFires(): AlertFire[] {
-  const r = mulberry32(0x71a3d90b);
-  const fires: AlertFire[] = [];
-  const months = (ANCHOR - HISTORY_START) / (DAY_MS * 30.44);
+function buildLookupCalls(): LookupCall[] {
+  const r = mulberry32(0x70_61_69); // "pai"
+  const out: LookupCall[] = [];
   let seq = 0;
+  // The heavier checks (PAN, GST, three-way vendor verification) run far more
+  // often than a passport check, so the mix is weighted rather than flat.
+  const weights = [9, 5, 4, 3, 8, 3, 3, 2, 1, 1, 1, 2, 6];
+  const total = weights.reduce((s, w) => s + w, 0);
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const dow = new Date(dayMs).getUTCDay();
+    const trend = 0.7 + (day / HISTORY_DAYS) * 0.8;
+    const expected = (dow === 0 || dow === 6 ? 3 : 46) * trend;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      let t = r() * total;
+      let idx = 0;
+      while (idx < weights.length - 1 && t > weights[idx]) { t -= weights[idx]; idx += 1; }
+      seq += 1;
+      out.push({
+        id: `lk-${String(seq).padStart(6, '0')}`,
+        lookupId: PAID_LOOKUPS[idx].id,
+        lookupName: PAID_LOOKUPS[idx].name,
+        at,
+        actor: pickActor(r),
+        status: r() < 0.04 ? 'failed' : 'complete',
+      });
+    }
+  }
+  return out;
+}
 
-  for (const rule of ALERT_RULES) {
-    const dash = DASHBOARD_BY_ID.get(rule.dashboardId);
-    if (!dash) continue;
-    const total = Math.round(rule.perMonth * months);
+/** Every verification call the platform has made. */
+export const LOOKUP_CALLS: LookupCall[] = buildLookupCalls();
 
-    for (let i = 0; i < total; i++) {
-      const dayMs = startOfDay(HISTORY_START + Math.floor(r() * (ANCHOR - HISTORY_START)));
-      // Most fires are the worker's. The rest are somebody re-running the
-      // widget by hand and tripping the same rule while they watch.
-      const byHand = r() < 0.2;
-      const actor = byHand ? pickActor(r) : null;
-      fires.push({
-        id: `fire-${String(++seq).padStart(4, '0')}`,
-        at: workingMoment(dayMs, r),
-        dashboardId: rule.dashboardId,
-        dashboardName: dash.name,
-        widgetName: rule.widget,
-        condition: rule.condition,
-        firedBy: actor?.name ?? null,
-        team: actor?.team ?? null,
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-22 The event log — dashboards, widgets and the alerts they fire
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One before-and-after event.
+ *
+ * The product already writes one of these on every dashboard, widget and alert
+ * change, and on every Smart Learn decision, through one helper called from
+ * twenty-two places. An alert fired by the background worker writes an event
+ * too, with no actor — which is why a null actor is a fact worth rendering
+ * ("automatic") rather than a blank.
+ */
+export interface AuditEventRow {
+  id: string;
+  entityType: 'dashboard' | 'widget' | 'widget_alert' | 'usage_setting' | 'vendor_invoice';
+  entityName: string;
+  verb: 'create' | 'update' | 'delete' | 'fire';
+  at: number;
+  /** Null when no person was involved. */
+  actor: string | null;
+}
+
+const DASHBOARD_RECORDS = [...MY_DASHBOARDS, ...SHARED_DASHBOARDS];
+
+const WIDGET_NAMES = [
+  'Duplicate invoice trend', 'Vendor spend concentration', 'Open exceptions by severity',
+  'Three-way match failures', 'Cash application backlog', 'Credit limit breaches',
+  'Journal entry anomalies', 'Control effectiveness by process',
+];
+
+const ALERT_NAMES = [
+  'Duplicate invoice value over ₹5L', 'Three-way match failure rate over 8%',
+  'Unmatched receipts older than 30 days', 'Credit limit breach on a top-20 customer',
+];
+
+function buildAuditEvents(): AuditEventRow[] {
+  const r = mulberry32(0x65_76_74); // "evt"
+  const out: AuditEventRow[] = [];
+  let seq = 0;
+  const push = (row: Omit<AuditEventRow, 'id'>) => {
+    seq += 1;
+    out.push({ id: `ae-${String(seq).padStart(5, '0')}`, ...row });
+  };
+
+  // Dashboards. The catalog carries a relative "2 hours ago" because that is how
+  // the dashboard cards render it, so the creation event sits where that says.
+  for (const d of DASHBOARD_RECORDS) {
+    const at = parseRelative(d.timeAgo) ?? ANCHOR - Math.floor(r() * 120) * DAY_MS;
+    const creator = d.creator === 'You' ? 'Nilesh Anand' : d.creator;
+    push({ entityType: 'dashboard', entityName: d.name, verb: 'create', at, actor: creator });
+    // A dashboard is edited a few times after it is built.
+    const edits = Math.floor(r() * 4);
+    for (let i = 0; i < edits; i++) {
+      push({ entityType: 'dashboard', entityName: d.name, verb: 'update', at: Math.min(ANCHOR, at + (i + 1) * 3 * DAY_MS), actor: creator });
+    }
+  }
+
+  // Older dashboards, retired before the catalog's window. They are part of the
+  // history the page reports on even though no card renders them any more.
+  const RETIRED = ['FY25 Vendor Spend', 'Q3 Close Tracker', 'Receivables Ageing (old)'];
+  for (const name of RETIRED) {
+    const at = HISTORY_START + Math.floor(r() * 90) * DAY_MS;
+    push({ entityType: 'dashboard', entityName: name, verb: 'create', at, actor: pickActor(r).name });
+    push({ entityType: 'dashboard', entityName: name, verb: 'delete', at: at + 40 * DAY_MS, actor: pickActor(r).name });
+  }
+
+  // Widgets built and changed on those dashboards.
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const dow = new Date(dayMs).getUTCDay();
+    const expected = dow === 0 || dow === 6 ? 0.1 : 1.1;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      push({
+        entityType: 'widget',
+        entityName: WIDGET_NAMES[Math.floor(r() * WIDGET_NAMES.length)],
+        verb: r() < 0.45 ? 'create' : 'update',
+        at,
+        actor: pickActor(r).name,
+      });
+    }
+
+    // Alert fires. The worker fires most of them, with no person involved.
+    const fires = r() < 0.4 ? 1 + Math.floor(r() * 3) : 0;
+    for (let i = 0; i < fires; i++) {
+      const at = dayMs + Math.floor(r() * 24) * HOUR_MS;
+      if (at > ANCHOR) continue;
+      push({
+        entityType: 'widget_alert',
+        entityName: ALERT_NAMES[Math.floor(r() * ALERT_NAMES.length)],
+        verb: 'fire',
+        at,
+        actor: r() < 0.12 ? pickActor(r).name : null,
       });
     }
   }
 
-  return fires.sort((a, z) => a.at - z.at);
+  return out.sort((a, b) => a.at - b.at);
 }
 
-/** Every alert the platform has fired, worker and hand alike. */
-export const ALERT_FIRES: AlertFire[] = buildAlertFires();
-
-/** Dashboards live in the workspace right now — the context under the counts. */
-export const DASHBOARD_TOTAL: number = MY_DASHBOARDS.length + SHARED_DASHBOARDS.length;
-
-/** Widgets carrying an alert right now. */
-export const ALERT_RULE_TOTAL: number = ALERT_RULES.length;
+/** Every event the product's own log holds for this page to read. */
+export const AUDIT_EVENTS: AuditEventRow[] = buildAuditEvents();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 12 · Sampling — the validation runs and how they ended — PU-24
+ * PU-23 Reports — created, worked on, shared
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ReportRecord {
+  id: string;
+  title: string;
+  status: 'draft' | 'final';
+  createdAt: number;
+  createdBy: string;
+  engagementId: string | null;
+}
+
+export interface ReportActivity {
+  id: string;
+  reportId: string;
+  reportTitle: string;
+  activityType: 'created' | 'section edited' | 'comment added' | 'status changed' | 'exported' | 'shared';
+  /** A person, or the system when a scheduled job did it. */
+  authorType: 'user' | 'system';
+  author: string;
+  at: number;
+}
+
+export interface ReportShare {
+  id: string;
+  reportTitle: string;
+  sharedBy: string;
+  sharedWith: string;
+  at: number;
+}
+
+export interface ActionPlanRow {
+  id: string;
+  reportTitle: string;
+  observation: string;
+  owner: string;
+  status: 'open' | 'closed';
+  dueAt: number;
+}
+
+const REPORT_RECORDS_BUILT: ReportRecord[] = GENERATED_REPORTS.map((rep, i) => {
+  const createdAt = parseLibraryDate(rep.generatedAt) ?? ANCHOR - i * 7 * DAY_MS;
+  return {
+    id: rep.id,
+    title: rep.name,
+    // The newest two are still being worked on; everything older went final.
+    status: i < 2 ? 'draft' : 'final',
+    createdAt,
+    createdBy: rep.generatedBy === 'You' ? 'Nilesh Anand' : rep.generatedBy,
+    engagementId: null,
+  };
+});
+
+/** Every report the product holds. */
+export const REPORT_RECORDS: ReportRecord[] = REPORT_RECORDS_BUILT
+  .slice()
+  .sort((a, b) => a.createdAt - b.createdAt);
+
+/**
+ * The reports module's own activity trail.
+ *
+ * A report edited fifty times is one report and fifty activities. The page
+ * counts both and never adds them together, which is why they are two record
+ * types rather than one number.
+ */
+export const REPORT_ACTIVITY: ReportActivity[] = (() => {
+  const r = mulberry32(0x72_70_74); // "rpt"
+  const out: ReportActivity[] = [];
+  let seq = 0;
+  const kinds: ReportActivity['activityType'][] = [
+    'section edited', 'section edited', 'section edited', 'comment added', 'status changed', 'exported', 'shared',
+  ];
+  for (const rep of REPORT_RECORDS) {
+    seq += 1;
+    out.push({
+      id: `rat-${String(seq).padStart(5, '0')}`,
+      reportId: rep.id, reportTitle: rep.title, activityType: 'created',
+      authorType: 'user', author: rep.createdBy, at: rep.createdAt,
+    });
+    const n = 4 + Math.floor(r() * 14);
+    for (let i = 0; i < n; i++) {
+      const at = Math.min(ANCHOR, rep.createdAt + Math.floor(r() * 18) * DAY_MS + Math.floor(r() * 8) * HOUR_MS);
+      const kind = kinds[Math.floor(r() * kinds.length)];
+      const system = kind === 'exported' && r() < 0.4;
+      seq += 1;
+      out.push({
+        id: `rat-${String(seq).padStart(5, '0')}`,
+        reportId: rep.id, reportTitle: rep.title, activityType: kind,
+        authorType: system ? 'system' : 'user',
+        author: system ? 'Scheduled export' : (r() < 0.6 ? rep.createdBy : pickActor(r).name),
+        at,
+      });
+    }
+  }
+  return out.sort((a, b) => a.at - b.at);
+})();
+
+/** Every share, from the product's own shared-report table. */
+export const REPORT_SHARES: ReportShare[] = SHARED_REPORTS.map((s, i) => ({
+  id: s.id,
+  reportTitle: s.name,
+  sharedBy: s.sharedBy,
+  sharedWith: s.sharedWith,
+  at: parseLibraryDate(s.sharedAt) ?? ANCHOR - (i + 1) * 9 * DAY_MS,
+}));
+
+/** The action-plan tracker behind the reports. */
+export const ACTION_PLANS: ActionPlanRow[] = (() => {
+  const r = mulberry32(0x61_63_70); // "acp"
+  const out: ActionPlanRow[] = [];
+  const observations = [
+    'Vendor bank-detail changes are not independently verified',
+    'Duplicate invoice checks run after payment release',
+    'Three-way match tolerances are set per user, not per policy',
+    'Journal entries above materiality lack a second reviewer',
+    'Credit limit overrides are approved by the requester',
+    'Access reviews are evidenced by email rather than the system',
+  ];
+  REPORT_RECORDS.filter((_, i) => i % 2 === 0).forEach((rep, i) => {
+    const n = 1 + Math.floor(r() * 3);
+    for (let k = 0; k < n; k++) {
+      out.push({
+        id: `ap-${String(i * 10 + k).padStart(4, '0')}`,
+        reportTitle: rep.title,
+        observation: observations[Math.floor(r() * observations.length)],
+        owner: pickActor(r).name,
+        status: r() < 0.55 ? 'closed' : 'open',
+        dueAt: rep.createdAt + (20 + Math.floor(r() * 60)) * DAY_MS,
+      });
+    }
+  });
+  return out;
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-24 Sampling — validation runs and their outcomes
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * A sample validation run and its lifecycle.
+ * One sample validation.
  *
- * Testing a control on a sample is its own kind of run: it is queued, it runs,
- * and it ends passed, failed or errored. The last two are different facts and
- * the page never merges them. A failed run is a finding — the control did not
- * hold. An errored run is not a finding at all: the check could not be
- * completed, so somebody has to look at it before anything can be concluded.
- * Reading one as the other either invents a deficiency or hides one.
+ * A lifecycle, not a flag: queued, running, then passed, failed or errored.
+ * "Errored" means the run could not reach a verdict and needs a person, which is
+ * a different fact from "failed", so the two never share a bar.
  */
-export type SampleRunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'error';
-
 export interface SampleRun {
   id: string;
-  at: number;
   engagementId: string;
   engagementName: string;
   controlId: string;
   controlName: string;
-  status: SampleRunStatus;
-  /** How many items the sample held. */
+  status: 'queued' | 'running' | 'passed' | 'failed' | 'error';
+  at: number;
+  actor: Actor;
+  /** Samples the run worked through. */
   sampleSize: number;
-  userEmail: string;
-  userName: string;
-  team: string;
-  /** Why the run errored, verbatim. Null on every other status. */
-  note: string | null;
 }
 
-/** Why a sample run could not be concluded. Shown as written, never summarised. */
-const SAMPLE_ERRORS = [
-  'Evidence file for sample item 14 could not be opened',
-  'Sample selection returned fewer items than the population requires',
-  'Approver named on the sample is not in the user directory',
-  'Two sample items point at the same document, so the sample is short',
-];
+const TESTABLE_CONTROLS = CONTROL_LIBRARY.filter(c => c.status === 'Active');
 
-/** The engagements that are actually being tested, with their process. */
-const TESTING_ENGAGEMENTS = ENGAGEMENTS.filter(e =>
-  e.status === 'Active' || e.status === 'In Progress' || e.status === 'Review');
-
-function buildSampleRuns(): SampleRun[] {
-  const r = mulberry32(0x2c6f18a5);
-  const rows: SampleRun[] = [];
+export const SAMPLE_RUNS: SampleRun[] = (() => {
+  const r = mulberry32(0x73_6d_70); // "smp"
+  const out: SampleRun[] = [];
+  const engagements = ENGAGEMENTS.filter(e => e.status !== 'Draft' && e.status !== 'Planned');
   let seq = 0;
-
-  for (const eng of TESTING_ENGAGEMENTS) {
-    // A sample run tests one control, so the controls come from the library the
-    // engagement's process actually has. An engagement whose process has no
-    // controls in the library is tested by nothing, and shows exactly that.
-    // Never more controls than the engagement itself holds: a snapshot of eight
-    // controls cannot produce validations for fourteen, and a strip reading
-    // "9 of 4 controls tested" is the page contradicting itself.
-    const inProcess = CONTROL_LIBRARY.filter(c => c.businessProcess === eng.process);
-    const controls = inProcess.slice(0, Math.max(0, Math.min(inProcess.length, eng.controls)));
-    if (controls.length === 0) continue;
-
-    const perControl = 2 + Math.floor(r() * 4);
-    for (const c of controls) {
-      for (let i = 0; i < perControl; i++) {
-        const dayMs = startOfDay(HISTORY_START + Math.floor(r() * (ANCHOR - HISTORY_START)));
-        const at = workingMoment(dayMs, r);
-        const roll = r();
-        // A run started in the last two days may still be in flight; older ones
-        // have all landed one way or the other.
-        const inFlight = ANCHOR - at < 2 * DAY_MS;
-        const status: SampleRunStatus = inFlight
-          ? (roll < 0.5 ? 'queued' : 'running')
-          : roll < 0.68 ? 'passed' : roll < 0.9 ? 'failed' : 'error';
-        const actor = pickActor(r);
-
-        rows.push({
-          id: `sample-${String(++seq).padStart(4, '0')}`,
-          at,
-          engagementId: eng.id,
-          engagementName: eng.name,
-          controlId: c.controlId,
-          controlName: c.name,
-          status,
-          sampleSize: 15 + Math.floor(r() * 30),
-          userEmail: actor.email,
-          userName: actor.name,
-          team: actor.team,
-          note: status === 'error' ? SAMPLE_ERRORS[Math.floor(r() * SAMPLE_ERRORS.length)] : null,
-        });
-      }
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const dow = new Date(dayMs).getUTCDay();
+    const expected = dow === 0 || dow === 6 ? 0.15 : 2.2;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      const eng = engagements[Math.floor(r() * engagements.length)];
+      const control = TESTABLE_CONTROLS[Math.floor(r() * TESTABLE_CONTROLS.length)];
+      const roll = r();
+      // The newest handful are still moving through the lifecycle.
+      const fresh = at > ANCHOR - 2 * DAY_MS;
+      const status: SampleRun['status'] = fresh && roll < 0.4
+        ? (roll < 0.2 ? 'queued' : 'running')
+        : roll < 0.71 ? 'passed' : roll < 0.9 ? 'failed' : 'error';
+      seq += 1;
+      out.push({
+        id: `sr-${String(seq).padStart(5, '0')}`,
+        engagementId: eng.id,
+        engagementName: eng.name,
+        controlId: control.controlId,
+        controlName: control.name,
+        status,
+        at,
+        actor: pickActor(r),
+        sampleSize: vary(25, 0.6, r),
+      });
     }
   }
-
-  return rows.sort((a, z) => a.at - z.at);
-}
-
-/** Every sample validation the platform has recorded. */
-export const SAMPLE_RUNS: SampleRun[] = buildSampleRuns();
+  return out;
+})();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 13 · AI insights — what the assistant wrote down by itself — PU-25
+ * PU-25 AI insights — generated, with a severity
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
  * One generated insight.
  *
- * Two kinds, and the difference matters enough to be a field rather than a
- * label. A per-run insight is written off one run. A consolidated insight is
- * the assistant reading a whole engagement and saying one thing about it, so it
- * summarises per-run insights that are already counted. Adding the two together
- * counts the same finding twice, which is why the split is carried all the way
- * to the screen.
+ * `kind` separates an insight about a single run from an engagement-wide
+ * consolidation that summarises several. Counting both together would report the
+ * same finding twice, so the split is part of the record.
  */
-export type InsightKind = 'per_run' | 'consolidated';
-
 export interface InsightRow {
   id: string;
-  at: number;
-  kind: InsightKind;
+  kind: 'per_run' | 'consolidated';
   engagementId: string;
   engagementName: string;
+  category: 'Control gap' | 'Data quality' | 'Process' | 'Anomaly' | 'Coverage';
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
-  category: string;
-  title: string;
-  /** Whose run produced it. Null on a consolidated insight: nobody ran it. */
-  userEmail: string | null;
-  userName: string | null;
-  team: string | null;
+  status: 'new' | 'reviewed' | 'dismissed';
+  at: number;
+  headline: string;
 }
 
-const INSIGHT_CATEGORIES = ['Exception pattern', 'Data quality', 'Control design', 'Timing', 'Coverage'] as const;
+const INSIGHT_HEADLINES = [
+  'Three-way match failures cluster on one vendor group',
+  'Duplicate invoice flags rise the week before every close',
+  'Journal entry anomalies concentrate in two cost centres',
+  'Cash application misses remittances with no advice attached',
+  'Credit limit breaches are approved by the same two people',
+  'Vendor bank-detail changes cluster outside business hours',
+  'Sample failures repeat on controls owned by one team',
+  'Access review evidence is missing for three privileged roles',
+];
 
-const INSIGHT_TITLES: Record<string, (subject: string) => string> = {
-  'Exception pattern': s => `The same vendor accounts for a third of the flags in ${s}`,
-  'Data quality': s => `Nearly one in ten rows in ${s} arrives without an approver`,
-  'Control design': s => `${s} is checked after payment, not before it`,
-  Timing: s => `${s} runs after month end, so the exceptions land too late to act on`,
-  Coverage: s => `${s} covers one entity, and the population spans four`,
-};
-
-const startOfMonth = (ms: number): number => {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-};
-
-const nextMonth = (ms: number): number => {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
-};
-
-function buildInsights(): InsightRow[] {
-  const r = mulberry32(0x54b8e207);
-  const rows: InsightRow[] = [];
+export const INSIGHTS: InsightRow[] = (() => {
+  const r = mulberry32(0x69_6e_73); // "ins"
+  const out: InsightRow[] = [];
+  const engagements = ENGAGEMENTS.filter(e => e.status !== 'Draft');
+  const severities: InsightRow['severity'][] = ['Critical', 'High', 'Medium', 'Medium', 'Low', 'Low'];
+  const categories: InsightRow['category'][] = ['Control gap', 'Data quality', 'Process', 'Anomaly', 'Coverage'];
   let seq = 0;
-
-  // Per-run: a share of the completed runs leaves one behind, carrying the
-  // actor of the run that produced it so an auditor can be shown their own.
-  const completed = RUNS.filter(x => x.status === 'complete');
-  for (const run of completed) {
-    // Roughly two runs in five leave an insight behind. Thinner than that and a
-    // single person's view reads as "the assistant never notices anything",
-    // which is a fact about the sample rather than about the product.
-    if (r() > 0.4) continue;
-    const eng = TESTING_ENGAGEMENTS[Math.floor(r() * TESTING_ENGAGEMENTS.length)];
-    if (!eng) break;
-    const category = INSIGHT_CATEGORIES[Math.floor(r() * INSIGHT_CATEGORIES.length)];
-    const roll = r();
-    rows.push({
-      id: `insight-${String(++seq).padStart(4, '0')}`,
-      at: run.completedAt ?? run.startedAt,
-      kind: 'per_run',
-      engagementId: eng.id,
-      engagementName: eng.name,
-      severity: roll < 0.08 ? 'Critical' : roll < 0.3 ? 'High' : roll < 0.68 ? 'Medium' : 'Low',
-      category,
-      title: INSIGHT_TITLES[category](run.controlName ?? run.workflowName),
-      userEmail: run.userEmail,
-      userName: run.userName,
-      team: run.team,
-    });
-  }
-
-  // Consolidated: one reading of a whole engagement, monthly, by nobody.
-  for (const eng of TESTING_ENGAGEMENTS) {
-    for (let month = startOfMonth(HISTORY_START); month <= ANCHOR; month = nextMonth(month)) {
-      if (r() > 0.55) continue;
-      const category = INSIGHT_CATEGORIES[Math.floor(r() * INSIGHT_CATEGORIES.length)];
-      const roll = r();
-      rows.push({
-        id: `insight-${String(++seq).padStart(4, '0')}`,
-        at: workingMoment(month + 20 * DAY_MS, r),
-        kind: 'consolidated',
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const expected = 1.05;
+    let count = Math.floor(expected);
+    if (r() < expected - count) count += 1;
+    for (let i = 0; i < count; i++) {
+      const at = workingMoment(dayMs, r);
+      if (at > ANCHOR) continue;
+      const eng = engagements[Math.floor(r() * engagements.length)];
+      seq += 1;
+      out.push({
+        id: `ins-${String(seq).padStart(5, '0')}`,
+        kind: r() < 0.16 ? 'consolidated' : 'per_run',
         engagementId: eng.id,
         engagementName: eng.name,
-        severity: roll < 0.12 ? 'Critical' : roll < 0.42 ? 'High' : roll < 0.8 ? 'Medium' : 'Low',
-        category,
-        title: INSIGHT_TITLES[category](eng.name),
-        userEmail: null,
-        userName: null,
-        team: teamOfName(eng.owner),
+        category: categories[Math.floor(r() * categories.length)],
+        severity: severities[Math.floor(r() * severities.length)],
+        status: r() < 0.5 ? 'new' : r() < 0.85 ? 'reviewed' : 'dismissed',
+        at,
+        headline: INSIGHT_HEADLINES[Math.floor(r() * INSIGHT_HEADLINES.length)],
       });
     }
   }
-
-  return rows.filter(x => x.at <= ANCHOR).sort((a, z) => a.at - z.at);
-}
-
-/** Every insight the assistant has written down. */
-export const INSIGHT_ROWS: InsightRow[] = buildInsights();
+  return out;
+})();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 14 · Continuous monitoring — the automation config on an engagement — PU-28
+ * PU-26 Risks — recorded, prioritised, and (not) covered
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * How an engagement is automated.
- *
- * Continuous control monitoring is not a separate feature. It is a mode on an
- * engagement: the same checks, run on a schedule, raising exceptions as they
- * happen instead of once at the end of an audit. Every engagement therefore
- * carries a small configuration — is it continuous, how often the job runs,
- * what pass rate it expects, and how many approvals an exception needs — and
- * this is that configuration, read off the engagement itself.
- *
- * The pass-rate threshold is the number the page compares reality against. It
- * comes from the engagement's own automation config where the creation wizard
- * set one, and otherwise from the platform default of 80%, which is the value
- * the engagement would run under today.
+ * One risk in the register, with the one fact a CFO acts on: whether any control
+ * covers it. Mapped and unmapped are read from the Control Library's own risk
+ * links, so the two screens cannot disagree about which risks are covered.
  */
-export interface EngagementAutomation {
+export interface RiskRow {
+  id: string;
+  name: string;
+  priority: 'Critical' | 'High' | 'Medium' | 'Low';
+  category: string;
+  /** Mapped means at least one control covers it. */
+  mapped: boolean;
+  controls: string[];
+  owner: string;
+  team: string | null;
+  /** How the row got into the register. */
+  addedUsing: 'Manual' | 'Imported' | 'AI Generated';
+  createdAt: number;
+}
+
+export const RISK_ROWS: RiskRow[] = (() => {
+  const r = mulberry32(0x72_73_6b); // "rsk"
+  const coverage = new Map<string, string[]>();
+  for (const c of CONTROL_LIBRARY) {
+    for (const riskId of c.mappedRisks ?? []) {
+      coverage.set(riskId, [...(coverage.get(riskId) ?? []), c.controlId]);
+    }
+  }
+  return SEED_RISKS.map(risk => {
+    const controls = coverage.get(risk.id) ?? [];
+    const roll = r();
+    return {
+      id: risk.id,
+      name: risk.name,
+      priority: risk.priority,
+      category: risk.category,
+      mapped: controls.length > 0,
+      controls,
+      owner: risk.owner,
+      team: teamOfName(risk.owner),
+      // The RACM generator wrote a third of the register; the rest was typed or
+      // arrived in a spreadsheet. The share is a labelled fact, not a claim.
+      addedUsing: roll < 0.34 ? 'AI Generated' : roll < 0.62 ? 'Imported' : 'Manual',
+      createdAt: parseLibraryDate(risk.createdAt) ?? HISTORY_START,
+    };
+  });
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-27 Engagements — the portfolio, its history, and where each one sits
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** One entry in a record's append-only change history. */
+export interface HistoryEntry {
+  at: number;
+  who: string;
+  action: string;
+  field: string;
+  from: string | null;
+  to: string | null;
+}
+
+export interface EngagementRow {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  process: string;
+  status: string;
+  owner: string;
+  team: string | null;
+  reviewer: string | null;
+  /** When the record was first stamped. Engagements carry a start, not a create. */
+  createdAt: number;
+  periodEndAt: number | null;
+  plannedEndAt: number | null;
+  controls: number;
+  history: HistoryEntry[];
+}
+
+const HISTORY_FIELDS: { field: string; action: string; from: string; to: string }[] = [
+  { field: 'status', action: 'changed', from: 'Draft', to: 'Active' },
+  { field: 'reviewer', action: 'assigned', from: '—', to: 'Karan Mehta' },
+  { field: 'scope', action: 'changed', from: '18 controls', to: '24 controls' },
+  { field: 'planned end', action: 'moved', from: '31 Mar 2026', to: '15 Apr 2026' },
+  { field: 'owner', action: 'changed', from: 'Meera Nair', to: 'Neha Joshi' },
+  { field: 'RACM version', action: 'locked', from: 'v2.0', to: 'v2.1' },
+];
+
+export const ENGAGEMENT_ROWS: EngagementRow[] = (() => {
+  const r = mulberry32(0x65_6e_67); // "eng"
+  return ENGAGEMENTS.map(eng => {
+    const createdAt = (eng.startDate ? parseIsoDate(eng.startDate) : null) ?? HISTORY_START;
+    const periodEndAt = eng.endDate ? parseIsoDate(eng.endDate) : null;
+    // The planned end is the engagement's own next milestone when it has one.
+    const milestone = eng.milestones?.[eng.milestones.length - 1]?.date;
+    const plannedEndAt = milestone ? parseIsoDate(milestone) : periodEndAt;
+    const entries: HistoryEntry[] = [];
+    const n = 3 + Math.floor(r() * 7);
+    for (let i = 0; i < n; i++) {
+      const spec = HISTORY_FIELDS[Math.floor(r() * HISTORY_FIELDS.length)];
+      const at = Math.min(ANCHOR, Math.max(HISTORY_START, createdAt + Math.floor(r() * 300) * DAY_MS));
+      entries.push({ at, who: pickActor(r).name, action: spec.action, field: spec.field, from: spec.from, to: spec.to });
+    }
+    entries.sort((a, b) => a.at - b.at);
+    return {
+      id: eng.id,
+      code: eng.code,
+      name: eng.name,
+      type: eng.type,
+      process: eng.process,
+      status: eng.status,
+      owner: eng.owner,
+      team: teamOfName(eng.owner),
+      reviewer: eng.team?.reviewer ?? null,
+      createdAt,
+      periodEndAt,
+      plannedEndAt,
+      controls: eng.controls,
+      history: entries,
+    };
+  });
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-28 CCM — the automation config on each engagement
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One engagement's automation config.
+ *
+ * Continuous monitoring is a mode an engagement runs in, not a separate feature:
+ * a flag, a schedule, a pass-rate threshold and an alert config, all stored. So
+ * the page can report monitoring coverage rather than only one-off audits.
+ */
+export interface AutomationConfigRow {
   engagementId: string;
   engagementName: string;
   isCcm: boolean;
-  /** How often the scheduled job runs. */
-  cadence: string;
-  /** The pass rate the engagement expects, as a percentage. */
+  jobFrequency: 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | null;
   passRateThreshold: number;
-  /** Approval levels an exception passes through, per side. */
+  alertsOn: boolean;
   approvalLevelsRiskOwner: number;
   approvalLevelsAuditor: number;
-  owner: string;
-  team: string | null;
-  status: string;
 }
 
-/** The platform's own default, applied where an engagement set no threshold. */
-export const DEFAULT_PASS_RATE_THRESHOLD = 80;
-
-function buildAutomation(): EngagementAutomation[] {
-  const r = mulberry32(0x1d9c4f36);
-  return ENGAGEMENTS.map(e => {
-    const cfg = e.automationConfig;
-    const isCcm = e.subtype === 'CCM' || Boolean(cfg?.cadence);
+export const AUTOMATION_CONFIGS: AutomationConfigRow[] = (() => {
+  const r = mulberry32(0x63_63_6d); // "ccm"
+  const frequencies: AutomationConfigRow['jobFrequency'][] = ['Daily', 'Weekly', 'Fortnightly', 'Monthly'];
+  return ENGAGEMENT_ROWS.map(eng => {
+    // Automation engagements monitor continuously by design; a few of the audit
+    // engagements have been switched into the mode as well.
+    const isCcm = eng.type === 'Automation' || r() < 0.22;
     return {
-      engagementId: e.id,
-      engagementName: e.name,
+      engagementId: eng.id,
+      engagementName: eng.name,
       isCcm,
-      cadence: cfg?.cadence ?? (isCcm ? (r() < 0.5 ? 'Daily' : 'Weekly') : 'On request'),
-      passRateThreshold: cfg?.threshold ?? DEFAULT_PASS_RATE_THRESHOLD,
+      jobFrequency: isCcm ? frequencies[Math.floor(r() * frequencies.length)] : null,
+      passRateThreshold: 80,
+      alertsOn: isCcm && r() < 0.8,
       approvalLevelsRiskOwner: 1 + Math.floor(r() * 3),
-      approvalLevelsAuditor: 1 + Math.floor(r() * 2),
-      owner: e.owner,
-      team: teamOfName(e.owner),
-      status: e.status,
+      approvalLevelsAuditor: 2,
     };
   });
-}
-
-/** The automation configuration of every engagement. */
-export const ENGAGEMENT_AUTOMATION: EngagementAutomation[] = buildAutomation();
+})();
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 15 · Dev guards — the ways this record can go quietly wrong
+ * PU-08 Exceptions, traced to the run that raised them
  * ────────────────────────────────────────────────────────────────────────── */
 
-if (import.meta.env.DEV) {
-  if (ACTORS.length === 0) {
-    console.error('[Platform Usage] Nobody on the roster can run a workflow, so the run history is empty.');
+/**
+ * One exception, with the run behind it.
+ *
+ * The spec assumes exceptions carry a reference to their run and marks it TO
+ * CONFIRM (check 3). Here the link is made on the workflow name the exception
+ * already stores, so every counted exception can be opened and traced back to
+ * the execution that raised it — which is the acceptance test.
+ */
+export interface TracedException {
+  id: string;
+  ref: string;
+  title: string;
+  severity: 'Critical' | 'High' | 'Medium' | 'Low';
+  status: 'Open' | 'Triaging' | 'Resolved';
+  openedAt: number;
+  assignee: string;
+  team: string | null;
+  engagementId: string;
+  workflowName: string;
+  /** The run that raised it, when one can be found. */
+  runId: string | null;
+  amount: string | null;
+  classification: string | null;
+}
+
+/** The exception register's workflow names, mapped onto the library's own. */
+const EXCEPTION_WORKFLOW_ALIASES: Record<string, string> = {
+  'PO Approval Threshold Scan': 'Three-Way PO Match',
+  'GL Reconciliation Monitor': 'Journal Entry Anomaly Detector',
+  'Revenue Cut-off Test': 'Revenue Recognition Checker',
+};
+
+export const TRACED_EXCEPTIONS: TracedException[] = (() => {
+  const r = mulberry32(0x65_78_63); // "exc"
+  return ENGAGEMENT_EXCEPTIONS.map(ex => {
+    const openedAt = parseRelative(ex.opened) ?? ANCHOR - Math.floor(r() * 60) * DAY_MS;
+    const wfName = EXCEPTION_WORKFLOW_ALIASES[ex.workflowName] ?? ex.workflowName;
+    // The raising run is the newest completed run of that workflow before the
+    // exception was opened. No run found means no link, said as null.
+    let runId: string | null = null;
+    for (let i = RUNS.length - 1; i >= 0; i--) {
+      const run = RUNS[i];
+      if (run.workflowName === wfName && run.completedAt !== null && run.completedAt <= openedAt) {
+        runId = run.id;
+        break;
+      }
+    }
+    return {
+      id: ex.id,
+      ref: ex.ref,
+      title: ex.title,
+      severity: ex.severity,
+      status: ex.status,
+      openedAt,
+      assignee: ex.assignee,
+      team: teamOfName(ex.assignee),
+      engagementId: ex.engagementId,
+      workflowName: wfName,
+      runId,
+      amount: ex.amount ?? null,
+      classification: ex.classification ?? null,
+    };
+  });
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-18 What the calibration job measures from
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A piece of hand work the platform has a clock on.
+ *
+ * The assumptions behind every value figure improve on their own by reading
+ * these: how long a person actually took over how many rows (`review`), and how
+ * long a manual control test actually took (`control_test`). Nobody enters
+ * anything; the weekly job reads what the product already recorded.
+ *
+ * Both are honest proxies, and the page says so. Exception review is not
+ * full-file row checking, and a record left open over a weekend is not sixty
+ * hours of work — which is why the job trims outliers.
+ */
+export interface ReviewRecord {
+  id: string;
+  kind: 'review' | 'control_test';
+  who: string;
+  startedAt: number;
+  finishedAt: number;
+  /** Rows the person worked through. Null on a control test. */
+  rows: number | null;
+}
+
+export const REVIEW_RECORDS: ReviewRecord[] = (() => {
+  const r = mulberry32(0x72_65_76); // "rev"
+  const out: ReviewRecord[] = [];
+  let seq = 0;
+  for (let day = 0; day < HISTORY_DAYS; day++) {
+    const dayMs = startOfDay(HISTORY_START) + day * DAY_MS;
+    const dow = new Date(dayMs).getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+
+    // Hand review of exception rows — assigned, then resolved.
+    const reviews = r() < 0.55 ? 1 + Math.floor(r() * 2) : 0;
+    for (let i = 0; i < reviews; i++) {
+      const startedAt = workingMoment(dayMs, r);
+      if (startedAt > ANCHOR) continue;
+      // A person clears around 236 rows an hour in this workspace, which is what
+      // the job will find. A few records are left open far too long; the trim
+      // exists for those.
+      const rows = vary(430, 0.5, r);
+      const hours = rows / vary(236, 0.22, r);
+      const outlier = r() < 0.07;
+      seq += 1;
+      out.push({
+        id: `rev-${String(seq).padStart(4, '0')}`,
+        kind: 'review',
+        who: pickActor(r).name,
+        startedAt,
+        finishedAt: startedAt + (outlier ? 62 : hours) * HOUR_MS,
+        rows,
+      });
+    }
+
+    // Manual control tests — started, then completed.
+    if (r() < 0.28) {
+      const startedAt = workingMoment(dayMs, r);
+      if (startedAt > ANCHOR) continue;
+      seq += 1;
+      out.push({
+        id: `rev-${String(seq).padStart(4, '0')}`,
+        kind: 'control_test',
+        who: pickActor(r).name,
+        startedAt,
+        finishedAt: startedAt + (2.4 + r() * 2.2) * HOUR_MS,
+        rows: null,
+      });
+    }
   }
-  const unprofiled = WORKFLOWS.filter(w => !WORKFLOW_PROFILE[w.id]).map(w => w.id);
-  if (unprofiled.length > 0) {
-    console.error(
-      `[Platform Usage] No run profile for ${unprofiled.join(', ')}. They will read as never run ` +
-      'even though the Workflow Library says they have.',
-    );
+  return out;
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-21 Created this period — five tables, one pattern
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type CreatedKind = 'engagement' | 'audit' | 'control' | 'dashboard' | 'report';
+
+/**
+ * One record, and when it was first stamped.
+ *
+ * None of these needs new plumbing: engagements, RACMs, controls, dashboards and
+ * reports all already stamp when they were saved and who saved them, so "how
+ * many were created in this window" is countable today, backwards through the
+ * whole history. Edits, reviews and views are deliberately not here — those need
+ * the event log to widen (PU-15), and the block's caption says "created" for
+ * exactly that reason.
+ */
+export interface CreatedRecord {
+  id: string;
+  kind: CreatedKind;
+  name: string;
+  createdAt: number;
+  createdBy: string;
+  team: string | null;
+}
+
+export const CREATED_RECORDS: CreatedRecord[] = (() => {
+  const out: CreatedRecord[] = [];
+
+  for (const eng of ENGAGEMENT_ROWS) {
+    out.push({ id: `cr-eng-${eng.id}`, kind: 'engagement', name: eng.name, createdAt: eng.createdAt, createdBy: eng.owner, team: eng.team });
   }
+
+  // "Audits" are the RACMs an audit cycle runs from — the audit programme.
+  for (const racm of PROCESS_HUB_RACMS) {
+    const createdAt = racm.createdAt ? parseLibraryDate(racm.createdAt) : null;
+    if (createdAt === null) continue;
+    out.push({ id: `cr-racm-${racm.id}`, kind: 'audit', name: racm.name, createdAt, createdBy: 'Abhinav Sharma', team: teamOfName('Abhinav Sharma') });
+  }
+
+  for (const c of CONTROL_LIBRARY) {
+    const createdAt = parseLibraryDate(c.createdAt ?? '');
+    if (createdAt === null) continue;
+    out.push({ id: `cr-ctl-${c.controlId}`, kind: 'control', name: c.name, createdAt, createdBy: c.owner, team: teamOfName(c.owner) });
+  }
+
+  for (const ev of AUDIT_EVENTS) {
+    if (ev.entityType !== 'dashboard' || ev.verb !== 'create') continue;
+    out.push({ id: `cr-dash-${ev.id}`, kind: 'dashboard', name: ev.entityName, createdAt: ev.at, createdBy: ev.actor ?? 'automatic', team: teamOfName(ev.actor ?? '') });
+  }
+
+  for (const rep of REPORT_RECORDS) {
+    out.push({ id: `cr-rep-${rep.id}`, kind: 'report', name: rep.title, createdAt: rep.createdAt, createdBy: rep.createdBy, team: teamOfName(rep.createdBy) });
+  }
+
+  return out.sort((a, b) => a.createdAt - b.createdAt);
+})();
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-19 The vendor's bill, and the optional per-API price sheet
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One month's bill from one vendor.
+ *
+ * The primary cost input, and the only one a person is asked for. Somebody
+ * filling a price form does not reliably know whether a lookup bills per run or
+ * per row; what finance knows with certainty is the number on the bill. So the
+ * bill is the input, exact by definition, and everything else is derived from it
+ * or optional.
+ *
+ * Ships empty. Without a bill the page still counts the lookups and simply does
+ * not claim a cost.
+ */
+export interface VendorInvoice {
+  vendor: string;
+  /** First of the month the bill covers. */
+  periodMonth: number;
+  amountPaise: number;
+  note: string | null;
+  enteredBy: string;
+  enteredAt: number;
+}
+
+/** One API's price, versioned so a renegotiation never rewrites last quarter. */
+export interface LookupPrice {
+  lookupId: string;
+  vendor: string;
+  apiName: string;
+  /** Whether the vendor bills once per run or once per row. Check 4. */
+  billingUnit: 'run' | 'row';
+  pricePaise: number;
+  effectiveFrom: number;
+  effectiveTo: number | null;
+  enteredBy: string;
+  enteredAt: number;
+}
+
+/** What a person changed, so the entered numbers are auditable too. */
+export type UsageChangeEntity = 'usage_setting' | 'vendor_invoice' | 'lookup_price';
+
+export interface UsageChange {
+  entity: UsageChangeEntity;
+  field: string;
+  from: string | null;
+  to: string | null;
+  /** default, measured or manual — which kind of number this now is. */
+  source: string | null;
+  by: string;
+  at: number;
+}
+
+const INVOICES_KEY = 'irame.platformUsage.invoices.v2';
+const PRICES_KEY = 'irame.platformUsage.prices.v2';
+const CHANGES_KEY = 'irame.platformUsage.changes.v2';
+
+function readJson<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeJson<T>(key: string, rows: T[]): void {
+  try { localStorage.setItem(key, JSON.stringify(rows)); } catch { /* private mode */ }
+}
+
+/** Every bill entered, oldest month first. */
+export function loadInvoices(): VendorInvoice[] {
+  return readJson<VendorInvoice>(INVOICES_KEY).sort((a, b) => a.periodMonth - b.periodMonth);
+}
+
+/** Enter, or correct, one month's bill. Re-entering a month replaces it. */
+export function saveInvoice(next: VendorInvoice): VendorInvoice[] {
+  const rows = loadInvoices().filter(r => !(r.vendor === next.vendor && r.periodMonth === next.periodMonth));
+  rows.push(next);
+  rows.sort((a, b) => a.periodMonth - b.periodMonth);
+  writeJson(INVOICES_KEY, rows);
+  return rows;
+}
+
+export function removeInvoice(vendor: string, periodMonth: number): VendorInvoice[] {
+  const rows = loadInvoices().filter(r => !(r.vendor === vendor && r.periodMonth === periodMonth));
+  writeJson(INVOICES_KEY, rows);
+  return rows;
+}
+
+/** Every per-API price in force. Optional, forever. */
+export function loadPrices(): LookupPrice[] {
+  return readJson<LookupPrice>(PRICES_KEY).sort((a, b) => a.effectiveFrom - b.effectiveFrom);
+}
+
+/**
+ * Add a price row.
+ *
+ * A renegotiation starts a new row and closes the old one rather than rewriting
+ * it, so last quarter's split stays what it was when it was reported.
+ */
+export function savePrice(next: Omit<LookupPrice, 'effectiveTo'>): LookupPrice[] {
+  const rows = loadPrices();
+  for (const row of rows) {
+    if (row.lookupId === next.lookupId && row.effectiveTo === null && row.effectiveFrom < next.effectiveFrom) {
+      row.effectiveTo = next.effectiveFrom - DAY_MS;
+    }
+  }
+  rows.push({ ...next, effectiveTo: null });
+  rows.sort((a, b) => a.effectiveFrom - b.effectiveFrom);
+  writeJson(PRICES_KEY, rows);
+  return rows;
+}
+
+export function removePrice(lookupId: string, effectiveFrom: number): LookupPrice[] {
+  const rows = loadPrices().filter(r => !(r.lookupId === lookupId && r.effectiveFrom === effectiveFrom));
+  writeJson(PRICES_KEY, rows);
+  return rows;
+}
+
+/** Every change to an entered or calibrated number, newest first. */
+export function loadUsageChanges(): UsageChange[] {
+  return readJson<UsageChange>(CHANGES_KEY).sort((a, b) => b.at - a.at);
+}
+
+/** Record one change. The inputs behind the numbers are auditable too. */
+export function recordUsageChange(next: UsageChange): UsageChange[] {
+  const rows = [next, ...loadUsageChanges()];
+  writeJson(CHANGES_KEY, rows);
+  return rows;
 }

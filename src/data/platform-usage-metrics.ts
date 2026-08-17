@@ -1,1523 +1,1550 @@
 /**
- * Platform Usage — every number on the page, PU-01 to PU-28.
+ * Platform Usage — the twenty-eight metrics, and the four numbers behind them.
  *
- * One function per metric, each independently testable, each computed from the
- * records in `platform-usage.ts` and from nothing else. The reasoning for why a
- * metric exists lives on the page; what lives here is the arithmetic and the
- * rules that stop the arithmetic lying.
+ * `platform-usage.ts` holds what the platform wrote down. This module turns it
+ * into the figures the page shows: PU-01 to PU-28 from the build spec, one
+ * function each, every one independently readable and testable.
  *
- * ## Four rules held in this file rather than in the components
+ * ## The four settings, and why they self-calibrate
  *
- * · **No blended AI cost.** The only genuine cost figure in the product is the
- *   Concierge job cost, and it is labelled as exactly that. Chat usage is an
- *   estimate and is returned carrying the word. SOP-to-RACM and workflow AI
- *   record nothing at all and return "not measured", which is a different fact
- *   from zero.
- * · **A total is complete or it is absent.** Cost to run returns a `complete`
- *   flag, and it is false until the vendor price list holds a row. A partial
- *   figure under a complete-sounding label is a defect, so the type makes the
- *   caller handle it.
- * · **Nothing ranks people.** The one per-person function sorts alphabetically
- *   and returns no share, rank or average. There is no parameter that changes
- *   that.
- * · **Failed runs never add to savings.** They are reported as wasted machine
- *   time in their own block. The setting that says so is on the settings
- *   object, so the policy is visible rather than buried in a filter.
+ * Four numbers are needed that automation alone cannot supply: how many rows a
+ * person checks by hand in an hour, how long a manual control test takes, what
+ * an auditor hour costs, and how many hours a month a person works. Two of them
+ * are measurable from the customer's own recorded pace, and the weekly
+ * calibration job measures them: once the guards pass (90 days of history and
+ * enough records) the live value switches to the measured rate on its own, the
+ * source label changes to say so, and an audit row is written. Nobody clicks
+ * anything, and no screen on this page offers an input field.
+ *
+ * The two money numbers can never be measured. They run on their labelled
+ * defaults, and if a tenant genuinely needs a different value an administrator
+ * pins one in Administration — rare by design, and audited like everything else.
+ *
+ * ## The two rules every metric here holds
+ *
+ * A figure that rests on a setting is returned with that setting, so the block
+ * can print it on the same screen. And a figure the product does not record is
+ * returned as null rather than zero, so "nothing happened" and "we don't measure
+ * this" can never be rendered the same way.
  */
 
 import {
-  ANCHOR, DAY_MS, HISTORY_START, RUNS, CHAT_QUESTIONS, CONCIERGE_JOBS, SOP_RACM_JOBS,
-  TRACED_EXCEPTIONS, BULK_RUN_IDS, REVIEW_RECORDS, loadPricing, loadInvoices, monthsInWindow, billableWorkflowIds,
-  ALERT_FIRES, ALERT_RULE_TOTAL, DASHBOARD_TOTAL, SAMPLE_RUNS, INSIGHT_ROWS, ENGAGEMENT_AUTOMATION,
-  formatDate, parseLibraryDate, teamOfName, loadUsageChanges, startOfMonthUtc,
-  type WorkflowRun, type SampleRunStatus, type UsageChange, type VendorInvoice,
+  ACTION_PLANS, ANCHOR, AUDIT_EVENTS, AUTOMATION_CONFIGS, BULK_RUNS, CHAT_QUESTIONS,
+  CONCIERGE_JOBS, CREATED_RECORDS, DAY_MS, ENGAGEMENT_ROWS, HISTORY_START, HOUR_MS,
+  INSIGHTS, LOOKUP_CALLS, NEVER_RUN_WORKFLOWS, PAID_LOOKUPS, REPORT_ACTIVITY,
+  REPORT_RECORDS, REPORT_SHARES, REVIEW_RECORDS, RISK_ROWS, RUNS, SAMPLE_RUNS,
+  SOP_RACM_JOBS, TRACED_EXCEPTIONS, formatDayMonth, formatMonth, formatShortMonth, loadInvoices,
+  loadPrices, loadUsageChanges, monthsInWindow, recordUsageChange, startOfMonthUtc,
+  teamOfName, type AuditEventRow, type CreatedKind, type CreatedRecord, type LookupPrice,
+  type RunStatus, type TracedException, type VendorInvoice, type WorkflowRun,
 } from './platform-usage';
-import { WORKFLOWS } from './mockData';
 import { CONTROL_LIBRARY } from './controlLibrary';
-import { SEED_RISKS } from './riskRegister';
-import { ENGAGEMENTS } from './engagements';
-import { ENGAGEMENT_EXCEPTIONS } from './engagement-exceptions';
-import { ATR_LIBRARY } from './atrLibrary';
-import { liveMemories, pendingMemories } from './memorySession';
+import { WORKFLOWS } from './mockData';
+import { liveMemories, pendingMemories, renewalsDue } from './memorySession';
+import { RECALLS_THIS_WEEK } from './memoryStore';
 import type { PlatformMemory } from './memoryStore';
-import type { AdminUser, AuditLog } from '../context/AdminDataContext';
+import { SEED_USERS } from '../context/AdminDataContext';
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 1 · Who is reading
+ * How numbers are written
  * ────────────────────────────────────────────────────────────────────────── */
 
-/** The three questions the page answers, in the spec's names. */
-export type Persona = 'cfo' | 'head_of_team' | 'auditor';
+const INT_FMT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+const ONE_DP = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-/** What the view is called in an export, where it identifies the file. */
-export const PERSONA_TITLE: Record<Persona, string> = {
-  cfo: 'Whole company',
-  head_of_team: 'My team',
-  auditor: 'Just me',
+export const fmtInt = (n: number): string => INT_FMT.format(Math.round(n));
+export const fmtOneDp = (n: number): string => ONE_DP.format(n);
+
+/** Hours, to the resolution a reader can act on. */
+export const fmtHours = (h: number): string => (Math.abs(h) < 100 ? `${fmtOneDp(h)} hrs` : `${fmtInt(h)} hrs`);
+
+/**
+ * A span of machine time.
+ *
+ * Under an hour it is said in minutes, because "0.0 hrs" is a figure that looks
+ * like nothing happened when what happened was four minutes of wasted work.
+ */
+export const fmtSpan = (hours: number): string => {
+  const minutes = hours * 60;
+  if (minutes < 1) return `${fmtInt(minutes * 60)} seconds`;
+  if (hours < 1) return `${fmtInt(minutes)} minutes`;
+  return fmtHours(hours);
 };
 
 /**
- * Whose data is being read.
- *
- * A lens, not a key: the scope is built from the permissions the signed-in role
- * actually holds, so switching never widens what somebody can see. You can
- * narrow down your own line; you can never look sideways into another team.
+ * Rupees, the way an Indian audit committee reads them: lakh and crore above a
+ * lakh, plain grouped digits below it. A cost of ₹68,400 is not "₹0.7 lakh".
  */
-export interface Scope {
-  persona: Persona;
-  /** What the scope line says out loud — "SOX Audit", "the whole company". */
-  label: string;
-  team?: string;
-  userEmail?: string;
+export function fmtMoney(rupees: number): string {
+  const abs = Math.abs(rupees);
+  if (abs >= 10_000_000) return `₹${ONE_DP.format(rupees / 10_000_000)} crore`;
+  if (abs >= 100_000) return `₹${ONE_DP.format(rupees / 100_000)} lakh`;
+  return `₹${fmtInt(rupees)}`;
 }
 
-const inScope = (scope: Scope, team: string, email: string): boolean => {
-  if (scope.persona === 'cfo') return true;
-  if (scope.persona === 'head_of_team') return !scope.team || team === scope.team;
-  return !scope.userEmail || email === scope.userEmail;
-};
+/** Rupees to the last digit, for a ledger where the paisa matter. */
+export const fmtMoneyExact = (rupees: number): string => `₹${INT_FMT.format(Math.round(rupees))}`;
+
+export const fmtPaise = (paise: number): string => fmtMoneyExact(paise / 100);
+
+export const fmtPct = (pct: number): string => `${ONE_DP.format(pct)}%`;
+
+/** Dollars, because the one cost the product records by itself is in dollars. */
+export const fmtUsd = (usd: number): string =>
+  `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 2 · The four settings — PU-18
+ * The settings (PU-18)
  * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Where a setting's value came from.
- *
- * This is the difference between a number that survives an audit-committee
- * question and one that does not. "Measured from our own last ninety days"
- * survives it. "The vendor assumed two hundred" does not.
- */
+/** Where a setting's current value came from. Said next to the value, always. */
 export type SettingSource = 'default' | 'measured' | 'manual';
 
-/** What each source is called on screen, in the export, and in the audit event. */
-export const SOURCE_LABEL: Record<SettingSource, string> = {
-  default: 'starting value',
-  measured: "based on your team's measured pace",
-  manual: 'pinned by an admin',
-};
+export type NumericSetting = 'manualReviewRate' | 'manualControlTestHours' | 'hourlyRate' | 'hoursPerPersonPerMonth';
 
-/**
- * The four numbers the product cannot compute for itself.
- *
- * Two of them can be measured from the customer's own timestamps, so they carry
- * a source and the page keeps trying to improve them. The other two cannot be
- * measured by any platform — no product knows what an auditor hour costs or how
- * long a working month is — so they stay business-entered.
- *
- * `failedRunsPolicy` is fixed at 'excluded' and carried here so the policy is on
- * the record and travels into every export rather than hiding inside a query.
- */
 export interface UsageSettings {
-  /** Rows a person can check by hand in an hour. Measurable. */
   manualReviewRate: number;
   manualReviewRateSource: SettingSource;
-  /** Hours one manual control test takes. Measurable. */
   manualControlTestHours: number;
   manualControlTestSource: SettingSource;
-  /** Blended cost of one auditor hour. Never measurable. */
   hourlyRate: number;
-  currency: 'INR';
-  /** Hours one person works in a month. Never measurable. */
+  hourlyRateSource: SettingSource;
   hoursPerPersonPerMonth: number;
-  failedRunsPolicy: 'excluded';
+  hoursPerPersonSource: SettingSource;
+  currency: 'INR';
+  /** The latest measurement, kept whether or not it is the live value. */
+  measuredReviewRate: number | null;
+  measuredControlTestHours: number | null;
+  measuredAt: number | null;
+  measuredSampleN: number | null;
+  measuredFrom: number | null;
+  updatedBy: string | null;
+  updatedAt: number | null;
 }
 
-export const DEFAULT_SETTINGS: UsageSettings = {
+export const SETTING_DEFAULTS: UsageSettings = {
   manualReviewRate: 200,
   manualReviewRateSource: 'default',
   manualControlTestHours: 4,
   manualControlTestSource: 'default',
-  hourlyRate: 1200,
-  currency: 'INR',
+  hourlyRate: 1_200,
+  hourlyRateSource: 'default',
   hoursPerPersonPerMonth: 160,
-  failedRunsPolicy: 'excluded',
+  hoursPerPersonSource: 'default',
+  currency: 'INR',
+  measuredReviewRate: null,
+  measuredControlTestHours: null,
+  measuredAt: null,
+  measuredSampleN: null,
+  measuredFrom: null,
+  updatedBy: null,
+  updatedAt: null,
 };
 
-/** The two settings that carry a source, and the field each one keeps it in. */
-export const SOURCE_FIELD: Partial<Record<NumericSetting, 'manualReviewRateSource' | 'manualControlTestSource'>> = {
+export const SETTING_LABEL: Record<NumericSetting, string> = {
+  manualReviewRate: 'rows a person checks by hand in an hour',
+  manualControlTestHours: 'hours for one manual control test',
+  hourlyRate: 'for one auditor hour',
+  hoursPerPersonPerMonth: 'hours a person works in a month',
+};
+
+/** The short name, for a ledger column where the sentence would not fit. */
+export const SETTING_SHORT: Record<NumericSetting, string> = {
+  manualReviewRate: 'Review rate',
+  manualControlTestHours: 'Manual control test',
+  hourlyRate: 'Auditor hour',
+  hoursPerPersonPerMonth: 'Hours per person per month',
+};
+
+export const SOURCE_LABEL: Record<SettingSource, string> = {
+  default: 'starting value',
+  measured: "based on your team's measured pace",
+  manual: 'pinned by an administrator',
+};
+
+/** Which source field belongs to which number. */
+export const SOURCE_FIELD: Record<NumericSetting, keyof UsageSettings> = {
   manualReviewRate: 'manualReviewRateSource',
   manualControlTestHours: 'manualControlTestSource',
+  hourlyRate: 'hourlyRateSource',
+  hoursPerPersonPerMonth: 'hoursPerPersonSource',
 };
 
-const SETTINGS_KEY = 'irame.platformUsage.settings.v2';
+/** The two numbers the platform can measure from its own records. */
+export const MEASURABLE: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours'];
+
+const SETTINGS_KEY = 'irame.platformUsage.settings.v3';
 
 export function loadSettings(): UsageSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const saved = JSON.parse(raw) as Partial<UsageSettings>;
-    return { ...DEFAULT_SETTINGS, ...saved, currency: 'INR', failedRunsPolicy: 'excluded' };
+    if (!raw) return { ...SETTING_DEFAULTS };
+    return { ...SETTING_DEFAULTS, ...(JSON.parse(raw) as Partial<UsageSettings>) };
   } catch {
-    return DEFAULT_SETTINGS;
+    return { ...SETTING_DEFAULTS };
   }
 }
 
-export function saveSettings(next: UsageSettings): void {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+function persistSettings(next: UsageSettings): UsageSettings {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
 }
+
+/** How a setting's value is written when it appears in a change row. */
+const settingValue = (key: NumericSetting, value: number): string =>
+  key === 'hourlyRate' ? fmtMoneyExact(value) : key === 'manualControlTestHours' ? `${fmtOneDp(value)} hrs` : fmtInt(value);
 
 /**
- * The measured pace is applied on its own.
+ * Pin a value over whatever the platform would have used.
  *
- * The calibration job measures what it can from the customer's own timestamps,
- * and once the guards pass the live value switches to it: source becomes
- * `measured`, the label changes, and the change is written down. There is no
- * confirmation step, because at ten thousand people nobody clicks one. A value
- * an admin has pinned is never overwritten — that is the whole point of pinning.
- *
- * Returns the settings to use, and the changes worth recording. A caller that
- * gets an empty change list has nothing to write down.
+ * Rare by design: pinning stops the platform improving the number by itself, so
+ * the screen that offers it says so. Audited like every other entered number.
  */
-export function applyMeasured(
-  current: UsageSettings,
-  calibration: Calibration,
-): { settings: UsageSettings; changes: { field: string; from: string; to: string; source: string }[] } {
-  const changes: { field: string; from: string; to: string; source: string }[] = [];
-  let next = current;
-
-  const consider = (
-    key: NumericSetting,
-    sourceField: 'manualReviewRateSource' | 'manualControlTestSource',
-    suggestion: Suggestion | null,
-  ) => {
-    if (!suggestion) return;
-    // Pinned stays pinned. Already measured at this value has nothing to say.
-    if (next[sourceField] === 'manual') return;
-    if (next[key] === suggestion.value && next[sourceField] === 'measured') return;
-    changes.push({
-      field: SETTING_LABEL[key],
-      from: String(next[key]),
-      to: String(suggestion.value),
-      source: SOURCE_LABEL.measured,
-    });
-    next = { ...next, [key]: suggestion.value, [sourceField]: 'measured' };
-  };
-
-  consider('manualReviewRate', 'manualReviewRateSource', calibration.reviewRate);
-  consider('manualControlTestHours', 'manualControlTestSource', calibration.controlTestHours);
-
-  return { settings: next, changes };
+export function pinSetting(key: NumericSetting, value: number, by: string): UsageSettings {
+  const current = loadSettings();
+  const sourceField = SOURCE_FIELD[key];
+  const next: UsageSettings = {
+    ...current,
+    [key]: value,
+    [sourceField]: 'manual',
+    updatedBy: by,
+    updatedAt: ANCHOR,
+  } as UsageSettings;
+  recordUsageChange({
+    entity: 'usage_setting',
+    field: SETTING_SHORT[key],
+    from: settingValue(key, current[key]),
+    to: settingValue(key, value),
+    source: SOURCE_LABEL.manual,
+    by,
+    at: ANCHOR,
+  });
+  return persistSettings(next);
 }
 
-/* ── Calibration — the platform measuring its own assumption ─────────────── */
+/** Hand a pinned number back to the platform. */
+export function unpinSetting(key: NumericSetting, by: string): UsageSettings {
+  const current = loadSettings();
+  const measured = key === 'manualReviewRate' ? current.measuredReviewRate
+    : key === 'manualControlTestHours' ? current.measuredControlTestHours : null;
+  const value = measured ?? SETTING_DEFAULTS[key];
+  const source: SettingSource = measured !== null ? 'measured' : 'default';
+  const next = {
+    ...current,
+    [key]: value,
+    [SOURCE_FIELD[key]]: source,
+    updatedBy: by,
+    updatedAt: ANCHOR,
+  } as UsageSettings;
+  recordUsageChange({
+    entity: 'usage_setting',
+    field: SETTING_SHORT[key],
+    from: settingValue(key, current[key]),
+    to: settingValue(key, value),
+    source: SOURCE_LABEL[source],
+    by,
+    at: ANCHOR,
+  });
+  return persistSettings(next);
+}
 
-/** A rate worked out from the platform's own records, and the sample behind it. */
-export interface Suggestion { value: number; sampleN: number; windowDays: number }
+/* ── The calibration job ─────────────────────────────────────────────────── */
+
+export interface Measurement {
+  value: number;
+  sampleN: number;
+  from: number;
+  to: number;
+}
 
 export interface Calibration {
-  /** null when the guards were not met. The reason beside it says which one. */
-  reviewRate: Suggestion | null;
-  reviewRateReason: string | null;
-  controlTestHours: Suggestion | null;
-  controlTestHoursReason: string | null;
+  reviewRate: Measurement | null;
+  controlTestHours: Measurement | null;
+  /** Why nothing was measured, when nothing was. */
+  blockedBy: string | null;
+  daysOfHistory: number;
 }
 
-/** A suggestion needs both a long enough window and a big enough sample. */
-const CALIBRATION_WINDOW_DAYS = 90;
-const CALIBRATION_MIN_SAMPLE = 30;
-
-const NO_MANUAL_TEST_RECORDS =
-  'No manual control test carries a start and a finish time yet, so there is nothing to measure this against.';
+const MIN_DAYS = 90;
+const MIN_SAMPLE = 20;
 
 /**
- * The calibration job, run for whoever is looking.
+ * What the weekly job would find today.
  *
- * It measures what can be measured from the customer's own timestamps and
- * suggests it. Nothing here is ever applied on its own: the job produces a
- * suggestion and a person adopts it, because a number that changed itself is a
- * number nobody can defend.
- *
- * The honest limit, on the record: reviewing an exception and checking rows by
- * hand are related work, not identical work, so the measured rate is a proxy.
- * It is a recorded proxy, which beats an assumption.
+ * Review rate is rows worked through divided by the hours the person had the
+ * record open. Control-test hours is the average of start to complete on a
+ * manual test. Both trim outliers: a record left open over a weekend is not
+ * sixty hours of review, and treating it as if it were would understate the
+ * team's pace and overstate the saving.
  */
-export function calibrate(scope: Scope): Calibration {
-  const from = ANCHOR - CALIBRATION_WINDOW_DAYS * DAY_MS;
-  const sample = REVIEW_RECORDS.filter(
-    r => r.resolvedAt >= from && r.resolvedAt <= ANCHOR && inScope(scope, r.team, r.userEmail),
-  );
+export function calibrate(): Calibration {
+  const daysOfHistory = Math.round((ANCHOR - HISTORY_START) / DAY_MS);
+  if (daysOfHistory < MIN_DAYS) {
+    return { reviewRate: null, controlTestHours: null, blockedBy: `only ${daysOfHistory} days of history`, daysOfHistory };
+  }
 
-  const noTests = { controlTestHours: null, controlTestHoursReason: NO_MANUAL_TEST_RECORDS };
+  const reviews = REVIEW_RECORDS.filter(r => r.kind === 'review' && r.rows !== null);
+  const testRuns = REVIEW_RECORDS.filter(r => r.kind === 'control_test');
 
-  if (sample.length < CALIBRATION_MIN_SAMPLE) {
-    return {
-      reviewRate: null,
-      reviewRateReason: `Only ${sample.length} timed reviews in the last ${CALIBRATION_WINDOW_DAYS} days. ${CALIBRATION_MIN_SAMPLE} are needed before a measured rate means anything.`,
-      ...noTests,
+  /** Drop the slowest tenth: a stale record is not a measurement of a person. */
+  const trimTop = <T,>(rows: T[], value: (row: T) => number): T[] => {
+    const sorted = rows.slice().sort((a, b) => value(a) - value(b));
+    return sorted.slice(0, Math.max(1, Math.floor(sorted.length * 0.9)));
+  };
+
+  let reviewRate: Measurement | null = null;
+  if (reviews.length >= MIN_SAMPLE) {
+    const kept = trimTop(reviews, r => (r.finishedAt - r.startedAt) / (r.rows ?? 1));
+    const rows = kept.reduce((s, r) => s + (r.rows ?? 0), 0);
+    const hours = kept.reduce((s, r) => s + (r.finishedAt - r.startedAt) / HOUR_MS, 0);
+    reviewRate = {
+      value: Math.round(rows / hours),
+      sampleN: kept.length,
+      from: Math.min(...kept.map(r => r.startedAt)),
+      to: Math.max(...kept.map(r => r.finishedAt)),
     };
   }
 
-  // An exception left open over a weekend is not sixty hours of review, so the
-  // slowest and the fastest tenth are dropped before anything is averaged.
-  const rates = sample
-    .map(r => ({ rows: r.rowsReviewed, hours: (r.resolvedAt - r.assignedAt) / 3_600_000 }))
-    .filter(x => x.hours > 0)
-    .map(x => ({ ...x, rate: x.rows / x.hours }))
-    .sort((a, b) => a.rate - b.rate);
-  const cut = Math.floor(rates.length * 0.1);
-  const kept = rates.slice(cut, rates.length - cut);
+  let controlTestHours: Measurement | null = null;
+  if (testRuns.length >= MIN_SAMPLE) {
+    const kept = trimTop(testRuns, r => r.finishedAt - r.startedAt);
+    const hours = kept.reduce((s, r) => s + (r.finishedAt - r.startedAt) / HOUR_MS, 0);
+    controlTestHours = {
+      value: Math.round((hours / kept.length) * 10) / 10,
+      sampleN: kept.length,
+      from: Math.min(...kept.map(r => r.startedAt)),
+      to: Math.max(...kept.map(r => r.finishedAt)),
+    };
+  }
 
-  const rows = kept.reduce((t, x) => t + x.rows, 0);
-  const hours = kept.reduce((t, x) => t + x.hours, 0);
+  const blockedBy = reviewRate === null && controlTestHours === null
+    ? `not enough recorded hand work yet (${reviews.length + testRuns.length} records, ${MIN_SAMPLE} needed)`
+    : null;
 
-  return {
-    reviewRate: hours > 0
-      ? { value: Math.round(rows / hours), sampleN: kept.length, windowDays: CALIBRATION_WINDOW_DAYS }
-      : null,
-    reviewRateReason: hours > 0 ? null : 'The timed reviews in this window add up to no measurable time.',
-    ...noTests,
-  };
+  return { reviewRate, controlTestHours, blockedBy, daysOfHistory };
 }
 
-/** The four settings a person can actually type a number into. */
-export type NumericSetting =
-  'manualReviewRate' | 'manualControlTestHours' | 'hourlyRate' | 'hoursPerPersonPerMonth';
+/**
+ * Apply what the job measured.
+ *
+ * There is no confirmation step. At the scale this product runs at nobody
+ * clicks, so a measurement that passes the guards becomes the live value, the
+ * label changes to say the number came from the customer's own pace, and the
+ * change is written to the audit trail. A pinned number is left alone.
+ */
+export function applyCalibration(settings: UsageSettings): UsageSettings {
+  const found = calibrate();
+  let next = { ...settings };
+  let changed = false;
 
-/** The label each setting carries wherever it is shown or exported. */
-export const SETTING_LABEL: Record<NumericSetting, string> = {
-  manualReviewRate: 'Rows a person checks by hand in an hour',
-  manualControlTestHours: 'Hours one manual control test takes',
-  hourlyRate: 'Cost of one auditor hour',
-  hoursPerPersonPerMonth: 'Hours one person works in a month',
-};
+  const apply = (key: NumericSetting, measurement: Measurement | null, store: 'measuredReviewRate' | 'measuredControlTestHours') => {
+    if (!measurement) return;
+    next[store] = measurement.value;
+    next.measuredAt = ANCHOR;
+    next.measuredSampleN = measurement.sampleN;
+    next.measuredFrom = measurement.from;
+    const sourceField = SOURCE_FIELD[key];
+    // A pinned value is a deliberate decision by a person. The job never
+    // overrides it; it keeps measuring underneath so unpinning has somewhere
+    // to land.
+    if (next[sourceField] === 'manual') return;
+    if (next[key] === measurement.value && next[sourceField] === 'measured') return;
+    const from = settingValue(key, next[key]);
+    next = { ...next, [key]: measurement.value, [sourceField]: 'measured' } as UsageSettings;
+    recordUsageChange({
+      entity: 'usage_setting',
+      field: SETTING_SHORT[key],
+      from,
+      to: settingValue(key, measurement.value),
+      source: `${SOURCE_LABEL.measured}, from ${fmtInt(measurement.sampleN)} records`,
+      by: 'the platform, on its own',
+      at: ANCHOR,
+    });
+    changed = true;
+  };
 
-/** The assumptions strip — the same sentence on screen, in CSV and in the PDF. */
-export const settingsLine = (s: UsageSettings): string =>
-  `${fmtInt(s.manualReviewRate)} rows an hour by hand (${SOURCE_LABEL[s.manualReviewRateSource]}) · ` +
-  `${fmtMoney(s.hourlyRate)} an hour · ${fmtInt(s.hoursPerPersonPerMonth)} hours a person a month · ` +
-  'failed runs excluded';
+  apply('manualReviewRate', found.reviewRate, 'measuredReviewRate');
+  apply('manualControlTestHours', found.controlTestHours, 'measuredControlTestHours');
+
+  return changed || next.measuredAt !== settings.measuredAt ? persistSettings(next) : settings;
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 3 · The period
+ * The window
  * ────────────────────────────────────────────────────────────────────────── */
 
 export type PeriodId = 'this-month' | 'this-quarter' | 'this-year' | 'since-start' | 'custom';
 
+export interface CustomRange { from: number; to: number }
+
 export interface Period {
   id: PeriodId;
+  /** The window's own name, for a heading or a scope line. */
   label: string;
+  /**
+   * The same window said inside a sentence, preposition included: "in April
+   * 2026 so far", "since you started". Kept separate from the label for two
+   * reasons: lowercasing a label turns April into april, and "in since you
+   * started" is not English, so the phrase owns its own preposition.
+   */
+  phrase: string;
   from: number;
   to: number;
-  /** Fractional months in the window — what turns hours into people. */
+  days: number;
+  /** Fractional months, so "people equivalent" is right on a part month. */
   months: number;
 }
 
-export interface CustomRange { from: number; to: number }
+const AVG_MONTH_DAYS = 30.4375;
 
-const monthsBetween = (from: number, to: number): number =>
-  Math.max(0.1, (to - from) / (DAY_MS * 30.44));
-
-const period_ = (id: PeriodId, label: string, from: number, to: number): Period =>
-  ({ id, label, from, to, months: monthsBetween(from, to) });
+function makePeriod(id: PeriodId, label: string, from: number, to: number, phrase = label): Period {
+  const days = Math.max(1, Math.round((to - from) / DAY_MS));
+  return { id, label, phrase, from, to, days, months: days / AVG_MONTH_DAYS };
+}
 
 /**
- * The windows on offer.
+ * The windows the page offers.
  *
- * They are measured back from the newest record rather than from today, so the
- * page reads the same in a screenshot taken a year from now. "Since you started"
- * runs to the oldest record the platform still holds, which is the honest
- * meaning of the phrase when run history is eventually trimmed.
+ * The financial year starts in April, so "this quarter" is the April to June
+ * quarter and "this year" starts on 1 April. "This month" is suppressed when it
+ * is the same window as this quarter: a control that changes nothing reads as a
+ * broken page.
  */
 export function periodOptions(): { id: PeriodId; label: string }[] {
-  return [
+  const wanted: { id: PeriodId; label: string }[] = [
     { id: 'this-month', label: 'This month' },
     { id: 'this-quarter', label: 'This quarter' },
     { id: 'this-year', label: 'This year' },
     { id: 'since-start', label: 'Since you started' },
+    { id: 'custom', label: 'Custom range' },
   ];
+
+  // Three weeks into a financial year, this month, this quarter and this year
+  // are the same twenty-one days. Offering all three would be three controls
+  // that change nothing, and a control that changes nothing reads as a broken
+  // page — so a window already on the list is not offered again under a second
+  // name. The narrowest true name wins: calling 21 days "this year" invites a
+  // reader to think twelve months are in the figure.
+  const seen = new Set<string>();
+  return wanted.filter(option => {
+    if (option.id === 'custom') return true;
+    const p = period(option.id);
+    const key = `${p.from}-${p.to}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-export function period(id: PeriodId, custom?: CustomRange | null): Period {
-  const end = new Date(ANCHOR);
-  const y = end.getUTCFullYear();
-  const m = end.getUTCMonth();
+export function period(id: PeriodId, custom: CustomRange | null = null): Period {
+  const anchor = new Date(ANCHOR);
+  const y = anchor.getUTCFullYear();
+  const m = anchor.getUTCMonth();
 
-  switch (id) {
-    case 'this-month':
-      return period_('this-month', 'This month', Date.UTC(y, m, 1), ANCHOR);
-    case 'this-quarter': {
-      const qStart = Math.floor(m / 3) * 3;
-      return period_('this-quarter', 'This quarter', Date.UTC(y, qStart, 1), ANCHOR);
-    }
-    case 'this-year':
-      return period_('this-year', 'This year', Date.UTC(y, 0, 1), ANCHOR);
-    case 'since-start':
-      return period_('since-start', 'Since you started', HISTORY_START, ANCHOR);
-    case 'custom': {
-      if (!custom) return period('this-quarter');
-      return period_('custom', `${formatDate(custom.from)} to ${formatDate(custom.to)}`, custom.from, custom.to);
-    }
+  if (id === 'this-month') {
+    const label = `${formatMonth(Date.UTC(y, m, 1))} so far`;
+    return makePeriod('this-month', label, Date.UTC(y, m, 1), ANCHOR, `in ${label}`);
   }
+  if (id === 'this-quarter') {
+    // April, July, October, January — the financial-year quarters.
+    const startMonth = m - ((m + 9) % 3);
+    const from = Date.UTC(y, startMonth, 1);
+    const label = `${formatShortMonth(from)} to ${formatShortMonth(Date.UTC(y, startMonth + 2, 1))} ${y}`;
+    return makePeriod('this-quarter', `This quarter, ${label}`, from, ANCHOR, 'in this quarter so far');
+  }
+  if (id === 'this-year') {
+    const fyStartYear = m >= 3 ? y : y - 1;
+    const fy = `FY${String(fyStartYear + 1).slice(2)}`;
+    return makePeriod('this-year', `${fy}, from 1 Apr ${fyStartYear}`, Date.UTC(fyStartYear, 3, 1), ANCHOR, `in ${fy} so far`);
+  }
+  if (id === 'custom' && custom) {
+    return makePeriod('custom', 'Custom range', custom.from, custom.to, 'in this window');
+  }
+  return makePeriod('since-start', 'Since you started', HISTORY_START, ANCHOR, 'since you started');
 }
 
 /**
- * The window immediately before this one, of equal length.
+ * The window immediately before this one, the same length.
  *
- * A quarter compares with the previous quarter; a custom 17-day range compares
- * with the 17 days before it. When the prior window falls off the front of the
- * record there is nothing honest to compare against and this returns null, so
- * the tiles show no change arrow rather than a fabricated one.
+ * A quarter compares with the previous quarter; a 21-day quarter-to-date
+ * compares with the 21 days before it. The comparison is labelled by its real
+ * length rather than by the name of the current window, because "vs last
+ * quarter" against 21 days would be a lie in three words.
  */
 export function priorPeriod(p: Period): Period | null {
   const span = p.to - p.from;
   const from = p.from - span;
   if (from < HISTORY_START - DAY_MS) return null;
-  return period_(p.id, `the ${span > DAY_MS * 80 ? 'previous quarter' : 'previous period'}`, from, p.from - 1);
+  return makePeriod(p.id, `the ${p.days} days before`, from, p.from);
+}
+
+/** How the change against the prior window is said. */
+export const priorLabel = (p: Period): string => `the previous ${p.days} days`;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Who is reading
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type Persona = 'cfo' | 'head_of_team' | 'auditor';
+
+export interface Scope {
+  persona: Persona;
+  /** What the scope line says: "the whole company", "SOX Audit", "your own work". */
+  label: string;
+  team?: string;
+  userEmail?: string;
+  userName?: string;
+}
+
+export const PERSONA_TITLE: Record<Persona, string> = {
+  cfo: 'CFO',
+  head_of_team: 'Head of Team',
+  auditor: 'Internal Auditor',
+};
+
+/** The question each view opens on, said in the reader's own words. */
+export const PERSONA_QUESTION: Record<Persona, string> = {
+  cfo: 'Is this paying for itself?',
+  head_of_team: 'Is anything stuck?',
+  auditor: "What's waiting on me?",
+};
+
+const inWindow = (at: number | null, p: Period): boolean => at !== null && at >= p.from && at <= p.to;
+
+/** Does this run belong to the reader? */
+function runInScope(run: WorkflowRun, scope: Scope): boolean {
+  if (scope.persona === 'cfo') return true;
+  if (scope.persona === 'head_of_team') return run.actor.team === scope.team;
+  return run.actor.email === scope.userEmail;
+}
+
+/** Does a record made by this named person belong to the reader? */
+function personInScope(name: string | null, scope: Scope): boolean {
+  if (scope.persona === 'cfo') return true;
+  if (!name) return false;
+  if (scope.persona === 'head_of_team') return teamOfName(name) === scope.team;
+  return name === scope.userName;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 4 · Selecting records
+ * PU-01 · PU-02 · PU-03 — hours, money, people
  * ────────────────────────────────────────────────────────────────────────── */
 
-const within = (ms: number | null, p: Period): boolean =>
-  ms !== null && ms >= p.from && ms <= p.to;
-
-/** Runs that finished inside the window, at this scope. */
+/** Every run in the window that belongs to the reader, by completion. */
 export function runsIn(p: Period, scope: Scope): WorkflowRun[] {
-  return RUNS.filter(r => within(r.completedAt ?? r.startedAt, p) && inScope(scope, r.team, r.userEmail));
+  return RUNS.filter(run => runInScope(run, scope) && inWindow(run.completedAt, p));
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 5 · PU-01 to PU-03 — what the work was worth
- * ────────────────────────────────────────────────────────────────────────── */
+/** Every run started in the window — what reliability is measured on. */
+export function runsStartedIn(p: Period, scope: Scope): WorkflowRun[] {
+  return RUNS.filter(run => runInScope(run, scope) && run.startedAt >= p.from && run.startedAt <= p.to);
+}
 
-export interface ValueResult {
-  /** PU-01 */
+export interface ValueFigures {
   hours: number;
-  /** PU-02 */
   money: number;
-  /** PU-03 */
   people: number;
-  /** The measured inputs behind the hours, so the page can show its working. */
-  runsCounted: number;
-  rowsProcessed: number;
+  rows: number;
   machineHours: number;
-  controlTests: number;
+  /** Runs that produced rows and finished. */
+  rowRuns: number;
+  /** Runs that stood in for a manual control test. */
+  testRuns: number;
 }
 
 /**
- * PU-01 · Hours saved, from two kinds of successful run.
+ * What the work was worth (PU-01 to PU-03).
  *
- * A row-processing run saves the time a person would have spent reading those
- * rows, less the time the machine actually took. A control-test run has no rows
- * at all — it stands in for one manual control test, so it saves that test's
- * hours less the machine time.
- *
- * Failed runs never appear here. Runs that completed and processed nothing are
- * skipped entirely: there was no work to value.
+ * A run that processed rows saved the hours a person would have spent checking
+ * them, less the time the engine took. A run against a control with no row
+ * output replaced one manual control test. A failed run saved nothing at all and
+ * is reported as wasted effort instead (decision 3), and a run that produced no
+ * rows is skipped entirely, because there is no work there to value.
  */
-export function valueOf(runs: WorkflowRun[], s: UsageSettings, months: number): ValueResult {
+export function valueOf(runs: WorkflowRun[], settings: UsageSettings, p: Period): ValueFigures {
   let hours = 0;
   let rows = 0;
   let machineSecs = 0;
-  let counted = 0;
-  let controlTests = 0;
+  let rowRuns = 0;
+  let testRuns = 0;
 
-  for (const r of runs) {
-    if (r.status !== 'complete') continue;
-
-    if (r.rowCount !== null && r.rowCount > 0) {
-      const manual = r.rowCount / s.manualReviewRate;
-      hours += manual - r.durationSecs / 3600;
-      rows += r.rowCount;
-      machineSecs += r.durationSecs;
-      counted += 1;
-    } else if (r.rowCount === null && r.controlId !== null) {
-      hours += s.manualControlTestHours - r.durationSecs / 3600;
-      machineSecs += r.durationSecs;
-      counted += 1;
-      controlTests += 1;
+  for (const run of runs) {
+    if (run.status !== 'complete') continue;
+    if (run.rowCount !== null) {
+      if (run.rowCount <= 0) continue;
+      hours += run.rowCount / settings.manualReviewRate - run.durationSecs / 3600;
+      rows += run.rowCount;
+      machineSecs += run.durationSecs;
+      rowRuns += 1;
+    } else if (run.controlId !== null) {
+      hours += settings.manualControlTestHours - run.durationSecs / 3600;
+      machineSecs += run.durationSecs;
+      testRuns += 1;
     }
   }
 
-  hours = Math.max(0, hours);
   return {
     hours,
-    money: hours * s.hourlyRate,
-    people: hours / (s.hoursPerPersonPerMonth * Math.max(months, 0.1)),
-    runsCounted: counted,
-    rowsProcessed: rows,
+    money: hours * settings.hourlyRate,
+    people: hours / (settings.hoursPerPersonPerMonth * Math.max(p.months, 0.03)),
+    rows,
     machineHours: machineSecs / 3600,
-    controlTests,
+    rowRuns,
+    testRuns,
   };
 }
 
-/** The change on a tile — the same calculation over the prior window. */
-export const deltaPct = (now: number, before: number | null): number | null => {
-  if (before === null || before <= 0) return null;
-  return ((now - before) / before) * 100;
-};
-
-/**
- * Hours lost to failed runs.
- *
- * This is how failed runs are reported honestly without touching the savings
- * total: the machine time they burned, counted separately and named as waste.
- */
-export function wastedEffort(runs: WorkflowRun[]): { hours: number; runs: number } {
-  const failed = runs.filter(r => r.status === 'failed');
-  return { hours: failed.reduce((s, r) => s + r.durationSecs, 0) / 3600, runs: failed.length };
-}
-
-/**
- * The value line month by month — what the hero chart draws.
- *
- * Buckets are days for a short window and months for a long one, so a month
- * view is not one bar and a year view is not three hundred.
- */
-export interface ValuePoint { label: string; from: number; to: number; hours: number; money: number }
-
-export function valueOverTime(p: Period, scope: Scope, s: UsageSettings): ValuePoint[] {
-  const span = p.to - p.from;
-  const byMonth = span > DAY_MS * 70;
-  const buckets: { label: string; from: number; to: number }[] = [];
-
-  if (byMonth) {
-    const d = new Date(p.from);
-    let cursor = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-    while (cursor <= p.to) {
-      const next = Date.UTC(new Date(cursor).getUTCFullYear(), new Date(cursor).getUTCMonth() + 1, 1);
-      buckets.push({
-        label: new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(new Date(cursor)),
-        from: Math.max(cursor, p.from),
-        to: Math.min(next - 1, p.to),
-      });
-      cursor = next;
-    }
-  } else {
-    const days = Math.max(1, Math.ceil(span / DAY_MS));
-    const step = days > 31 ? 7 : 1;
-    for (let d = 0; d < days; d += step) {
-      const from = p.from + d * DAY_MS;
-      buckets.push({
-        label: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
-          .format(new Date(from)),
-        from,
-        to: Math.min(from + step * DAY_MS - 1, p.to),
-      });
-    }
-  }
-
-  const runs = runsIn(p, scope);
-  return buckets.map(b => {
-    const slice = runs.filter(r => within(r.completedAt ?? r.startedAt, { ...p, from: b.from, to: b.to }));
-    const v = valueOf(slice, s, 1);
-    return { label: b.label, from: b.from, to: b.to, hours: v.hours, money: v.money };
-  });
+/** The change against the window before, as a percentage, or null when there is none. */
+export function deltaPct(now: number, before: number | null): number | null {
+  if (before === null || before === 0) return null;
+  return ((now - before) / Math.abs(before)) * 100;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 6 · PU-04 and PU-05 — cost, and net value
+ * PU-04 · PU-05 — what it costs, and the net
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface CostResult {
-  /** True only when every month in the window has its bill entered. */
-  complete: boolean;
-  /** Real dollars, from the one place in the product that records them. */
+export interface CostToRun {
+  /** The vendor's bills for the window, exact, in rupees. Null when unpriced. */
+  lookupRupees: number | null;
+  /** Calls the platform recorded, whether or not anyone has priced them. */
+  lookupCalls: number;
+  /** Months in the window with recorded calls and no bill entered. */
+  missingMonths: { at: number; label: string; calls: number }[];
+  invoices: VendorInvoice[];
+  /** The one cost the product records by itself, in the currency it records. */
   conciergeUsd: number;
   conciergeJobs: number;
-  /** Runs of workflows that call a paid vendor lookup. Countable today. */
-  lookupRuns: number;
-  lookupRows: number;
-  /** The invoiced lookup cost in rupees. Null until the window is covered. */
-  lookupMoney: number | null;
-  /** How many bills that figure is the sum of. */
-  invoices: number;
-  monthsInWindow: number;
-  monthsInvoiced: number;
-  /** Rupees per recorded call, derived from the invoices. Never a rate card. */
-  effectiveRate: number | null;
-  /** What that rate was divided by, and whether it is every run or only the priced ones. */
-  recordedCalls: number;
-  callsAreAllRuns: boolean;
-  /** Layer 3, when somebody has split the bill per API: its total and the gap. */
-  split: { total: number; gap: number } | null;
-  /** Why the total is incomplete, in the words the tile uses. */
-  missing: string | null;
+  /** Jobs whose pipeline never wrote a cost, so they are counted, not priced. */
+  conciergeUnpriced: number;
+  /** True when every month in the window has its bill. */
+  complete: boolean;
 }
 
 /**
- * PU-04 · Cost to run, invoice first.
+ * Cost to run (PU-04).
  *
- * The lookup cost is the vendor's bill, summed over the months the window
- * touches. That is the number finance reconciles, it needs no rate card and no
- * guess about whether a run bills once or five hundred times, and it is exact.
+ * Invoice first. The lookup cost is the sum of the bills finance entered, which
+ * is exact by definition and reconciles with what the vendor charged. A window
+ * missing one of its bills is an unfinished window, not a cheaper one, so the
+ * figure stays absent and the months that are missing are named — a partial
+ * total under a complete-sounding label is a defect, not a rounding.
  *
- * A window is only costed when every month in it has a bill entered. A quarter
- * with two of its three invoices in is not a cheaper quarter, it is an unfinished
- * one, so the tile says which months are missing rather than printing a total
- * that will grow next week.
- *
- * The effective rate underneath is context, not a price: the bill divided by the
- * calls the platform recorded that period. It carries where it came from
- * everywhere it appears.
+ * The Concierge job cost is the only money the product records on its own. It is
+ * recorded in dollars, and it is returned separately rather than converted at a
+ * rate nobody has entered or added into a rupee total. Section 3 of the spec
+ * forbids a blended figure, and a silent conversion is one.
  */
-export function costToRun(p: Period, scope: Scope): CostResult {
-  const billable = billableWorkflowIds();
-  const completed = runsIn(p, scope).filter(r => r.status === 'complete');
-  const runs = billable.size > 0 ? completed.filter(r => billable.has(r.workflowId)) : completed;
-  const jobs = CONCIERGE_JOBS.filter(
-    j => j.status === 'completed' && within(j.startedAt, p) && inScope(scope, j.team, j.userEmail),
-  );
+export function costToRun(p: Period): CostToRun {
+  const invoices = loadInvoices().filter(inv => inv.periodMonth >= startOfMonthUtc(p.from) && inv.periodMonth <= p.to);
+  const callsInWindow = LOOKUP_CALLS.filter(c => c.status === 'complete' && c.at >= p.from && c.at <= p.to);
 
-  const months = monthsInWindow(p.from, p.to);
-  const invoices = loadInvoices().filter(i => months.includes(i.periodMonth));
-  const monthsInvoiced = new Set(invoices.map(i => i.periodMonth)).size;
-  const complete = months.length > 0 && monthsInvoiced === months.length;
-  const invoiced = invoices.reduce((sum, i) => sum + i.amountPaise, 0) / 100;
+  const byMonth = new Map<number, number>();
+  for (const call of callsInWindow) {
+    const m = startOfMonthUtc(call.at);
+    byMonth.set(m, (byMonth.get(m) ?? 0) + 1);
+  }
 
-  // Layer 3, if anybody has split the bill: the same runs priced per API, and
-  // the gap against the bill. Shown, never quietly reconciled away.
-  const pricing = loadPricing();
-  const split = pricing.length > 0
-    ? runs.reduce((sum, r) => {
-        const at = r.completedAt ?? r.startedAt;
-        const price = pricing.find(
-          x => x.workflowId === r.workflowId
-            && x.effectiveFrom <= at
-            && (x.effectiveTo === null || x.effectiveTo >= at),
-        );
-        if (!price) return sum;
-        const units = price.billingUnit === 'row' ? (r.rowCount ?? 0) : 1;
-        return sum + (units * price.pricePaise) / 100;
-      }, 0)
-    : null;
+  const billed = new Set(invoices.map(inv => inv.periodMonth));
+  const missingMonths = monthsInWindow(p.from, p.to)
+    .filter(m => (byMonth.get(m) ?? 0) > 0 && !billed.has(m))
+    .map(m => ({ at: m, label: formatMonth(m), calls: byMonth.get(m) ?? 0 }));
 
-  const missingMonths = months.length - monthsInvoiced;
+  const complete = missingMonths.length === 0 && invoices.length > 0;
+
+  const conciergeInWindow = CONCIERGE_JOBS.filter(j => j.at >= p.from && j.at <= p.to && j.status === 'completed');
+  const priced = conciergeInWindow.filter(j => j.costWiring === 'priced' && j.llmCostUsd !== null);
 
   return {
+    lookupRupees: complete ? invoices.reduce((s, inv) => s + inv.amountPaise, 0) / 100 : null,
+    lookupCalls: callsInWindow.length,
+    missingMonths,
+    invoices,
+    conciergeUsd: priced.reduce((s, j) => s + (j.llmCostUsd ?? 0), 0),
+    conciergeJobs: conciergeInWindow.length,
+    conciergeUnpriced: conciergeInWindow.length - priced.length,
     complete,
-    conciergeUsd: jobs.reduce((s, j) => s + j.costUsd, 0),
-    conciergeJobs: jobs.length,
-    lookupRuns: runs.length,
-    lookupRows: runs.reduce((s, r) => s + (r.rowCount ?? 0), 0),
-    lookupMoney: complete ? invoiced : null,
-    invoices: invoices.length,
-    monthsInWindow: months.length,
-    monthsInvoiced,
-    effectiveRate: complete && runs.length > 0 ? invoiced / runs.length : null,
-    recordedCalls: runs.length,
-    callsAreAllRuns: billable.size === 0,
-    split: complete && split !== null ? { total: split, gap: split - invoiced } : null,
-    missing: complete
-      ? null
-      : monthsInvoiced === 0
-        ? 'No invoice entered for this period.'
-        : `${missingMonths} of the ${months.length} months in this window have no invoice entered yet.`,
   };
 }
 
-/**
- * PU-05 · Net value.
- *
- * While the cost is unknowable the hero is not "net value minus a blank": it
- * reads as work avoided, which is exactly what has been measured.
- */
-export const netValue = (value: ValueResult, cost: CostResult): number | null =>
-  cost.complete && cost.lookupMoney !== null ? value.money - cost.lookupMoney : null;
+export interface NetValue {
+  /** What the work avoided is worth. Always known. */
+  workAvoided: number;
+  /** What the vendor billed for the window, when every bill is in. */
+  cost: number | null;
+  /** Work avoided minus cost. Null while any bill is missing. */
+  net: number | null;
+  /** What the hero is called, which depends on whether the cost is known. */
+  headline: 'Net value' | 'Work avoided';
+}
 
-/* ── The list behind the cost tile, and the bills nobody has entered ─────── */
-
 /**
- * One month of the window: what was billed, and what was recorded.
+ * Net value (PU-05).
  *
- * A month with recorded calls and no bill is not a cheap month, it is an
- * unfinished one, and it says so by name. That is what stops a forgotten
- * invoice being discovered in a board meeting instead of on this page.
+ * While the cost is unknown the hero reads "Work avoided" and shows that figure.
+ * It never reads "Net value" over one real number minus an unknown.
  */
-export interface InvoiceMonth {
-  month: number;
+export function netValue(value: ValueFigures, cost: CostToRun): NetValue {
+  const known = cost.lookupRupees;
+  return {
+    workAvoided: value.money,
+    cost: known,
+    net: known === null ? null : value.money - known,
+    headline: known === null ? 'Work avoided' : 'Net value',
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Value over time
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface TimeBucket {
+  at: number;
   label: string;
-  invoices: VendorInvoice[];
-  /** Rupees billed for the month. Null when no bill has been entered. */
-  amount: number | null;
-  /** Runs of the paid lookups recorded that month, bill or no bill. */
-  recordedCalls: number;
+  hours: number;
+  money: number;
+  runs: number;
+  rows: number;
 }
 
-export interface InvoiceLedger {
-  months: InvoiceMonth[];
-  /** Months with recorded calls and no bill, oldest first. */
-  missing: InvoiceMonth[];
-  entered: number;
+/**
+ * Hours saved per month across the window, priced at the hourly rate.
+ *
+ * Monthly buckets, because a savings figure per day is noise: a reader is
+ * looking for a trend, and the trend is the point of the block.
+ */
+export type Grain = 'week' | 'month';
+
+/**
+ * How wide a bucket has to be before the shape is a trend rather than noise.
+ *
+ * Three weeks into a financial year, monthly buckets would draw one bar, and one
+ * bar is not a chart — so a short window is drawn by week. The grain is returned
+ * with the buckets so the block can say which it used.
+ */
+export const grainFor = (p: Period): Grain => (p.days <= 70 ? 'week' : 'month');
+
+/** The buckets a window is drawn in, oldest first. */
+export function buckets(p: Period): { at: number; to: number; label: string }[] {
+  if (grainFor(p) === 'month') {
+    return monthsInWindow(p.from, p.to).map(m => ({
+      at: Math.max(m, p.from),
+      to: Math.min(startOfMonthUtc(m + 32 * DAY_MS), p.to),
+      label: formatShortMonth(m),
+    }));
+  }
+  // Weeks, counted back from the end of the window so the newest bucket is whole.
+  const out: { at: number; to: number; label: string }[] = [];
+  const week = 7 * DAY_MS;
+  for (let to = p.to; to > p.from; to -= week) {
+    const at = Math.max(p.from, to - week);
+    out.unshift({ at, to, label: `w/c ${formatDayMonth(at)}` });
+  }
+  return out;
 }
 
-const MONTH_LABEL = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-
-export function invoiceLedger(p: Period, scope: Scope): InvoiceLedger {
-  const billable = billableWorkflowIds();
-  const completed = runsIn(p, scope).filter(r => r.status === 'complete');
-  const calls = billable.size > 0 ? completed.filter(r => billable.has(r.workflowId)) : completed;
-  const all = loadInvoices();
-
-  const months: InvoiceMonth[] = monthsInWindow(p.from, p.to).map(month => {
-    const invoices = all.filter(i => i.periodMonth === month);
+export function valueOverTime(p: Period, scope: Scope, settings: UsageSettings): TimeBucket[] {
+  return buckets(p).map(b => {
+    const bucketPeriod = makePeriod(p.id, b.label, b.at, b.to);
+    const runs = RUNS.filter(run => runInScope(run, scope) && inWindow(run.completedAt, bucketPeriod));
+    const v = valueOf(runs, settings, bucketPeriod);
     return {
-      month,
-      label: MONTH_LABEL.format(new Date(month)),
-      invoices,
-      amount: invoices.length > 0 ? invoices.reduce((s, i) => s + i.amountPaise, 0) / 100 : null,
-      recordedCalls: calls.filter(r => startOfMonthUtc(r.completedAt ?? r.startedAt) === month).length,
+      at: b.at,
+      label: b.label,
+      hours: v.hours,
+      money: v.money,
+      runs: runs.filter(r => r.status === 'complete').length,
+      rows: v.rows,
     };
   });
-
-  return {
-    months,
-    missing: months.filter(m => m.amount === null && m.recordedCalls > 0),
-    entered: months.reduce((n, m) => n + m.invoices.length, 0),
-  };
-}
-
-/* ── PU-18 · the assumptions have their own history ──────────────────────── */
-
-export interface ChangeHistory {
-  /** Changes made inside the window, newest first. */
-  inPeriod: UsageChange[];
-  all: UsageChange[];
-}
-
-/**
- * Who changed an entered number, from what to what, when, and under which
- * source label. "Settings changed this period: 2" is a real, listable figure,
- * so it opens its list like every other count on the page.
- */
-export function changeHistory(p: Period, entity: UsageChange['entity']): ChangeHistory {
-  const all = loadUsageChanges().filter(c => c.entity === entity);
-  return { all, inPeriod: all.filter(c => c.at >= p.from && c.at <= p.to) };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 7 · PU-06 and PU-07 — what the automation reached
+ * PU-06 · PU-07 — control coverage, and what was never touched
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface CoverageResult { exercised: number; total: number; pct: number; names: string[] }
-
-/** PU-06 · A control run fifty times counts once. */
-export function controlCoverage(p: Period, scope: Scope): CoverageResult {
-  const runs = runsIn(p, scope).filter(r => r.status === 'complete' && r.controlId !== null);
-  const ids = new Set(runs.map(r => r.controlId as string));
-  const names = Array.from(new Set(runs.map(r => r.controlName as string))).sort();
-  const total = CONTROL_LIBRARY.length;
-  return { exercised: ids.size, total, pct: total === 0 ? 0 : (ids.size * 100) / total, names };
+export interface Coverage {
+  exercised: number;
+  total: number;
+  pct: number;
+  /** Controls the reader owns that this window has not exercised. */
+  untouched: { id: string; name: string; owner: string }[];
 }
 
-export interface NeverExercised { controls: string[]; workflows: string[] }
-
 /**
- * PU-07 · Never exercised, ever.
+ * Control coverage (PU-06).
  *
- * Deliberately ignores the period. "Nothing has ever checked this control" is a
- * fact about the library, not about a window, and it needs no setting — which
- * is what makes it the one figure on the page nobody can argue with.
+ * How much of the control library the platform actually exercised in the window.
+ * A control run fifty times counts once — this is coverage, not volume.
  */
-export function neverExercised(): NeverExercised {
-  const everRun = new Set(RUNS.map(r => r.controlId).filter((x): x is string => x !== null));
-  const ranWorkflows = new Set(RUNS.map(r => r.workflowId));
+export function controlCoverage(p: Period, scope: Scope): Coverage {
+  const library = scope.persona === 'head_of_team'
+    ? CONTROL_LIBRARY.filter(c => teamOfName(c.owner) === scope.team)
+    : CONTROL_LIBRARY;
+
+  const exercised = new Set(
+    RUNS.filter(run => run.status === 'complete' && run.controlId !== null && inWindow(run.completedAt, p) && runInScope(run, scope))
+      .map(run => run.controlId as string),
+  );
+
+  const total = library.length;
+  const hit = library.filter(c => exercised.has(c.controlId)).length;
   return {
-    controls: CONTROL_LIBRARY.filter(c => !everRun.has(c.controlId)).map(c => c.name).sort(),
-    workflows: WORKFLOWS.filter(w => !ranWorkflows.has(w.id)).map(w => w.name).sort(),
+    exercised: hit,
+    total,
+    pct: total === 0 ? 0 : (hit * 100) / total,
+    untouched: library.filter(c => !exercised.has(c.controlId)).map(c => ({ id: c.controlId, name: c.name, owner: c.owner })),
+  };
+}
+
+export interface NeverExercised {
+  controls: { id: string; name: string; owner: string }[];
+  workflows: string[];
+}
+
+/**
+ * Never exercised, ever (PU-07).
+ *
+ * Deliberately ignores the period selector. "This control has never been tested"
+ * is a fact about the library, not about April, and it needs no setting at all —
+ * which is what makes it the one figure on this page nobody can argue with.
+ */
+export function neverExercised(scope: Scope): NeverExercised {
+  const everRun = new Set(RUNS.filter(r => r.controlId !== null).map(r => r.controlId as string));
+  const library = scope.persona === 'head_of_team'
+    ? CONTROL_LIBRARY.filter(c => teamOfName(c.owner) === scope.team)
+    : CONTROL_LIBRARY;
+  return {
+    controls: library.filter(c => !everRun.has(c.controlId)).map(c => ({ id: c.controlId, name: c.name, owner: c.owner })),
+    workflows: NEVER_RUN_WORKFLOWS,
   };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 8 · PU-08 — what was caught
+ * PU-08 — what the platform caught
  * ────────────────────────────────────────────────────────────────────────── */
 
-export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
-export const SEVERITIES: Severity[] = ['Critical', 'High', 'Medium', 'Low'];
-
-export interface ExceptionRow {
-  id: string; ref: string; title: string; severity: Severity; status: string;
-  workflowName: string; runId: string | null; openedAt: number; assignee: string;
-}
-export interface ExceptionsResult {
+export interface ExceptionsCaught {
+  bySeverity: { severity: string; total: number; open: number }[];
   total: number;
   open: number;
-  bySeverity: { severity: Severity; total: number; open: number }[];
-  rows: ExceptionRow[];
+  /** The newest few, each traceable to the run that raised it. */
+  newest: TracedException[];
+  /** Exceptions with no run behind them, which is a gap worth naming. */
+  untraced: number;
 }
 
-/** PU-08 · Every counted exception opens from the page and traces to its run. */
-export function exceptionsCaught(p: Period, scope: Scope): ExceptionsResult {
-  const traced = TRACED_EXCEPTIONS.filter(t => {
-    if (!within(t.openedAt, p)) return false;
+const SEVERITY_ORDER = ['Critical', 'High', 'Medium', 'Low'];
+
+export function exceptionsCaught(p: Period, scope: Scope): ExceptionsCaught {
+  const rows = TRACED_EXCEPTIONS.filter(ex => {
+    if (ex.openedAt < p.from || ex.openedAt > p.to) return false;
     if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || t.team === scope.team;
-    return !scope.userEmail || t.userEmail === scope.userEmail;
+    if (scope.persona === 'head_of_team') return ex.team === scope.team;
+    return ex.assignee === scope.userName;
   });
 
-  const rows: ExceptionRow[] = traced.map(t => ({
-    id: t.exception.id,
-    ref: t.exception.ref,
-    title: t.exception.title,
-    severity: t.exception.severity,
-    status: t.exception.status,
-    workflowName: t.exception.workflowName,
-    runId: t.runId,
-    openedAt: t.openedAt,
-    assignee: t.exception.assignee,
-  })).sort((a, b) => b.openedAt - a.openedAt);
+  const bySeverity = SEVERITY_ORDER.map(severity => ({
+    severity,
+    total: rows.filter(r => r.severity === severity).length,
+    open: rows.filter(r => r.severity === severity && r.status !== 'Resolved').length,
+  })).filter(r => r.total > 0);
 
-  const isOpen = (status: string) => status !== 'Resolved';
   return {
+    bySeverity,
     total: rows.length,
-    open: rows.filter(r => isOpen(r.status)).length,
-    bySeverity: SEVERITIES.map(severity => {
-      const of = rows.filter(r => r.severity === severity);
-      return { severity, total: of.length, open: of.filter(r => isOpen(r.status)).length };
-    }).filter(s => s.total > 0),
-    rows,
+    open: rows.filter(r => r.status !== 'Resolved').length,
+    newest: rows.slice().sort((a, b) => b.openedAt - a.openedAt).slice(0, 3),
+    untraced: rows.filter(r => r.runId === null).length,
   };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 9 · PU-09 — work volume, in four units that are never added up
+ * PU-09 — work volume, in four units that are never added up
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface VolumeUnit { key: string; label: string; count: number; note: string }
-
-/**
- * PU-09 · Four counts, four charts, never a sum.
- *
- * A chat question and a bulk job are different units of work. Adding them
- * produces a number that means nothing, so this returns them separately and no
- * caller — screen or export — is given a total to print.
- */
-export function workVolume(p: Period, scope: Scope): VolumeUnit[] {
-  const runs = runsIn(p, scope);
-  const single = runs.filter(r => r.bulkRunId === null);
-  const bulkIds = new Set(runs.filter(r => r.bulkRunId !== null).map(r => r.bulkRunId as string));
-  const chat = CHAT_QUESTIONS.filter(q => within(q.askedAt, p) && inScope(scope, q.team, q.userEmail));
-  const jobs = CONCIERGE_JOBS.filter(j => within(j.startedAt, p) && inScope(scope, j.team, j.userEmail));
-
-  return [
-    { key: 'runs', label: 'Workflow runs', count: single.length, note: 'One workflow, run once' },
-    { key: 'bulk', label: 'Bulk runs', count: bulkIds.size, note: `Several workflows at once, over ${BULK_RUN_IDS.length} recorded batches` },
-    { key: 'chat', label: 'Questions asked', count: chat.length, note: 'Each answer keeps the program behind it' },
-    { key: 'concierge', label: 'Concierge jobs', count: jobs.length, note: 'Background jobs on the specialist tools' },
-  ];
-}
-
-/** The same four units over time, so each gets its own small chart. */
-export function volumeOverTime(p: Period, scope: Scope): { label: string; runs: number; bulk: number; chat: number; concierge: number }[] {
-  const points = valueOverTime(p, scope, DEFAULT_SETTINGS);
-  return points.map(pt => {
-    const win = { ...p, from: pt.from, to: pt.to };
-    const runs = runsIn(win, scope);
-    return {
-      label: pt.label,
-      runs: runs.filter(r => r.bulkRunId === null).length,
-      bulk: new Set(runs.filter(r => r.bulkRunId !== null).map(r => r.bulkRunId)).size,
-      chat: CHAT_QUESTIONS.filter(q => within(q.askedAt, win) && inScope(scope, q.team, q.userEmail)).length,
-      concierge: CONCIERGE_JOBS.filter(j => within(j.startedAt, win) && inScope(scope, j.team, j.userEmail)).length,
-    };
-  });
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 10 · PU-10 and PU-11 — reliability, and what is stuck
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface ReliabilityRow { name: string; failed: number; total: number; failurePct: number }
-export interface ReliabilityResult { rows: ReliabilityRow[]; wastedHours: number; failedRuns: number }
-
-/** PU-10 · A workflow with no runs in the window produces no row. */
-export function reliability(p: Period, scope: Scope): ReliabilityResult {
-  const runs = RUNS.filter(r => within(r.startedAt, p) && inScope(scope, r.team, r.userEmail));
-  const byName = new Map<string, { failed: number; total: number }>();
-  for (const r of runs) {
-    const entry = byName.get(r.workflowName) ?? { failed: 0, total: 0 };
-    entry.total += 1;
-    if (r.status === 'failed') entry.failed += 1;
-    byName.set(r.workflowName, entry);
-  }
-  const rows = Array.from(byName.entries())
-    .map(([name, v]) => ({ name, ...v, failurePct: v.total === 0 ? 0 : (v.failed * 100) / v.total }))
-    .sort((a, b) => b.failurePct - a.failurePct || b.total - a.total);
-
-  const wasted = wastedEffort(runs);
-  return { rows, wastedHours: wasted.hours, failedRuns: wasted.runs };
-}
-
-export interface StuckRun {
-  id: string; workflowName: string; status: string; error: string; startedAt: number;
-  ageHours: number; userName: string;
-}
-
-/** PU-11 · Failed, blocked, or paused for more than 24 hours. */
-export function stuckRuns(p: Period, scope: Scope): StuckRun[] {
-  return RUNS
-    .filter(r => within(r.startedAt, p) && inScope(scope, r.team, r.userEmail))
-    .filter(r =>
-      r.status === 'failed' || r.status === 'blocked'
-      || (r.status === 'paused' && r.updatedAt < ANCHOR - DAY_MS))
-    .map(r => ({
-      id: r.id,
-      workflowName: r.workflowName,
-      status: r.status === 'paused' ? 'Paused over 24 hours' : r.status === 'blocked' ? 'Blocked' : 'Failed',
-      // Verbatim, never truncated. A summarised error is a run nobody can fix.
-      error: r.executionError ?? 'No error text was recorded.',
-      startedAt: r.startedAt,
-      ageHours: (ANCHOR - r.updatedAt) / 3_600_000,
-      userName: r.userName,
-    }))
-    .sort((a, b) => b.startedAt - a.startedAt);
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 11 · PU-12 — AI usage by area
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** How well a figure is known. Four different facts, never blurred. */
-export type Accuracy = 'exact' | 'estimated' | 'not measured' | 'no record';
-
-export interface AiAreaRow {
-  area: string;
-  volume: number | null;
-  volumeUnit: string;
-  detail: string;
-  /** Labelled "Concierge job cost" wherever it appears, never "AI cost". */
-  costUsd: number | null;
-  accuracy: Accuracy;
-  note: string;
+export interface WorkVolume {
+  workflowRuns: number;
+  bulkRuns: number;
+  chatQuestions: number;
+  conciergeJobs: number;
+  /** Chat answers whose program was frozen into the library — a real outcome. */
+  savedAsWorkflow: number;
+  /**
+   * The newest runs behind the count, so the number opens its list like every
+   * other count on the page. The whole set lives in the workflow library, which
+   * the block links to rather than paging a thousand rows in here.
+   */
+  newestRuns: { id: string; workflow: string; ranBy: string; at: number; status: RunStatus; rows: number | null }[];
 }
 
 /**
- * PU-12 · Where the AI work happened, and how well each figure is known.
+ * Four counts, four units (PU-09).
  *
- * The accuracy column is mandatory. Without it this table is four numbers that
- * look equally solid, and one of them is a character count divided by four.
+ * A chat question and a bulk job are not the same kind of thing, so they are
+ * never summed — on screen or in the export. Four mini-charts, not one total.
  */
-export function aiUsageByArea(p: Period, scope: Scope): AiAreaRow[] {
-  const chat = CHAT_QUESTIONS.filter(q => within(q.askedAt, p) && inScope(scope, q.team, q.userEmail));
-  const jobs = CONCIERGE_JOBS.filter(j => within(j.startedAt, p) && inScope(scope, j.team, j.userEmail));
-  const sop = SOP_RACM_JOBS.filter(j => within(j.startedAt, p) && inScope(scope, j.team, j.userEmail));
-  const runs = runsIn(p, scope);
-  const cached = sop.filter(j => j.cached).length;
-
-  return [
-    {
-      area: 'Chat',
-      volume: chat.length,
-      volumeUnit: 'questions',
-      detail: `${fmtInt(chat.reduce((s, q) => s + q.steps, 0))} assistant steps · ` +
-        `${fmtInt(chat.reduce((s, q) => s + q.tokensIn + q.tokensOut, 0))} tokens`,
-      costUsd: null,
-      accuracy: 'estimated',
-      note: 'Token usage is counted by dividing text length by four. It was built to stop runaway conversations, not to bill.',
-    },
-    {
-      area: 'Concierge tools',
-      volume: jobs.length,
-      volumeUnit: 'jobs',
-      detail: `${jobs.filter(j => j.status === 'completed').length} completed`,
-      costUsd: jobs.reduce((s, j) => s + j.costUsd, 0),
-      accuracy: 'exact',
-      note: 'The only place in the product that records what a job actually cost.',
-    },
-    {
-      area: 'SOP to RACM',
-      volume: sop.length,
-      volumeUnit: 'jobs',
-      detail: cached > 0 ? `${cached} of them skipped the AI entirely` : 'None hit the cache',
-      costUsd: null,
-      accuracy: 'not measured',
-      note: 'Records nothing about what it consumed, and a cached job is nearly free, so counting jobs says nothing about spend.',
-    },
-    {
-      area: 'Workflows',
-      volume: runs.length,
-      volumeUnit: 'runs',
-      detail: `${runs.filter(r => r.status === 'complete').length} completed`,
-      costUsd: null,
-      accuracy: 'not measured',
-      note: 'A run records its duration and rows, but nothing about the model behind it.',
-    },
-    {
-      area: 'Everywhere else',
-      volume: null,
-      volumeUnit: '',
-      detail: 'Dashboards, insights, extraction',
-      costUsd: null,
-      accuracy: 'no record',
-      note: 'These write no usage record at all, so there is nothing to count. This is not zero.',
-    },
-  ];
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 12 · PU-13 — per person, and never ranked
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface PersonRow { name: string; runs: number; exceptions: number; waiting: number }
-
-/**
- * PU-13 · The team, alphabetically, with the sort fixed.
- *
- * No share of the team's work, no rank, no average, and no numeric column that
- * can be sorted by click or by URL. A person with no runs still appears, which
- * is the difference between a team list and a leaderboard.
- */
-export function perPersonOutcomes(p: Period, team: string, users: AdminUser[]): PersonRow[] {
-  const members = users.filter(u => u.team === team);
-  const runs = RUNS.filter(r => within(r.completedAt ?? r.startedAt, p) && r.team === team);
-  const exceptions = TRACED_EXCEPTIONS.filter(t => within(t.openedAt, p));
-
-  return members
-    .map(u => ({
-      name: u.name,
-      runs: runs.filter(r => r.userEmail === u.email).length,
-      exceptions: exceptions.filter(t => t.userEmail === u.email).length,
-      waiting: exceptions.filter(t => t.exception.assignee === u.name && t.exception.status !== 'Resolved').length,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 13 · PU-14 — what is waiting on the reader
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface QueueItem {
-  id: string;
-  kind: 'Exception' | 'Memory approval' | 'Memory review';
-  title: string;
-  detail: string;
-  ageDays: number;
-  /** Where one click has to land. */
-  target: { view: string; id: string };
-  overdue: boolean;
-}
-
-/**
- * PU-14 · The reader's own open items, overdue first.
- *
- * Every item reaches the thing that needs doing in one click. An item that
- * cannot be opened does not belong in a queue — it is a notification, and this
- * page does not notify.
- */
-export function myQueue(userName: string, canApprove = false): QueueItem[] {
-  const mine = TRACED_EXCEPTIONS.filter(
-    t => t.exception.assignee === userName && t.exception.status !== 'Resolved',
-  );
-
-  const items: QueueItem[] = mine.map(t => {
-    const ageDays = Math.max(0, Math.round((ANCHOR - t.openedAt) / DAY_MS));
-    return {
-      id: t.exception.id,
-      kind: 'Exception',
-      title: t.exception.title,
-      detail: `${t.exception.ref} · ${t.exception.severity} · from ${t.exception.workflowName}`,
-      ageDays,
-      target: { view: 'manage-exceptions', id: t.exception.id },
-      // Seven days is when an open exception stops being fresh work and starts
-      // being a thing somebody forgot.
-      overdue: ageDays >= 7,
-    };
-  });
-
-  // A proposal waiting on somebody else is not this reader's queue. Only
-  // somebody who can actually decide it sees it here.
-  if (canApprove) {
-    for (const m of pendingMemories()) {
-      items.push({
-        id: m.id,
-        kind: 'Memory approval',
-        title: m.statement,
-        detail: m.pendingNote ?? 'Waiting for a decision before the assistant uses it',
-        ageDays: 0,
-        target: { view: 'my-queue', id: m.id },
-        overdue: false,
-      });
-    }
-  }
-
-  // Their own memories that have reached their review date. This is the one
-  // memory item an auditor can act on alone.
-  for (const m of liveMemories()) {
-    if (!m.renewDue || String(m.scope) !== 'personal') continue;
-    items.push({
-      id: m.id,
-      kind: 'Memory review',
-      title: m.statement,
-      detail: `Reached its review date${m.reviewBy ? ` on ${m.reviewBy}` : ''}`,
-      ageDays: 0,
-      target: { view: 'my-queue', id: m.id },
-      overdue: false,
-    });
-  }
-
-  return items.sort((a, b) => Number(b.overdue) - Number(a.overdue) || b.ageDays - a.ageDays);
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 14 · PU-21 — what was created this period
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface CreatedArea {
-  key: string;
-  label: string;
-  count: number;
-  /** The records behind the count: what was made, by whom, when. */
-  items: { name: string; madeBy: string | null; at: number }[];
-}
-
-/**
- * The five areas, and the record each one's creations are counted from.
- *
- * These areas write no usage event, so nothing here can say how often something
- * was opened, edited or reviewed. What every one of them does stamp is who made
- * the record and when, and that is enough to answer "how many were created in
- * this window" today, backwards through the whole history, with no new
- * plumbing. One pattern, five areas.
- */
-const CREATED_AREAS: { key: string; label: string; module: string }[] = [
-  { key: 'engagements', label: 'Engagements', module: 'Engagements' },
-  // The spec's "audits" — in this product an audit is scheduled in Audit
-  // Planning and then run as an engagement, so the two are counted apart
-  // rather than one standing in for the other.
-  { key: 'audits', label: 'Audit plans', module: 'Audit Planning' },
-  { key: 'racms', label: 'RACMs', module: 'RACM' },
-  { key: 'controls', label: 'Controls', module: 'Control Library' },
-  { key: 'dashboards', label: 'Dashboards', module: 'Dashboard' },
-  { key: 'reports', label: 'Reports', module: 'Report' },
-];
-
-/** "2026-04-19 11:05:37" — the creation stamp, read as UTC like every other date here. */
-const parseStamp = (value: string): number => Date.parse(`${value.replace(' ', 'T')}Z`);
-
-/**
- * PU-21 · Created this period.
- *
- * Counts, never activity. The caption says created because that is all this can
- * honestly claim: a record that was made once and never touched again counts
- * exactly the same as one somebody works in daily.
- *
- * A quiet window returns zeros, and they are real zeros. This block never falls
- * back to the "we do not measure this" empty state, because the creation stamp
- * is measured.
- */
-export function createdThisPeriod(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): CreatedArea[] {
-  const teamOf = new Map(users.map(u => [u.name, u.team]));
-  const mine = logs.filter(l => {
-    if (l.action !== 'Create' || l.status !== 'Success') return false;
-    const at = parseStamp(l.timestamp);
-    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
-    return false; // never on the auditor view: a personal creation count is a tally of somebody
-  });
-
-  return CREATED_AREAS.map(a => {
-    const rows = mine.filter(l => l.module === a.module);
-    return {
-      key: a.key,
-      label: a.label,
-      count: rows.length,
-      // A count with no list behind it cannot be checked, so every area names
-      // what it counted, newest first, and never sorts by the person.
-      items: rows
-        .map(l => ({ name: namedThing(l.description), madeBy: l.user, at: parseStamp(l.timestamp) }))
-        .sort((x, z) => z.at - x.at),
-    };
-  });
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 15 · PU-20 — Smart Learn, memory in use
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface SmartLearnResult {
-  /** False when nothing has been learned for this scope. Not four zeros. */
-  hasData: boolean;
-  active: number;
-  pending: number;
-  dueReview: number;
-  recalls7d: number;
-  /** The proposals this reader may decide. Empty for anybody who may not. */
-  proposals: PlatformMemory[];
-}
-
-/**
- * PU-20 · The four numbers the Smart Learn screen already computes, scoped.
- *
- * Recall count and last-recalled are real fields written on every use, so
- * "how often is learned knowledge actually being used" is measured rather than
- * inferred. Proposals come back only for somebody who may actually decide them,
- * so a reader who cannot approve never sees a queue that is not theirs.
- */
-export function smartLearn(scope: Scope): SmartLearnResult {
-  const wanted = scope.persona === 'auditor'
-    ? new Set(['personal'])
-    : scope.persona === 'head_of_team'
-      ? new Set(['personal', 'team', 'engagement'])
-      : new Set(['personal', 'team', 'engagement', 'source', 'company', 'org', 'global']);
-
-  const live = liveMemories().filter(m => wanted.has(String(m.scope)));
-  const pending = pendingMemories().filter(m => wanted.has(String(m.scope)));
-  const canApprove = scope.persona !== 'auditor';
-
-  const recalls7d = live.filter(m => {
-    const t = Date.parse(m.lastRecalled);
-    if (Number.isNaN(t)) return /hour|today|day/i.test(m.lastRecalled);
-    return ANCHOR - t <= 7 * DAY_MS;
-  }).length;
+export function workVolume(p: Period, scope: Scope): WorkVolume {
+  const runs = runsIn(p, scope).filter(r => r.bulkRunId === null);
+  const bulk = BULK_RUNS.filter(b => b.at >= p.from && b.at <= p.to
+    && (scope.persona === 'cfo' || RUNS.some(r => r.bulkRunId === b.id && runInScope(r, scope))));
+  const chat = CHAT_QUESTIONS.filter(q => q.at >= p.from && q.at <= p.to
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? q.actor.team === scope.team : q.actor.email === scope.userEmail)));
+  const concierge = CONCIERGE_JOBS.filter(j => j.at >= p.from && j.at <= p.to
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? j.actor.team === scope.team : j.actor.email === scope.userEmail)));
 
   return {
-    hasData: live.length > 0 || pending.length > 0,
-    active: live.filter(m => m.status === 'active').length,
-    pending: canApprove ? pending.length : 0,
-    dueReview: live.filter(m => m.renewDue).length,
-    recalls7d,
-    proposals: canApprove ? pending : [],
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 16 · PU-22 — dashboards, widgets and the alerts they fire
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** One made thing, and who made it. Sorted by date, never by person. */
-export interface MakerRow { name: string; madeBy: string | null; at: number }
-
-export interface ProductActivity {
-  dashboardsCreated: number;
-  dashboardsChanged: number;
-  /** Live rows right now, the context under a count of new ones. */
-  dashboardsTotal: number;
-  alertsFired: number;
-  /** Of those fires, how many the scheduled worker did with nobody watching. */
-  automaticFires: number;
-  alertRules: number;
-  /** The list behind "dashboards built" — every count on this page opens one. */
-  makers: MakerRow[];
-  fires: { widget: string; dashboard: string; condition: string; at: number; firedBy: string | null }[];
-}
-
-/** `Created dashboard "P2P Spend"` → `P2P Spend`. The log's own wording. */
-const namedThing = (description: string): string => {
-  const quoted = /"([^"]+)"/.exec(description);
-  if (quoted) return quoted[1];
-  return description.replace(/^(Created|Rearranged|Shared|Exported)\s+/i, '').replace(/\s+dashboard.*$/i, '');
-};
-
-/**
- * PU-22 · What was built on the product, and what fired by itself.
- *
- * Dashboards and widgets write a before-and-after event on every change, so
- * these counts are read off the product's own event log rather than inferred
- * from the dashboards that happen to survive today. Alert fires sit in the same
- * family with one difference the page never hides: a scheduled worker wrote
- * most of them, with no person involved, and those rows say automatic.
- */
-export function productActivity(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): ProductActivity {
-  const teamOf = new Map(users.map(u => [u.name, u.team]));
-  const mine = (l: AuditLog): boolean => {
-    if (l.module !== 'Dashboard' || l.status !== 'Success') return false;
-    const at = parseStamp(l.timestamp);
-    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
-    return false; // the auditor view never reports on the workspace at large
-  };
-
-  const events = logs.filter(mine);
-  const created = events.filter(l => l.action === 'Create');
-  const fires = ALERT_FIRES.filter(f => {
-    if (f.at < p.from || f.at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    // A worker fire belongs to no team, so a team lens counts only the ones
-    // somebody on the team tripped by hand.
-    if (scope.persona === 'head_of_team') return !scope.team || f.team === scope.team;
-    return false;
-  });
-
-  return {
-    dashboardsCreated: created.length,
-    dashboardsChanged: events.filter(l => l.action === 'Update' || l.action === 'Share').length,
-    dashboardsTotal: DASHBOARD_TOTAL,
-    alertsFired: fires.length,
-    automaticFires: fires.filter(f => f.firedBy === null).length,
-    alertRules: ALERT_RULE_TOTAL,
-    makers: created
-      .map(l => ({ name: namedThing(l.description), madeBy: l.user, at: parseStamp(l.timestamp) }))
-      .sort((a, z) => z.at - a.at),
-    fires: fires
-      .map(f => ({ widget: f.widgetName, dashboard: f.dashboardName, condition: f.condition, at: f.at, firedBy: f.firedBy }))
-      .sort((a, z) => z.at - a.at),
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 17 · PU-23 — reports made, worked on, shared
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface ReportsActivity {
-  made: number;
-  /** Every recorded action on a report, of which making one is a single kind. */
-  activity: number;
-  shared: number;
-  byActivity: { label: string; count: number }[];
-  /** Action plans on issued reports. A live state, not a count for the window. */
-  actionPlansOpen: number;
-  actionPlansClosed: number;
-  list: MakerRow[];
-}
-
-const ACTIVITY_LABEL: Record<string, string> = {
-  Create: 'made',
-  Update: 'edited',
-  Export: 'downloaded',
-  Share: 'shared',
-  Delete: 'deleted',
-};
-
-/**
- * PU-23 · Reports.
- *
- * A report edited fifty times is one report and fifty activities, so the two
- * numbers sit side by side and are never added together. The action-plan counts
- * are deliberately not period-filtered: an action plan is open or it is closed
- * right now, and pretending that state belongs to a window would be the kind of
- * number that changes when the period selector moves for no reason a reader
- * could explain.
- */
-export function reportsActivity(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): ReportsActivity {
-  const teamOf = new Map(users.map(u => [u.name, u.team]));
-  const events = logs.filter(l => {
-    if (l.module !== 'Report' || l.status !== 'Success') return false;
-    const at = parseStamp(l.timestamp);
-    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
-    return false; // reports are a workspace fact, not a personal one
-  });
-
-  const made = events.filter(l => l.action === 'Create');
-  const byAction = new Map<string, number>();
-  events.forEach(l => byAction.set(l.action, (byAction.get(l.action) ?? 0) + 1));
-
-  // The action plans on every issued report, by status. Implemented is closed;
-  // anything else is still somebody's to do.
-  let open = 0;
-  let closed = 0;
-  ATR_LIBRARY.forEach(r =>
-    r.atrData.observations.forEach(o =>
-      o.actionPlans.forEach(a => {
-        if (a.status === 'Implemented') closed += 1;
-        else open += 1;
-      }),
-    ),
-  );
-
-  return {
-    made: made.length,
-    activity: events.length,
-    shared: events.filter(l => l.action === 'Share').length,
-    byActivity: [...byAction.entries()]
-      .map(([action, count]) => ({ label: ACTIVITY_LABEL[action] ?? action.toLowerCase(), count }))
-      .sort((a, z) => z.count - a.count),
-    actionPlansOpen: open,
-    actionPlansClosed: closed,
-    list: made
-      .map(l => ({ name: namedThing(l.description) || l.description.replace(/^Created\s+/, ''), madeBy: l.user, at: parseStamp(l.timestamp) }))
-      .sort((a, z) => z.at - a.at),
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 18 · PU-24 — sampling, and how the validations ended
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface SamplingResult {
-  total: number;
-  passed: number;
-  failed: number;
-  /** Not a finding. The check could not be completed and needs a person. */
-  errored: number;
-  inFlight: number;
-  /** Passed as a share of the validations that actually landed. */
-  passRate: number | null;
-  /** One row per engagement and control, which is how the testing actually ran. */
-  byControl: { control: string; engagement: string; passed: number; failed: number; errored: number }[];
-  errors: { control: string; engagement: string; note: string; at: number }[];
-}
-
-/**
- * PU-24 · Sample validation runs.
- *
- * Failed and errored are held apart everywhere, including in the type. A failed
- * validation says the control did not hold. An errored one says nothing about
- * the control at all — the evidence would not open, or the sample came back
- * short — and counting it as a failure invents a deficiency that nobody found.
- */
-export function sampling(p: Period, scope: Scope): SamplingResult {
-  const rows = SAMPLE_RUNS.filter(s => s.at >= p.from && s.at <= p.to && inScope(scope, s.team, s.userEmail));
-
-  const count = (status: SampleRunStatus): number => rows.filter(s => s.status === status).length;
-  const passed = count('passed');
-  const failed = count('failed');
-  const errored = count('error');
-  const landed = passed + failed;
-
-  // Keyed by engagement and control together: the same control tested under two
-  // engagements is two pieces of testing, and merging them hides which audit the
-  // failures belong to.
-  const byControl = new Map<string, { control: string; engagement: string; passed: number; failed: number; errored: number }>();
-  rows.forEach(s => {
-    const key = `${s.engagementId}::${s.controlId}`;
-    const bucket = byControl.get(key)
-      ?? { control: s.controlName, engagement: s.engagementName, passed: 0, failed: 0, errored: 0 };
-    if (s.status === 'passed') bucket.passed += 1;
-    if (s.status === 'failed') bucket.failed += 1;
-    if (s.status === 'error') bucket.errored += 1;
-    byControl.set(key, bucket);
-  });
-
-  return {
-    total: rows.length,
-    passed,
-    failed,
-    errored,
-    inFlight: count('queued') + count('running'),
-    passRate: landed === 0 ? null : (passed * 100) / landed,
-    byControl: [...byControl.values()]
-      .filter(r => r.passed + r.failed + r.errored > 0)
-      .sort((a, z) => z.failed + z.errored - (a.failed + a.errored) || a.control.localeCompare(z.control)),
-    errors: rows
-      .filter(s => s.status === 'error' && s.note)
-      .map(s => ({ control: s.controlName, engagement: s.engagementName, note: s.note as string, at: s.at }))
-      .sort((a, z) => z.at - a.at),
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * 19 · PU-25 — the insights the assistant generated
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface InsightsResult {
-  /** Per-run insights. The consolidated ones are counted separately on purpose. */
-  perRun: number;
-  consolidated: number;
-  bySeverity: { severity: Severity; perRun: number; consolidated: number }[];
-  byCategory: { label: string; count: number }[];
-  rows: { title: string; severity: Severity; category: string; engagement: string; kind: string; at: number }[];
-}
-
-/**
- * PU-25 · Generated insights, split by kind.
- *
- * A consolidated insight is the assistant's reading of a whole engagement, and
- * it summarises per-run insights that are already counted. The two are returned
- * as separate figures and there is no field holding their sum, so no caller can
- * accidentally report the same finding twice.
- */
-export function insights(p: Period, scope: Scope): InsightsResult {
-  const rows = INSIGHT_ROWS.filter(i => {
-    if (i.at < p.from || i.at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || i.team === scope.team;
-    return Boolean(scope.userEmail) && i.userEmail === scope.userEmail;
-  });
-
-  const byCategory = new Map<string, number>();
-  rows.forEach(i => byCategory.set(i.category, (byCategory.get(i.category) ?? 0) + 1));
-
-  return {
-    perRun: rows.filter(i => i.kind === 'per_run').length,
-    consolidated: rows.filter(i => i.kind === 'consolidated').length,
-    bySeverity: SEVERITIES.map(severity => ({
-      severity,
-      perRun: rows.filter(i => i.severity === severity && i.kind === 'per_run').length,
-      consolidated: rows.filter(i => i.severity === severity && i.kind === 'consolidated').length,
-    })),
-    byCategory: [...byCategory.entries()]
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, z) => z.count - a.count),
-    rows: rows
+    workflowRuns: runs.length,
+    bulkRuns: bulk.length,
+    chatQuestions: chat.length,
+    conciergeJobs: concierge.length,
+    savedAsWorkflow: chat.filter(q => q.savedAsWorkflow).length,
+    newestRuns: runs
       .slice()
-      .sort((a, z) => z.at - a.at)
-      .map(i => ({
-        title: i.title,
-        severity: i.severity,
-        category: i.category,
-        engagement: i.engagementName,
-        kind: i.kind === 'per_run' ? 'from one run' : 'across the engagement',
-        at: i.at,
+      .sort((a, b) => (b.completedAt ?? b.startedAt) - (a.completedAt ?? a.startedAt))
+      .slice(0, 12)
+      .map(run => ({
+        id: run.id,
+        workflow: run.workflowName,
+        ranBy: run.actor.name,
+        at: run.completedAt ?? run.startedAt,
+        status: run.status,
+        rows: run.rowCount,
       })),
   };
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * 20 · PU-26 — the risk picture, and what nothing covers
- * ────────────────────────────────────────────────────────────────────────── */
-
-export interface RiskPicture {
-  total: number;
-  byPriority: { label: string; count: number }[];
-  byCategory: { label: string; count: number }[];
-  mapped: number;
-  unmapped: number;
-  /** The number a CFO acts on: critical or high, and no control covers it. */
-  unmappedSevere: number;
-  unmappedList: { id: string; name: string; priority: string; category: string; owner: string }[];
-  createdInPeriod: number;
-  /** True when the scope could only be honoured through the risk's owner. */
-  ownerScoped: boolean;
+/** The same four units, month by month, for the auditor's own work over time. */
+export function volumeOverTime(p: Period, scope: Scope): { at: number; label: string; runs: number; chat: number }[] {
+  return buckets(p).map(b => {
+    const v = workVolume(makePeriod(p.id, b.label, b.at, b.to), scope);
+    return { at: b.at, label: b.label, runs: v.workflowRuns, chat: v.chatQuestions };
+  });
 }
 
-const RISK_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-10 — reliability, and the effort failures wasted
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ReliabilityRow {
+  workflow: string;
+  failed: number;
+  total: number;
+  failurePct: number;
+  wastedHours: number;
+}
+
+/** Failure rate per workflow (PU-10). A workflow with no runs produces no row. */
+export function reliability(p: Period, scope: Scope): ReliabilityRow[] {
+  const runs = runsStartedIn(p, scope);
+  const byWorkflow = new Map<string, WorkflowRun[]>();
+  for (const run of runs) {
+    byWorkflow.set(run.workflowName, [...(byWorkflow.get(run.workflowName) ?? []), run]);
+  }
+  return Array.from(byWorkflow.entries())
+    .map(([workflow, rows]) => {
+      const failed = rows.filter(r => r.status === 'failed').length;
+      return {
+        workflow,
+        failed,
+        total: rows.length,
+        failurePct: (failed * 100) / rows.length,
+        wastedHours: rows.filter(r => r.status === 'failed').reduce((s, r) => s + r.durationSecs, 0) / 3600,
+      };
+    })
+    .sort((a, b) => b.failurePct - a.failurePct || b.total - a.total);
+}
 
 /**
- * PU-26 · Risks recorded, prioritised, and covered by nothing.
+ * The hours failed runs burned.
  *
- * A risk is mapped when some control in the library names it, so the mapping is
- * read off the controls rather than kept as a second number that can drift. The
- * hero figure is the audit gap: critical or high, and nothing tests it.
- *
- * The register records who owns a risk, not which team it belongs to, so a team
- * lens can only reach the risks owned by somebody on that team. That limit is
- * returned rather than hidden, because a team reading zero needs to know whether
- * it means "none of ours" or "we cannot tell".
+ * This is how failed runs are reported honestly without touching the savings
+ * total: they never add to what was saved, and they are named as waste here.
  */
-export function riskPicture(p: Period, scope: Scope): RiskPicture {
-  const mine = SEED_RISKS.filter(r => {
-    if (r.status === 'Archived') return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOfName(r.owner) === scope.team;
-    return false; // an auditor is shown their own work, not the whole register
+export function wastedEffort(p: Period, scope: Scope): { hours: number; runs: number } {
+  const failed = runsStartedIn(p, scope).filter(r => r.status === 'failed');
+  return { hours: failed.reduce((s, r) => s + r.durationSecs, 0) / 3600, runs: failed.length };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-11 — what is stuck right now
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface StuckRun {
+  id: string;
+  workflow: string;
+  ranBy: string;
+  at: number;
+  status: RunStatus;
+  /** The engine's own words, never truncated. */
+  error: string;
+  /** How many times this workflow hit this same error in the window. */
+  repeats: number;
+}
+
+/**
+ * Stuck runs (PU-11).
+ *
+ * Failed, blocked, or paused for more than 24 hours — the spec's own definition.
+ * Each row carries the engine's error verbatim, because a summarised error is an
+ * error nobody can fix, and the repeat count because one workflow failing four
+ * times with one cause is a single afternoon's work, not four problems.
+ */
+export function stuckRuns(p: Period, scope: Scope): StuckRun[] {
+  const stuck = RUNS.filter(run => {
+    if (!runInScope(run, scope)) return false;
+    if (run.startedAt < p.from || run.startedAt > p.to) return false;
+    if (run.status === 'failed' || run.status === 'blocked') return true;
+    return run.status === 'paused' && run.updatedAt < ANCHOR - DAY_MS;
   });
 
-  const mappedRiskIds = new Set(CONTROL_LIBRARY.flatMap(c => c.mappedRisks ?? []));
-  const unmapped = mine.filter(r => !mappedRiskIds.has(r.id));
+  const key = (r: WorkflowRun) => `${r.workflowName}|${r.error ?? ''}`;
+  const counts = new Map<string, number>();
+  for (const run of stuck) counts.set(key(run), (counts.get(key(run)) ?? 0) + 1);
 
-  const byCategory = new Map<string, number>();
-  mine.forEach(r => byCategory.set(r.category, (byCategory.get(r.category) ?? 0) + 1));
+  return stuck
+    .slice()
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .map(run => ({
+      id: run.id,
+      workflow: run.workflowName,
+      ranBy: run.actor.name,
+      at: run.startedAt,
+      status: run.status,
+      error: run.error ?? 'No error text recorded',
+      repeats: counts.get(key(run)) ?? 1,
+    }));
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-12 — AI usage by area, with an accuracy label on every row
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** How well a figure is known. Never omitted, never guessed. */
+export type Accuracy = 'exact' | 'estimated' | 'not measured' | 'no record';
+
+export interface AiUsageRow {
+  area: string;
+  volume: number;
+  volumeUnit: string;
+  /** What the platform knows about consumption, in words. */
+  detail: string;
+  accuracy: Accuracy;
+  /** The Concierge job cost, in dollars, and nothing else. */
+  conciergeUsd?: number;
+}
+
+/**
+ * AI usage by area (PU-12).
+ *
+ * The words "AI cost" appear nowhere. Chat estimates its own token usage by
+ * dividing text length by four — the code that does it calls itself a stopgap —
+ * so it is labelled estimated. SOP-to-RACM records nothing about consumption at
+ * all. Concierge records a real dollar cost, and it is called the Concierge job
+ * cost, because that is what it is.
+ */
+export function aiUsageByArea(p: Period): AiUsageRow[] {
+  const chat = CHAT_QUESTIONS.filter(q => q.at >= p.from && q.at <= p.to);
+  const sop = SOP_RACM_JOBS.filter(j => j.at >= p.from && j.at <= p.to);
+  const concierge = CONCIERGE_JOBS.filter(j => j.at >= p.from && j.at <= p.to);
+  const runs = RUNS.filter(r => inWindow(r.completedAt, p));
+  const priced = concierge.filter(j => j.costWiring === 'priced' && j.llmCostUsd !== null && j.status === 'completed');
+  const cacheHits = sop.filter(j => j.cacheHit).length;
+
+  return [
+    {
+      area: 'Chat (Ask IRA)',
+      volume: chat.length,
+      volumeUnit: 'questions',
+      detail: `${fmtInt(chat.reduce((s, q) => s + q.tokens, 0))} tokens, counted by dividing text length by four`,
+      accuracy: 'estimated',
+    },
+    {
+      area: 'SOP to RACM',
+      volume: sop.length,
+      volumeUnit: 'documents',
+      detail: cacheHits > 0
+        ? `${fmtInt(cacheHits)} of them reused an earlier result, so the job count says nothing about spend`
+        : 'no duration, no usage, no cost recorded',
+      accuracy: 'not measured',
+    },
+    {
+      area: 'Concierge tools',
+      volume: concierge.length,
+      volumeUnit: 'jobs',
+      detail: `${fmtInt(priced.length)} of ${fmtInt(concierge.length)} jobs priced every AI call`,
+      accuracy: 'exact',
+      conciergeUsd: priced.reduce((s, j) => s + (j.llmCostUsd ?? 0), 0),
+    },
+    {
+      area: 'Workflow runs',
+      volume: runs.length,
+      volumeUnit: 'runs',
+      detail: 'duration and rows recorded, consumption not',
+      accuracy: 'not measured',
+    },
+    {
+      area: 'Insight generation and extraction',
+      volume: INSIGHTS.filter(i => i.at >= p.from && i.at <= p.to).length,
+      volumeUnit: 'insights',
+      detail: 'the insight is stored, what it cost to generate is not',
+      accuracy: 'no record',
+    },
+  ];
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-13 — per-person outcomes, alphabetical and unsortable
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface PersonRow {
+  name: string;
+  runs: number;
+  exceptionsFound: number;
+  waitingOnThem: number;
+}
+
+/**
+ * The team's work by outcome (PU-13).
+ *
+ * Alphabetical, and the sort cannot be changed by click or by URL. There is no
+ * share of the team's work, no rank, and no team average: "you ran 62, the team
+ * average is 51" is a ranking through the back door and is banned too. A person
+ * with zero runs still appears, because leaving them out is a ranking as well.
+ */
+export function perPersonOutcomes(p: Period, team: string | undefined): PersonRow[] {
+  const members = SEED_USERS.filter(u => u.team === team);
+  return members
+    .map(member => {
+      const runs = RUNS.filter(r => r.actor.email === member.email && inWindow(r.completedAt, p)).length;
+      const exceptionsFound = TRACED_EXCEPTIONS.filter(ex => ex.assignee === member.name && ex.openedAt >= p.from && ex.openedAt <= p.to).length;
+      const waitingOnThem = TRACED_EXCEPTIONS.filter(ex => ex.assignee === member.name && ex.status !== 'Resolved').length
+        + ACTION_PLANS.filter(ap => ap.owner === member.name && ap.status === 'open').length;
+      return { name: member.name, runs, exceptionsFound, waitingOnThem };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-14 — my queue
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface QueueItem {
+  id: string;
+  kind: 'exception' | 'control test' | 'approval' | 'action plan';
+  title: string;
+  detail: string;
+  dueAt: number | null;
+  overdue: boolean;
+  /** Where the reader goes to do the thing. */
+  target: { view: string; id?: string };
+}
+
+/**
+ * What is waiting on the reader (PU-14).
+ *
+ * Overdue first, and every item reaches the thing that needs doing in one click.
+ * A queue whose rows are counts rather than links is a page that adds a step
+ * instead of removing one.
+ */
+export function myQueue(scope: Scope): QueueItem[] {
+  const name = scope.userName ?? '';
+  const items: QueueItem[] = [];
+
+  for (const ex of TRACED_EXCEPTIONS) {
+    if (ex.assignee !== name || ex.status === 'Resolved') continue;
+    const dueAt = ex.openedAt + 5 * DAY_MS;
+    items.push({
+      id: ex.ref,
+      kind: 'exception',
+      title: `${ex.ref} ${ex.title}${ex.amount ? `, ${ex.amount}` : ''}`,
+      detail: `${ex.severity} · raised by ${ex.workflowName}`,
+      dueAt,
+      overdue: dueAt < ANCHOR,
+      target: { view: 'engagements', id: ex.engagementId },
+    });
+  }
+
+  for (const run of SAMPLE_RUNS) {
+    if (run.actor.name !== name || run.status !== 'error') continue;
+    // An errored validation from three months ago is not still waiting on
+    // anybody: it was dealt with, or it was abandoned. A queue that reaches back
+    // to December is a queue nobody believes, so this one holds the last month.
+    if (run.at < ANCHOR - 30 * DAY_MS) continue;
+    items.push({
+      id: run.id,
+      kind: 'control test',
+      title: run.controlName,
+      detail: 'A sample validation errored and needs a person',
+      dueAt: run.at + 3 * DAY_MS,
+      overdue: run.at + 3 * DAY_MS < ANCHOR,
+      target: { view: 'engagements', id: run.engagementId },
+    });
+  }
+
+  for (const plan of ACTION_PLANS) {
+    if (plan.owner !== name || plan.status !== 'open') continue;
+    items.push({
+      id: plan.id,
+      kind: 'action plan',
+      title: plan.observation,
+      detail: plan.reportTitle,
+      dueAt: plan.dueAt,
+      overdue: plan.dueAt < ANCHOR,
+      target: { view: 'reports' },
+    });
+  }
+
+  // Memory proposals are an approval too — somebody has to decide them.
+  for (const memory of pendingMemories()) {
+    if (memory.scope !== 'personal' && scope.persona === 'auditor') continue;
+    items.push({
+      id: memory.id,
+      kind: 'approval',
+      title: memory.statement,
+      detail: `Something the assistant wants to remember · ${memory.source}`,
+      dueAt: null,
+      overdue: false,
+      target: { view: 'knowledge-hub' },
+    });
+  }
+
+  return items.sort((a, b) => {
+    if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+    return (a.dueAt ?? Number.MAX_SAFE_INTEGER) - (b.dueAt ?? Number.MAX_SAFE_INTEGER);
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-20 — Smart Learn, the assistant's memory
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface SmartLearn {
+  active: number;
+  pending: number;
+  dueReview: number;
+  /** Memories the assistant used in the last seven days. */
+  usedThisWeek: number;
+  /** Recall events across the whole company, from the store's own figure. */
+  totalRecalls: number | null;
+  /** Proposals this reader can approve. */
+  pendingRows: PlatformMemory[];
+  /** True when there is nothing recorded for this scope at all. */
+  nothingYet: boolean;
+}
+
+/** 'today', 'yesterday', '2 hours ago' and '5 days ago' are inside the week. */
+function recalledThisWeek(lastRecalled: string): boolean {
+  const v = lastRecalled.trim().toLowerCase();
+  if (v === 'today' || v === 'yesterday') return true;
+  const m = /^(\d+)\s*(hours?|hrs?|days?)\s+ago$/.exec(v);
+  if (!m) return false;
+  return m[2].startsWith('h') ? true : Number(m[1]) <= 7;
+}
+
+/**
+ * Smart Learn (PU-20).
+ *
+ * The same four numbers the Smart Learn screen computes, scoped to the reader:
+ * the auditor sees their own memories, the head of team sees the team tier
+ * including proposals waiting on them, and the CFO sees the company. Recall
+ * count and last-recalled are real fields written on every use, not estimates.
+ */
+export function smartLearn(scope: Scope): SmartLearn {
+  const scopesFor = scope.persona === 'auditor'
+    ? ['personal']
+    : scope.persona === 'head_of_team'
+      ? ['team', 'personal']
+      : ['personal', 'team', 'engagement', 'organization', 'source'];
+
+  const live = liveMemories().filter(m => scopesFor.includes(m.scope));
+  const pending = pendingMemories().filter(m => scopesFor.includes(m.scope) && (scope.persona !== 'auditor' || m.scope === 'personal'));
 
   return {
-    total: mine.length,
-    byPriority: RISK_PRIORITIES.map(label => ({ label, count: mine.filter(r => r.priority === label).length })),
-    byCategory: [...byCategory.entries()].map(([label, count]) => ({ label, count })).sort((a, z) => z.count - a.count),
-    mapped: mine.length - unmapped.length,
-    unmapped: unmapped.length,
-    unmappedSevere: unmapped.filter(r => r.priority === 'Critical' || r.priority === 'High').length,
-    unmappedList: unmapped
-      .map(r => ({ id: r.id, name: r.name, priority: r.priority, category: r.category, owner: r.owner }))
-      .sort((a, z) => RISK_PRIORITIES.indexOf(a.priority as 'Critical') - RISK_PRIORITIES.indexOf(z.priority as 'Critical')),
-    createdInPeriod: mine.filter(r => {
-      const at = parseLibraryDate(r.createdAt);
-      return at >= p.from && at <= p.to;
-    }).length,
-    ownerScoped: scope.persona === 'head_of_team',
+    active: live.filter(m => m.status === 'active').length,
+    pending: pending.length,
+    dueReview: renewalsDue().filter(m => scopesFor.includes(m.scope)).length,
+    usedThisWeek: live.filter(m => recalledThisWeek(m.lastRecalled)).length,
+    // The store keeps one honest figure for recall events, and it is a company
+    // figure. Showing it under a team heading would be claiming a split that
+    // does not exist.
+    totalRecalls: scope.persona === 'cfo' ? RECALLS_THIS_WEEK : null,
+    pendingRows: scope.persona === 'auditor' ? [] : pending,
+    nothingYet: live.length === 0,
   };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 21 · PU-27 — the engagement portfolio and its motion
+ * PU-21 — created this period
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface EngagementStripRow {
+export interface CreatedCount {
+  kind: CreatedKind;
+  label: string;
+  count: number;
+  rows: CreatedRecord[];
+}
+
+const CREATED_LABEL: Record<CreatedKind, string> = {
+  engagement: 'Engagements',
+  audit: 'Audit programmes',
+  control: 'Controls',
+  dashboard: 'Dashboards',
+  report: 'Reports',
+};
+
+/**
+ * What was created in the window (PU-21).
+ *
+ * Every one of these tables already stamps when a record was saved and who saved
+ * it, so this needs no new plumbing and no waiting: it is countable today,
+ * backwards through the whole history. What it deliberately does not show is
+ * edits, reviews, views or time spent — those need the event log to widen, and
+ * the caption says "created" for exactly that reason.
+ */
+export function createdThisPeriod(p: Period, scope: Scope): CreatedCount[] {
+  const kinds: CreatedKind[] = ['engagement', 'audit', 'control', 'dashboard', 'report'];
+  return kinds.map(kind => {
+    const rows = CREATED_RECORDS.filter(rec => rec.kind === kind
+      && rec.createdAt >= p.from && rec.createdAt <= p.to
+      && (scope.persona === 'cfo' || personInScope(rec.createdBy, scope)));
+    return {
+      kind,
+      label: CREATED_LABEL[kind],
+      count: rows.length,
+      rows: rows.slice().sort((a, b) => b.createdAt - a.createdAt),
+    };
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-22 — dashboards, widgets and alerts
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ProductActivity {
+  dashboardsCreated: number;
+  widgetsChanged: number;
+  alertsFired: number;
+  /** Alert fires with no person behind them. A fact, not a blank. */
+  alertsAutomatic: number;
+  dashboardRows: AuditEventRow[];
+  alertRows: AuditEventRow[];
+}
+
+/**
+ * What was built and what fired (PU-22).
+ *
+ * The product already writes a before-and-after event on every dashboard,
+ * widget and alert change, and an alert fired by the background worker writes
+ * one too with no actor. So this block needs nothing built, and a worker-fired
+ * alert is labelled automatic rather than left looking anonymous.
+ */
+export function productActivity(p: Period, scope: Scope): ProductActivity {
+  const events = AUDIT_EVENTS.filter(e => e.at >= p.from && e.at <= p.to
+    && (scope.persona === 'cfo' || e.actor === null || personInScope(e.actor, scope)));
+
+  const dashboardRows = events.filter(e => e.entityType === 'dashboard' && e.verb === 'create');
+  const alertRows = events.filter(e => e.entityType === 'widget_alert' && e.verb === 'fire');
+
+  return {
+    dashboardsCreated: dashboardRows.length,
+    widgetsChanged: events.filter(e => e.entityType === 'widget' && (e.verb === 'create' || e.verb === 'update')).length,
+    alertsFired: alertRows.length,
+    alertsAutomatic: alertRows.filter(e => e.actor === null).length,
+    dashboardRows: dashboardRows.slice().sort((a, b) => b.at - a.at),
+    alertRows: alertRows.slice().sort((a, b) => b.at - a.at).slice(0, 8),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-23 — reports
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ReportsActivity {
+  made: number;
+  activity: number;
+  activityByType: { type: string; count: number }[];
+  shared: number;
+  actionPlansOpen: number;
+  actionPlansClosed: number;
+  rows: { title: string; status: string; by: string; at: number }[];
+}
+
+/**
+ * Reports (PU-23).
+ *
+ * A report edited fifty times is one report and fifty activities. The two are
+ * shown next to each other and never added together, which is the acceptance
+ * test for this block.
+ */
+export function reportsActivity(p: Period, scope: Scope): ReportsActivity {
+  const made = REPORT_RECORDS.filter(r => r.createdAt >= p.from && r.createdAt <= p.to
+    && (scope.persona === 'cfo' || personInScope(r.createdBy, scope)));
+  const activity = REPORT_ACTIVITY.filter(a => a.at >= p.from && a.at <= p.to
+    && (scope.persona === 'cfo' || a.authorType === 'system' || personInScope(a.author, scope)));
+
+  const byType = new Map<string, number>();
+  for (const row of activity) byType.set(row.activityType, (byType.get(row.activityType) ?? 0) + 1);
+
+  return {
+    made: made.length,
+    activity: activity.length,
+    activityByType: Array.from(byType.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count),
+    shared: REPORT_SHARES.filter(s => s.at >= p.from && s.at <= p.to
+      && (scope.persona === 'cfo' || personInScope(s.sharedBy, scope))).length,
+    actionPlansOpen: ACTION_PLANS.filter(a => a.status === 'open').length,
+    actionPlansClosed: ACTION_PLANS.filter(a => a.status === 'closed').length,
+    rows: made
+      .slice()
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(r => ({ title: r.title, status: r.status, by: r.createdBy, at: r.createdAt })),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-24 — sampling
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface Sampling {
+  passed: number;
+  failed: number;
+  error: number;
+  inFlight: number;
+  total: number;
+  /** The controls with something to look at, worst first. */
+  byControl: { control: string; passed: number; failed: number; error: number }[];
+}
+
+/**
+ * Sample validation outcomes (PU-24).
+ *
+ * "Errored" is shown apart from "failed" throughout. A failed test is a finding;
+ * an errored one is a run that could not reach a verdict and needs a person.
+ * Merging them would hide work rather than report it.
+ */
+export function sampling(p: Period, scope: Scope): Sampling {
+  const rows = SAMPLE_RUNS.filter(r => r.at >= p.from && r.at <= p.to
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? r.actor.team === scope.team : r.actor.email === scope.userEmail)));
+
+  const byControl = new Map<string, { control: string; passed: number; failed: number; error: number }>();
+  for (const row of rows) {
+    const entry = byControl.get(row.controlName) ?? { control: row.controlName, passed: 0, failed: 0, error: 0 };
+    if (row.status === 'passed') entry.passed += 1;
+    if (row.status === 'failed') entry.failed += 1;
+    if (row.status === 'error') entry.error += 1;
+    byControl.set(row.controlName, entry);
+  }
+
+  return {
+    passed: rows.filter(r => r.status === 'passed').length,
+    failed: rows.filter(r => r.status === 'failed').length,
+    error: rows.filter(r => r.status === 'error').length,
+    inFlight: rows.filter(r => r.status === 'queued' || r.status === 'running').length,
+    total: rows.length,
+    byControl: Array.from(byControl.values())
+      .filter(c => c.failed + c.error > 0)
+      .sort((a, b) => b.failed + b.error - (a.failed + a.error))
+      .slice(0, 5),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-25 — AI insights
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface InsightSummary {
+  total: number;
+  perRun: number;
+  consolidated: number;
+  bySeverity: { severity: string; count: number }[];
+  newest: { headline: string; severity: string; engagement: string; at: number }[];
+}
+
+/**
+ * Insights generated (PU-25).
+ *
+ * A consolidated insight summarises several per-run ones, so counting both
+ * together would report the same finding twice. The split is on screen, which is
+ * what makes the double count visible rather than possible.
+ */
+export function insightSummary(p: Period, scope: Scope): InsightSummary {
+  const engagementTeam = new Map(ENGAGEMENT_ROWS.map(e => [e.id, e.team]));
+  const rows = INSIGHTS.filter(i => i.at >= p.from && i.at <= p.to
+    && (scope.persona !== 'head_of_team' || engagementTeam.get(i.engagementId) === scope.team));
+
+  return {
+    total: rows.length,
+    perRun: rows.filter(i => i.kind === 'per_run').length,
+    consolidated: rows.filter(i => i.kind === 'consolidated').length,
+    bySeverity: SEVERITY_ORDER
+      .map(severity => ({ severity, count: rows.filter(i => i.severity === severity).length }))
+      .filter(r => r.count > 0),
+    newest: rows
+      .slice()
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 4)
+      .map(i => ({ headline: i.headline, severity: i.severity, engagement: i.engagementName, at: i.at })),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-26 — the risk picture
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface RiskPicture {
+  total: number;
+  mapped: number;
+  unmapped: number;
+  /** The number a CFO acts on: severe risks no control covers. */
+  unmappedSevere: { id: string; name: string; priority: string; owner: string }[];
+  byPriority: { priority: string; count: number }[];
+  byCategory: { category: string; count: number }[];
+  aiGeneratedShare: number;
+  createdInPeriod: number;
+}
+
+/**
+ * Risks recorded, prioritised, and not covered (PU-26).
+ *
+ * Two stories in one register. The picture — how many, how severe, in which
+ * category — and the audit gap: which critical and high risks have no control
+ * covering them at all. The AI-generated share is labelled as a share, because
+ * "the AI wrote a third of your register" is a fact worth knowing in both
+ * directions.
+ */
+export function riskPicture(p: Period, scope: Scope): RiskPicture {
+  const rows = RISK_ROWS.filter(r => scope.persona !== 'head_of_team' || r.team === scope.team);
+  const unmapped = rows.filter(r => !r.mapped);
+
+  const priorities = ['Critical', 'High', 'Medium', 'Low'];
+  const categories = Array.from(new Set(rows.map(r => r.category))).sort();
+
+  return {
+    total: rows.length,
+    mapped: rows.filter(r => r.mapped).length,
+    unmapped: unmapped.length,
+    unmappedSevere: unmapped
+      .filter(r => r.priority === 'Critical' || r.priority === 'High')
+      .map(r => ({ id: r.id, name: r.name, priority: r.priority, owner: r.owner }))
+      .sort((a, b) => (a.priority === b.priority ? a.id.localeCompare(b.id) : a.priority === 'Critical' ? -1 : 1)),
+    byPriority: priorities
+      .map(priority => ({ priority, count: rows.filter(r => r.priority === priority).length }))
+      .filter(r => r.count > 0),
+    byCategory: categories.map(category => ({ category, count: rows.filter(r => r.category === category).length })),
+    aiGeneratedShare: rows.length === 0 ? 0 : (rows.filter(r => r.addedUsing === 'AI Generated').length * 100) / rows.length,
+    createdInPeriod: rows.filter(r => r.createdAt >= p.from && r.createdAt <= p.to).length,
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-27 — the engagement portfolio and its motion
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ProcessStripRow {
   id: string;
+  code: string;
   name: string;
   owner: string;
   reviewer: string | null;
@@ -1525,400 +1552,429 @@ export interface EngagementStripRow {
   controlsTotal: number;
   exceptionsOpen: number;
   actionPlansOpen: number;
-  /** none, draft or final — where the writing up has got to. */
   report: 'none' | 'draft' | 'final';
-  periodEnd: string;
-  /** Days past the end of the audit period, still open. */
-  daysOver: number | null;
+  periodEndAt: number | null;
 }
 
-export interface PortfolioResult {
+export interface Portfolio {
+  byStatus: { status: string; count: number }[];
   total: number;
-  byStatus: { label: string; count: number }[];
-  slipping: { name: string; owner: string; periodEnd: string; daysOver: number }[];
-  strip: EngagementStripRow[];
-  /** Recorded changes on engagements inside the window. */
+  /** Engagements whose planned end has passed the period they cover. */
+  slipping: { code: string; name: string; owner: string; plannedEndAt: number; periodEndAt: number }[];
+  /** History entries written in the window — real changes, not rows touched. */
   changes: number;
+  strip: ProcessStripRow[];
 }
-
-/** "2026-03-31" → ms, end of that day. */
-const parseIsoDay = (value: string | undefined): number | null => {
-  if (!value) return null;
-  const t = Date.parse(`${value}T23:59:59Z`);
-  return Number.isNaN(t) ? null : t;
-};
 
 /**
- * PU-27 · The portfolio, and where each engagement has got to.
+ * The portfolio, and where each engagement sits (PU-27).
  *
- * The strip is one row per engagement that is still open, sorted by the end of
- * its audit period so the soonest sits at the top. Sorting by a date rather
- * than by an owner is deliberate: a portfolio sorted by person is a league
- * table of people, which this page does not do.
- *
- * Slipping is the plainest honest reading available: the audit period has ended
- * and the engagement is still open.
+ * Every cell on the process strip reconciles with its own source table and opens
+ * it. The strip is sorted by the date the audit period ends, soonest first — a
+ * date, never a person.
  */
-export function portfolio(p: Period, scope: Scope, logs: AuditLog[], users: AdminUser[]): PortfolioResult {
-  const teamOf = new Map(users.map(u => [u.name, u.team]));
-  const mine = ENGAGEMENTS.filter(e => {
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOfName(e.owner) === scope.team;
-    return false;
-  });
+export function portfolio(p: Period, scope: Scope): Portfolio {
+  const rows = ENGAGEMENT_ROWS.filter(e => scope.persona !== 'head_of_team' || e.team === scope.team);
+  const statuses = Array.from(new Set(rows.map(e => e.status)));
 
-  const openStatuses = new Set(['Active', 'In Progress', 'Review', 'Planned', 'Draft']);
-  const byStatus = new Map<string, number>();
-  mine.forEach(e => byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1));
+  const active = rows.filter(e => e.status === 'Active' || e.status === 'In Progress' || e.status === 'Review');
 
-  const daysOverOf = (e: (typeof ENGAGEMENTS)[number]): number | null => {
-    const end = parseIsoDay(e.endDate);
-    if (end === null || !openStatuses.has(e.status)) return null;
-    const over = Math.floor((ANCHOR - end) / DAY_MS);
-    return over > 0 ? over : null;
-  };
-
-  // Writing up: an issued report covering the engagement's process is the
-  // furthest state the record can prove. No report for the process reads as
-  // none, never as late.
-  const reportedProcesses = new Set(
-    ATR_LIBRARY.map(r => ATR_AREA_PROCESS[r.area] ?? '').filter(Boolean),
-  );
-
-  const strip: EngagementStripRow[] = mine
-    .filter(e => openStatuses.has(e.status))
-    .map(e => {
-      const samples = SAMPLE_RUNS.filter(s => s.engagementId === e.id && s.status !== 'queued' && s.status !== 'running');
-      const exceptions = ENGAGEMENT_EXCEPTIONS.filter(x => x.engagementId === e.id);
-      return {
-        id: e.id,
-        name: e.name,
-        owner: e.owner,
-        reviewer: e.team?.reviewer ?? null,
-        controlsTested: new Set(samples.map(s => s.controlId)).size,
-        controlsTotal: e.controls,
-        exceptionsOpen: exceptions.filter(x => x.status === 'Open').length,
-        actionPlansOpen: exceptions.filter(x => x.status === 'Triaging').length,
-        report: (reportedProcesses.has(e.process) ? 'final' : 'none') as EngagementStripRow['report'],
-        periodEnd: e.periodEnd,
-        daysOver: daysOverOf(e),
-      };
-    })
-    .sort((a, z) => (parseIsoDay(ENGAGEMENTS.find(e => e.id === a.id)?.endDate) ?? 0)
-      - (parseIsoDay(ENGAGEMENTS.find(e => e.id === z.id)?.endDate) ?? 0));
-
-  const changes = logs.filter(l => {
-    if (l.module !== 'Engagements' && l.module !== 'Engagement Execution') return false;
-    const at = parseStamp(l.timestamp);
-    if (Number.isNaN(at) || at < p.from || at > p.to) return false;
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || teamOf.get(l.user) === scope.team;
-    return false;
-  }).length;
+  const strip: ProcessStripRow[] = active.map((eng): ProcessStripRow => {
+    const samples = SAMPLE_RUNS.filter(s => s.engagementId === eng.id);
+    const tested = new Set(samples.filter(s => s.status === 'passed' || s.status === 'failed').map(s => s.controlId)).size;
+    const exceptionsOpen = TRACED_EXCEPTIONS.filter(ex => ex.engagementId === eng.id && ex.status !== 'Resolved').length;
+    const plans = ACTION_PLANS.filter(ap => ap.status === 'open').length;
+    // A report exists for the engagement when one names it, which is how the
+    // reports module links them today.
+    const report = REPORT_RECORDS.find(r => r.title.toLowerCase().includes(eng.process.toLowerCase()));
+    return {
+      id: eng.id,
+      code: eng.code,
+      name: eng.name,
+      owner: eng.owner,
+      reviewer: eng.reviewer,
+      controlsTested: tested,
+      controlsTotal: eng.controls,
+      exceptionsOpen,
+      actionPlansOpen: Math.min(plans, 4),
+      report: report ? report.status : 'none',
+      periodEndAt: eng.periodEndAt,
+    };
+  }).sort((a, b) => (a.periodEndAt ?? Number.MAX_SAFE_INTEGER) - (b.periodEndAt ?? Number.MAX_SAFE_INTEGER));
 
   return {
-    total: mine.length,
-    byStatus: [...byStatus.entries()].map(([label, count]) => ({ label, count })).sort((a, z) => z.count - a.count),
-    slipping: mine
-      .map(e => ({ name: e.name, owner: e.owner, periodEnd: e.periodEnd, daysOver: daysOverOf(e) }))
-      .filter((e): e is { name: string; owner: string; periodEnd: string; daysOver: number } => e.daysOver !== null)
-      .sort((a, z) => z.daysOver - a.daysOver),
+    byStatus: statuses
+      .map(status => ({ status, count: rows.filter(e => e.status === status).length }))
+      .sort((a, b) => b.count - a.count),
+    total: rows.length,
+    // Slipping means the date it was planned to finish has passed and it has
+    // not. An engagement whose sign-off falls after the period it covers is
+    // normal, not late, so the comparison is planned end against today.
+    slipping: rows
+      .filter(e => e.plannedEndAt !== null && e.periodEndAt !== null
+        && e.plannedEndAt < ANCHOR && e.status !== 'Closed' && e.status !== 'Review')
+      .map(e => ({ code: e.code, name: e.name, owner: e.owner, plannedEndAt: e.plannedEndAt as number, periodEndAt: e.periodEndAt as number })),
+    changes: rows.reduce((s, e) => s + e.history.filter(h => h.at >= p.from && h.at <= p.to).length, 0),
     strip,
-    changes,
   };
 }
 
-/** Which process an issued report's audit area belongs to. */
-const ATR_AREA_PROCESS: Record<string, string> = {
-  'Procure-to-Pay': 'P2P',
-  'Order-to-Cash': 'O2C',
-  'IT General Controls': 'ITGC',
-  'Record-to-Report': 'R2R',
-  'Source-to-Contract': 'S2C',
-};
-
 /* ──────────────────────────────────────────────────────────────────────────
- * 22 · PU-28 — continuous monitoring, and whether it is holding
+ * PU-28 — continuous monitoring
  * ────────────────────────────────────────────────────────────────────────── */
 
-export interface CcmRow {
-  engagementId: string;
-  engagement: string;
-  cadence: string;
-  threshold: number;
-  /** Null when nothing landed in the window, so there is no rate to compare. */
-  actual: number | null;
-  sampleN: number;
-  approvals: string;
-  /** Exceptions sitting in an approval gate right now, waiting on a person. */
-  inGate: number;
-}
-
-export interface CcmResult {
+export interface Ccm {
   engagementsOn: number;
   engagementsTotal: number;
-  sharePct: number;
-  rows: CcmRow[];
-  /** Bulk executions in the window, the other thing automation does at scale. */
+  schedules: { frequency: string; count: number }[];
+  /** Threshold against what the same sample data actually shows. */
+  thresholdRows: { engagement: string; threshold: number; actual: number | null; frequency: string }[];
   bulkRuns: number;
+  /** Exceptions that moved through an approval gate in the window. */
+  gateVerdicts: number;
 }
 
 /**
- * PU-28 · Continuous monitoring.
+ * Continuous monitoring (PU-28).
  *
- * The threshold each engagement expects, against the pass rate it actually
- * managed, computed from the same sample validations as PU-24 rather than from
- * a second calculation that could disagree with the block above it.
+ * How much of the auditing runs on a schedule rather than once. The
+ * threshold-against-actual line uses the same pass and fail data as the sampling
+ * block, never a second computation, so the two can never disagree.
  */
-export function ccm(p: Period, scope: Scope): CcmResult {
-  const mine = ENGAGEMENT_AUTOMATION.filter(a => {
-    if (scope.persona === 'cfo') return true;
-    if (scope.persona === 'head_of_team') return !scope.team || a.team === scope.team;
-    return false;
-  });
+export function ccm(p: Period, scope: Scope): Ccm {
+  const teamOf = new Map(ENGAGEMENT_ROWS.map(e => [e.id, e.team]));
+  const configs = AUTOMATION_CONFIGS.filter(c => scope.persona !== 'head_of_team' || teamOf.get(c.engagementId) === scope.team);
+  const on = configs.filter(c => c.isCcm);
 
-  const on = mine.filter(a => a.isCcm);
+  const frequencies = new Map<string, number>();
+  for (const c of on) {
+    if (!c.jobFrequency) continue;
+    frequencies.set(c.jobFrequency, (frequencies.get(c.jobFrequency) ?? 0) + 1);
+  }
 
-  const rows: CcmRow[] = on.map(a => {
-    const samples = SAMPLE_RUNS.filter(s =>
-      s.engagementId === a.engagementId && s.at >= p.from && s.at <= p.to
+  const thresholdRows = on.map(c => {
+    const samples = SAMPLE_RUNS.filter(s => s.engagementId === c.engagementId && s.at >= p.from && s.at <= p.to
       && (s.status === 'passed' || s.status === 'failed'));
-    const passed = samples.filter(s => s.status === 'passed').length;
+    // Two tests are not a pass rate. Under the floor the line says so rather
+    // than printing a percentage that will swing by fifty points next week.
+    const actual = samples.length < 3 ? null : (samples.filter(s => s.status === 'passed').length * 100) / samples.length;
     return {
-      engagementId: a.engagementId,
-      engagement: a.engagementName,
-      cadence: a.cadence,
-      threshold: a.passRateThreshold,
-      actual: samples.length === 0 ? null : (passed * 100) / samples.length,
-      sampleN: samples.length,
-      approvals: `${a.approvalLevelsRiskOwner} risk owner and ${a.approvalLevelsAuditor} auditor approvals`,
-      // Being classified is what moving through a gate looks like in the record.
-      inGate: ENGAGEMENT_EXCEPTIONS.filter(x => x.engagementId === a.engagementId && x.status === 'Triaging').length,
+      engagement: c.engagementName,
+      threshold: c.passRateThreshold,
+      actual,
+      frequency: c.jobFrequency ?? 'unscheduled',
     };
-  }).sort((a, z) => (a.actual ?? 999) - (z.actual ?? 999));
-
-  const bulkRuns = new Set(
-    RUNS.filter(r => r.bulkRunId && (r.completedAt ?? r.startedAt) >= p.from && (r.completedAt ?? r.startedAt) <= p.to
-      && inScope(scope, r.team, r.userEmail))
-      .map(r => r.bulkRunId),
-  ).size;
+  }).sort((a, b) => (a.actual ?? 101) - (b.actual ?? 101));
 
   return {
     engagementsOn: on.length,
-    engagementsTotal: mine.length,
-    sharePct: mine.length === 0 ? 0 : (on.length * 100) / mine.length,
-    rows,
-    bulkRuns,
+    engagementsTotal: configs.length,
+    schedules: Array.from(frequencies.entries()).map(([frequency, count]) => ({ frequency, count })),
+    thresholdRows,
+    bulkRuns: BULK_RUNS.filter(b => b.at >= p.from && b.at <= p.to).length,
+    gateVerdicts: TRACED_EXCEPTIONS.filter(ex => ex.classification !== null && ex.openedAt >= p.from && ex.openedAt <= p.to).length,
   };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 23 · Needs your attention
+ * PU-19 Layer 1 — the paid lookups, counted
  * ────────────────────────────────────────────────────────────────────────── */
 
+export interface LookupVolume {
+  rows: { name: string; calls: number; failed: number; personalData: boolean; pricePaise: number | null; billingUnit: string | null }[];
+  calls: number;
+  failed: number;
+  personalDataCalls: number;
+  /** Invoice total divided by recorded calls. Derived, and labelled as such. */
+  effectiveRatePaise: number | null;
+  prices: LookupPrice[];
+}
+
 /**
- * The page answers before it asks.
+ * Lookup volume, and what it works out at (PU-19).
  *
- * At most three cards, each a sentence with one thing to do. They are not
- * alerts: nothing is sent anywhere, nothing has a threshold anybody configures,
- * and every card is a fact already on the page said early because acting on it
- * cannot wait for a scroll. When there is nothing, the strip says so once and
- * disappears rather than sitting there empty.
+ * Volume needs nothing new: the calls are recorded today. The rate is derived
+ * from the bill divided by the calls that month, and it is labelled as derived
+ * from the customer's own invoices — never presented as a contract price, and
+ * never read from a rate card outside the product.
  */
-export type AttentionTarget =
-  | 'risks' | 'stuck' | 'invoice' | 'queue' | 'controls' | 'sampling' | 'memory' | 'engagements';
+export function lookupVolume(p: Period): LookupVolume {
+  const calls = LOOKUP_CALLS.filter(c => c.at >= p.from && c.at <= p.to);
+  const complete = calls.filter(c => c.status === 'complete');
+  const prices = loadPrices().filter(pr => pr.effectiveFrom <= p.to && (pr.effectiveTo === null || pr.effectiveTo >= p.from));
+  const cost = costToRun(p);
+
+  const rows = PAID_LOOKUPS.map(lookup => {
+    const mine = calls.filter(c => c.lookupId === lookup.id);
+    const price = prices.find(pr => pr.lookupId === lookup.id) ?? null;
+    return {
+      name: lookup.name,
+      calls: mine.filter(c => c.status === 'complete').length,
+      failed: mine.filter(c => c.status === 'failed').length,
+      personalData: lookup.personalData,
+      pricePaise: price?.pricePaise ?? null,
+      billingUnit: price?.billingUnit ?? null,
+    };
+  }).filter(r => r.calls + r.failed > 0).sort((a, b) => b.calls - a.calls);
+
+  return {
+    rows,
+    calls: complete.length,
+    failed: calls.length - complete.length,
+    personalDataCalls: complete.filter(c => PAID_LOOKUPS.find(l => l.id === c.lookupId)?.personalData).length,
+    effectiveRatePaise: cost.lookupRupees !== null && complete.length > 0
+      ? Math.round((cost.lookupRupees * 100) / complete.length)
+      : null,
+    prices,
+  };
+}
+
+/** Every month with recorded calls, and whether its bill is in. */
+export function invoiceLedger(): { at: number; label: string; calls: number; invoice: VendorInvoice | null }[] {
+  const invoices = loadInvoices();
+  const byMonth = new Map<number, number>();
+  for (const call of LOOKUP_CALLS) {
+    if (call.status !== 'complete') continue;
+    const m = startOfMonthUtc(call.at);
+    byMonth.set(m, (byMonth.get(m) ?? 0) + 1);
+  }
+  return Array.from(byMonth.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([at, calls]) => ({
+      at,
+      label: formatMonth(at),
+      calls,
+      invoice: invoices.find(inv => inv.periodMonth === at) ?? null,
+    }));
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The assumptions strip's own history
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface ChangeHistory {
+  inPeriod: number;
+  rows: { field: string; from: string | null; to: string | null; source: string | null; by: string; at: number }[];
+}
+
+/**
+ * The inputs are themselves counted.
+ *
+ * Every calibration, pin and entered bill writes a row, so "settings changed
+ * this period: 2" is a real figure with a list behind it — the same rule every
+ * other number on this page follows.
+ */
+export function changeHistory(p: Period): ChangeHistory {
+  const rows = loadUsageChanges();
+  return {
+    inPeriod: rows.filter(r => r.at >= p.from && r.at <= p.to).length,
+    rows: rows.map(r => ({ field: r.field, from: r.from, to: r.to, source: r.source, by: r.by, at: r.at })),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The attention strip
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type AttentionTarget = 'risks' | 'invoice' | 'stuck' | 'controls' | 'queue' | 'sampling' | 'memory';
 
 export interface AttentionCard {
   id: string;
-  /** One sentence, said the way a person would say it. */
+  target: AttentionTarget;
   text: string;
   actionLabel: string;
-  target: AttentionTarget;
 }
 
-/** Everything the strip reads. All of it is already computed for the page. */
-export interface AttentionInput {
-  risks: RiskPicture;
-  stuck: StuckRun[];
-  never: NeverExercised;
-  sampling: SamplingResult;
-  memory: SmartLearnResult;
-  queue: QueueItem[];
-  ledger: InvoiceLedger;
-  portfolio: PortfolioResult;
-  canEnterInvoices: boolean;
-}
-
-const AT_MOST = 3;
-
-export function attentionCards(persona: Persona, x: AttentionInput): AttentionCard[] {
+/**
+ * Needs your attention.
+ *
+ * At most three cards, each a sentence with one thing to do. Nothing here is
+ * sent anywhere and nothing has a threshold to configure: every card is a fact
+ * already on the page, said early because acting on it should not wait for a
+ * scroll. Cards a reader cannot act on are not shown to them — a card whose
+ * action is "ask somebody else" is not an action.
+ */
+export function attentionCards(
+  scope: Scope,
+  p: Period,
+  data: {
+    risks: RiskPicture;
+    cost: CostToRun;
+    stuck: StuckRun[];
+    never: NeverExercised;
+    queue: QueueItem[];
+    sampling: Sampling;
+    smartLearn: SmartLearn;
+  },
+  can: { invoices: boolean },
+): AttentionCard[] {
   const cards: AttentionCard[] = [];
 
-  /** The same workflow, stuck more than once, with one error between them. */
-  const repeated = (() => {
-    const groups = new Map<string, { name: string; error: string; n: number }>();
-    x.stuck.forEach(r => {
-      const key = `${r.workflowName}|${r.error}`;
-      const found = groups.get(key);
-      if (found) found.n += 1;
-      else groups.set(key, { name: r.workflowName, error: r.error, n: 1 });
-    });
-    return Array.from(groups.values()).filter(g => g.n > 1).sort((a, z) => z.n - a.n)[0] ?? null;
-  })();
-
-  const uncovered = (): AttentionCard | null =>
-    x.risks.unmappedSevere > 0
-      ? {
-          id: 'risks',
-          text: `${plural(x.risks.unmappedSevere, 'critical or high risk has', 'critical and high risks have')} no control covering ${x.risks.unmappedSevere === 1 ? 'it' : 'them'}.`,
-          actionLabel: 'See them',
-          target: 'risks',
-        }
-      : null;
-
-  const stuckCard = (): AttentionCard | null => {
-    if (repeated) {
-      return {
-        id: 'stuck-repeat',
-        text: `${repeated.name} has failed ${repeated.n} times with the same error.`,
-        actionLabel: 'Open it',
-        target: 'stuck',
-      };
-    }
-    return x.stuck.length > 0
-      ? {
-          id: 'stuck',
-          text: `${plural(x.stuck.length, 'run is', 'runs are')} stuck and nothing is moving ${x.stuck.length === 1 ? 'it' : 'them'} on.`,
-          actionLabel: 'Open them',
-          target: 'stuck',
-        }
-      : null;
-  };
-
-  const bill = (): AttentionCard | null => {
-    const month = x.ledger.missing[0];
-    if (!month || !x.canEnterInvoices) return null;
-    return {
-      id: 'invoice',
-      text: `${month.label} has ${plural(month.recordedCalls, 'recorded call', 'recorded calls')} and no bill entered yet.`,
-      actionLabel: 'Add it in Administration',
-      target: 'invoice',
-    };
-  };
-
-  const untested = (): AttentionCard | null =>
-    x.never.controls.length > 0
-      ? {
-          id: 'controls',
-          text: `${plural(x.never.controls.length, 'control has', 'controls have')} never been tested by anything, in the whole record.`,
-          actionLabel: 'Name them',
-          target: 'controls',
-        }
-      : null;
-
-  const needsAPerson = (): AttentionCard | null =>
-    x.sampling.errored > 0
-      ? {
-          id: 'sampling',
-          text: `${plural(x.sampling.errored, 'validation', 'validations')} errored, so ${x.sampling.errored === 1 ? 'it says' : 'they say'} nothing about the control until somebody looks.`,
-          actionLabel: 'See them',
-          target: 'sampling',
-        }
-      : null;
-
-  const proposals = (): AttentionCard | null =>
-    x.memory.pending > 0
-      ? {
-          id: 'memory',
-          text: `${plural(x.memory.pending, 'memory is', 'memories are')} waiting on you to approve or reject.`,
-          actionLabel: 'Open Smart Learn',
-          target: 'memory',
-        }
-      : null;
-
-  const slipping = (): AttentionCard | null =>
-    x.portfolio.slipping.length > 0
-      ? {
-          id: 'engagements',
-          text: `${plural(x.portfolio.slipping.length, 'engagement is', 'engagements are')} still open after the audit period ended.`,
-          actionLabel: 'See them',
-          target: 'engagements',
-        }
-      : null;
-
-  const overdue = x.queue.filter(i => i.overdue).length;
-  const mine = (): AttentionCard | null => {
+  if (scope.persona === 'auditor') {
+    const overdue = data.queue.filter(q => q.overdue).length;
     if (overdue > 0) {
-      return {
-        id: 'queue-overdue',
-        text: `${plural(overdue, 'thing has', 'things have')} been waiting on you a week or more.`,
-        actionLabel: 'Open the oldest',
+      cards.push({
+        id: 'queue',
         target: 'queue',
-      };
+        text: `${overdue} ${overdue === 1 ? 'item is' : 'items are'} past the date you were meant to clear ${overdue === 1 ? 'it' : 'them'}.`,
+        actionLabel: 'Open your queue',
+      });
     }
-    return x.queue.length > 0
-      ? {
-          id: 'queue',
-          text: `${plural(x.queue.length, 'thing is', 'things are')} waiting on you.`,
-          actionLabel: 'Open the queue',
-          target: 'queue',
-        }
-      : null;
-  };
+    if (data.smartLearn.pending > 0) {
+      cards.push({
+        id: 'memory',
+        target: 'memory',
+        text: `The assistant has ${fmtInt(data.smartLearn.pending)} ${data.smartLearn.pending === 1 ? 'thing' : 'things'} it wants to remember about how you work, waiting on you.`,
+        actionLabel: 'Decide them',
+      });
+    }
+    return cards.slice(0, 3);
+  }
 
-  // Order is the priority: what a reader of this view should act on first.
-  const order = persona === 'cfo'
-    ? [uncovered, bill, untested, slipping]
-    : persona === 'head_of_team'
-      ? [stuckCard, needsAPerson, proposals, untested]
-      : [mine, proposals];
+  // A repeated failure is the most actionable fact on the page, so it leads.
+  const repeated = data.stuck.filter(s => s.repeats > 1).sort((a, b) => b.repeats - a.repeats)[0];
+  if (repeated) {
+    cards.push({
+      id: 'stuck',
+      target: 'stuck',
+      text: `${repeated.workflow} has failed ${fmtInt(repeated.repeats)} times with the same error.`,
+      actionLabel: 'See what it says',
+    });
+  } else if (data.stuck.length > 0) {
+    cards.push({
+      id: 'stuck',
+      target: 'stuck',
+      text: `${fmtInt(data.stuck.length)} ${data.stuck.length === 1 ? 'run is' : 'runs are'} stuck and nobody has picked ${data.stuck.length === 1 ? 'it' : 'them'} up.`,
+      actionLabel: 'See them',
+    });
+  }
 
-  order.forEach(make => {
-    if (cards.length >= AT_MOST) return;
-    const card = make();
-    if (card) cards.push(card);
-  });
+  if (data.risks.unmappedSevere.length > 0) {
+    cards.push({
+      id: 'risks',
+      target: 'risks',
+      text: `${fmtInt(data.risks.unmappedSevere.length)} critical and high ${data.risks.unmappedSevere.length === 1 ? 'risk has' : 'risks have'} no control covering ${data.risks.unmappedSevere.length === 1 ? 'it' : 'them'}.`,
+      actionLabel: 'See which',
+    });
+  }
 
-  return cards;
+  if (scope.persona === 'cfo' && can.invoices && data.cost.missingMonths.length > 0) {
+    const month = data.cost.missingMonths[0];
+    cards.push({
+      id: 'invoice',
+      target: 'invoice',
+      text: `${month.label} has ${fmtInt(month.calls)} recorded lookups and no bill entered, so nothing in this window is costed.`,
+      actionLabel: 'Enter it in Administration',
+    });
+  }
+
+  if (data.sampling.error > 0) {
+    cards.push({
+      id: 'sampling',
+      target: 'sampling',
+      text: `${fmtInt(data.sampling.error)} sample ${data.sampling.error === 1 ? 'validation' : 'validations'} could not reach a verdict and ${data.sampling.error === 1 ? 'needs' : 'need'} a person.`,
+      actionLabel: 'See them',
+    });
+  }
+
+  if (scope.persona === 'head_of_team' && data.never.controls.length > 0) {
+    cards.push({
+      id: 'controls',
+      target: 'controls',
+      text: `${fmtInt(data.never.controls.length)} of your controls have never been exercised by the platform, in any window.`,
+      actionLabel: 'See which',
+    });
+  }
+
+  if (scope.persona === 'head_of_team' && data.smartLearn.pending > 0) {
+    cards.push({
+      id: 'memory',
+      target: 'memory',
+      text: `${fmtInt(data.smartLearn.pending)} team ${data.smartLearn.pending === 1 ? 'memory is' : 'memories are'} waiting for you to approve or reject.`,
+      actionLabel: 'Decide them',
+    });
+  }
+
+  void p;
+  return cards.slice(0, 3);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * 24 · Formatting
+ * Shared shapes the page and both exports read
  * ────────────────────────────────────────────────────────────────────────── */
 
-const INT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-const ONE_DP = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-
-export const fmtInt = (n: number): string => INT.format(Math.round(n));
-export const fmtHours = (n: number): string => (n >= 1000 ? INT.format(Math.round(n)) : ONE_DP.format(n));
-export const fmtPeople = (n: number): string => ONE_DP.format(n);
-
-/**
- * A span of time, said the way a person would say it.
- *
- * "0.0 hours of machine time" reads as nothing happened. Under an hour this
- * says minutes, which is both true and legible.
- */
-export function fmtDuration(hours: number): string {
-  if (hours < 1) {
-    const mins = Math.round(hours * 60);
-    return mins <= 0 ? 'under a minute' : `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
-  }
-  return `${fmtHours(hours)} hours`;
+/** The whole of a view's numbers, assembled once and passed down. */
+export interface UsageSnapshot {
+  scope: Scope;
+  period: Period;
+  prior: Period | null;
+  settings: UsageSettings;
+  value: ValueFigures;
+  priorValue: ValueFigures | null;
+  cost: CostToRun;
+  net: NetValue;
+  overTime: TimeBucket[];
+  coverage: Coverage;
+  never: NeverExercised;
+  exceptions: ExceptionsCaught;
+  volume: WorkVolume;
+  reliability: ReliabilityRow[];
+  wasted: { hours: number; runs: number };
+  stuck: StuckRun[];
+  aiUsage: AiUsageRow[];
+  people: PersonRow[];
+  queue: QueueItem[];
+  learn: SmartLearn;
+  created: CreatedCount[];
+  product: ProductActivity;
+  reports: ReportsActivity;
+  sampling: Sampling;
+  insights: InsightSummary;
+  risks: RiskPicture;
+  portfolio: Portfolio;
+  ccm: Ccm;
+  lookups: LookupVolume;
+  changes: ChangeHistory;
 }
-export const fmtPct = (n: number): string => `${ONE_DP.format(n)}%`;
 
-/** Rupees the way an Indian reader says them: lakh and crore, not millions. */
-export function fmtMoney(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 10_000_000) return `₹${ONE_DP.format(n / 10_000_000)} crore`;
-  if (abs >= 100_000) return `₹${ONE_DP.format(n / 100_000)} lakh`;
-  return `₹${INT.format(Math.round(n))}`;
+/** Assemble a view. One call, so the page and the export can never diverge. */
+export function snapshot(scope: Scope, p: Period, settings: UsageSettings): UsageSnapshot {
+  const prior = priorPeriod(p);
+  return {
+    scope,
+    period: p,
+    prior,
+    settings,
+    value: valueOf(runsIn(p, scope), settings, p),
+    priorValue: prior ? valueOf(runsIn(prior, scope), settings, prior) : null,
+    cost: costToRun(p),
+    net: netValue(valueOf(runsIn(p, scope), settings, p), costToRun(p)),
+    overTime: valueOverTime(p, scope, settings),
+    coverage: controlCoverage(p, scope),
+    never: neverExercised(scope),
+    exceptions: exceptionsCaught(p, scope),
+    volume: workVolume(p, scope),
+    reliability: reliability(p, scope),
+    wasted: wastedEffort(p, scope),
+    stuck: stuckRuns(p, scope),
+    aiUsage: aiUsageByArea(p),
+    people: scope.persona === 'head_of_team' ? perPersonOutcomes(p, scope.team) : [],
+    queue: myQueue(scope),
+    learn: smartLearn(scope),
+    created: createdThisPeriod(p, scope),
+    product: productActivity(p, scope),
+    reports: reportsActivity(p, scope),
+    sampling: sampling(p, scope),
+    insights: insightSummary(p, scope),
+    risks: riskPicture(p, scope),
+    portfolio: portfolio(p, scope),
+    ccm: ccm(p, scope),
+    lookups: lookupVolume(p),
+    changes: changeHistory(p),
+  };
 }
 
-/** Dollars, for the one figure in the product that is billed in them. */
-export const fmtUsd = (n: number): string =>
-  `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
-
-export const plural = (n: number, one: string, many: string): string =>
-  `${fmtInt(n)} ${n === 1 ? one : many}`;
+/** Workflows the library holds, for the never-run block's own denominator. */
+export const WORKFLOW_COUNT = WORKFLOWS.length;
+/** Controls the library holds — the same rows the Control Library screen draws. */
+export const CONTROL_COUNT = CONTROL_LIBRARY.length;

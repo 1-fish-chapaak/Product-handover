@@ -1,112 +1,119 @@
 /**
- * PU-20 · Smart Learn — what the assistant has learned, and whether it is used.
+ * PU-20 — Smart Learn, the assistant's memory.
  *
- * The four numbers here are the same four the Smart Learn screen computes, read
- * off the same store and scoped to whoever is looking. Recall count and last
- * recalled are real fields written every time a memory is attached to a
- * question, so "is learned knowledge actually being used" is measured rather
- * than inferred.
+ * The same four numbers the Smart Learn screen computes, scoped to whoever is
+ * reading: an auditor sees their own memories, a head of team sees the team tier
+ * including the proposals waiting on them, a CFO sees the company. Recall count
+ * and last recalled are real fields written on every use, so "is learned
+ * knowledge actually being used" is measured rather than estimated.
  *
- * Proposals waiting for approval are shown to the person who can decide them,
- * and they are decided here: somebody who opens this page to see what is stuck
- * should not have to go somewhere else to clear the one thing waiting on them.
- * Approving and rejecting write the same audit event the Smart Learn screen
- * writes, because it is the same store underneath.
+ * The empty state matters here more than anywhere else on the page: memory can be
+ * switched off, and four zeros that look measured would be a lie about a feature
+ * that is not running.
  */
 
-import { Block, Empty, Fig, Stat } from './usageKit';
-import { fmtInt, plural } from './usageFormat';
-import type { SmartLearnResult } from '../../data/platform-usage-metrics';
+import { ArrowRight, Check, X } from 'lucide-react';
+import {
+  fmtInt,
+  type Scope, type SmartLearn as SmartLearnFigures,
+} from '../../data/platform-usage-metrics';
 import type { PlatformMemory } from '../../data/memoryStore';
+import { Block, Drill, Empty, Fig, Stat, StatRow } from './usageKit';
 
 export function SmartLearn({
-  data,
-  scopeLabel,
-  onManage,
+  learn,
+  scope,
+  onOpenSmartLearn,
   onApprove,
   onReject,
 }: {
-  data: SmartLearnResult;
-  scopeLabel: string;
-  onManage: () => void;
-  /** Only passed to a reader who may decide a proposal. */
-  onApprove?: (m: PlatformMemory) => void;
-  onReject?: (m: PlatformMemory) => void;
+  learn: SmartLearnFigures;
+  scope: Scope;
+  onOpenSmartLearn: () => void;
+  onApprove: (memory: PlatformMemory) => void;
+  onReject: (memory: PlatformMemory) => void;
 }) {
-  const canDecide = Boolean(onApprove && onReject);
+  const whose = scope.persona === 'auditor' ? 'about you' : scope.persona === 'head_of_team' ? 'for your team' : 'across the company';
+
+  if (learn.nothingYet) {
+    return (
+      <Block id="memory" title="What the assistant has learned" lede={null}>
+        <Empty
+          kind="unmeasured"
+          title={`The assistant has not learned anything ${whose} yet.`}
+          detail="Either memory is switched off for this workspace or nothing has been saved to it. Four zeros here would look like a measurement, so there are none."
+        />
+      </Block>
+    );
+  }
 
   return (
     <Block
-      title="Smart Learn"
-      hint={`Memory in use · ${scopeLabel}`}
+      id="memory"
+      title="What the assistant has learned"
       lede={
-        !data.hasData ? null : (
-          <>
-            The assistant is holding <Fig>{plural(data.active, 'memory', 'memories')}</Fig> at this scope and
-            used <Fig>{fmtInt(data.recalls7d)}</Fig> of them in the last 7 days
-            {data.pending > 0 && <>, with <Fig>{fmtInt(data.pending)}</Fig> waiting on a decision</>}.
-          </>
-        )
+        <>
+          The assistant is holding <Fig>{fmtInt(learn.active)}</Fig> things {whose}, and it used{' '}
+          <Fig>{fmtInt(learn.usedThisWeek)}</Fig> of them in the last seven days
+          {learn.pending > 0 && <>. <Fig>{fmtInt(learn.pending)}</Fig> more are waiting for somebody to approve or reject</>}
+          {learn.dueReview > 0 && <>, and <Fig>{fmtInt(learn.dueReview)}</Fig> are due a review</>}.
+        </>
       }
+      hint="The same figures the Smart Learn screen shows, narrowed to what you can see."
       action={
-        <button
-          type="button"
-          onClick={onManage}
-          className="h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-600 hover:text-brand-700 hover:border-brand-200"
-        >
-          Open Smart Learn
+        <button type="button" onClick={onOpenSmartLearn} className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
+          Open Smart Learn <ArrowRight size={12} />
         </button>
       }
-    >
-      {!data.hasData ? (
-        <Empty
-          kind="quiet"
-          title="The assistant has not learned anything for this scope yet."
-          action={{ label: 'Open Smart Learn', onClick: onManage }}
-        />
-      ) : (
-        <>
-          <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
-            <Stat size="md" value={fmtInt(data.active)} label="memories in use" />
-            <Stat size="sm" value={fmtInt(data.recalls7d)} label="recalled in the last 7 days" />
-            <Stat size="sm" value={fmtInt(data.dueReview)} label="due for review" />
-            {data.pending > 0 && <Stat size="sm" value={fmtInt(data.pending)} label="waiting for approval" />}
-          </div>
+      table={
+        <div className="space-y-4">
+          <StatRow>
+            <Stat value={fmtInt(learn.active)} label="Active memories" />
+            <Stat value={fmtInt(learn.pending)} label="Awaiting approval" />
+            <Stat value={fmtInt(learn.dueReview)} label="Due for review" />
+            <Stat
+              value={fmtInt(learn.usedThisWeek)}
+              label="Used in the last seven days"
+              sub={learn.totalRecalls === null ? undefined : `${fmtInt(learn.totalRecalls)} recalls in total`}
+            />
+          </StatRow>
 
-          {/* A memory spreads only through approval, so the decision is made on
-              a named sentence, never on a count. */}
-          {canDecide && data.proposals.length > 0 && (
-            <ul className="mt-4 divide-y divide-canvas-border border-t border-canvas-border">
-              {data.proposals.map(m => (
-                <li key={m.id} className="py-3 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] text-ink-800">{m.statement}</p>
-                    <p className="mt-0.5 text-[0.75rem] text-ink-500">
-                      {m.pendingNote ?? 'Waiting for a decision before the assistant uses it'}
-                    </p>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onReject?.(m)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-600 hover:text-risk-700 hover:border-risk-200"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onApprove?.(m)}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-medium hover:bg-brand-700"
-                    >
-                      Approve
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {learn.pendingRows.length > 0 && (
+            <Drill label={`Decide the ${fmtInt(learn.pendingRows.length)} waiting on you`} hideLabel="Hide the proposals">
+              <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+                {learn.pendingRows.map(memory => (
+                  <li key={memory.id} className="py-3 flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[0.875rem] text-ink-800">{memory.statement}</p>
+                      <p className="text-[0.75rem] text-ink-500">
+                        {memory.scope} · {memory.source}
+                        {memory.pendingNote ? ` · ${memory.pendingNote}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onApprove(memory)}
+                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-700 hover:border-brand-200 hover:text-brand-700"
+                      >
+                        <Check size={13} /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onReject(memory)}
+                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-700 hover:border-risk-200 hover:text-risk-700"
+                      >
+                        <X size={13} /> Reject
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Drill>
           )}
-        </>
-      )}
-    </Block>
+        </div>
+      }
+      footer="Every approval, rejection and renewal writes a row into the product's change log."
+    />
   );
 }

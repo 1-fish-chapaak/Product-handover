@@ -1,187 +1,248 @@
 /**
- * The product being used, not just the AI — PU-22, PU-23, PU-24 and PU-25.
+ * The product being used, not just the AI.
  *
- * Four areas of the product write down what happens in them well enough to be
- * reported on: dashboards and the alerts they fire, reports and their activity
- * trail, sample validations and their outcomes, and the insights the assistant
- * generates. None of these blocks needs anything invented, and each one holds a
- * distinction the reader would otherwise lose:
+ * PU-22 dashboards, widgets and alerts · PU-23 reports · PU-24 sampling ·
+ * PU-25 insights.
  *
- * · a dashboard alert fired by the scheduled worker says automatic, because
- *   nobody was there;
- * · a report made and a report worked on are two numbers that are never added,
- *   so fifty edits stay one report;
- * · a failed validation is a finding and an errored one is not, so they are
- *   counted and coloured apart;
- * · a consolidated insight summarises per-run insights already counted, so the
- *   two are shown side by side and never summed.
+ * None of these needed anything built. The product already writes a before and
+ * after event on every dashboard, widget and alert change, reports keep their
+ * own activity trail, sample validations carry a lifecycle, and every generated
+ * insight is a stored row. So these blocks read what is there, and each one says
+ * which table it read.
  */
 
-import { Bars, Block, DataTable, Drill, Empty, Fig, MadeRow, Stat } from './usageKit';
-import { fmtInt, fmtPct, plural, formatWhen } from './usageFormat';
-import type { InsightsResult, ProductActivity, ReportsActivity, SamplingResult } from '../../data/platform-usage-metrics';
+import { formatDate, formatDateTime } from '../../data/platform-usage';
+import {
+  fmtInt, fmtPct,
+  type InsightSummary, type Period, type ProductActivity, type ReportsActivity, type Sampling,
+} from '../../data/platform-usage-metrics';
+import { Bars, Block, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow } from './usageKit';
 
-/* ── PU-22 · Dashboards, widgets and alerts ──────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-22 — dashboards, widgets and alerts
+ * ────────────────────────────────────────────────────────────────────────── */
 
-export function DashboardsAndAlerts({
-  data,
-  periodLabel,
-  onOpenDashboards,
-}: {
-  data: ProductActivity;
-  periodLabel: string;
-  onOpenDashboards: () => void;
-}) {
-  const nothing = data.dashboardsCreated === 0 && data.dashboardsChanged === 0 && data.alertsFired === 0;
+/**
+ * What was built, and what fired.
+ *
+ * Every tile here opens the list behind it, with the name of each thing and who
+ * made it. An alert fired by the scheduled worker has no person behind it, and
+ * the list says "automatic" rather than leaving the column blank.
+ */
+export function DashboardsAndAlerts({ product, period, subject }: { product: ProductActivity; period: Period; subject: string }) {
+  const nothing = product.dashboardsCreated === 0 && product.widgetsChanged === 0 && product.alertsFired === 0;
+
+  if (nothing) {
+    return (
+      <Block id="dashboards" title="Dashboards, widgets and alerts" lede={null}>
+        <Empty
+          kind="quiet"
+          title={`Nothing was built or fired for ${subject} in this window.`}
+          detail="The event log was read and had nothing in it for this window. Dashboards built earlier still exist."
+        />
+      </Block>
+    );
+  }
 
   return (
     <Block
+      id="dashboards"
       title="Dashboards, widgets and alerts"
-      hint="Built and firing. Every change to a dashboard is recorded, and alerts fire on a schedule with nobody watching."
       lede={
-        nothing ? null : (
-          <>
-            <Fig>{plural(data.dashboardsCreated, 'dashboard was', 'dashboards were')}</Fig> built{' '}
-            {periodLabel.toLowerCase()}, <Fig>{fmtInt(data.dashboardsChanged)}</Fig> changed or shared, and{' '}
-            <Fig>{plural(data.alertsFired, 'alert', 'alerts')}</Fig> fired
-            {data.alertsFired > 0 && <>, <Fig>{fmtInt(data.automaticFires)}</Fig> of them with nobody watching</>}.
-          </>
-        )
-      }
-    >
-      {nothing ? (
-        <Empty
-          kind="quiet"
-          title="No dashboard was built or changed in this window, and no alert fired."
-          detail={`${plural(data.dashboardsTotal, 'dashboard', 'dashboards')} in the workspace, ${plural(data.alertRules, 'widget', 'widgets')} watching for something.`}
-          action={{ label: 'Open Dashboards', onClick: onOpenDashboards }}
-        />
-      ) : (
         <>
-          <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-            <Stat size="md" value={fmtInt(data.dashboardsCreated)} label={`built ${periodLabel.toLowerCase()}`} />
-            <Stat size="sm" value={fmtInt(data.dashboardsChanged)} label="changed or shared" />
-            <Stat size="sm" value={fmtInt(data.alertsFired)} label="alerts fired" />
-          </div>
-
-          <p className="mt-3 text-[0.75rem] text-ink-500 tabular-nums">
-            {fmtInt(data.dashboardsTotal)} dashboards in the workspace now, {fmtInt(data.alertRules)} of their
-            widgets watching for something.
-            {data.alertsFired > 0 && (
-              <> {fmtInt(data.automaticFires)} of the {fmtInt(data.alertsFired)} fires were the scheduled worker,
-              with nobody watching.</>
-            )}
-          </p>
-
-          <div className="mt-4 space-y-3">
-            {data.makers.length > 0 && (
-              <Drill label={`Name the ${plural(data.makers.length, 'dashboard', 'dashboards')}`}>
-                <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                  {data.makers.map(m => (
-                    <MadeRow key={`${m.name}-${m.at}`} name={m.name} madeBy={m.madeBy} when={formatWhen(m.at)} />
-                  ))}
-                </ul>
-              </Drill>
-            )}
-            {data.fires.length > 0 && (
-              <Drill label={`Show what fired (${fmtInt(data.fires.length)})`}>
-                <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                  {data.fires.slice(0, 20).map((f, i) => (
-                    <MadeRow
-                      key={`${f.widget}-${f.at}-${i}`}
-                      name={`${f.widget} on ${f.dashboard}`}
-                      madeBy={f.firedBy}
-                      when={formatWhen(f.at)}
-                      note={f.condition}
-                    />
-                  ))}
-                </ul>
-                {data.fires.length > 20 && (
-                  <p className="mt-2 text-[0.75rem] text-ink-400 tabular-nums">
-                    20 newest of {fmtInt(data.fires.length)}.
-                  </p>
-                )}
-              </Drill>
-            )}
-          </div>
+          {subject === 'the company' ? 'The company' : subject} built <Fig>{fmtInt(product.dashboardsCreated)}</Fig> dashboards
+          and changed <Fig>{fmtInt(product.widgetsChanged)}</Fig> widgets {period.phrase}, and{' '}
+          <Fig>{fmtInt(product.alertsFired)}</Fig> alerts fired,{' '}
+          <Fig>{fmtInt(product.alertsAutomatic)}</Fig> of them with no person involved at all.
         </>
-      )}
-    </Block>
+      }
+      hint="Read from the product's own change log, which records a before and after on every create, update and delete."
+      table={
+        <div className="space-y-4">
+          <StatRow>
+            <Stat value={fmtInt(product.dashboardsCreated)} label="Dashboards built" />
+            <Stat value={fmtInt(product.widgetsChanged)} label="Widgets created or changed" />
+            <Stat value={fmtInt(product.alertsFired)} label="Alerts fired" sub={`${fmtInt(product.alertsAutomatic)} automatic`} />
+            <Stat
+              value={product.alertsFired === 0 ? '0%' : fmtPct((product.alertsAutomatic * 100) / product.alertsFired)}
+              label="Fired without a person"
+            />
+          </StatRow>
+
+          {product.dashboardsCreated > 0 && (
+            <Drill label={`Name the ${fmtInt(product.dashboardsCreated)} dashboards`} hideLabel="Hide the dashboards">
+              <MadeList>
+                {product.dashboardRows.map(row => (
+                  <MadeRow key={row.id} name={row.entityName} madeBy={row.actor} when={formatDate(row.at)} />
+                ))}
+              </MadeList>
+            </Drill>
+          )}
+
+          {product.alertsFired > 0 && (
+            <Drill label="See the alerts that fired" hideLabel="Hide the alerts">
+              <MadeList>
+                {product.alertRows.map(row => (
+                  <MadeRow
+                    key={row.id}
+                    name={row.entityName}
+                    madeBy={row.actor}
+                    when={formatDateTime(row.at)}
+                    note={row.actor === null ? 'fired by the scheduled worker' : undefined}
+                  />
+                ))}
+              </MadeList>
+            </Drill>
+          )}
+        </div>
+      }
+    />
   );
 }
 
-/* ── PU-23 · Reports ─────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-23 — reports
+ * ────────────────────────────────────────────────────────────────────────── */
 
-export function ReportsMade({
-  data,
-  periodLabel,
-  onOpenReports,
-}: {
-  data: ReportsActivity;
-  periodLabel: string;
-  onOpenReports: () => void;
-}) {
+/**
+ * Reports made, worked on, shared.
+ *
+ * A report edited fifty times is one report and fifty activities. Both figures
+ * are here, next to each other, and they are never added together.
+ */
+export function ReportsMade({ reports, period, subject }: { reports: ReportsActivity; period: Period; subject: string }) {
+  if (reports.made === 0 && reports.activity === 0) {
+    return (
+      <Block id="reports" title="Reports" lede={null}>
+        <Empty kind="quiet" title={`No report was made or worked on by ${subject} in this window.`} />
+      </Block>
+    );
+  }
+
   return (
     <Block
+      id="reports"
       title="Reports"
-      hint="Created, worked on, shared. A report edited fifty times is one report and fifty activities, and the two are never added together."
       lede={
-        data.activity === 0 ? null : (
-          <>
-            <Fig>{plural(data.made, 'report was', 'reports were')}</Fig> made {periodLabel.toLowerCase()} and
-            reports were worked on <Fig>{plural(data.activity, 'time', 'times')}</Fig>
-            {data.shared > 0 && <>, with <Fig>{fmtInt(data.shared)}</Fig> shared out</>}.
-          </>
-        )
+        <>
+          {subject === 'the company' ? 'The company' : subject} made <Fig>{fmtInt(reports.made)}</Fig> reports{' '}
+          {period.phrase} and worked on them <Fig>{fmtInt(reports.activity)}</Fig> times.
+          <Fig> {fmtInt(reports.shared)}</Fig> were shared outside the team. Made and worked on are two counts of
+          two different things, so they are never added up.
+        </>
       }
+      hint="Made comes from the reports table. Worked on comes from the reports module's own activity trail."
+      table={
+        <div className="space-y-4">
+          <StatRow>
+            <Stat value={fmtInt(reports.made)} label="Reports made" />
+            <Stat value={fmtInt(reports.activity)} label="Times worked on" />
+            <Stat value={fmtInt(reports.shared)} label="Shared" />
+            <Stat
+              value={fmtInt(reports.actionPlansOpen)}
+              label="Action plans open"
+              sub={`${fmtInt(reports.actionPlansClosed)} closed`}
+            />
+          </StatRow>
+
+          {reports.rows.length > 0 && (
+            <Drill label={`Name the ${fmtInt(reports.made)} reports`} hideLabel="Hide the reports">
+              <MadeList>
+                {reports.rows.map(row => (
+                  <MadeRow key={row.title} name={row.title} madeBy={row.by} when={formatDate(row.at)} note={row.status} />
+                ))}
+              </MadeList>
+            </Drill>
+          )}
+
+          {reports.activityByType.length > 0 && (
+            <Drill label="What the activity was" hideLabel="Hide the activity">
+              <DataTable
+                head={['Activity', 'Times']}
+                rows={reports.activityByType.map(row => [row.type, fmtInt(row.count)])}
+              />
+            </Drill>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-24 — sampling
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Sample validation outcomes.
+ *
+ * Passed, failed and errored are three different facts and never share a bar. A
+ * failed test is a finding. An errored one could not reach a verdict and needs a
+ * person, which is work rather than a result.
+ */
+export function SamplingOutcomes({ sampling, period, subject }: { sampling: Sampling; period: Period; subject: string }) {
+  if (sampling.total === 0) {
+    return (
+      <Block id="sampling" title="Sample validation" lede={null}>
+        <Empty
+          kind="quiet"
+          title={`No samples were validated for ${subject} in this window.`}
+          detail="Sampling runs are recorded with a full lifecycle, so this is a real zero rather than a gap."
+        />
+      </Block>
+    );
+  }
+
+  const passRate = sampling.passed + sampling.failed === 0
+    ? null
+    : (sampling.passed * 100) / (sampling.passed + sampling.failed);
+
+  return (
+    <Block
+      id="sampling"
+      title="Sample validation"
+      lede={
+        <>
+          <Fig>{fmtInt(sampling.total)}</Fig> sample validations ran for {subject} {period.phrase}:{' '}
+          <Fig>{fmtInt(sampling.passed)}</Fig> passed, <Fig>{fmtInt(sampling.failed)}</Fig> failed and{' '}
+          <Fig>{fmtInt(sampling.error)}</Fig> could not reach a verdict at all
+          {sampling.error > 0 && <>, which is work waiting for a person rather than a result</>}
+          {passRate !== null && <>. That is a pass rate of <Fig>{fmtPct(passRate)}</Fig> on the tests that concluded</>}.
+        </>
+      }
+      hint="A pass flips its control to effective. A fail flips it to failed. An error flips nothing."
       chart={
-        data.activity === 0 ? (
-          <Empty
-            kind="quiet"
-            title="Nobody touched a report in this window."
-            action={{ label: 'Open Reports', onClick: onOpenReports }}
+        <div className="space-y-4">
+          <Bars
+            rows={[
+              { label: 'Passed', value: sampling.passed },
+              { label: 'Failed', value: sampling.failed },
+              { label: 'Errored, needs a person', value: sampling.error },
+              { label: 'Still queued or running', value: sampling.inFlight },
+            ].filter(row => row.value > 0)}
           />
-        ) : (
-          <>
-            <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-              <Stat size="md" value={fmtInt(data.made)} label={`made ${periodLabel.toLowerCase()}`} />
-              <Stat size="sm" value={fmtInt(data.activity)} label="recorded activities" />
-              <Stat size="sm" value={fmtInt(data.shared)} label="shared" />
+          {sampling.byControl.length > 0 && (
+            <div>
+              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 mb-2">
+                The controls with something to look at
+              </p>
+              <DataTable
+                head={['Control', 'Passed', 'Failed', 'Errored']}
+                rows={sampling.byControl.map(row => [row.control, fmtInt(row.passed), fmtInt(row.failed), fmtInt(row.error)])}
+              />
             </div>
-
-            <div className="mt-4">
-              <Bars rows={data.byActivity.map(a => ({ label: a.label, value: a.count }))} />
-            </div>
-
-            <p className="mt-4 text-[0.75rem] text-ink-500 tabular-nums">
-              Across every issued report, {fmtInt(data.actionPlansOpen)} action{' '}
-              {data.actionPlansOpen === 1 ? 'plan is' : 'plans are'} still open and{' '}
-              {fmtInt(data.actionPlansClosed)} {data.actionPlansClosed === 1 ? 'is' : 'are'} implemented.
-              That is where they stand now, not a count for this window.
-            </p>
-
-            {data.list.length > 0 && (
-              <div className="mt-3">
-                <Drill label={`Name the ${plural(data.list.length, 'report', 'reports')}`}>
-                  <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                    {data.list.map(r => (
-                      <MadeRow key={`${r.name}-${r.at}`} name={r.name} madeBy={r.madeBy} when={formatWhen(r.at)} />
-                    ))}
-                  </ul>
-                </Drill>
-              </div>
-            )}
-          </>
-        )
+          )}
+        </div>
       }
       table={
         <DataTable
-          head={['Activity', 'Count']}
+          head={['Outcome', 'Runs']}
           rows={[
-            ['reports made', fmtInt(data.made)],
-            ...data.byActivity.map(a => [a.label, fmtInt(a.count)] as (string | number)[]),
-            ['action plans open', fmtInt(data.actionPlansOpen)],
-            ['action plans implemented', fmtInt(data.actionPlansClosed)],
+            ['Passed', fmtInt(sampling.passed)],
+            ['Failed', fmtInt(sampling.failed)],
+            ['Errored, needs a person', fmtInt(sampling.error)],
+            ['Queued or running', fmtInt(sampling.inFlight)],
+            ['All validations', fmtInt(sampling.total)],
           ]}
         />
       }
@@ -189,177 +250,74 @@ export function ReportsMade({
   );
 }
 
-/* ── PU-24 · Sampling ────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────────
+ * PU-25 — insights
+ * ────────────────────────────────────────────────────────────────────────── */
 
-export function SamplingOutcomes({ data }: { data: SamplingResult }) {
-  const troubled = data.byControl.filter(c => c.failed + c.errored > 0);
-  const clean = data.byControl.filter(c => c.failed + c.errored === 0 && c.passed > 0);
+const SEVERITY_TONE: Record<string, string> = {
+  Critical: 'text-risk-700',
+  High: 'text-high-700',
+  Medium: 'text-mitigated-700',
+  Low: 'text-ink-600',
+};
+
+/**
+ * Insights the platform generated.
+ *
+ * A consolidated insight summarises several per run ones, so the split between
+ * them is on screen. Without it the same finding would be counted twice and
+ * nobody looking at the number could tell.
+ */
+export function InsightsGenerated({ insights, period, subject }: { insights: InsightSummary; period: Period; subject: string }) {
+  if (insights.total === 0) {
+    return (
+      <Block id="insights" title="Insights generated" lede={null}>
+        <Empty kind="quiet" title={`The platform generated no insights for ${subject} in this window.`} />
+      </Block>
+    );
+  }
+
+  const severe = insights.bySeverity.find(s => s.severity === 'Critical')?.count ?? 0;
 
   return (
     <Block
-      title="Sampling"
-      hint="Validation runs and their outcomes. A failed one says the control did not hold; an errored one says nothing about the control, so somebody has to look."
+      id="insights"
+      title="Insights generated"
       lede={
-        data.total === 0 ? null : (
-          <>
-            <Fig>{plural(data.passed + data.failed + data.errored, 'validation', 'validations')}</Fig> landed in
-            this window: <Fig>{fmtInt(data.passed)}</Fig> passed, <Fig>{fmtInt(data.failed)}</Fig> failed and{' '}
-            <Fig>{fmtInt(data.errored)}</Fig> errored, which says nothing about the control until somebody looks.
-          </>
-        )
+        <>
+          The platform generated <Fig>{fmtInt(insights.total)}</Fig> insights for {subject}{' '}
+          {period.phrase}: <Fig>{fmtInt(insights.perRun)}</Fig> about a single run and{' '}
+          <Fig>{fmtInt(insights.consolidated)}</Fig> that pull a whole engagement together
+          {severe > 0 && <>, of which <Fig>{fmtInt(severe)}</Fig> {severe === 1 ? 'is' : 'are'} critical</>}.
+        </>
       }
+      hint="A consolidated insight summarises per run ones, so the two are counted apart and never added."
       chart={
-        data.total === 0 ? (
-          <Empty kind="quiet" title="No sample was validated in this window." />
-        ) : (
-          <>
-            <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-              <Stat size="md" value={fmtInt(data.passed)} label="passed" />
-              <Stat size="sm" value={fmtInt(data.failed)} label="failed" />
-              <Stat size="sm" value={fmtInt(data.errored)} label="errored, needs a person" />
-              {data.inFlight > 0 && <Stat size="sm" value={fmtInt(data.inFlight)} label="still running" />}
-              {data.passRate !== null && (
-                <Stat size="sm" value={fmtPct(data.passRate)} label="of the validations that landed" />
-              )}
-            </div>
-
-            {/* Only the controls something went wrong on are charted. A bar of
-                zero next to a bar of four says nothing and reads as a control
-                that failed once, which it did not. */}
-            {troubled.length > 0 && (
-              <div className="mt-4">
-                <Bars
-                  rows={troubled.slice(0, 5).map(c => ({
-                    label: c.control,
-                    value: c.failed + c.errored,
-                    note: `${fmtInt(c.passed)} passed, ${fmtInt(c.failed)} failed, ${fmtInt(c.errored)} errored · ${c.engagement}`,
-                  }))}
-                  tone="risk"
-                />
-                {troubled.length > 5 && (
-                  <p className="mt-2 text-[0.75rem] text-ink-400 tabular-nums">
-                    5 of {fmtInt(troubled.length)} with something to look at. The table has every one.
+        <div className="space-y-4">
+          <Bars rows={insights.bySeverity.map(s => ({ label: s.severity, value: s.count }))} tone="risk" />
+          <div>
+            <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 mb-2">The newest</p>
+            <MadeList>
+              {insights.newest.map((row, i) => (
+                <li key={`${row.headline}-${i}`} className="py-2">
+                  <p className="text-[0.875rem] text-ink-800">{row.headline}</p>
+                  <p className="text-[0.75rem] text-ink-500">
+                    <span className={SEVERITY_TONE[row.severity]}>{row.severity}</span> · {row.engagement} · {formatDate(row.at)}
                   </p>
-                )}
-              </div>
-            )}
-
-            {clean.length > 0 && (
-              <p className="mt-4 text-[0.75rem] text-ink-500 tabular-nums">
-                {plural(clean.length, 'control passed', 'controls passed')} every validation in this window.
-              </p>
-            )}
-
-            {data.errors.length > 0 && (
-              <div className="mt-4">
-                <Drill label={`Show the ${plural(data.errors.length, 'error', 'errors')}`}>
-                  <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                    {data.errors.slice(0, 10).map((e, i) => (
-                      <li key={`${e.control}-${e.at}-${i}`} className="py-2">
-                        <div className="flex items-baseline justify-between gap-4">
-                          <span className="text-[0.875rem] text-ink-800 truncate">{e.control}</span>
-                          <span className="text-[0.75rem] text-ink-400 shrink-0 tabular-nums">{formatWhen(e.at)}</span>
-                        </div>
-                        {/* Verbatim. A summarised reason is a validation nobody can rescue. */}
-                        <p className="mt-1 text-[0.75rem] text-ink-700 font-mono break-words max-w-[80ch]">{e.note}</p>
-                        <p className="text-[0.75rem] text-ink-500">{e.engagement}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </Drill>
-              </div>
-            )}
-          </>
-        )
+                </li>
+              ))}
+            </MadeList>
+          </div>
+        </div>
       }
       table={
         <DataTable
-          head={['Control', 'Engagement', 'Passed', 'Failed', 'Errored']}
-          numericFrom={2}
-          rows={data.byControl.map(c => [c.control, c.engagement, fmtInt(c.passed), fmtInt(c.failed), fmtInt(c.errored)])}
-        />
-      }
-    />
-  );
-}
-
-/* ── PU-25 · AI insights ─────────────────────────────────────────────────── */
-
-export function InsightsGenerated({ data }: { data: InsightsResult }) {
-  const nothing = data.perRun === 0 && data.consolidated === 0;
-
-  return (
-    <Block
-      title="AI insights"
-      hint="Generated and by severity. Insights written off one run are kept apart from insights written across a whole engagement, because the second kind summarises the first."
-      lede={
-        nothing ? null : (
-          <>
-            The assistant wrote <Fig>{plural(data.perRun, 'insight', 'insights')}</Fig> off single runs and{' '}
-            <Fig>{fmtInt(data.consolidated)}</Fig> across whole engagements. The two are kept apart because the
-            second kind summarises the first.
-          </>
-        )
-      }
-      chart={
-        nothing ? (
-          <Empty kind="quiet" title="The assistant wrote nothing down in this window." />
-        ) : (
-          <>
-            <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-              <Stat size="md" value={fmtInt(data.perRun)} label="from a single run" />
-              <Stat size="sm" value={fmtInt(data.consolidated)} label="across an engagement" />
-            </div>
-
-            <div className="mt-4">
-              <Bars
-                rows={data.bySeverity
-                  .filter(s => s.perRun + s.consolidated > 0)
-                  .map(s => ({
-                    label: s.severity,
-                    value: s.perRun,
-                    note: s.consolidated > 0
-                      ? `plus ${fmtInt(s.consolidated)} written across an engagement`
-                      : undefined,
-                  }))}
-                tone="risk"
-              />
-            </div>
-
-            {data.rows.length > 0 && (
-              <div className="mt-4">
-                {/* Never a total here: adding the two kinds together counts a
-                    consolidated insight and the per-run insights it summarises
-                    as separate findings. */}
-                <Drill label="Read them">
-                  <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                    {data.rows.slice(0, 12).map((r, i) => (
-                      <li key={`${r.title}-${r.at}-${i}`} className="py-2">
-                        <div className="flex items-baseline justify-between gap-4">
-                          <span className="text-[0.875rem] text-ink-800">{r.title}</span>
-                          <span className="text-[0.75rem] text-ink-400 shrink-0 tabular-nums">{formatWhen(r.at)}</span>
-                        </div>
-                        <p className="text-[0.75rem] text-ink-500">
-                          {r.severity} · {r.category} · {r.kind} · {r.engagement}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                  {data.rows.length > 12 && (
-                    <p className="mt-2 text-[0.75rem] text-ink-400 tabular-nums">
-                      12 newest of {fmtInt(data.rows.length)}.
-                    </p>
-                  )}
-                </Drill>
-              </div>
-            )}
-          </>
-        )
-      }
-      table={
-        <DataTable
-          head={['Severity', 'From one run', 'Across an engagement']}
-          rows={data.bySeverity.map(s => [s.severity, fmtInt(s.perRun), fmtInt(s.consolidated)])}
+          head={['Severity', 'Insights']}
+          rows={[
+            ...insights.bySeverity.map(s => [s.severity, fmtInt(s.count)] as (string | number)[]),
+            ['Per run', fmtInt(insights.perRun)],
+            ['Consolidated', fmtInt(insights.consolidated)],
+          ]}
         />
       }
     />

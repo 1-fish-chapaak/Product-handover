@@ -1,270 +1,254 @@
 /**
- * Export.
+ * Platform Usage as a CSV.
  *
- * An exported figure travels further than the screen it came from: a headline
- * saying the platform did the work of fifteen people ends up in a pack, detached
- * from the page that produced it. So every file carries the four things needed
- * to read it honestly — whose view, which window, the settings the value figures
- * rest on, and the coverage note — and carries them at the top rather than in a
- * footnote.
+ * The export carries the same four things the screen does, in the same words:
+ * whose view it is, what window it covers, which assumptions produced the value
+ * figures, and the one line coverage note saying what is not counted. A figure
+ * that leaves the building without them is a figure somebody will quote back
+ * without them.
  *
- * Two things it deliberately will not do: print a cost total there isn't one of,
- * and add the four work-volume counts together.
+ * The four work volume units are written as four rows and never as a total, the
+ * same rule the screen holds to. An unpriced cost is written as an empty cell
+ * with its reason next to it rather than as a zero.
  */
 
-import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  PERSONA_TITLE, SETTING_LABEL, SOURCE_FIELD, SOURCE_LABEL, fmtHours, fmtInt, fmtMoney, fmtPeople, fmtPct, fmtUsd,
-  type AiAreaRow, type CcmResult, type CoverageResult, type CostResult, type CreatedArea, type ExceptionsResult,
-  type InsightsResult, type NumericSetting, type Period, type PortfolioResult, type ProductActivity,
-  type ReportsActivity, type RiskPicture, type SamplingResult,
-  type Scope, type SmartLearnResult, type UsageSettings, type ValueResult, type VolumeUnit,
+  COVERAGE_NOTE, dataAsOfLabel, formatDate, formatMonth,
+} from '../../data/platform-usage';
+import {
+  PERSONA_TITLE, SETTING_SHORT, SOURCE_FIELD, SOURCE_LABEL,
+  fmtOneDp, priorLabel,
+  type NumericSetting, type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
-export interface ExportInput {
-  scope: Scope;
-  period: Period;
-  settings: UsageSettings;
-  value: ValueResult;
-  /** An auditor's export carries hours, not rupees, exactly like their screen. */
-  showMoney: boolean;
-  cost: CostResult | null;
-  coverage: CoverageResult | null;
-  neverExercised: { controls: string[]; workflows: string[] } | null;
-  volume: VolumeUnit[];
-  /** PU-21. Absent on the auditor view, where a creation tally is a tally of a person. */
-  created: CreatedArea[] | null;
-  ai: AiAreaRow[] | null;
-  exceptions: ExceptionsResult | null;
-  smartLearn: SmartLearnResult | null;
-  wasted: { hours: number; runs: number };
-  /** PU-22 to PU-28. Null wherever the view does not show that block. */
-  product: ProductActivity | null;
-  reports: ReportsActivity | null;
-  sampling: SamplingResult | null;
-  insights: InsightsResult | null;
-  risks: RiskPicture | null;
-  portfolio: PortfolioResult | null;
-  ccm: CcmResult | null;
+/** One CSV cell, quoted only when it has to be. */
+function cell(value: string | number | null): string {
+  if (value === null) return '';
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-const esc = (v: string | number): string => {
-  const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
+const row = (...cells: (string | number | null)[]): string => cells.map(cell).join(',');
 
-const row = (...cells: (string | number)[]): string => cells.map(esc).join(',');
-
-/** The header every export carries, in both formats. */
-export function exportHeader(input: ExportInput): [string, string][] {
-  const { scope, period, settings } = input;
+/** The header every export opens with, so a file can be read on its own. */
+export function exportHeader(data: UsageSnapshot): string[][] {
+  const settings = data.settings;
+  const keys: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
   return [
-    ['View', PERSONA_TITLE[scope.persona]],
-    ['Scope', scope.label],
-    ['Period', `${formatDate(period.from)} to ${formatDate(period.to)}`],
-    ['Data', dataAsOfLabel()],
-    // Each assumption travels with where its value came from. A rate defended as
-    // measured from the customer's own history reads differently from one the
-    // vendor picked, and the file has to carry that difference.
-    ...(Object.keys(SETTING_LABEL) as NumericSetting[]).map(k => {
-      const field = SOURCE_FIELD[k];
-      const value = k === 'hourlyRate' ? fmtMoney(settings[k]) : fmtInt(settings[k]);
-      return [SETTING_LABEL[k], field ? `${value} (${SOURCE_LABEL[settings[field]]})` : value] as [string, string];
-    }),
-    ['Failed runs', 'Excluded from every saving figure, reported separately as wasted machine time'],
+    ['Platform Usage'],
+    ['Viewing as', PERSONA_TITLE[data.scope.persona]],
+    ['Scope', data.scope.label],
+    ['Window', `${data.period.label}, ${formatDate(data.period.from)} to ${formatDate(data.period.to)}`],
+    ['Compared with', data.prior ? priorLabel(data.period) : 'nothing, there is no earlier window of the same length'],
+    ['Data as of', dataAsOfLabel().replace('Data as of ', '')],
     ['What this covers', COVERAGE_NOTE],
+    [],
+    ['Assumptions behind every value figure'],
+    ['Setting', 'Value', 'Where it came from'],
+    ...keys.map(key => [
+      SETTING_SHORT[key],
+      String(settings[key]),
+      SOURCE_LABEL[settings[SOURCE_FIELD[key]] as keyof typeof SOURCE_LABEL],
+    ]),
   ];
 }
 
-export function buildUsageCsv(input: ExportInput): string {
-  const lines: string[] = ['Platform Usage'];
+/** The whole view as rows. */
+export function buildUsageCsv(
+  data: UsageSnapshot,
+  volumeBuckets: { label: string; runs: number; chat: number }[],
+): string {
+  const lines: string[] = [];
+  const push = (...cells: (string | number | null)[]) => lines.push(row(...cells));
+  const section = (title: string) => {
+    lines.push('');
+    push(title);
+  };
 
-  for (const [k, v] of exportHeader(input)) lines.push(row(k, v));
+  for (const header of exportHeader(data)) lines.push(row(...header));
 
-  lines.push('', 'What the work was worth');
-  lines.push(row('Hours saved (estimated)', fmtHours(input.value.hours)));
-  if (input.showMoney) {
-    lines.push(row('Money saved (estimated)', fmtMoney(input.value.money)));
-    lines.push(row('People equivalent (estimated)', fmtPeople(input.value.people)));
-  }
-  lines.push(row('Runs counted', fmtInt(input.value.runsCounted)));
-  lines.push(row('Rows processed', fmtInt(input.value.rowsProcessed)));
-  lines.push(row('Machine time (hours)', fmtHours(input.value.machineHours)));
-  lines.push(row('Hours lost to failed runs', fmtHours(input.wasted.hours)));
+  section('Value (estimated, from the assumptions above)');
+  push('Figure', 'Value', 'Compared with the previous window');
+  push('Hours saved', fmtOneDp(data.value.hours), data.priorValue ? fmtOneDp(data.priorValue.hours) : null);
+  push('Money saved (INR)', Math.round(data.value.money), data.priorValue ? Math.round(data.priorValue.money) : null);
+  push('People equivalent', fmtOneDp(data.value.people), data.priorValue ? fmtOneDp(data.priorValue.people) : null);
+  push('Rows worked through', data.value.rows, data.priorValue ? data.priorValue.rows : null);
+  push('Machine time (hours)', fmtOneDp(data.value.machineHours), null);
 
-  if (input.cost) {
-    lines.push('', 'Cost to run');
-    if (input.cost.complete) {
-      lines.push(row('Paid vendor lookups', fmtMoney(input.cost.lookupMoney ?? 0)));
-      lines.push(row('Invoices that figure is the sum of', fmtInt(input.cost.invoices)));
-      lines.push(row('Months in this window, all invoiced', fmtInt(input.cost.monthsInWindow)));
-      lines.push(row('Recorded calls', fmtInt(input.cost.recordedCalls)));
-      if (input.cost.effectiveRate !== null) {
-        lines.push(row('Derived from your invoices', `${fmtMoney(input.cost.effectiveRate)} per recorded call, not a price anybody quoted`));
-      }
-      if (input.cost.split) {
-        lines.push(row('The same runs priced per API', fmtMoney(input.cost.split.total)));
-        lines.push(row('Gap against the bill', fmtMoney(input.cost.split.gap)));
-      }
-    } else {
-      // No total under a total's label: an unfinished window is unfinished.
-      lines.push(row('Paid vendor lookups', `${input.cost.missing ?? 'No invoice entered for this period.'} No cost total exists.`));
-      lines.push(row('Months invoiced', `${fmtInt(input.cost.monthsInvoiced)} of ${fmtInt(input.cost.monthsInWindow)}`));
-    }
-    lines.push(row('Concierge job cost', fmtUsd(input.cost.conciergeUsd)));
-  }
+  section('Cost to run (entered, not estimated)');
+  push('Figure', 'Value', 'Note');
+  push(
+    'Billed by the vendor (INR)',
+    data.cost.lookupRupees === null ? null : Math.round(data.cost.lookupRupees),
+    data.cost.lookupRupees === null
+      ? `no bill entered for ${data.cost.missingMonths.map(m => m.label).join(', ') || 'this window'}`
+      : `${data.cost.invoices.length} invoices entered`,
+  );
+  push('Paid lookups recorded', data.cost.lookupCalls, `${data.lookups.failed} failed, which are not charged`);
+  push('Concierge job cost (USD)', fmtOneDp(data.cost.conciergeUsd), 'recorded in dollars by the tools, never converted here');
+  push('Net value (INR)', data.net.net === null ? null : Math.round(data.net.net), data.net.headline === 'Net value' ? 'work avoided less the vendor bill' : 'not computed while any bill is missing');
 
-  if (input.coverage) {
-    lines.push('', 'Control coverage');
-    lines.push(row('Controls exercised', fmtInt(input.coverage.exercised)));
-    lines.push(row('Controls in the library', fmtInt(input.coverage.total)));
-    lines.push(row('Coverage', fmtPct(input.coverage.pct)));
+  section('Value over time');
+  push('Bucket', 'Runs', 'Rows', 'Hours saved', 'Worth (INR)');
+  for (const bucket of data.overTime) {
+    push(bucket.label, bucket.runs, bucket.rows, fmtOneDp(bucket.hours), Math.round(bucket.money));
   }
 
-  if (input.neverExercised) {
-    lines.push('', 'Never exercised (ignores the period)');
-    lines.push(row('Controls', fmtInt(input.neverExercised.controls.length)));
-    for (const c of input.neverExercised.controls) lines.push(row('Control', c));
-    lines.push(row('Workflows', fmtInt(input.neverExercised.workflows.length)));
-    for (const w of input.neverExercised.workflows) lines.push(row('Workflow', w));
+  section('Control coverage');
+  push('Controls exercised in this window', data.coverage.exercised);
+  push('Controls in the library', data.coverage.total);
+  push('Coverage percent', fmtOneDp(data.coverage.pct));
+  section('Never exercised, ever (ignores the window)');
+  push('Control', 'Owner');
+  for (const control of data.never.controls) push(`${control.id} ${control.name}`, control.owner);
+  for (const workflow of data.never.workflows) push(`Workflow: ${workflow}`, null);
+
+  section('Exceptions caught');
+  push('Severity', 'Raised', 'Still open');
+  for (const severity of data.exceptions.bySeverity) push(severity.severity, severity.total, severity.open);
+  push('Without a run reference', data.exceptions.untraced, null);
+
+  section('Work volume by unit (four units, never summed)');
+  push('Unit', 'Count');
+  push('Workflow runs', data.volume.workflowRuns);
+  push('Bulk runs', data.volume.bulkRuns);
+  push('Chat questions', data.volume.chatQuestions);
+  push('Concierge jobs', data.volume.conciergeJobs);
+  push('Bucket', 'Workflow runs', 'Chat questions');
+  for (const bucket of volumeBuckets) push(bucket.label, bucket.runs, bucket.chat);
+
+  section('Reliability by workflow');
+  push('Workflow', 'Runs', 'Failed', 'Failure percent', 'Hours lost');
+  for (const line of data.reliability) {
+    push(line.workflow, line.total, line.failed, fmtOneDp(line.failurePct), fmtOneDp(line.wastedHours));
   }
 
-  if (input.exceptions && input.exceptions.total > 0) {
-    lines.push('', 'Exceptions caught');
-    lines.push(row('Reference', 'Severity', 'Status', 'Workflow', 'Raised'));
-    for (const e of input.exceptions.rows) {
-      lines.push(row(e.ref, e.severity, e.status, e.workflowName, formatDate(e.openedAt)));
-    }
+  section('Stuck runs');
+  push('Workflow', 'Ran by', 'When', 'State', 'Times in this window', 'What the engine said');
+  for (const run of data.stuck) {
+    push(run.workflow, run.ranBy, formatDate(run.at), run.status, run.repeats, run.error);
   }
 
-  // Four rows, never a sum.
-  lines.push('', 'Work volume by unit, in four units that are not addable');
-  lines.push(row('Unit', 'Count', 'What it is'));
-  for (const u of input.volume) lines.push(row(u.label, u.count, u.note));
-
-  if (input.created) {
-    lines.push('', 'Created this period');
-    lines.push(row('Area', 'Created'));
-    for (const a of input.created) lines.push(row(a.label, a.count));
-    lines.push(row('Not counted here', 'Edits, reviews, views and time spent'));
+  section('AI usage by area');
+  push('Area', 'Volume', 'Unit', 'How well it is known', 'Detail');
+  for (const line of data.aiUsage) {
+    push(line.area, line.volume, line.volumeUnit, line.accuracy, line.detail);
   }
 
-  if (input.ai) {
-    lines.push('', 'AI usage by area');
-    lines.push(row('Area', 'Volume', 'Unit', 'Cost', 'How well we know it', 'Note'));
-    for (const a of input.ai) {
-      lines.push(row(
-        a.area,
-        a.volume === null ? '' : a.volume,
-        a.volumeUnit,
-        a.costUsd === null ? '' : `${fmtUsd(a.costUsd)} (Concierge job cost)`,
-        a.accuracy,
-        a.note,
-      ));
-    }
+  if (data.people.length > 0) {
+    section('Your team, by outcome (alphabetical, never ranked)');
+    push('Member', 'Runs', 'Exceptions found', 'Waiting on them');
+    for (const person of data.people) push(person.name, person.runs, person.exceptionsFound, person.waitingOnThem);
   }
 
-  if (input.portfolio && input.portfolio.total > 0) {
-    lines.push('', 'Engagements');
-    for (const st of input.portfolio.byStatus) lines.push(row(st.label, st.count));
-    lines.push(row('Recorded changes in this window', fmtInt(input.portfolio.changes)));
-    lines.push(row('Open past the end of the audit period', fmtInt(input.portfolio.slipping.length)));
-    if (input.portfolio.strip.length > 0) {
-      lines.push(row('Engagement', 'Controls tested', 'Of', 'Open exceptions', 'In remediation', 'Report', 'Period ends'));
-      for (const e of input.portfolio.strip) {
-        lines.push(row(e.name, e.controlsTested, e.controlsTotal, e.exceptionsOpen, e.actionPlansOpen, e.report, e.periodEnd));
-      }
+  if (data.queue.length > 0) {
+    section('Waiting on you');
+    push('Item', 'Kind', 'Due', 'State');
+    for (const item of data.queue) {
+      push(item.title, item.kind, item.dueAt === null ? null : formatDate(item.dueAt), item.overdue ? 'overdue' : 'on track');
     }
   }
 
-  if (input.risks) {
-    lines.push('', 'Risks');
-    lines.push(row('Risks recorded', fmtInt(input.risks.total)));
-    lines.push(row('Critical or high with no control covering them', fmtInt(input.risks.unmappedSevere)));
-    lines.push(row('Covered by a control', fmtInt(input.risks.mapped)));
-    lines.push(row('Covered by nothing', fmtInt(input.risks.unmapped)));
-    for (const b of input.risks.byPriority) lines.push(row(`Priority ${b.label}`, b.count));
-    for (const r of input.risks.unmappedList) lines.push(row('Uncovered risk', `${r.id} ${r.name}`, r.priority, r.owner));
-    lines.push(row('Not recorded', 'Whether a risk was typed by a person or drafted by the assistant'));
+  section('Created in this window');
+  push('Kind', 'Created');
+  for (const created of data.created) push(created.label, created.count);
+
+  section('Dashboards, widgets and alerts');
+  push('Dashboards built', data.product.dashboardsCreated);
+  push('Widgets created or changed', data.product.widgetsChanged);
+  push('Alerts fired', data.product.alertsFired);
+  push('Alerts fired with no person', data.product.alertsAutomatic);
+
+  section('Reports');
+  push('Reports made', data.reports.made);
+  push('Times worked on', data.reports.activity);
+  push('Shared', data.reports.shared);
+  push('Action plans open', data.reports.actionPlansOpen);
+  push('Action plans closed', data.reports.actionPlansClosed);
+
+  section('Sample validation');
+  push('Passed', data.sampling.passed);
+  push('Failed', data.sampling.failed);
+  push('Errored, needs a person', data.sampling.error);
+  push('Queued or running', data.sampling.inFlight);
+
+  section('Insights generated');
+  push('Severity', 'Insights');
+  for (const line of data.insights.bySeverity) push(line.severity, line.count);
+  push('Per run', data.insights.perRun);
+  push('Consolidated', data.insights.consolidated);
+
+  section('Risks');
+  push('Recorded', data.risks.total);
+  push('With a control', data.risks.mapped);
+  push('With no control', data.risks.unmapped);
+  push('Critical or high with no control', data.risks.unmappedSevere.length);
+  push('Written by the AI (percent)', fmtOneDp(data.risks.aiGeneratedShare));
+  push('Risk', 'Priority', 'Owner');
+  for (const risk of data.risks.unmappedSevere) push(`${risk.id} ${risk.name}`, risk.priority, risk.owner);
+
+  section('Engagements');
+  push('Status', 'Engagements');
+  for (const line of data.portfolio.byStatus) push(line.status, line.count);
+  push('Past their planned finish', data.portfolio.slipping.length);
+  push('Record changes in this window', data.portfolio.changes);
+  push('Engagement', 'Controls tested', 'Of', 'Exceptions open', 'Report');
+  for (const line of data.portfolio.strip) {
+    push(`${line.code} ${line.name}`, line.controlsTested, line.controlsTotal, line.exceptionsOpen, line.report);
   }
 
-  if (input.sampling && input.sampling.total > 0) {
-    lines.push('', 'Sampling');
-    lines.push(row('Passed', fmtInt(input.sampling.passed)));
-    lines.push(row('Failed, the control did not hold', fmtInt(input.sampling.failed)));
-    lines.push(row('Errored, needs a person', fmtInt(input.sampling.errored)));
-    lines.push(row('Still running', fmtInt(input.sampling.inFlight)));
-    lines.push(row('Control', 'Engagement', 'Passed', 'Failed', 'Errored'));
-    for (const c of input.sampling.byControl) lines.push(row(c.control, c.engagement, c.passed, c.failed, c.errored));
+  section('Continuous monitoring');
+  push('Engagements monitoring continuously', data.ccm.engagementsOn);
+  push('Engagements in scope', data.ccm.engagementsTotal);
+  push('Bulk runs in this window', data.ccm.bulkRuns);
+  push('Engagement', 'Schedule', 'Must hold (percent)', 'Actually passing (percent)');
+  for (const line of data.ccm.thresholdRows) {
+    push(line.engagement, line.frequency, line.threshold, line.actual === null ? null : fmtOneDp(line.actual));
   }
 
-  if (input.ccm && input.ccm.engagementsOn > 0) {
-    lines.push('', 'CCM and automation');
-    lines.push(row('Engagements monitored continuously', fmtInt(input.ccm.engagementsOn)));
-    lines.push(row('Engagements in scope', fmtInt(input.ccm.engagementsTotal)));
-    lines.push(row('Bulk runs in this window', fmtInt(input.ccm.bulkRuns)));
-    lines.push(row('Engagement', 'Expects', 'Actual', 'Validations counted', 'Cadence', 'Approvals', 'Exceptions in a gate now'));
-    for (const r of input.ccm.rows) {
-      lines.push(row(
-        r.engagement, `${fmtInt(r.threshold)}%`, r.actual === null ? 'nothing landed' : fmtPct(r.actual),
-        r.sampleN, r.cadence, r.approvals, r.inGate,
-      ));
+  section('Paid lookups');
+  push('API', 'Successful calls', 'Failed', 'Touches personal data', 'Price entered');
+  for (const line of data.lookups.rows) {
+    push(line.name, line.calls, line.failed, line.personalData ? 'yes' : 'no', line.pricePaise === null ? null : line.pricePaise);
+  }
+  for (const invoice of data.cost.invoices) {
+    push(`Bill: ${formatMonth(invoice.periodMonth)} ${invoice.vendor}`, invoice.amountPaise / 100, null, null, invoice.enteredBy);
+  }
+
+  section("What the assistant has learned");
+  push('Active memories', data.learn.active);
+  push('Awaiting approval', data.learn.pending);
+  push('Due for review', data.learn.dueReview);
+  push('Used in the last seven days', data.learn.usedThisWeek);
+
+  if (data.changes.rows.length > 0) {
+    section('Changes to the assumptions and the entered bills');
+    push('What changed', 'From', 'To', 'Where it came from', 'Who', 'When');
+    for (const change of data.changes.rows) {
+      push(change.field, change.from, change.to, change.source, change.by, formatDate(change.at));
     }
-  }
-
-  if (input.product) {
-    lines.push('', 'Dashboards, widgets and alerts');
-    lines.push(row('Dashboards built', fmtInt(input.product.dashboardsCreated)));
-    lines.push(row('Dashboards changed or shared', fmtInt(input.product.dashboardsChanged)));
-    lines.push(row('Dashboards in the workspace now', fmtInt(input.product.dashboardsTotal)));
-    lines.push(row('Alerts fired', fmtInt(input.product.alertsFired)));
-    lines.push(row('Of those, fired automatically', fmtInt(input.product.automaticFires)));
-    if (input.product.makers.length > 0) {
-      lines.push(row('Dashboard', 'Made by', 'When'));
-      for (const m of input.product.makers) lines.push(row(m.name, m.madeBy ?? 'automatic', formatDate(m.at)));
-    }
-  }
-
-  if (input.reports) {
-    lines.push('', 'Reports');
-    lines.push(row('Made', fmtInt(input.reports.made)));
-    lines.push(row('Recorded activities', fmtInt(input.reports.activity)));
-    lines.push(row('Shared', fmtInt(input.reports.shared)));
-    lines.push(row('Action plans open right now', fmtInt(input.reports.actionPlansOpen)));
-    lines.push(row('Action plans implemented', fmtInt(input.reports.actionPlansClosed)));
-    if (input.reports.list.length > 0) {
-      lines.push(row('Report', 'Made by', 'When'));
-      for (const r of input.reports.list) lines.push(row(r.name, r.madeBy ?? 'automatic', formatDate(r.at)));
-    }
-  }
-
-  if (input.insights && input.insights.perRun + input.insights.consolidated > 0) {
-    lines.push('', 'AI insights');
-    lines.push(row('Written from one run', fmtInt(input.insights.perRun)));
-    lines.push(row('Written across an engagement', fmtInt(input.insights.consolidated)));
-    lines.push(row('Severity', 'From one run', 'Across an engagement'));
-    for (const b of input.insights.bySeverity) lines.push(row(b.severity, b.perRun, b.consolidated));
-  }
-
-  if (input.smartLearn?.hasData) {
-    lines.push('', 'Smart Learn');
-    lines.push(row('Memories in use', fmtInt(input.smartLearn.active)));
-    lines.push(row('Recalled in the last 7 days', fmtInt(input.smartLearn.recalls7d)));
-    lines.push(row('Due for review', fmtInt(input.smartLearn.dueReview)));
-    lines.push(row('Waiting for approval', fmtInt(input.smartLearn.pending)));
   }
 
   return lines.join('\n');
 }
 
-export function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+/** The file name says whose view and which window, so two files never collide. */
+export function usageFileName(data: UsageSnapshot, extension: string): string {
+  const persona = PERSONA_TITLE[data.scope.persona].toLowerCase().replace(/\s+/g, '-');
+  return `platform-usage-${persona}-${formatDate(data.period.from).replace(/\s+/g, '-')}-to-${formatDate(data.period.to).replace(/\s+/g, '-')}.${extension}`;
+}
+
+export function downloadUsageCsv(
+  data: UsageSnapshot,
+  volumeBuckets: { label: string; runs: number; chat: number }[],
+): void {
+  const blob = new Blob([buildUsageCsv(data, volumeBuckets)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = usageFileName(data, 'csv');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }
