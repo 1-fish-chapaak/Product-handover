@@ -277,14 +277,30 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
   /** Open the same action the Exceptions tab would (persists + logs activity). */
   onAction?: (kind: ExceptionActionKind, ex: GrcException) => void;
 }) {
+  // One surface at a time (auditor feedback, row 20): opening any drawer —
+  // preset list, approval-route list, or the case deep-dive — closes the
+  // others, so two sheets never sit stacked over the same exception.
   const [openPresetKey, setOpenPresetKey] = useState<string | null>(null);
-  const [detailEx, setDetailEx] = useState<GrcException | null>(null);
-  const openDrawer = useCallback((key: string) => setOpenPresetKey(key), []);
+  const [detailEx, setDetailExRaw] = useState<GrcException | null>(null);
+  const openDrawer = useCallback((key: string) => {
+    setWfDrawer(null);
+    setDetailExRaw(null);
+    setOpenPresetKey(key);
+  }, []);
+  const setDetailEx = useCallback((ex: GrcException | null) => {
+    if (ex) { setOpenPresetKey(null); setWfDrawer(null); }
+    setDetailExRaw(ex);
+  }, []);
 
   // ── Approval-route journey — assignments delegated through an approval chain.
   // Drives the "Approval routes" KPI band; tiles open a filtered case list.
   const { assignments, currentUserId } = useWorkflow();
   const [wfDrawer, setWfDrawer] = useState<{ title: string; subtitle: string; exceptions: GrcException[] } | null>(null);
+  const openWfDrawer = useCallback((d: { title: string; subtitle: string; exceptions: GrcException[] }) => {
+    setOpenPresetKey(null);
+    setDetailExRaw(null);
+    setWfDrawer(d);
+  }, []);
   const wf = useMemo(() => {
     const active = assignments.filter(a => a.status !== 'pulled-back');
     const byEx = (pred: (a: typeof active[number]) => boolean) => exceptions.filter(e => active.some(a => a.exceptionId === e.id && pred(a)));
@@ -444,10 +460,10 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
               <span className="text-[0.6875rem] text-ink-400">· where delegated work sits · tap a tile to see the cases</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-              <KpiTile icon={GitBranch}   label="In approval route"     value={wf.inRoute.length}          tone="brand"     onClick={() => setWfDrawer({ title: 'In approval route', subtitle: 'Delegated through an approval chain', exceptions: wf.inRoute })} />
-              <KpiTile icon={Inbox}       label="Awaiting approval"     value={wf.awaitingApproval.length} tone="mitigated" onClick={() => setWfDrawer({ title: 'Awaiting approval', subtitle: 'Submitted and moving through approvers', exceptions: wf.awaitingApproval })} />
-              <KpiTile icon={Wrench}      label="My work pending"       value={wf.myWork.length}           tone="evidence"  onClick={() => setWfDrawer({ title: 'My work pending', subtitle: 'Assigned to you — draft and submit', exceptions: wf.myWork })} />
-              <KpiTile icon={ShieldCheck} label="Awaiting my approval"  value={wf.myApprovals.length}      tone="risk"      onClick={() => setWfDrawer({ title: 'Awaiting my approval', subtitle: 'Pending your decision', exceptions: wf.myApprovals })} />
+              <KpiTile icon={GitBranch}   label="In approval route"     value={wf.inRoute.length}          tone="brand"     onClick={() => openWfDrawer({ title: 'In approval route', subtitle: 'Delegated through an approval chain', exceptions: wf.inRoute })} />
+              <KpiTile icon={Inbox}       label="Awaiting approval"     value={wf.awaitingApproval.length} tone="mitigated" onClick={() => openWfDrawer({ title: 'Awaiting approval', subtitle: 'Submitted and moving through approvers', exceptions: wf.awaitingApproval })} />
+              <KpiTile icon={Wrench}      label="My work pending"       value={wf.myWork.length}           tone="evidence"  onClick={() => openWfDrawer({ title: 'My work pending', subtitle: 'Assigned to you — draft and submit', exceptions: wf.myWork })} />
+              <KpiTile icon={ShieldCheck} label="Awaiting my approval"  value={wf.myApprovals.length}      tone="risk"      onClick={() => openWfDrawer({ title: 'Awaiting my approval', subtitle: 'Pending your decision', exceptions: wf.myApprovals })} />
             </div>
           </>
         )}

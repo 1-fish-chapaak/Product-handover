@@ -11,6 +11,7 @@ import {
   FileText, Image as ImageIcon, FileSpreadsheet, Check, AlertCircle,
   Link2, Workflow as WorkflowIcon, ClipboardList,
   CheckCircle2, Circle, FlaskConical, Play, Loader2, XCircle,
+  List, LayoutGrid,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -461,6 +462,8 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   // then hand the focus back. Filters that would hide the row are cleared: the
   // redirect's intent ("show me this control") outranks stored filter state.
   const [flashControlId, setFlashControlId] = useState<string | null>(null);
+  // List ⇄ cards presentation of the same filtered set (auditor feedback, row 16).
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
   useEffect(() => {
     if (!focusControlId) return;
     if (!controls.some(c => c.controlId === focusControlId)) { onFocusHandled?.(); return; }
@@ -586,13 +589,62 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       {/* ─── Controls list ─── */}
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[0.75rem] font-semibold text-ink-600">{filteredControls.length} control{filteredControls.length === 1 ? '' : 's'}</span>
-        <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
-        <Button variant="primary" size="sm" leftIcon={<Plus size={13} />} onClick={() => setAddControlOpen(true)}>
-          New control
-        </Button>
-        </Gated>
+        <div className="flex items-center gap-2">
+          {/* List ⇄ cards switch (auditor feedback, row 16) — same pattern as
+              the SOX control library. */}
+          <div className="inline-flex items-center p-0.5 bg-canvas rounded-md border border-canvas-border">
+            {([['list', List], ['cards', LayoutGrid]] as const).map(([mode, Icon]) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                title={mode === 'list' ? 'List view' : 'Cards view'}
+                aria-pressed={viewMode === mode}
+                className={`w-7 h-7 rounded-sm flex items-center justify-center cursor-pointer transition-colors ${viewMode === mode ? 'bg-white text-brand-700 shadow-sm' : 'text-ink-400 hover:text-ink-700'}`}
+              >
+                <Icon size={13} />
+              </button>
+            ))}
+          </div>
+          <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
+          <Button variant="primary" size="sm" leftIcon={<Plus size={13} />} onClick={() => setAddControlOpen(true)}>
+            New control
+          </Button>
+          </Gated>
+        </div>
       </div>
-      <div className="space-y-2.5">
+
+      {/* ─── Cards view — compact grid; a card opens the control in the list ─── */}
+      {viewMode === 'cards' && filteredControls.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filteredControls.map(c => {
+            const status = controlStatuses.get(c.controlId) ?? 'Not tested';
+            return (
+              <button
+                key={c.controlId}
+                onClick={() => { setViewMode('list'); expandControl(c.controlId); setFlashControlId(c.controlId); window.setTimeout(() => setFlashControlId(null), 2600); }}
+                className="glass-card p-4 text-left hover:shadow-md transition-shadow cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[0.6875rem] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5">{c.controlId}</span>
+                  {c.isKey && <span className="px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 border border-mitigated-100 inline-flex items-center">Key</span>}
+                  <span className={`ml-auto px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${
+                    status === 'Pass' ? 'bg-compliant-50 text-compliant-700'
+                    : status === 'Fail' ? 'bg-risk-50 text-risk-700'
+                    : status === 'In test' ? 'bg-evidence-50 text-evidence-700'
+                    : 'bg-surface-2 text-ink-500'
+                  }`}>{status}</span>
+                </div>
+                <p className="text-[0.78125rem] font-medium text-ink-800 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">{c.description}</p>
+                <div className="mt-2 text-[0.6875rem] text-ink-500">
+                  {c.subProcess} · {c.attributes.length} attribute{c.attributes.length === 1 ? '' : 's'} · {c.frequency}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className={viewMode === 'cards' && filteredControls.length > 0 ? 'hidden' : 'space-y-2.5'}>
         {filteredControls.length === 0 && (
           <div className="glass-card">
             <ListPlaceholder
@@ -775,7 +827,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                   <ResultPill result={resultFor(attr.id)} />
                                   <TestButton type={typeFor(attr.id)} hasWorkflow={linkedWfs.length > 0} running={runningAttr.has(attr.id)} onClick={() => testAttribute(attr)} />
                                   {typeFor(attr.id) === 'Automated' && (
-                                  <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
+                                  <Gated permission="racm_link_workflow" mode="disable" title="Linking is locked for your role — it needs the 'Link workflow' permission (RACM). Ask your workspace admin, or the engagement owner, to grant it or link the workflow for you.">
                                   <button
                                     onClick={() => setMapAttr(attr)}
                                     title={linkedWfs.map(w => w.name).join(', ') || 'Link or build a workflow'}

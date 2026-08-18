@@ -26,6 +26,9 @@ import {
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
+import { racmRegisters } from './racmRegisterStore';
+import type { RACMRow, Frequency, Automation } from '../../data/racm';
+import type { ProcessCode } from '../../data/engagements';
 
 interface Props {
   onBack: () => void;
@@ -49,6 +52,72 @@ interface Props {
    * trailing "Ref" column is shown.
    */
   sourceFiles?: string[];
+  /**
+   * Set when opened from an engagement's RACM tab. The editor then loads the
+   * clicked RACM's rows from the engagement register and writes every edit
+   * back — so a delete here disappears from the RACM and Controls tabs too.
+   * Absent for legacy hosts (Process Hub, RACM Generator), which keep the
+   * demo procurement matrix.
+   */
+  engagementId?: string;
+  /** The RACM entry (sub-process area) being edited within the register. */
+  subProcess?: string;
+}
+
+// ─── Engagement-register bridge ────────────────────────────────────────────
+// The register stores RACMRow (≈10 fields + structured attributes); the editor
+// renders the rich 25-field matrix. Fields the register doesn't hold show "—"
+// and survive editing untouched.
+
+const VALID_FREQ = new Set(['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Event-driven']);
+const VALID_AUTOMATION = new Set(['Manual', 'IT-dependent', 'Automated']);
+
+function racmRowToEditor(r: RACMRow): ProcurementRacmRow {
+  return {
+    riskId: r.riskId, controlId: r.controlId, isKey: r.isKey,
+    processArea: r.process, subProcess: r.subProcess,
+    riskCategory: '—', riskDescription: r.riskDescription,
+    riskRating: '—', likelihood: '—', impact: '—',
+    controlObjective: '—', controlActivity: r.controlDescription,
+    controlType: r.controlType, controlNature: r.automation, frequency: r.frequency,
+    controlOwner: '—',
+    controlEvidence: Array.from(new Set(r.attributes.flatMap(a => a.requiredEvidence))).slice(0, 3).join(', ') || '—',
+    assertions: r.assertion, fsLineItem: '—', regulatoryRef: '—',
+    keyReport: '—', ipeIceDetails: '—', segregationOfDuties: '—', mgmtReviewControl: '—',
+    confidence: '—', sopSectionRef: '—',
+    attributes: r.attributes.map(a => a.description).join(', '),
+  };
+}
+
+function editorRowToRacm(row: ProcurementRacmRow, src: RACMRow | undefined, process: ProcessCode, seq: number): RACMRow {
+  // Attributes keep their structured form (ids, evidence, populations) unless
+  // the comma-separated list was actually edited — then it is re-synthesised.
+  const srcAttrText = src?.attributes.map(a => a.description).join(', ') ?? '';
+  const attributes = src && srcAttrText === row.attributes
+    ? src.attributes
+    : row.attributes.split(',').map(s => s.trim()).filter(s => s && s !== '—').map((desc, i) => ({
+        id: `${row.controlId}.${i + 1}`,
+        description: desc,
+        testProcedure: 'Define the test procedure for this attribute.',
+        requiredEvidence: [],
+        populationSize: 0,
+        defaultSampleSize: 0,
+      }));
+  return {
+    id: src?.id ?? `${row.controlId}-row-${seq}`,
+    process,
+    subProcess: row.subProcess,
+    riskId: row.riskId,
+    riskDescription: row.riskDescription,
+    controlId: row.controlId,
+    controlDescription: row.controlActivity,
+    attributes,
+    assertion: src?.assertion ?? 'Accuracy',
+    frequency: (VALID_FREQ.has(row.frequency) ? row.frequency : src?.frequency ?? 'Monthly') as Frequency,
+    controlType: row.controlType === 'Detective' ? 'Detective' : 'Preventive',
+    automation: (VALID_AUTOMATION.has(row.controlNature) ? row.controlNature : src?.automation ?? 'Manual') as Automation,
+    isKey: Boolean(row.isKey),
+  };
 }
 
 // Trailing "Ref" column — shown only when a RACM was consolidated from 2+ files.
@@ -109,19 +178,48 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
   { value: 'riskRating', label: 'Risk Rating' },
 ];
 
-export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
+export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles, engagementId, subProcess }: Props) {
   const { openShare } = useShare();
   const logEvent = useAuditLog();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
   const showRef = (sourceFiles?.length ?? 0) > 1;
+
+  // ─── Engagement-register mode ─────────────────────────────────────────
+  // Opened from an engagement's RACM tab: load THAT RACM's rows and write every
+  // edit back, so nothing here is a demo seed and nothing is lost on Back.
+  const wiredRows = engagementId ? racmRegisters.rows(engagementId) : undefined;
+  const wired = Boolean(engagementId && wiredRows);
+  // Structured originals by row key — preserves attribute objects on save.
+  const srcByKey = useRef<Map<string, RACMRow>>(new Map());
+  const wiredProcess = useRef<ProcessCode>('P2P');
+
   // ─── State ───────────────────────────────────────────────────────────
-  const [rows, setRows] = useState<ProcurementRacmRow[]>(() =>
-    PROCUREMENT_RACM_ROWS.map((r, i) => ({
+  const [rows, setRows] = useState<ProcurementRacmRow[]>(() => {
+    if (wired) {
+      const scoped = subProcess ? wiredRows!.filter(r => r.subProcess === subProcess) : wiredRows!;
+      srcByKey.current = new Map(scoped.map(r => [`${r.riskId}-${r.controlId}`, r]));
+      if (scoped[0]) wiredProcess.current = scoped[0].process;
+      return scoped.map(racmRowToEditor);
+    }
+    return PROCUREMENT_RACM_ROWS.map((r, i) => ({
       ...r,
       isKey: isKeyControl(r.controlId),
       ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
-    })));
+    }));
+  });
+
+  // Persist every rows change back to the engagement register (wired mode).
+  // Rows outside this RACM's sub-process pass through untouched.
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (!wired || !engagementId) return;
+    if (!hydrated.current) { hydrated.current = true; return; }
+    const others = (racmRegisters.rows(engagementId) ?? []).filter(r => (subProcess ? r.subProcess !== subProcess : false));
+    const mapped = rows.map((row, i) => editorRowToRacm(row, srcByKey.current.get(`${row.riskId}-${row.controlId}`), wiredProcess.current, i));
+    racmRegisters.replaceRows(engagementId, [...mapped, ...others]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupByMode>('subProcess');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -140,6 +238,13 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   useEffect(() => {
     try { localStorage.setItem(`racm-colw-${racmId ?? 'x'}`, JSON.stringify(colWidths)); } catch { /* ignore */ }
   }, [colWidths, racmId]);
+  // User-dragged column order (non-pinned columns), remembered per RACM.
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`racm-colorder-${racmId ?? 'x'}`) || '[]'); } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`racm-colorder-${racmId ?? 'x'}`, JSON.stringify(colOrder)); } catch { /* ignore */ }
+  }, [colOrder, racmId]);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
@@ -243,6 +348,15 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     // pinned first, then by configured group order
     const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
     const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
+    // Apply the user's drag order to the scrollable columns; columns never
+    // reordered keep their catalog position (after all ordered ones).
+    if (colOrder.length) {
+      const pos = (k: string) => {
+        const i = colOrder.indexOf(k);
+        return i !== -1 ? i : colOrder.length + PROCUREMENT_RACM_COLUMNS.findIndex(c => c.key === k);
+      };
+      rest.sort((a, b) => pos(a.key as string) - pos(b.key as string));
+    }
     let cols = [...pinned, ...rest];
     // A constant Process Area lives in the header instead of a per-row column.
     if (singleProcessArea) cols = cols.filter(c => c.key !== 'processArea');
@@ -253,7 +367,18 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       cols.splice(Math.max(afterControlId, 1), 0, REF_COLUMN);
     }
     return cols;
-  }, [visibleCols, showRef, singleProcessArea]);
+  }, [visibleCols, showRef, singleProcessArea, colOrder]);
+
+  // Drop one scrollable column onto another to reorder — pinned columns hold.
+  const reorderColumn = (fromKey: string, toKey: string) => {
+    if (fromKey === toKey) return;
+    const ordered = visibleColumns.filter(c => !PINNED_KEYS.has(c.key) && c.key !== 'ref').map(c => c.key as string);
+    const from = ordered.indexOf(fromKey);
+    const to = ordered.indexOf(toKey);
+    if (from === -1 || to === -1) return;
+    ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+    setColOrder(ordered);
+  };
 
   // Overlay any user resize overrides on the default widths, then hand these
   // "effective" columns to the header + rows so widths stay in sync everywhere.
@@ -323,11 +448,24 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     setSaveStatus('edited');
   };
 
+  // Delete asks first — in an audit file a silent delete is data loss, and in
+  // engagement mode it cascades (Controls tab entry + workflow links go too).
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteSelected = () => {
     if (selectedRowIds.size === 0) return;
+    setConfirmDelete(true);
+  };
+  const reallyDeleteSelected = () => {
+    const ids = Array.from(selectedRowIds);
     setRows(prev => prev.filter(r => !selectedRowIds.has(`${r.riskId}-${r.controlId}`)));
     setSelectedRowIds(new Set());
+    setConfirmDelete(false);
     setSaveStatus('saved');
+    logEvent({
+      action: 'Delete',
+      description: `Deleted ${ids.length} row${ids.length === 1 ? '' : 's'} from ${racmName ?? 'the RACM'}`,
+      module: 'Audit', entity: 'RACM',
+    });
   };
 
   const toggleGroup = (label: string) =>
@@ -570,6 +708,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             onToggleGroup={toggleGroup}
             visibleColumns={effCols}
             onResize={startResize}
+            onReorderColumn={reorderColumn}
             pinnedKeys={PINNED_KEYS}
             stickyOffsets={stickyOffsets}
             selectedRowIds={selectedRowIds}
@@ -621,9 +760,34 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             onClose={() => setDetailRowId(null)}
             onImport={() => fileInputRef.current?.click()}
             onUpdate={(k, v) => updateCell(`${detailRow.riskId}-${detailRow.controlId}`, k, v)}
+            saveNote={wired ? "Changes save to this engagement's RACM" : 'Demo matrix — changes reset when you leave'}
           />
         )}
       </AnimatePresence>
+
+      {/* Delete confirmation — names exactly what goes with the rows */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[70] bg-ink-900/40 backdrop-blur-[2px] flex items-start justify-center pt-[20vh] px-5" onClick={() => setConfirmDelete(false)}>
+          <div role="dialog" aria-label="Confirm delete" className="w-full max-w-[440px] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <h2 className="text-[15px] font-semibold text-ink-900">
+                Delete {selectedRowIds.size} row{selectedRowIds.size === 1 ? '' : 's'}?
+              </h2>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">
+                {wired
+                  ? 'These rows come off this engagement’s RACM. Their controls disappear from the Controls tab, and any workflows linked to their attributes are unlinked.'
+                  : 'These rows come off the matrix.'}
+              </p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmDelete(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={reallyDeleteSelected} className="h-9 px-3.5 rounded-lg bg-risk-600 text-white text-[12.5px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import/Export toast */}
       <AnimatePresence>
@@ -800,7 +964,7 @@ function ColumnVisibilityPanel({
 
 // ─── Grid ─────────────────────────────────────────────────────────────────
 function RacmGrid({
-  grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, pinnedKeys, stickyOffsets,
+  grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, onReorderColumn, pinnedKeys, stickyOffsets,
   selectedRowIds, onToggleRowSelected, onOpenDetail, onUpdateCell, onToggleKey, showGroupHeaders,
   columnFilters, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
 }: {
@@ -809,6 +973,7 @@ function RacmGrid({
   onToggleGroup: (label: string) => void;
   visibleColumns: RacmColumnDef[];
   onResize: (e: { clientX: number; preventDefault: () => void; stopPropagation: () => void }, key: string, startW: number) => void;
+  onReorderColumn: (fromKey: string, toKey: string) => void;
   pinnedKeys: Set<keyof ProcurementRacmRow>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
   selectedRowIds: Set<string>;
@@ -838,10 +1003,16 @@ function RacmGrid({
           const left = stickyOffsets.offsets.get(c.key);
           const isLastPinned = pinned && [...pinnedKeys].slice(-1)[0] === c.key;
           const filterMode = COLUMN_FILTER_MODE[c.key as string];
+          const reorderable = !pinned && c.key !== 'ref';
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              draggable={reorderable}
+              onDragStart={reorderable ? (e) => { e.dataTransfer.setData('text/racm-col', c.key as string); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+              onDragOver={reorderable ? (e) => { if (e.dataTransfer.types.includes('text/racm-col')) e.preventDefault(); } : undefined}
+              onDrop={reorderable ? (e) => { const from = e.dataTransfer.getData('text/racm-col'); if (from) { e.preventDefault(); onReorderColumn(from, c.key as string); } } : undefined}
+              title={reorderable ? 'Drag to reorder this column' : undefined}
+              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : 'cursor-grab active:cursor-grabbing'} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               <span className="truncate">{c.label}</span>
               {filterMode && (
                 <ColumnFilterControl colKey={c.key as string} label={c.label}
@@ -1151,12 +1322,14 @@ function CellContent({
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────
 function DetailPanel({
-  row, onClose, onUpdate, onImport,
+  row, onClose, onUpdate, onImport, saveNote = 'Changes auto-save',
 }: {
   row: ProcurementRacmRow;
   onClose: () => void;
   onUpdate: (k: keyof ProcurementRacmRow, v: string) => void;
   onImport?: () => void;
+  /** Honest save-behaviour label for the footer — varies by host. */
+  saveNote?: string;
 }) {
   const sections: { group: ColumnGroup; label: string }[] = COLUMN_GROUP_ORDER.map(g => ({ group: g, label: COLUMN_GROUP_LABELS[g] }));
   // Non-modal side panel: the grid behind stays interactive (no backdrop / focus
@@ -1206,7 +1379,7 @@ function DetailPanel({
 
       <div className="px-5 py-3 border-t border-border-light flex items-center justify-between bg-surface-2/30">
         <div className="flex items-center gap-1.5 text-[0.625rem] text-text-muted">
-          <Save size={10} />Changes auto-save
+          <Save size={10} />{saveNote}
         </div>
         <div className="flex items-center gap-2">
           {onImport && (

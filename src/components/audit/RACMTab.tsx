@@ -62,7 +62,7 @@ function customControlToRacmRow(c: WorkspaceControl, process: Engagement['proces
 interface Props {
   engagement: Engagement;
   /** Open the full-page RACM editor (optionally scoped to a specific RACM). */
-  onOpenFullEditor?: (override?: { racmName?: string; processLabel?: string }) => void;
+  onOpenFullEditor?: (override?: { racmName?: string; processLabel?: string; entryId?: string; subProcess?: string }) => void;
 }
 
 // ─── Token maps ───────────────────────────────────────────────────────────────
@@ -171,19 +171,10 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   // Light up when the engagement-level generation lands (header launcher run).
   useInsightCacheVersion();
   const insightStamp = getGeneratedInsight('engagement', engagement.id)?.generatedAt ?? null;
-  const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
-
-  // When a full RACM is uploaded it replaces the library rows for every area.
-  const [uploadedRows, setUploadedRows] = useState<RACMRow[]>([]);
-  // SOP per entry id — seed every sub-process with one except the last (to demo the extract path).
-  const [sopByEntry, setSopByEntry] = useState<Record<string, SopDoc | null>>(() => {
-    const groups = groupRacmBySubProcess(racmRowsForProcess(engagement.process));
-    const map: Record<string, SopDoc | null> = {};
-    groups.forEach((g, i) => { map[slug(g.subProcess)] = i === groups.length - 1 ? null : defaultSopFor(g.subProcess); });
-    return map;
-  });
-  // Brand-new RACMs created by extracting from an SOP (a new area not in the library).
-  const [extraEntries, setExtraEntries] = useState<RacmEntry[]>([]);
+  // Rows, uploads and extractions all live on the engagement's register in the
+  // workspace store — so they survive leaving the tab, and the Controls tab
+  // sees the same controls under the same ids.
+  const racmRows = ws.racmRows;
 
   const [sopPreview, setSopPreview] = useState<RacmEntry | null>(null);
   // Fallback in-tab matrix — only used in contexts that don't provide a full-page editor.
@@ -202,23 +193,22 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   const sopFileRef = useRef<HTMLInputElement | null>(null);
   const sopTargetRef = useRef<string>('new'); // entry id, or 'new'
 
-  const baseRows = uploadedRows.length > 0 ? uploadedRows : libraryRows;
   const customRows = useMemo(
     () => ws.racmControls.map(c => customControlToRacmRow(c, engagement.process)),
     [ws.racmControls, engagement.process],
   );
 
-  const libraryEntries = useMemo<RacmEntry[]>(() => {
-    const groups = groupRacmBySubProcess([...customRows, ...baseRows]);
-    return groups.map(g => {
+  const entries = useMemo<RacmEntry[]>(() => {
+    const groups = groupRacmBySubProcess([...customRows, ...racmRows]);
+    return groups.map((g, i) => {
       const id = slug(g.subProcess);
-      const sop = sopByEntry[id] ?? null;
-      const source: RacmEntry['source'] = uploadedRows.length > 0 ? 'uploaded' : sop?.extracted ? 'sop-extracted' : 'library';
+      // An SOP the auditor linked wins; otherwise the seed gives every area a
+      // document except the last, so the extract path has somewhere to start.
+      const sop = ws.sopOverrides[id] ?? (i === groups.length - 1 ? null : defaultSopFor(g.subProcess));
+      const source: RacmEntry['source'] = sop?.extracted ? 'sop-extracted' : 'library';
       return { id, name: `${g.subProcess} RACM`, subProcess: g.subProcess, rows: g.rows, sop, source, updatedAgo: defaultSopFor(g.subProcess).uploadedAgo };
     });
-  }, [customRows, baseRows, sopByEntry, uploadedRows.length]);
-
-  const entries = useMemo(() => [...extraEntries, ...libraryEntries], [extraEntries, libraryEntries]);
+  }, [customRows, racmRows, ws.sopOverrides]);
   const selected = entries.find(e => e.id === selectedId) ?? null;
 
   // Two ways into a RACM: the card NAME opens the in-tab matrix (read it in
@@ -226,19 +216,22 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   // goes to the full-page editor for actual editing.
   const openMatrix = (entry: RacmEntry) => setSelectedId(entry.id);
   const openEditor = (entry: RacmEntry) => {
-    if (onOpenFullEditor) onOpenFullEditor({ racmName: entry.name, processLabel: entry.subProcess });
+    if (onOpenFullEditor) onOpenFullEditor({ racmName: entry.name, processLabel: entry.subProcess, entryId: entry.id, subProcess: entry.subProcess });
     else setSelectedId(entry.id);
   };
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-  const triggerRacmUpload = () => { setNewOpen(false); racmFileRef.current?.click(); };
-  const triggerSopUpload = (target: string) => { sopTargetRef.current = target; setNewOpen(false); sopFileRef.current?.click(); };
+  // One extraction at a time: starting a second would overwrite the first's
+  // progress and leave a half-built RACM behind.
+  const busy = extracting !== null;
+  const triggerRacmUpload = () => { if (busy) return; setNewOpen(false); racmFileRef.current?.click(); };
+  const triggerSopUpload = (target: string) => { if (busy) return; sopTargetRef.current = target; setNewOpen(false); sopFileRef.current?.click(); };
 
   const onRacmFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const rows = generateRacmForProcess(engagement.process);
-      setUploadedRows(rows);
+      ws.replaceRacmRows(rows);
       const areas = new Set(rows.map(r => r.subProcess)).size;
       logEvent({ action: 'Create', description: `Created ${areas} RACM${areas === 1 ? '' : 's'} from uploaded matrix "${file.name}"`, module: 'Governance', entity: 'RACM' });
       addToast({ type: 'success', message: `Imported \`${file.name}\`: ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
@@ -259,7 +252,9 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       const sop: SopDoc = { name: filename, version: 'v1.0', uploadedAgo: 'just now', sections: SOP_SECTIONS, extracted: true };
       if (target === 'new') {
         const area = areaFromFilename(filename);
-        const id = `extra-${slug(area)}-${extraEntries.length + 1}`;
+        const id = slug(area);
+        // Rows go onto the engagement's register, so these controls appear on
+        // the Controls tab under exactly the ids shown here.
         const gen = generateRacmForProcess(engagement.process).slice(0, 5).map((r, i) => ({
           ...r,
           id: `${id}-row-${i}`,
@@ -268,14 +263,15 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
           controlId: `C-${slug(area).toUpperCase().replace(/-/g, '').slice(0, 6)}-${String(i + 1).padStart(2, '0')}`,
         }));
         const attrs = gen.reduce((s, r) => s + r.attributes.length, 0);
+        ws.appendRacmRows(gen);
+        ws.setSopOverride(id, sop);
         const entry: RacmEntry = { id, name: `${area} RACM`, subProcess: area, rows: gen, sop, source: 'sop-extracted', updatedAgo: 'just now' };
-        setExtraEntries(prev => [entry, ...prev]);
         logEvent({ action: 'Create', description: `Created RACM "${entry.name}" by extracting from SOP "${filename}"`, module: 'Governance', entity: 'RACM' });
         addToast({ type: 'success', message: `Extracted ${gen.length} controls · ${attrs} attributes from \`${filename}\`` });
         setExtracting(null);
         setSopPreview(entry); // show what was extracted, right on the list
       } else {
-        setSopByEntry(prev => ({ ...prev, [target]: sop }));
+        ws.setSopOverride(target, sop);
         addToast({ type: 'success', message: `Linked \`${filename}\` & extracted controls for this RACM` });
         setExtracting(null);
       }
@@ -300,7 +296,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
           onBack={() => setSelectedId(null)}
           onViewSop={() => setSopPreview(selected)}
           onUploadSop={() => triggerSopUpload(selected.id)}
-          onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor({ racmName: selected.name, processLabel: selected.subProcess }) : undefined}
+          onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor({ racmName: selected.name, processLabel: selected.subProcess, entryId: selected.id, subProcess: selected.subProcess }) : undefined}
         />
         {hiddenInputs}
         <AnimatePresence>{sopPreview && <SopPreviewDrawer entry={sopPreview} onClose={() => setSopPreview(null)} />}</AnimatePresence>
@@ -313,8 +309,6 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   return (
     <>
       <RacmLibraryList
-        process={engagement.process}
-        framework={engagement.framework}
         entries={entries}
         insightStamp={insightStamp}
         onOpen={openMatrix}
@@ -335,10 +329,8 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
 // ─── Library list ─────────────────────────────────────────────────────────────
 
 function RacmLibraryList({
-  process, framework, entries, insightStamp, onOpen, onOpenEditor, onViewSop, onNew, onUploadRacm, onUploadSop,
+  entries, insightStamp, onOpen, onOpenEditor, onViewSop, onNew, onUploadRacm, onUploadSop,
 }: {
-  process: string;
-  framework: string;
   entries: RacmEntry[];
   /** Engagement generation timestamp — null until the header Generate runs. */
   insightStamp: number | null;
@@ -351,40 +343,10 @@ function RacmLibraryList({
   onUploadRacm: () => void;
   onUploadSop: (target: string) => void;
 }): JSX.Element {
-  const totals = useMemo(() => {
-    const rows = entries.flatMap(e => e.rows);
-    return { ...entryStats(rows), racms: entries.length, withSop: entries.filter(e => e.sop).length };
-  }, [entries]);
-
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="glass-card px-5 py-4 flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 rounded-lg bg-brand-50 shrink-0"><FileStack size={16} className="text-brand-600" /></div>
-          <div className="min-w-0">
-            <div className="text-[0.90625rem] font-semibold text-text leading-tight">RACM Library</div>
-            <div className="text-[0.6875rem] text-text-muted mt-0.5">
-              {process} · {framework}
-              <span className="text-border mx-1.5">·</span>
-              {totals.racms} RACM{totals.racms === 1 ? '' : 's'}
-              <span className="text-border mx-1.5">·</span>
-              {totals.withSop}/{totals.racms} with SOP
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          <Gated permission="racm_generate" mode="disable" title="You don't have permission to create a RACM">
-          <button
-            onClick={onNew}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.78125rem] font-semibold transition-colors cursor-pointer"
-          >
-            <Plus size={14} /> New RACM
-          </button>
-          </Gated>
-        </div>
-      </div>
-
+      {/* No header card: creating a RACM has one door — the line below the list
+          (or the two cards when the library is empty). */}
       {entries.length === 0 ? (
         <RacmOnboarding onUploadRacm={onUploadRacm} onUploadSop={() => onUploadSop('new')} />
       ) : (
@@ -500,7 +462,7 @@ function RacmEntryCard({ entry, insightStamp, onOpen, onOpenEditor, onViewSop, o
         <button
           onClick={onViewSop}
           title="View SOP"
-          className="shrink-0 hidden sm:flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border-light bg-surface-1/50 hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer max-w-[280px] text-left group"
+          className="shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border-light bg-surface-1/50 hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer max-w-[280px] text-left group"
         >
           <div className="p-1.5 rounded-md bg-brand-50 shrink-0"><FileText size={14} className="text-brand-600" /></div>
           <div className="min-w-0">
@@ -516,7 +478,7 @@ function RacmEntryCard({ entry, insightStamp, onOpen, onOpenEditor, onViewSop, o
         <button
           onClick={onUploadSop}
           title="Upload an SOP and extract the RACM from it"
-          className="shrink-0 hidden sm:flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-mitigated-300 bg-mitigated-50/40 hover:bg-mitigated-50 transition-colors cursor-pointer text-left"
+          className="shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-mitigated-300 bg-mitigated-50/40 hover:bg-mitigated-50 transition-colors cursor-pointer text-left"
         >
           <div className="p-1.5 rounded-md bg-mitigated-50 shrink-0"><Sparkles size={14} className="text-mitigated-700" /></div>
           <div className="min-w-0">

@@ -241,10 +241,24 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
   const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
 
-  /** Close / finalize — flips to Closed with an undo toast. */
-  const handleClose = (eng: Engagement) => {
+  /** Close / finalize — asks for a mandatory reason first (auditor feedback,
+   *  row 23: an engagement must not be closable casually; the justification is
+   *  recorded on the audit trail). */
+  const [closeTarget, setCloseTarget] = useState<Engagement | null>(null);
+  const [closeReason, setCloseReason] = useState('');
+  const handleClose = (eng: Engagement) => { setCloseReason(''); setCloseTarget(eng); };
+  const handleCloseConfirmed = () => {
+    const eng = closeTarget;
+    const reason = closeReason.trim();
+    if (!eng || !reason) return;
     const prevStatus = eng.status;
+    setCloseTarget(null);
     patchEngagement(eng.id, { status: 'Closed' });
+    logEvent({
+      action: 'Update',
+      description: `Closed "${eng.name}" (${prevStatus} → Closed) — reason: ${reason}`,
+      module: 'Engagements', entity: 'Engagement',
+    });
     addToast({
       message: `"${eng.name}" closed`,
       type: 'success',
@@ -502,14 +516,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
                   {/* Actions column */}
                   <div className="flex items-start justify-end gap-1">
-                    <IconAction
-                      label="Open engagement"
-                      onClick={(e) => { e.stopPropagation(); onOpenEngagement(eng.id); }}
-                      className="text-text-muted hover:text-primary hover:bg-primary/10"
-                    >
-                      <Play size={14} />
-                    </IconAction>
-                    {can('eng_edit') && (
+                    {/* No "open" icon — clicking the card already opens the
+                        engagement; a Play button doing the same read as "Run"
+                        and confused the auditor (feedback, row 3). */}
+                    {/* Internal Audit has no edit sheet — its creation flow captures
+                        only name, description, period and approval levels, and
+                        everything else about the engagement is authored inside the
+                        workspace. Other types still edit from here. */}
+                    {can('eng_edit') && eng.type !== 'Internal Audit' && (
                       <IconAction
                         label="Edit engagement"
                         onClick={(e) => { e.stopPropagation(); setWizardInitialType(undefined); setEditTarget(eng); setWizardOpen(true); }}
@@ -719,6 +733,43 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         onClose={() => setOpenAction(null)}
         onViewAnchor={() => setInsightsPanelOpen(true)}
       />
+
+      {/* Close guardrail — a mandatory reason gates the terminal state. */}
+      {closeTarget && (
+        <div className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-start justify-center pt-[18vh] px-5" onClick={() => setCloseTarget(null)}>
+          <div role="dialog" aria-label="Close engagement" className="w-full max-w-[440px] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <h2 className="text-[15px] font-semibold text-ink-900">Close "{closeTarget.name}"?</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed mb-3">
+                Closing marks the engagement complete. The reason is recorded on the action trail.
+              </p>
+              <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">
+                Reason <span className="text-risk-700">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={closeReason}
+                onChange={e => setCloseReason(e.target.value)}
+                placeholder="e.g. Fieldwork complete, report issued and signed off."
+                autoFocus
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none"
+              />
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setCloseTarget(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button
+                  onClick={handleCloseConfirmed}
+                  disabled={!closeReason.trim()}
+                  className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Close engagement
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmationModal
         open={deleteTarget !== null}

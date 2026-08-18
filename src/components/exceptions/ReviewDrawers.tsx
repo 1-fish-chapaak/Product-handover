@@ -928,6 +928,34 @@ export function ReviewCaseDrawer({
                 Send back
               </button>
             )}
+            {/* The decision lives in the always-visible footer (auditor
+                feedback, row 19: it was buried at the end of a long scroll). */}
+            {!isViewMode && (
+              <>
+                <button
+                  onClick={() => setDecision('approve')}
+                  className={`flex-1 h-10 text-[0.8125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                    decision === 'approve'
+                      ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
+                      : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
+                  }`}
+                >
+                  <CheckCircle2 size={14} />
+                  {isPlanReview ? 'Accept Plan' : 'Approve'}
+                </button>
+                <button
+                  onClick={() => { setDecision('reject'); setImplementation(null); }}
+                  className={`flex-1 h-10 text-[0.8125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                    decision === 'reject'
+                      ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
+                      : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
+                  }`}
+                >
+                  <XCircle size={14} />
+                  {isPlanReview ? 'Reject Plan' : 'Reject'}
+                </button>
+              </>
+            )}
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
@@ -1061,40 +1089,17 @@ export function ReviewCaseDrawer({
             <section className="border border-canvas-border rounded-lg p-4">
               <SectionLabel>Auditor Decision</SectionLabel>
 
-              {/* Accept/Reject (plan) or Approve/Reject (completion / classification) */}
-              {!isViewMode && (
-                <div className="mb-4">
-                  <label className="block text-[0.78125rem] font-medium text-ink-800 mb-2">
-                    Decision <span className="text-risk">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => { setDecision('approve'); }}
-                      className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                        decision === 'approve'
-                          ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
-                          : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
-                      }`}
-                    >
-                      <CheckCircle2 size={14} />
-                      {isPlanReview ? 'Accept Plan' : 'Approve'}
-                    </button>
-                    <button
-                      onClick={() => { setDecision('reject'); setImplementation(null); }}
-                      className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                        decision === 'reject'
-                          ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
-                          : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
-                      }`}
-                    >
-                      <XCircle size={14} />
-                      {isPlanReview ? 'Reject Plan' : 'Reject'}
-                    </button>
-                  </div>
-                  {isPlanReview && decision === 'approve' && (
-                    <p className="text-[0.71875rem] text-ink-500 mt-2 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
-                  )}
-                </div>
+              {/* The Approve/Reject choice moved to the always-visible footer
+                  action bar; this section holds the follow-ups it unlocks. */}
+              {!isViewMode && !decision && (
+                <p className="mb-4 text-[0.75rem] text-ink-500 leading-snug">
+                  Choose <span className="font-semibold text-compliant-700">{isPlanReview ? 'Accept Plan' : 'Approve'}</span> or{' '}
+                  <span className="font-semibold text-risk-700">{isPlanReview ? 'Reject Plan' : 'Reject'}</span> in the action bar —
+                  it stays visible wherever you've scrolled.
+                </p>
+              )}
+              {!isViewMode && isPlanReview && decision === 'approve' && (
+                <p className="mb-4 text-[0.71875rem] text-ink-500 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
               )}
 
               {/* Completion Approve → mandatory implementation outcome */}
@@ -3001,7 +3006,7 @@ export function BulkReviewDrawer({
             <div className="h-full bg-brand-600 transition-all" style={{ width: `${Math.round((decidedValid.length / Math.max(1, groups.length)) * 100)}%` }} />
           </div>
           <p className="text-[0.71875rem] text-ink-500 leading-snug mt-2.5">
-            Cases are grouped by their management action plan — one decision applies to every linked case. Expand a plan to review it step by step, or tick plans and use Accept / Reject below.
+            Cases are grouped by their management action plan — one decision applies to every linked case. Expand a plan to review it step by step, or tick plans and use Accept / Reject in the toolbar above the list.
           </p>
         </div>
 

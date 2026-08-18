@@ -533,7 +533,7 @@ export interface GrcDueDateRevision {
   decidedAt?: string;                // ISO timestamp
 }
 
-export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner';
+export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner' | 'System';
 export interface GrcActivityEntry {
   id: string;
   author: string;

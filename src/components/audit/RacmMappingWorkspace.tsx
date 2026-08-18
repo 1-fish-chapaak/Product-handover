@@ -1288,7 +1288,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                             </div>
                                             <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center shrink-0 ${READINESS_CLS[rd]}`}>{rd}</span>
                                             {wfs.length === 0 && onLinkWorkflow && (
-                                              <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
+                                              <Gated permission="racm_link_workflow" mode="disable" title="Linking is locked for your role — it needs the 'Link workflow' permission (RACM). Ask your workspace admin, or the engagement owner, to grant it or link the workflow for you.">
                                               <button onClick={e => { e.stopPropagation(); onLinkWorkflow(ctrl.id); }}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[0.625rem] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors shrink-0"><Link2 size={10} />Link Workflow</button>
                                               </Gated>
@@ -1568,7 +1568,7 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                   <div className="pt-2 border-t border-border/30 space-y-2">
                     <div className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider">Workflow Actions</div>
                     <div className="flex items-center gap-2">
-                      <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
+                      <Gated permission="racm_link_workflow" mode="disable" title="Linking is locked for your role — it needs the 'Link workflow' permission (RACM). Ask your workspace admin, or the engagement owner, to grant it or link the workflow for you.">
                       <button onClick={() => { onLinkWorkflow(ctrl.id); addToast({ message: 'Opening workflow linker in Split View', type: 'info' }); }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
                         <Link2 size={11} />Link Workflow

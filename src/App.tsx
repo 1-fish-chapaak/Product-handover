@@ -304,7 +304,10 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[];
+    /** Set when opened from an engagement's RACM tab — the editor then reads and
+     *  writes that engagement's register (the clicked RACM, not a demo seed). */
+    engagementId?: string; subProcess?: string };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -1069,9 +1072,13 @@ function AppInner() {
             }}
             onOpenCaseManagement={openCaseManagement}
             onOpenRacmFullEditor={(override) => openRacmFullEditor({
-              racmId: 'racm-procurement-fy26',
+              // The entry id keys per-RACM prefs; the engagement id + sub-process
+              // point the editor at the register rows for the RACM actually clicked.
+              racmId: override?.entryId ?? 'racm-procurement-fy26',
               racmName: override?.racmName ?? 'Procurement SOP · Budget to Payment RACM',
               processLabel: override?.processLabel ?? 'P2P',
+              engagementId: state.selectedEngagementId ?? undefined,
+              subProcess: override?.subProcess,
               backView: 'engagement-overview',
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
@@ -1147,6 +1154,8 @@ function AppInner() {
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
             sourceFiles={racmEditorContext?.sourceFiles}
+            engagementId={racmEditorContext?.engagementId}
+            subProcess={racmEditorContext?.subProcess}
           />
         );
 

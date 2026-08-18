@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronLeft, ChevronRight, ShieldCheck, ClipboardList, Zap,
   Check, AlertCircle, Edit3, Users, Sparkles, ChevronDown, ChevronUp,
-  Plus, Trash2, FileText, Loader2, CalendarClock, Landmark, Building2,
+  Plus, Trash2, FileText, Loader2, CalendarClock, Landmark, Building2, Star,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -13,6 +13,11 @@ import type {
   EngagementEntity,
 } from '../../data/engagements';
 import { OWNER_NAMES, SUB_PROCESSES } from '../../data/grc-domain';
+import { approvalFlows, useApprovalFlows } from '../exceptions/workflow/approvalFlowStore';
+import WorkflowPipelineBuilder from '../exceptions/workflow/WorkflowPipelineBuilder';
+import { userName } from '../exceptions/workflow/workflowData';
+// Aliased — this file already has its own WorkflowTemplate (automation templates).
+import type { WorkflowTemplate as ApprovalTemplate, ApprovalMode } from '../exceptions/workflow/workflowTypes';
 
 // ─── Styles ────────────────────────────────────────────────────────────────
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -68,6 +73,21 @@ function isoToMonthYear(iso: string): string {
   const [y, m] = iso.split('-');
   return `${MONTHS_SHORT[Number(m) - 1] ?? '?'} ${y}`;
 }
+/** "2026-08-01" → "FY27". The fiscal year runs April→March and is labelled by
+ *  the year it ends in, matching how audits are referred to on the platform
+ *  ("FY26 ICFR — Airline P2P & O2C"). */
+function isoToFy(iso: string): string {
+  const [y, m] = iso.split('-');
+  const endYear = Number(m) >= 4 ? Number(y) + 1 : Number(y);
+  return `FY${String(endYear).slice(-2)}`;
+}
+/** The standard name a new Internal Audit engagement opens with, derived from
+ *  the audit period: "FY27 Internal Audit — Aug 2026". The auditor can
+ *  overwrite it; once they do, it stops following the dates. */
+function defaultIaName(periodStart: string): string {
+  if (!periodStart) return '';
+  return `${isoToFy(periodStart)} Internal Audit — ${isoToMonthYear(periodStart)}`;
+}
 /** "2026-07-15" → "Jul 15" (short date for nextScheduled copy). */
 function isoToShort(iso: string): string {
   const [, m, d] = iso.split('-');
@@ -115,6 +135,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   // ── Steps 1–2 — Type, then Basics ──
   const [type, setType] = useState<EngType | null>(initial?.type ?? initialType ?? null);
   const [name, setName] = useState(initial?.name ?? '');
+  // Once the auditor types their own name it stops tracking the period.
+  const [nameTouched, setNameTouched] = useState(Boolean(initial?.name));
   const [code, setCode] = useState(initial?.code ?? genCode());
   // `entity` is the group (listed / holding) company — the one name the
   // engagement card shows. The legal entities under it live in groupEntities.
@@ -144,7 +166,30 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   const [cttPct, setCttPct] = useState(initial?.soxConfig ? Math.round(initial.soxConfig.clearlyTrivial / initial.soxConfig.overallMateriality * 100) : 5);
   const [keyOnly, setKeyOnly] = useState(initial?.soxConfig?.keyOnly ?? true);
 
-  // ── Step 3 — Internal Audit scope ──
+  // ── Internal Audit — approval flows (Basics step on the lean IA flow) ──
+  // The auditor picks an existing approval flow per side rather than typing a
+  // level count: the levels and who sits at each are shown inline, so "how many
+  // levels does the risk owner have" is answered on the screen.
+  const approvalTemplates = useApprovalFlows();
+  const roFlows = useMemo(() => approvalTemplates.filter(t => t.persona === 'risk-owner'), [approvalTemplates]);
+  const auditorFlows = useMemo(() => approvalTemplates.filter(t => t.persona === 'auditor'), [approvalTemplates]);
+  const [roFlowId, setRoFlowId] = useState(
+    () => initial?.approvalLevels?.riskOwnerFlowId ?? '',
+  );
+  const [auditorFlowId, setAuditorFlowId] = useState(
+    () => initial?.approvalLevels?.auditorFlowId ?? '',
+  );
+  // Default to each side's default flow once the store has them.
+  useEffect(() => {
+    if (!roFlowId && roFlows.length) setRoFlowId((roFlows.find(f => f.isDefault) ?? roFlows[0]).id);
+  }, [roFlowId, roFlows]);
+  useEffect(() => {
+    if (!auditorFlowId && auditorFlows.length) setAuditorFlowId((auditorFlows.find(f => f.isDefault) ?? auditorFlows[0]).id);
+  }, [auditorFlowId, auditorFlows]);
+  const roFlow = roFlows.find(f => f.id === roFlowId) ?? null;
+  const auditorFlow = auditorFlows.find(f => f.id === auditorFlowId) ?? null;
+
+  // ── Step 3 — Internal Audit scope (not asked on the lean IA flow) ──
   const [scopeLevel, setScopeLevel] = useState<ScopeLevel>((initial?.auditConfig?.scopeLevel as ScopeLevel) ?? 'Full process');
   const [subProcessSel, setSubProcessSel] = useState<string[]>(initial?.auditConfig?.subProcesses ?? []);
   const [linkedRacms, setLinkedRacms] = useState<string[]>(initial?.auditConfig?.linkedRacms ?? [RACM_VERSIONS[0]]);
@@ -199,7 +244,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   };
 
   // Review collapsibles
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ basics: true, scope: true, team: true });
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ type: true, basics: true, scope: true, team: true });
   const toggleSection = (k: string) => setOpenSections(s => ({ ...s, [k]: !s[k] }));
 
   const sopSuggestions = useMemo(() => {
@@ -253,11 +298,23 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
     }, 1500);
   };
 
+  // ── Internal Audit runs a lean three-step flow ────────────────────────────
+  // Type → Basics → Review, matching the live product. It captures no scope,
+  // team or process: an IA engagement starts empty and is scoped from the RACM
+  // the auditor builds inside the workspace.
+  const leanIa = type === 'Internal Audit';
+  const stepLabels = leanIa ? (['Type', 'Basics', 'Review'] as const) : STEP_LABELS;
+  const reviewStep: Step = leanIa ? 3 : 5;
+
   // ── Validation — every step gates for real, no silent skips ──
   const typeValid = type !== null;
-  const basicsValid = name.trim().length > 0
-    && code.trim().length > 0
-    && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd;
+  const basicsValid = leanIa
+    // The lean flow shows no Code field, and makes Description required.
+    ? name.trim().length > 0 && description.trim().length > 0
+      && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd
+    : name.trim().length > 0
+      && code.trim().length > 0
+      && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd;
 
   let scopeValid = false;
   if (type === 'Compliance')          scopeValid = framework !== '' && racmVersion !== '' && materiality > 0 && (samplingMethod === 'Manual upload' || sampleSize > 0);
@@ -269,12 +326,15 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   const milestonesValid = milestones.length >= 2 && milestones.every(m => m.label.trim() !== '' && m.date !== '');
   const teamValid = reviewer !== '' && !reviewerInvalid && milestonesValid;
 
-  const canAdvanceFrom: Record<Step, boolean> = { 1: typeValid, 2: basicsValid, 3: scopeValid, 4: teamValid, 5: true };
+  const canAdvanceFrom: Record<Step, boolean> = leanIa
+    ? { 1: typeValid, 2: basicsValid, 3: true, 4: true, 5: true }
+    : { 1: typeValid, 2: basicsValid, 3: scopeValid, 4: teamValid, 5: true };
 
   // Leaving the Type step having chosen SOX hands the journey over — the rest
   // of this wizard asks for a period and materiality that SOX derives instead.
   const handsOffToSox = !isEdit && !!onPickSox && type === 'SOX / ICFR';
   const goToStep = (target: Step) => {
+    if (target > reviewStep) return;
     if (target <= step) { setStep(target); return; }
     if (step === 1 && handsOffToSox) { onPickSox!(); return; }
     for (let i = step; i < target; i++) if (!canAdvanceFrom[i as Step]) return;
@@ -283,9 +343,20 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   const nextStep = () => {
     if (!canAdvanceFrom[step]) return;
     if (step === 1 && handsOffToSox) { onPickSox!(); return; }
-    if (step < 5) setStep((step + 1) as Step);
+    if (step < reviewStep) setStep((step + 1) as Step);
   };
   const prevStep = () => { if (step > 1) setStep((step - 1) as Step); };
+
+  // Switching type can shorten the flow (IA has 3 steps, the rest have 5) —
+  // never strand the user past the last step of the flow they just chose.
+  useEffect(() => { setStep(s => (s > reviewStep ? reviewStep : s)); }, [reviewStep]);
+
+  // Name follows the audit period until the auditor writes their own —
+  // "FY27 Internal Audit — Aug 2026", the platform's standard structure.
+  useEffect(() => {
+    if (!leanIa || nameTouched || !periodStart) return;
+    setName(defaultIaName(periodStart));
+  }, [leanIa, nameTouched, periodStart]);
 
   // ── Build the complete engagement — everything captured above is carried ──
   const buildEngagement = (status: Engagement['status']): Engagement => {
@@ -319,9 +390,22 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
         sampleSize: samplingMethod === 'Manual upload' ? undefined : sampleSize,
         materiality,
       } : undefined,
-      auditConfig: type === 'Internal Audit' ? {
-        scopeLevel, subProcesses: subProcessSel, linkedRacms, linkedSops, tatDays, idrTemplate, cadence,
+      // The lean IA flow never asks for scope, so nothing is invented here —
+      // an existing config (seeded engagements) is carried through untouched.
+      auditConfig: type === 'Internal Audit'
+        ? (leanIa ? initial?.auditConfig : { scopeLevel, subProcesses: subProcessSel, linkedRacms, linkedSops, tatDays, idrTemplate, cadence })
+        : undefined,
+      // The level counts come from the flows the auditor picked, so the number
+      // on the engagement always matches a real, defined approval route.
+      approvalLevels: type === 'Internal Audit' ? {
+        riskOwner: roFlow?.levels.length ?? 0,
+        auditor: auditorFlow?.levels.length ?? 0,
+        riskOwnerFlowId: roFlow?.id,
+        auditorFlowId: auditorFlow?.id,
       } : undefined,
+      // A newly created IA engagement carries no process or RACM — its
+      // workspace opens empty until the auditor builds one inside it.
+      unscoped: leanIa ? (isEdit ? initial?.unscoped : true) : initial?.unscoped,
       automationConfig: type === 'Automation' ? {
         templates: selectedTemplates, inputSources: [...inputSources], cadence: autoCadence, threshold, alertRecipients,
       } : undefined,
@@ -366,7 +450,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   // backdrop goes inert (a stray click is the #1 accident) and X/Cancel ask.
   const dataSnap = JSON.stringify([type, name, entity, groupEntities, description, process, periodStart, periodEnd, owner,
     framework, racmVersion, samplingMethod, sampleSize, materiality,
-    overallMateriality, pmPct, cttPct, keyOnly, scopeLevel, subProcessSel, linkedRacms]);
+    overallMateriality, pmPct, cttPct, keyOnly, scopeLevel, subProcessSel, linkedRacms,
+    roFlowId, auditorFlowId]);
   const initialSnapRef = useRef<string | null>(null);
   if (initialSnapRef.current === null) initialSnapRef.current = dataSnap;
   const dirty = dataSnap !== initialSnapRef.current;
@@ -410,22 +495,25 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
                 <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">{isEdit ? 'Edit Engagement' : 'Create Engagement'}</h2>
               </div>
-              <p className="text-[0.75rem] text-ink-500">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
+              <p className="text-[0.75rem] text-ink-500">Step {step} of {reviewStep} — {stepLabels[step - 1]}</p>
             </div>
             <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4, 5].map(n => (
-              <button
-                key={n}
-                onClick={() => goToStep(n as Step)}
-                className={`flex-1 h-1.5 rounded-full transition-colors ${n === step ? 'bg-brand-600' : n < step ? 'bg-brand-300' : 'bg-canvas-border'} ${n <= step ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
-                aria-label={`Go to step ${n}`}
-              />
-            ))}
+            {stepLabels.map((_, i) => {
+              const n = (i + 1) as Step;
+              return (
+                <button
+                  key={n}
+                  onClick={() => goToStep(n)}
+                  className={`flex-1 h-1.5 rounded-full transition-colors ${n === step ? 'bg-brand-600' : n < step ? 'bg-brand-300' : 'bg-canvas-border'} ${n <= step ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
+                  aria-label={`Go to step ${n}`}
+                />
+              );
+            })}
           </div>
           <div className="flex justify-between mt-1.5 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
-            {STEP_LABELS.map((lbl, i) => (
+            {stepLabels.map((lbl, i) => (
               <span key={lbl} className={step === i + 1 ? 'text-brand-700' : ''}>{lbl}</span>
             ))}
           </div>
@@ -469,8 +557,60 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 </div>
               )}
 
+              {/* ═══ STEP 2: BASICS — lean Internal Audit flow ═══
+                  Name, description, period and approval levels. No code,
+                  owner, process or entities: an IA engagement is scoped from
+                  the RACM built inside the workspace, not from this sheet. */}
+              {step === 2 && leanIa && (
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelCls}>Engagement name <span className="text-risk-700">*</span></label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={e => { setNameTouched(true); setName(e.target.value); }}
+                      placeholder="e.g. P2P — SOX Q3 Testing"
+                      className={inputCls}
+                    />
+                    {name.trim().length === 0
+                      ? <Hint text="Name is required" />
+                      : !nameTouched && <p className="text-[0.6875rem] text-ink-500 mt-1">Named from the audit period — edit if your team uses its own scheme.</p>}
+                  </div>
+                  <div>
+                    <label className={labelCls}>Description <span className="text-risk-700">*</span></label>
+                    <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                    {description.trim().length === 0 && <Hint text="Description is required" />}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Period start <span className="text-risk-700">*</span></label>
+                      <DatePicker value={periodStart} onChange={e => setPeriodStart(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Period end <span className="text-risk-700">*</span></label>
+                      <DatePicker value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+                  {periodStart && periodEnd && periodStart > periodEnd && <Hint text="End must be after start" />}
+                  <ApprovalFlowField
+                    label="Approval level — RO"
+                    persona="risk-owner"
+                    flows={roFlows}
+                    value={roFlowId}
+                    onChange={setRoFlowId}
+                  />
+                  <ApprovalFlowField
+                    label="Approval level — Auditor"
+                    persona="auditor"
+                    flows={auditorFlows}
+                    value={auditorFlowId}
+                    onChange={setAuditorFlowId}
+                  />
+                </div>
+              )}
+
               {/* ═══ STEP 2: BASICS ═══ */}
-              {step === 2 && (
+              {step === 2 && !leanIa && (
                 <div className="space-y-4">
                   <div>
                     <label className={labelCls}>Engagement name <span className="text-risk-700">*</span></label>
@@ -584,8 +724,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 </div>
               )}
 
-              {/* ═══ STEP 3: SCOPE ═══ */}
-              {step === 3 && (
+              {/* ═══ STEP 3: SCOPE ═══ (skipped on the lean IA flow) */}
+              {step === 3 && !leanIa && (
                 <div className="space-y-4">
                   {/* AI draft affordance — hidden for SOX, whose scope fields live in the workspace */}
                   {type !== 'SOX / ICFR' && (
@@ -693,63 +833,9 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                     </>
                   )}
 
-                  {type === 'Internal Audit' && (
-                    <>
-                      <SectionTitle title="Internal Audit scope" subtitle="Scope level, linked artefacts, and cadence" />
-                      <Field label="Scope level">
-                        <div className="grid grid-cols-2 gap-2">
-                          {SCOPE_LEVELS.map(s => (
-                            <RadioCard key={s} label={s} selected={scopeLevel === s} onChange={() => setScopeLevel(s)} />
-                          ))}
-                        </div>
-                      </Field>
-                      <Field label="Sub-processes">
-                        <div className="flex flex-wrap gap-1.5">
-                          {subProcessOptions.map(sp => (
-                            <Chip key={sp} label={sp} selected={subProcessSel.includes(sp)} onToggle={() => setSubProcessSel(toggle(subProcessSel, sp))} />
-                          ))}
-                          {subProcessOptions.length === 0 && <span className="text-[0.6875rem] text-ink-400">No sub-processes for selected process</span>}
-                        </div>
-                        {scopeLevel === 'Sub-process' && subProcessSel.length === 0 && <Hint text="Pick at least one sub-process for a sub-process scope" />}
-                      </Field>
-                      <Field label="Linked RACMs">
-                        <div className="space-y-1.5">
-                          {RACM_VERSIONS.map(v => (
-                            <label key={v} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.75rem] text-ink-700 cursor-pointer hover:bg-canvas">
-                              <input type="checkbox" checked={linkedRacms.includes(v)} onChange={() => setLinkedRacms(toggle(linkedRacms, v))} className="accent-brand-500" />
-                              {v}
-                            </label>
-                          ))}
-                        </div>
-                        {linkedRacms.length === 0 && <Hint text="Select at least one RACM" />}
-                      </Field>
-                      <Field label="Linked SOPs (auto-suggested)">
-                        <div className="flex flex-wrap gap-1.5">
-                          {sopSuggestions.map(s => (
-                            <Chip key={s} label={s} selected={linkedSops.includes(s)} onToggle={() => setLinkedSops(toggle(linkedSops, s))} />
-                          ))}
-                        </div>
-                      </Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="TAT (days)">
-                          <input type="number" min={1} value={tatDays} onChange={e => setTatDays(parseInt(e.target.value) || 0)} className={inputCls} />
-                          {tatDays <= 0 && <Hint text="TAT must be at least 1 day" />}
-                        </Field>
-                        <Field label="IDR template">
-                          <select value={idrTemplate} onChange={e => setIdrTemplate(e.target.value)} className={selectCls}>
-                            {IDR_TEMPLATES.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </Field>
-                      </div>
-                      <Field label="Reporting cadence">
-                        <div className="grid grid-cols-3 gap-2">
-                          {CADENCES.map(c => (
-                            <RadioCard key={c} label={c} selected={cadence === c} onChange={() => setCadence(c)} centered />
-                          ))}
-                        </div>
-                      </Field>
-                    </>
-                  )}
+                  {/* Internal Audit skips this step entirely — its lean flow is
+                      Type → Basics → Review, and scope is authored inside the
+                      engagement workspace from the RACM the auditor builds. */}
 
                   {type === 'Automation' && (
                     <>
@@ -815,8 +901,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 </div>
               )}
 
-              {/* ═══ STEP 4: TEAM & TIMELINE ═══ */}
-              {step === 4 && (
+              {/* ═══ STEP 4: TEAM & TIMELINE ═══ (skipped on the lean IA flow) */}
+              {step === 4 && !leanIa && (
                 <div className="space-y-4">
                   <SectionTitle title="Team & timeline" subtitle="Who runs the engagement, and its key dates" />
                   <Field label="Owner (from step 2)">
@@ -883,8 +969,23 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 </div>
               )}
 
+              {/* ═══ REVIEW & CREATE — lean Internal Audit flow ═══ */}
+              {step === reviewStep && leanIa && (
+                <div className="space-y-3">
+                  <SectionTitle title={isEdit ? 'Review & save' : 'Review & create'} subtitle="Confirm details before submitting" />
+                  <ReviewSection title="Type" open={openSections.type} onToggle={() => toggleSection('type')}>
+                    <ReviewRow k="Type" v={type ?? '—'} />
+                  </ReviewSection>
+                  <ReviewSection title="Basics" open={openSections.basics} onToggle={() => toggleSection('basics')}>
+                    <ReviewRow k="Name" v={name || '—'} />
+                    <ReviewRow k="Period" v={`${periodStart || '—'} → ${periodEnd || '—'}`} />
+                    <ReviewRow k="Description" v={description || '—'} />
+                  </ReviewSection>
+                </div>
+              )}
+
               {/* ═══ STEP 5: REVIEW & CREATE ═══ */}
-              {step === 5 && (
+              {step === 5 && !leanIa && (
                 <div className="space-y-3">
                   <SectionTitle title={isEdit ? 'Review & save' : 'Review & create'} subtitle="Everything below is carried onto the engagement" />
                   <ReviewSection title="Type & basics" open={openSections.basics} onToggle={() => toggleSection('basics')}>
@@ -914,17 +1015,8 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                         <ReviewRow k="Materiality & scoping" v="Managed in the engagement workspace" />
                       </>
                     )}
-                    {type === 'Internal Audit' && (
-                      <>
-                        <ReviewRow k="Scope" v={scopeLevel} />
-                        <ReviewRow k="Sub-processes" v={subProcessSel.length ? subProcessSel.join(', ') : '—'} />
-                        <ReviewRow k="Linked RACMs" v={linkedRacms.join(', ') || '—'} />
-                        <ReviewRow k="Linked SOPs" v={linkedSops.join(', ') || '—'} />
-                        <ReviewRow k="TAT" v={`${tatDays} days`} />
-                        <ReviewRow k="IDR template" v={idrTemplate} />
-                        <ReviewRow k="Cadence" v={cadence} />
-                      </>
-                    )}
+                    {/* Internal Audit never reaches this review — its lean flow
+                        has its own three-step Review above. */}
                     {type === 'Automation' && (
                       <>
                         <ReviewRow k="Subtype" v={autoSubtype} />
@@ -960,13 +1052,13 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 <ChevronLeft size={14} /> Back
               </button>
             )}
-            {step < 5 && (
+            {step < reviewStep && (
               <button onClick={nextStep} disabled={!canAdvanceFrom[step]}
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 Next <ChevronRight size={14} />
               </button>
             )}
-            {step === 5 && (isEdit ? (
+            {step === reviewStep && (isEdit ? (
               <button onClick={() => submit(initial?.status ?? 'Draft')} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">Save changes</button>
             ) : (
               <>
@@ -1000,6 +1092,244 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────
+
+/** A fresh flow with one empty level to fill in — same shape the Approval Flow
+ *  tab starts from, so a flow built here is identical to one built there. */
+function blankApprovalFlow(persona: 'risk-owner' | 'auditor'): ApprovalTemplate {
+  const stamp = Date.now();
+  return {
+    id: `wf-${stamp}`,
+    name: '',
+    persona,
+    isDefault: false,
+    version: 1,
+    createdBy: 'system',
+    createdAt: new Date().toISOString(),
+    levels: [{ id: `lvl-${stamp}`, name: 'L1 — Review', assigneeIds: [], mode: 'any', slaHours: 48, allowSendBack: true }],
+  };
+}
+
+/** How a level reaches its verdict — same wording as the Approval Flow tab. */
+const APPROVAL_MODE_LABEL: Record<ApprovalMode, string> = {
+  all: 'All must approve',
+  any: 'Any one approves',
+  sequential: 'Sequential',
+};
+
+/** Approval flow picker for one side of the review (risk owner / auditor).
+ *  Mirrors the Approval Flow tab in the engagement library: the flow's badges
+ *  and version, then the chain itself — who acts at each level, how the level
+ *  clears, its SLA, whether it can send the case back, and where the case goes
+ *  once the last level signs. The auditor picks a route they can actually read
+ *  instead of typing a level count from memory. */
+function ApprovalFlowField({ label, flows, value, onChange, persona }: {
+  label: string;
+  flows: ApprovalTemplate[];
+  value: string;
+  onChange: (id: string) => void;
+  persona: 'risk-owner' | 'auditor';
+}) {
+  const { addToast } = useToast();
+  const [draft, setDraft] = useState<ApprovalTemplate | null>(null);
+  const flow = flows.find(f => f.id === value) ?? null;
+  const personaLabel = persona === 'auditor' ? 'Auditor' : 'Risk Owner';
+
+  // ── Building a flow — the same chain builder the Approval Flow tab uses ──
+  if (draft) {
+    const nameMissing = !draft.name.trim();
+    const levelMissing = draft.levels.some(l => l.assigneeIds.length === 0);
+    const canSave = !nameMissing && !levelMissing && draft.levels.length > 0;
+    return (
+      <div>
+        <label className={labelCls}>{label}</label>
+        <div className="rounded-xl border border-canvas-border bg-white p-3.5 space-y-3.5">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-brand-700" />
+              <h3 className="text-[0.8125rem] font-semibold text-ink-900">New {personaLabel} approval flow</h3>
+            </div>
+            <p className="text-[0.6875rem] text-ink-500 mt-0.5 leading-relaxed">
+              A reusable chain. Each level has its approvers, how it clears, and how long they get.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-[0.6875rem] font-semibold text-ink-700 mb-1 block">
+              Flow name <span className="text-risk-700">*</span>
+            </label>
+            <input
+              value={draft.name}
+              onChange={e => setDraft({ ...draft, name: e.target.value })}
+              placeholder={persona === 'auditor' ? 'e.g. Audit Review – Manager → Partner' : 'e.g. P2P Quarterly Review – RO Flow'}
+              className={inputCls}
+            />
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-canvas/60 border border-canvas-border">
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-500">Owner</span>
+            <span className={`inline-flex items-center h-5 px-2 text-[0.625rem] font-semibold rounded-full ${persona === 'auditor' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>
+              {personaLabel} flow
+            </span>
+          </div>
+
+          <div>
+            <label className="text-[0.6875rem] font-semibold text-ink-700 mb-1.5 block">Approval levels</label>
+            <WorkflowPipelineBuilder
+              levels={draft.levels}
+              persona={persona}
+              onChange={levels => setDraft({ ...draft, levels })}
+            />
+            {levelMissing && (
+              <p className="mt-2 text-[0.6875rem] text-risk-700 inline-flex items-center gap-1">
+                <AlertCircle size={12} /> Every level needs at least one approver.
+              </p>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={draft.isDefault}
+              onChange={e => setDraft({ ...draft, isDefault: e.target.checked })}
+              className="w-4 h-4 accent-brand-600 cursor-pointer"
+            />
+            <span className="text-[0.71875rem] text-ink-700">Use this by default for new {personaLabel} assignments</span>
+          </label>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-canvas-border">
+            <button
+              onClick={() => setDraft(null)}
+              className="h-9 px-4 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (!canSave) return;
+                approvalFlows.upsert(draft);
+                if (draft.isDefault) approvalFlows.setDefault(draft.id, persona);
+                addToast({ type: 'success', message: `Approval flow "${draft.name.trim()}" saved.` });
+                onChange(draft.id);
+                setDraft(null);
+              }}
+              disabled={!canSave}
+              className="h-9 px-5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save flow
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Nothing defined yet — say what a flow is, and offer to build one ──
+  if (flows.length === 0) {
+    return (
+      <div>
+        <label className={labelCls}>{label}</label>
+        <div className="rounded-xl border border-dashed border-canvas-border bg-canvas/40 px-4 py-5 text-center">
+          <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2.5">
+            <ShieldCheck size={16} />
+          </div>
+          <div className="text-[0.8125rem] font-semibold text-ink-900">No {personaLabel.toLowerCase()} approval flow yet</div>
+          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[320px] mx-auto">
+            An approval flow is the chain a case travels before it is signed off. You add a
+            level for each review, name who approves it, and say how long they get.
+          </p>
+          <button
+            onClick={() => setDraft(blankApprovalFlow(persona))}
+            className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+          >
+            <Plus size={14} /> Create approval flow
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      {/* Pick an existing route, or build a new one right here — the auditor's
+          ask was "make the approval flow from the creation flow itself". */}
+      <div className="flex items-center gap-2">
+        <select value={value} onChange={e => onChange(e.target.value)} className={selectCls + ' flex-1'}>
+          {flows.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+        <button
+          onClick={() => setDraft(blankApprovalFlow(persona))}
+          title={`Create a new ${personaLabel.toLowerCase()} approval flow`}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-700 hover:bg-canvas hover:border-brand-200 transition-colors cursor-pointer"
+        >
+          <Plus size={13} /> New flow
+        </button>
+      </div>
+
+      {flow && (
+        <>
+          {/* Flow identity — same badges the Approval Flow tab puts on its cards. */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-2">
+            <span className={`inline-flex items-center h-5 px-2 text-[0.625rem] font-semibold rounded-full ${persona === 'auditor' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>
+              {personaLabel} flow
+            </span>
+            {flow.isDefault && (
+              <span className="inline-flex items-center gap-1 h-5 px-2 text-[0.625rem] font-semibold bg-brand-50 text-brand-700 rounded-full">
+                <Star size={9} /> Default
+              </span>
+            )}
+            <span className="text-[0.625rem] text-ink-400">v{flow.version}</span>
+            <span className="text-[0.6875rem] text-ink-500">
+              · {flow.levels.length} level{flow.levels.length === 1 ? '' : 's'} · created by {userName(flow.createdBy)}
+            </span>
+          </div>
+
+          {/* The chain itself — read top to bottom. */}
+          <ol className="mt-2 rounded-lg border border-canvas-border bg-white overflow-hidden">
+            {flow.levels.map((lvl, i) => (
+              <li key={lvl.id} className={`px-3 py-2.5 ${i > 0 ? 'border-t border-canvas-border' : ''}`}>
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-[0.6875rem] font-bold flex items-center justify-center shrink-0 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <span className="text-[0.78125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">{lvl.name}</span>
+                  {i === 0 && (
+                    <span className="inline-flex items-center h-5 px-2 text-[0.625rem] font-semibold bg-compliant-50 text-compliant-700 rounded-full shrink-0">
+                      Starts here
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 pl-[2.125rem] text-[0.6875rem] text-ink-500">
+                  <span className="text-ink-700 font-medium">
+                    {lvl.assigneeIds.map(id => userName(id)).join(', ') || 'Unassigned'}
+                  </span>
+                  <span className="text-border-light mx-1.5">·</span>
+                  {APPROVAL_MODE_LABEL[lvl.mode]}
+                  <span className="text-border-light mx-1.5">·</span>
+                  {lvl.slaHours}h to respond
+                  {lvl.allowSendBack && (
+                    <>
+                      <span className="text-border-light mx-1.5">·</span>
+                      can send back
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          {/* What happens after the last signature — the half a level list can't show. */}
+          <p className="mt-1.5 text-[0.6875rem] text-ink-500 leading-relaxed">
+            {persona === 'auditor'
+              ? 'When the last level approves, the case is closed as approved.'
+              : 'When the last level approves, the case moves to the auditor review — it is not approved yet.'}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Hint({ text }: { text: string }) {
   return <div className="mt-1 flex items-center gap-1 text-[0.75rem] text-risk-700"><AlertCircle size={11} /> {text}</div>;
 }

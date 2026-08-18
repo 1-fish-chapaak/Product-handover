@@ -56,7 +56,8 @@ import WorkingPaperTab from './WorkingPaperTab';
 import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
-import { EngagementWorkspaceProvider, useEngagementWorkspace, baseControlsFor, type WorkspaceControl } from './engagementWorkspace';
+import { EngagementWorkspaceProvider, useEngagementWorkspace, baseControlsFor, seedRacmRows, type WorkspaceControl } from './engagementWorkspace';
+import { racmRegisters, useRacmRegisterVersion } from './racmRegisterStore';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ interface Props {
   onBack: () => void;
   onOpenExecution: (engagementId: string) => void;
   onOpenCaseManagement: (engagementId: string) => void;
-  onOpenRacmFullEditor?: (override?: { racmName?: string; processLabel?: string }) => void;
+  onOpenRacmFullEditor?: (override?: { racmName?: string; processLabel?: string; entryId?: string; subProcess?: string }) => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   /** Open a workflow's detail page (same route the Workflow Library uses). */
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
@@ -467,39 +468,43 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const failed = eng.openIssues;
   const effective = Math.max(0, tested - failed);
 
+  // ── The engagement's register — drives tab counts and the first state ──
+  // Read straight from the module store (no provider needed at this level).
+  const registerVersion = useRacmRegisterVersion();
+  const registerRows = useMemo(
+    () => racmRegisters.rows(eng.id) ?? seedRacmRows(eng),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [eng, registerVersion],
+  );
+  const racmCount = useMemo(() => new Set(registerRows.map(r => r.subProcess)).size, [registerRows]);
+  const controlCount = useMemo(() => new Set(registerRows.map(r => r.controlId)).size, [registerRows]);
+  // An engagement created without a scope shows none of the demo workflow set.
+  const engWorkflows = eng.unscoped ? [] : MOCK_WORKFLOWS;
+  // First state: an Internal Audit engagement with an empty register — nothing
+  // to chart yet, so Overview guides instead of rendering zeroes.
+  const firstState = eng.type === 'Internal Audit' && registerRows.length === 0;
+
+  // Live totals on the tabs themselves — the auditor sees the size of each
+  // area without opening it (auditor feedback: tabs need count badges).
+  const tabCounts: Partial<Record<TabId, number>> = {
+    racm: racmCount,
+    controls: controlCount,
+    workflows: engWorkflows.length,
+    exceptions: failed,
+  };
+
   // Non-Automation types keep the engagement-level 6-card grid.
   const kpis = [
-    { label: 'Controls in Scope', value: eng.controls, icon: Shield },
+    { label: 'Controls in Scope', value: firstState ? 0 : eng.controls, icon: Shield },
     { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
     { label: 'Effective', value: notStarted ? '—' : effective, icon: ShieldCheck },
     { label: 'Failed', value: notStarted ? '—' : failed, icon: AlertTriangle },
-    { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
-    { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
+    { label: 'Workflows', value: engWorkflows.length, icon: Workflow },
+    { label: 'Evidence', value: eng.unscoped ? 0 : MOCK_EVIDENCE.length, icon: FolderOpen },
   ];
 
-  // Overview checklist — universal but slightly adapted per type.
-  const checklist = eng.type === 'Automation'
-    ? [
-        { key: 'scope',    label: 'Define scope',               desc: 'Identify the data streams, controls, or accounts this automation covers.', done: true,  icon: Layers },
-        { key: 'workflows',label: 'Configure workflows',        desc: 'Set up the workflow(s) and their input sources.',                          done: true,  icon: Workflow },
-        { key: 'rules',    label: 'Tune detection rules',       desc: 'Calibrate thresholds and business rules to balance signal vs. noise.',     done: true,  icon: Zap },
-        { key: 'routing',  label: 'Configure exception routing',desc: 'Assign owners and escalation rules for triggered exceptions.',             done: eng.health > 70, icon: AlertTriangle },
-        { key: 'live',     label: 'Go live',                    desc: 'Activate the automation so it runs on its scheduled or ad-hoc cadence.',   done: eng.status === 'Active' || eng.status === 'In Progress', icon: Play },
-      ]
-    : [
-        { key: 'scope',    label: 'Confirm engagement scope',    desc: 'Lock the controls and processes in scope for this engagement.',  done: true,  icon: Layers },
-        { key: 'racm',     label: 'Map RACM',                    desc: 'Link the RACM version being tested for this engagement.',        done: true,  icon: FileText },
-        { key: 'team',     label: 'Assign owner and reviewer',   desc: 'Owner runs testing; reviewer signs off on conclusions.',         done: true,  icon: User },
-        { key: 'workflows',label: 'Link test workflows',         desc: 'Workflows automate sampling and evidence collection.',           done: eng.health > 0, icon: Workflow },
-        { key: 'testing',  label: 'Complete testing',            desc: 'Test every key control and record results.',                     done: eng.health >= 95, icon: CheckCircle2 },
-        { key: 'evidence', label: 'Attach evidence',             desc: 'Upload working papers, walkthroughs, and supporting docs.',      done: eng.health > 50, icon: Upload },
-        { key: 'signoff',  label: 'Sign-off',                    desc: 'Reviewer signs off when testing is complete and evidence sufficient.', done: eng.status === 'Closed', icon: ShieldCheck },
-      ];
-  const completedCount = checklist.filter(c => c.done).length;
-  const completedPct = Math.round((completedCount / checklist.length) * 100);
-
   return (
-    <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
+    <EngagementWorkspaceProvider engagement={eng} workflows={eng.unscoped ? [] : WORKSPACE_WORKFLOWS}>
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
@@ -527,16 +532,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                     </span>
                   )}
                 </div>
+                {/* One door to Configuration: the tab. (The duplicate header
+                    shortcut was removed — auditor feedback, two initiation
+                    points for the same screen.) */}
                 <div className="flex items-center gap-2.5 text-[0.75rem] text-text-muted mt-1 flex-wrap">
                   <span className="font-mono tracking-tight">{eng.code}</span>
-                  <span className="text-border-light" aria-hidden="true">·</span>
-                  <button
-                    onClick={() => setActiveTab('config')}
-                    className="inline-flex items-center gap-1 text-text-muted hover:text-primary font-medium transition-colors cursor-pointer"
-                    title="Owner, planned dates, framework & more"
-                  >
-                    <Settings size={11} /> Configuration
-                  </button>
                 </div>
               </div>
             </div>
@@ -600,6 +600,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           {visibleTabs.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
+            const count = tabCounts[tab.id];
             return (
               <Reorder.Item
                 as="div"
@@ -618,6 +619,16 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                     <Icon size={13} />
                   </span>
                   {tab.label}
+                  {count != null && (
+                    <span
+                      aria-label={`${count} items`}
+                      className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+                        active ? 'bg-brand-100 text-brand-700' : 'bg-surface-2 text-text-muted'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
                   <GripHorizontal size={12} className="text-text-muted/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               </Reorder.Item>
@@ -643,8 +654,18 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
           >
+            {/* ═══ OVERVIEW · FIRST STATE — a new audit with an empty register.
+                Guidance instead of a wall of zero widgets, with the one action
+                that starts the flow: build the RACM. (Auditor feedback, row 4.) ═══ */}
+            {activeTab === 'overview' && firstState && (
+              <IaFirstState
+                eng={eng}
+                onCreateRacm={() => setActiveTab('racm')}
+              />
+            )}
+
             {/* ═══ OVERVIEW — Health dashboard for all three engagement types ═══ */}
-            {activeTab === 'overview' && (
+            {activeTab === 'overview' && !firstState && (
               <>
                 {/* Where-you-left-off (memory kit §03): the saved position from
                     the last visit, resumable in one click. Flagship world only —
@@ -665,9 +686,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                   onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                   onOpenWorkflow={onOpenWorkflow}
                   hideWorkflowConfig={eng.type === 'Automation'}
-                  // Insights moved to engagement chrome: generated from the
-                  // header, read in the right-side drawer — not on this tab.
-                  hideInsightGenerator
+                  // Inline generation restored on Overview (auditor feedback,
+                  // row 22) — the header launcher + drawer still work too.
                 />
               </>
             )}
@@ -690,8 +710,19 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
             {activeTab === 'workflows' && (
+              <div className="space-y-5">
+              {/* Generate insights lives on this tab too (auditor feedback, row 22). */}
+              <InsightGenerator
+                layer="engagement"
+                subjectId={eng.id}
+                subjectLabel={eng.name}
+                status={eng.status}
+                labelOverride={eng.name}
+                subjects={insightSubjects}
+                stackScopeLabel="across this engagement"
+              />
               <WorkflowsBySubProcess
-                workflows={MOCK_WORKFLOWS}
+                workflows={engWorkflows}
                 engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
@@ -699,6 +730,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
               />
+              </div>
             )}
 
             {/* ═══ EVIDENCE (Compliance / IA) ═══ */}
@@ -770,6 +802,65 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 // (this header and the Engagement Library's portfolio scan).
 
 // ═════════════════════════════════════════════════════════════════════════════
+// ─── Internal Audit · first state ─────────────────────────────────────────
+// A freshly created audit has no RACM, controls or workflows. Instead of six
+// zero KPIs and empty charts, Overview explains where the auditor is in the
+// journey and hands them the one action that starts everything: the RACM.
+function IaFirstState({ eng, onCreateRacm }: { eng: Engagement; onCreateRacm: () => void }) {
+  const approvalsDefined = (eng.approvalLevels?.riskOwner ?? 0) > 0 || (eng.approvalLevels?.auditor ?? 0) > 0;
+  const steps: { label: string; desc: string; state: 'done' | 'now' | 'locked' }[] = [
+    { label: 'Engagement created', desc: `${eng.periodStart} → ${eng.periodEnd} · owned by ${eng.owner}`, state: 'done' },
+    {
+      label: 'Approval flows defined',
+      desc: approvalsDefined
+        ? `Risk owner ${eng.approvalLevels?.riskOwner ?? 0} level${(eng.approvalLevels?.riskOwner ?? 0) === 1 ? '' : 's'} · auditor ${eng.approvalLevels?.auditor ?? 0}`
+        : 'No approval chains picked at creation — cases will need them before sign-off.',
+      state: approvalsDefined ? 'done' : 'locked',
+    },
+    { label: 'Build your RACM', desc: 'Upload an existing matrix, or upload an SOP and let IRA extract the risks, controls and attributes.', state: 'now' },
+    { label: 'Controls & workflows', desc: 'Derived from the RACM — every control it holds appears on the Controls tab, ready to map to workflows.', state: 'locked' },
+    { label: 'Test, resolve exceptions & report', desc: 'Run testing, work the exception queue, and issue the audit report.', state: 'locked' },
+  ];
+  return (
+    <div className="max-w-2xl mx-auto py-6">
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-3 mb-1.5">
+          <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Sparkles size={18} /></div>
+          <div>
+            <h2 className="text-[1rem] font-bold text-text">This audit is ready to set up</h2>
+            <p className="text-[0.75rem] text-text-muted">Everything in this engagement flows from its RACM — build that first and the rest of the tabs fill in.</p>
+          </div>
+        </div>
+        <ol className="mt-5 space-y-1">
+          {steps.map((s, i) => (
+            <li key={s.label} className={`flex items-start gap-3 rounded-lg px-3 py-2.5 ${s.state === 'now' ? 'bg-brand-50/60 border border-brand-100' : ''}`}>
+              <span className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                s.state === 'done' ? 'bg-compliant-50 text-compliant-700'
+                : s.state === 'now' ? 'bg-brand-600 text-white'
+                : 'bg-surface-2 text-text-muted'
+              }`}>
+                {s.state === 'done' ? <CheckCircle2 size={13} /> : <span className="text-[0.625rem] font-bold tabular-nums">{i + 1}</span>}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className={`text-[0.8125rem] font-semibold ${s.state === 'locked' ? 'text-text-muted' : 'text-text'}`}>{s.label}</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">{s.desc}</div>
+              </div>
+              {s.state === 'now' && (
+                <button
+                  onClick={onCreateRacm}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus size={13} /> Create RACM
+                </button>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 // Configuration Tab — editable engagement details (owner, planned dates, …)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -808,6 +899,25 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm(f => ({ ...f, [k]: v }));
   const dirty = JSON.stringify(form) !== JSON.stringify(saved);
   const ownerOptions = OWNER_LIST.includes(form.owner) ? OWNER_LIST : [form.owner, ...OWNER_LIST];
+  // Guardrail (auditor feedback, row 23): moving to the terminal state needs a
+  // recorded justification — no casual "Closed" from a dropdown.
+  const logStatusEvent = useAuditLog();
+  const closing = form.status === 'Closed' && saved.status !== 'Closed';
+  const [closeReason, setCloseReason] = useState('');
+  const saveBlocked = !dirty || (closing && !closeReason.trim());
+  const handleSave = () => {
+    if (saveBlocked) return;
+    if (closing) {
+      logStatusEvent({
+        action: 'Update',
+        description: `Closed "${form.name}" (${saved.status} → Closed) — reason: ${closeReason.trim()}`,
+        module: 'Engagements', entity: 'Engagement',
+      });
+      setCloseReason('');
+    }
+    setSaved(form);
+    onSaved();
+  };
 
   return (
     <div className="space-y-4">
@@ -829,6 +939,17 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
               {ENG_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </ConfigField>
+          {closing && (
+            <ConfigField label="Reason for closing *" full>
+              <textarea
+                rows={2}
+                value={closeReason}
+                onChange={e => setCloseReason(e.target.value)}
+                placeholder="Mandatory — recorded on the action trail. e.g. Fieldwork complete, report issued and signed off."
+                className={`${CONFIG_INPUT_CLS} resize-none leading-relaxed`}
+              />
+            </ConfigField>
+          )}
           <ConfigField label="Process">
             <select value={form.process} onChange={e => set('process', e.target.value as ProcessCode)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
               {ENG_PROCESS_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -893,8 +1014,8 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
       <div className="flex items-center justify-end gap-3">
         <Gated permission="eng_edit" mode="disable" title="You don't have permission to edit this engagement">
         <button
-          onClick={() => { setSaved(form); onSaved(); }}
-          disabled={!dirty}
+          onClick={handleSave}
+          disabled={saveBlocked}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
           <CheckCircle2 size={14} /> Save changes
@@ -2415,6 +2536,13 @@ function WorkflowsBySubProcess({
 
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<WorkflowSort>('default');
+  // Filters (auditor feedback, row 21): narrow by run status and sub-process.
+  const [statusFilter, setStatusFilter] = useState<'All' | MockWorkflow['status']>('All');
+  const [processFilter, setProcessFilter] = useState('All');
+  const subProcessOptions = useMemo(
+    () => Array.from(new Set(allWorkflows.map(w => w.subProcess))).sort(),
+    [allWorkflows],
+  );
 
   /** Open (non-resolved) exception count per workflow for this engagement — powers the count badge + "Open exceptions" sort. */
   const openByWorkflow = useMemo(() => {
@@ -2432,13 +2560,15 @@ function WorkflowsBySubProcess({
       !q || w.name.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
          || w.type.toLowerCase().includes(q) || w.subProcess.toLowerCase().includes(q)
     );
+    if (statusFilter !== 'All') list = list.filter(w => w.status === statusFilter);
+    if (processFilter !== 'All') list = list.filter(w => w.subProcess === processFilter);
     if (sortBy === 'open') {
       list = [...list].sort((a, b) => (openByWorkflow.get(b.id) ?? 0) - (openByWorkflow.get(a.id) ?? 0));
     } else if (sortBy === 'lastRun') {
       list = [...list].sort((a, b) => lastRunMinutes(a.lastRun) - lastRunMinutes(b.lastRun));
     }
     return list;
-  }, [allWorkflows, query, sortBy, openByWorkflow]);
+  }, [allWorkflows, query, sortBy, openByWorkflow, statusFilter, processFilter]);
 
   const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
 
@@ -2534,6 +2664,27 @@ function WorkflowsBySubProcess({
           )}
           {!bulkMode && (
             <>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as 'All' | MockWorkflow['status'])}
+                className="px-2.5 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] font-semibold text-text-secondary outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 hover:border-primary/30 cursor-pointer"
+                title="Filter by run status"
+                aria-label="Filter workflows by status"
+              >
+                {(['All', 'Success', 'Failed', 'Running'] as const).map(s => (
+                  <option key={s} value={s}>{s === 'All' ? 'Status: All' : s}</option>
+                ))}
+              </select>
+              <select
+                value={processFilter}
+                onChange={e => setProcessFilter(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] font-semibold text-text-secondary outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 hover:border-primary/30 cursor-pointer"
+                title="Filter by sub-process"
+                aria-label="Filter workflows by sub-process"
+              >
+                <option value="All">Process: All</option>
+                {subProcessOptions.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+              </select>
               <div className="relative flex items-center">
                 <ArrowUpDown size={13} className="absolute left-2.5 text-text-muted pointer-events-none" />
                 <select

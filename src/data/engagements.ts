@@ -92,10 +92,28 @@ export interface Engagement {
   soxSeedMode?: 'fresh' | 'live' | 'carried';
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
-  /** Present only for Internal Audit engagements created via the wizard. */
+  /** Present only for Internal Audit engagements created via the wizard.
+   *  The lean IA creation flow (Type → Basics → Review) doesn't capture scope,
+   *  so engagements created there carry no auditConfig — scope is built inside
+   *  the workspace from the RACM the auditor creates. */
   auditConfig?: AuditScopeConfig;
+  /** Approval routing captured on the IA creation flow's Basics step. The
+   *  counts are derived from the picked flows, so they always describe a real
+   *  approval route rather than a number typed from memory. */
+  approvalLevels?: {
+    riskOwner: number;
+    auditor: number;
+    /** WorkflowTemplate ids from the approval-flow store. */
+    riskOwnerFlowId?: string;
+    auditorFlowId?: string;
+  };
   /** Present only for Automation engagements created via the wizard. */
   automationConfig?: AutomationConfig;
+  /** True for engagements created without a process or RACM. `process` still
+   *  carries a placeholder so the 160-odd call sites that read it keep working,
+   *  but the IA workspace treats an unscoped engagement as genuinely empty and
+   *  asks the auditor to build a RACM instead of showing a process library. */
+  unscoped?: boolean;
   process: ProcessCode;
   framework: string;
   owner: string;

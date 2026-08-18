@@ -451,8 +451,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       module: 'Exceptions', entity: 'Exception',
     });
     addToast({ type: 'success', message: ids.length > 1
-      ? `Comment shared on ${ids.length} cases — the ${personaName(recipient)} will see it.`
-      : `Comment shared — the ${personaName(recipient)} will see it.` });
+      ? `Comment shared on ${ids.length} cases — the ${personaName(recipient)} has been notified by email.`
+      : `Comment shared — the ${personaName(recipient)} has been notified by email.` });
   };
 
   // Open a case's detail and clear this persona's unread comment badge for it.
@@ -1050,8 +1050,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <div className="flex items-center justify-between gap-6 -mb-px">
             <div className="flex items-center gap-0 border-b border-transparent">
               {([
-                { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
-                { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
+                { id: 'exceptions' as const, label: 'Exceptions', icon: Layers, count: exceptions.length },
+                { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart, count: exceptions.filter(e => requiresActionPlan(e.classification)).length },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -1065,6 +1065,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   >
                     <Icon size={14} />
                     {t.label}
+                    {/* Total on the tab itself (auditor feedback, row 21). */}
+                    <span
+                      aria-label={`${t.count} items`}
+                      className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+                        isActive ? 'bg-brand-100 text-brand-700' : 'bg-[#F4F2F7] text-ink-500'
+                      }`}
+                    >
+                      {t.count}
+                    </span>
                     {isActive && (
                       <motion.div
                         layoutId="exceptions-tab-bar"
@@ -1878,7 +1887,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   message: `${wasAssigned ? 'Reassigned' : 'Assigned'} to ${assigneeNames}`,
                   comment: payload.note,
                 };
-                detail.activityLog = [entry, ...detail.activityLog];
+                // The email notification is visible, not implied (auditor
+                // feedback, row 18) — its own line on the activity log.
+                const emailEntry: GrcActivityEntry = {
+                  id: `act-email-${caseId}-${Date.now()}`,
+                  author: 'System',
+                  role: 'System',
+                  timestamp: fmtStamp(nowIso),
+                  message: `Email notification sent to ${assigneeNames}`,
+                };
+                detail.activityLog = [emailEntry, entry, ...detail.activityLog];
               });
               const firstName = payload.assignees[0].name;
               const assigneeLabel =
@@ -1887,7 +1905,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   : `${firstName} and ${payload.assignees.length - 1} other${payload.assignees.length - 1 === 1 ? '' : 's'}`;
               addToast({
                 type: 'success',
-                message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
+                message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel} · notified by email`,
               });
               logEvent({ action: 'Update', description: `Assigned ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} to ${assigneeNames}`, module: 'Exceptions', entity: 'Exception' });
               // Only clear the selection set when the bulk drawer was the one

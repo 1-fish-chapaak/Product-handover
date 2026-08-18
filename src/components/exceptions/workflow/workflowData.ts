@@ -52,39 +52,14 @@ export function buildDefaultPermissions(): ColumnPermission[] {
   }));
 }
 
-// ─── Seeded workflow templates ───────────────────────────────────────────
-export const SEED_TEMPLATES: WorkflowTemplate[] = [
-  {
-    id: 'wf-ro-default',
-    name: 'P2P Quarterly Review – RO Flow',
-    persona: 'risk-owner',
-    isDefault: true,
-    version: 1,
-    createdBy: 'u-ro-owner',
-    createdAt: '2026-05-01T09:00:00.000Z',
-    // Risk-owner levels only. When the last one approves, the case is NOT marked
-    // approved — it hands off to the Auditor phase (the Auditor's own route runs
-    // step by step, or the Auditor lead signs off if no auditor route exists).
-    levels: [
-      { id: 'lvl-ro-1', name: 'L1 — Team Review',         assigneeIds: ['u-ro-2'],     mode: 'any', slaHours: 48, allowSendBack: true },
-      { id: 'lvl-ro-2', name: 'L2 — Process Owner',       assigneeIds: ['u-ro-3'],     mode: 'all', slaHours: 72, allowSendBack: true },
-      { id: 'lvl-ro-3', name: 'L3 — Risk Owner Sign-off', assigneeIds: ['u-ro-owner'], mode: 'any', slaHours: 96, allowSendBack: true },
-    ],
-  },
-  {
-    id: 'wf-au-default',
-    name: 'Audit Review – Manager → Senior Partner',
-    persona: 'auditor',
-    isDefault: true,
-    version: 1,
-    createdBy: 'u-au-owner',
-    createdAt: '2026-05-02T09:00:00.000Z',
-    levels: [
-      { id: 'lvl-au-1', name: 'L1 — Audit Manager',  assigneeIds: ['u-au-1'], mode: 'any', slaHours: 48, allowSendBack: true },
-      { id: 'lvl-au-2', name: 'L2 — Senior Partner', assigneeIds: ['u-au-3'], mode: 'any', slaHours: 72, allowSendBack: false },
-    ],
-  },
-];
+// ─── Workflow templates ──────────────────────────────────────────────────
+// Intentionally EMPTY: the first-time journey starts with no approval flows.
+// The auditor builds the first Risk Owner and Auditor chains from the
+// engagement creation flow (Basics step) — or from the library's Approval
+// Flow tab — and both write to the same shared store.
+// (When the risk-owner chain's last level approves, the case is NOT marked
+// approved — it hands off to the Auditor phase; the auditor chain closes it.)
+export const SEED_TEMPLATES: WorkflowTemplate[] = [];
 
 // No in-flight assignments are seeded — every exception starts unassigned. The
 // first assignment is created live when the Auditor assigns a case to a Risk
