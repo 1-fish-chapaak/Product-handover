@@ -10,6 +10,7 @@
  */
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { RACM_LIBRARY, racmRowsForProcess, type ControlAttribute, type RACMRow } from '../../data/racm';
+import { draftedRacmRows } from '../../data/draftedRegisterStore';
 import type { Engagement } from '../../data/engagements';
 
 export interface WorkspaceWorkflow {
@@ -62,8 +63,11 @@ export function useEngagementWorkspace(): WorkspaceCtx {
  *  Exported so the engagement insight subjects are built from the SAME rows the
  *  Controls tab renders — the drawer's redirects land on rows that exist. */
 export function baseControlsFor(engagement: Engagement): WorkspaceControl[] {
+  // An engagement drafted by One-Click Audit carries its own register; the process
+  // library is the fallback for every engagement that didn't come from the wizard.
+  const drafted = draftedRacmRows(engagement.id);
   const rows = racmRowsForProcess(engagement.process);
-  const usable = rows.length > 0 ? rows : RACM_LIBRARY;
+  const usable = drafted ?? (rows.length > 0 ? rows : RACM_LIBRARY);
   const byId = new Map<string, WorkspaceControl>();
   usable.forEach(r => {
     if (byId.has(r.controlId)) return;

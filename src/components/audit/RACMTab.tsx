@@ -34,6 +34,7 @@ import {
   type ControlType,
   type Automation,
 } from '../../data/racm';
+import { draftedRacmRows, hasDraftedRegister } from '../../data/draftedRegisterStore';
 import { useEngagementWorkspace, type WorkspaceControl } from './engagementWorkspace';
 import { AIRecommendsBadge } from '../shared/InsightGenerator';
 import { InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/TargetedActions';
@@ -171,15 +172,24 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   // Light up when the engagement-level generation lands (header launcher run).
   useInsightCacheVersion();
   const insightStamp = getGeneratedInsight('engagement', engagement.id)?.generatedAt ?? null;
-  const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
+  const libraryRows = useMemo(
+    () => draftedRacmRows(engagement.id) ?? racmRowsForProcess(engagement.process),
+    [engagement.id, engagement.process],
+  );
+  const isDrafted = hasDraftedRegister(engagement.id);
 
   // When a full RACM is uploaded it replaces the library rows for every area.
   const [uploadedRows, setUploadedRows] = useState<RACMRow[]>([]);
   // SOP per entry id — seed every sub-process with one except the last (to demo the extract path).
   const [sopByEntry, setSopByEntry] = useState<Record<string, SopDoc | null>>(() => {
-    const groups = groupRacmBySubProcess(racmRowsForProcess(engagement.process));
+    const drafted = draftedRacmRows(engagement.id);
+    const groups = groupRacmBySubProcess(drafted ?? racmRowsForProcess(engagement.process));
     const map: Record<string, SopDoc | null> = {};
-    groups.forEach((g, i) => { map[slug(g.subProcess)] = i === groups.length - 1 ? null : defaultSopFor(g.subProcess); });
+    // A drafted register was derived from the connected data, not from an SOP —
+    // showing a pre-attached SOP on it would be a lie, so leave every area empty.
+    groups.forEach((g, i) => {
+      map[slug(g.subProcess)] = drafted || i === groups.length - 1 ? null : defaultSopFor(g.subProcess);
+    });
     return map;
   });
   // Brand-new RACMs created by extracting from an SOP (a new area not in the library).
@@ -214,9 +224,10 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       const id = slug(g.subProcess);
       const sop = sopByEntry[id] ?? null;
       const source: RacmEntry['source'] = uploadedRows.length > 0 ? 'uploaded' : sop?.extracted ? 'sop-extracted' : 'library';
-      return { id, name: `${g.subProcess} RACM`, subProcess: g.subProcess, rows: g.rows, sop, source, updatedAgo: defaultSopFor(g.subProcess).uploadedAgo };
+      const updatedAgo = isDrafted ? 'just now' : defaultSopFor(g.subProcess).uploadedAgo;
+      return { id, name: `${g.subProcess} RACM`, subProcess: g.subProcess, rows: g.rows, sop, source, updatedAgo };
     });
-  }, [customRows, baseRows, sopByEntry, uploadedRows.length]);
+  }, [customRows, baseRows, sopByEntry, uploadedRows.length, isDrafted]);
 
   const entries = useMemo(() => [...extraEntries, ...libraryEntries], [extraEntries, libraryEntries]);
   const selected = entries.find(e => e.id === selectedId) ?? null;

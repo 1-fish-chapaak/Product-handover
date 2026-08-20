@@ -25,7 +25,7 @@ import { getGeneratedInsight, useInsightCacheVersion, type TargetedAction } from
 import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight, type EntityRef } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
-  ENGAGEMENTS,
+  findEngagement,
   PROCESS_COLORS,
   type AutomationSubtype,
   type Engagement,
@@ -33,6 +33,7 @@ import {
   type EngStatus,
   type ProcessCode,
 } from '../../data/engagements';
+import { draftedSubProcess, draftedWorkflows, type DraftedWorkflow } from '../../data/draftedRegisterStore';
 import {
   ENGAGEMENT_ACTIVITY,
   AVG_TIME_TO_CLOSE,
@@ -243,8 +244,46 @@ const MOCK_WORKFLOWS: MockWorkflow[] = [
   { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-012' },
 ];
 
-/** Engagement workflow set shared with the Controls/RACM tabs via the workspace store. */
-const WORKSPACE_WORKFLOWS = MOCK_WORKFLOWS.map(w => ({ id: w.id, code: w.code, name: w.name }));
+function draftedWorkflowType(name: string): string {
+  if (/duplicat|detect|anomal/i.test(name)) return 'Detection';
+  if (/match|recon/i.test(name)) return 'Reconciliation';
+  if (/approval|threshold|complian|sla/i.test(name)) return 'Compliance';
+  return 'Monitoring';
+}
+
+/** A workflow Ira drafted, in the shape the engagement tabs render. Mirrors
+ *  linkedToMockWorkflow: a workflow that has never run reports "Not run yet" with
+ *  no signal, so effectiveness scoring and the silent-failure banner stay honest. */
+function draftedToMockWorkflow(w: DraftedWorkflow, i: number): MockWorkflow {
+  const prefix = (w.controlId.split('-')[0] || 'WF').toUpperCase();
+  const cadence: Cadence =
+    w.cadence === 'Daily' ? { kind: 'Frequency', label: 'Daily 6 AM' }
+    : w.cadence === 'Weekly' ? { kind: 'Frequency', label: 'Weekly Mon 6 AM' }
+    : w.cadence === 'Monthly' ? { kind: 'Frequency', label: 'Monthly' }
+    : { kind: 'Ad-hoc' };
+  return {
+    id: w.id,
+    code: `WF-${prefix}-${String(i + 1).padStart(3, '0')}`,
+    name: w.name,
+    type: draftedWorkflowType(w.name),
+    inputs: ['SQL'],
+    cadence,
+    lastRun: 'Not run yet',
+    status: 'Success',
+    // Same heading the drafted controls group under, so the two tabs line up.
+    subProcess: draftedSubProcess(w.controlId),
+    truePositives: 0,
+    totalFires: 0,
+    // The detail page resolves by library id — borrow a real one so it isn't blank.
+    libraryId: MOCK_WORKFLOWS[i % MOCK_WORKFLOWS.length].libraryId,
+  };
+}
+
+/** An AI-drafted engagement monitors what Ira proposed; everything else keeps the demo set. */
+function workflowsForEngagement(eng: Engagement): MockWorkflow[] {
+  const drafted = draftedWorkflows(eng.id);
+  return drafted ? drafted.map(draftedToMockWorkflow) : MOCK_WORKFLOWS;
+}
 
 function effectivenessTier(pct: number): { label: string; tone: string; bar: string } {
   if (pct >= 80) return { label: 'High', tone: 'text-compliant-700', bar: 'bg-compliant' };
@@ -315,7 +354,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { openShare } = useShare();
-  const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
+  // Resolve through the runtime registry, not the static seed array — engagements
+  // created at runtime (One-Click Audit, the New Engagement wizard) only exist there.
+  const engagement = useMemo(() => findEngagement(engagementId), [engagementId]);
 
   // Default the tab to overview; pick the first tab for the type once we know
   // the engagement. A drawer deep link (?tab=&focusControl=, opened in a new
@@ -390,6 +431,16 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
       if (firstVisible) setActiveTab(firstVisible);
     }
   }, [tabPrefs, activeTab]);
+
+  // Above the not-found return so hook order stays stable when nothing resolves.
+  const engWorkflows = useMemo(
+    () => (engagement ? workflowsForEngagement(engagement) : MOCK_WORKFLOWS),
+    [engagement],
+  );
+  const workspaceWorkflows = useMemo(
+    () => engWorkflows.map(w => ({ id: w.id, code: w.code, name: w.name })),
+    [engWorkflows],
+  );
 
   if (!engagement) {
     return (
@@ -473,7 +524,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
     { label: 'Effective', value: notStarted ? '—' : effective, icon: ShieldCheck },
     { label: 'Failed', value: notStarted ? '—' : failed, icon: AlertTriangle },
-    { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
+    { label: 'Workflows', value: engWorkflows.length, icon: Workflow },
     { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
   ];
 
@@ -499,7 +550,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const completedPct = Math.round((completedCount / checklist.length) * 100);
 
   return (
-    <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
+    <EngagementWorkspaceProvider engagement={eng} workflows={workspaceWorkflows}>
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
@@ -660,6 +711,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 )}
                 <HealthOverviewTab
                   eng={eng}
+                  workflows={engWorkflows}
                   onDrillToExceptions={goToExceptionsTab}
                   onGoToWorkflows={goToWorkflowsTab}
                   onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
@@ -691,7 +743,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
             {activeTab === 'workflows' && (
               <WorkflowsBySubProcess
-                workflows={MOCK_WORKFLOWS}
+                workflows={engWorkflows}
                 engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
@@ -708,7 +760,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ EXCEPTION MANAGEMENT (Automation) — slim summary; full workspace lives at /case-management ═══ */}
             {activeTab === 'exceptions' && (
-              <ExceptionManagementTab eng={eng} onOpenWorkspace={openCaseWorkspace} />
+              <ExceptionManagementTab eng={eng} workflows={engWorkflows} onOpenWorkspace={openCaseWorkspace} />
             )}
             {/* ═══ WORKING PAPER (Compliance) / AUDIT REPORT (IA) ═══ */}
             {activeTab === 'working-paper' && (
@@ -739,6 +791,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
         {configWorkflow && (
           <WorkflowConfigDrawer
             workflowId={configWorkflow}
+            workflows={engWorkflows}
             onClose={() => setConfigWorkflow(null)}
             onSaved={() => {
               setConfigWorkflow(null);
@@ -931,9 +984,12 @@ const SEV_DOT_CLS: Record<Severity, string> = {
 
 function ExceptionManagementTab({
   eng,
+  workflows = MOCK_WORKFLOWS,
   onOpenWorkspace,
 }: {
   eng: Engagement;
+  /** Defaults to the demo set so existing callers keep today's behaviour. */
+  workflows?: MockWorkflow[];
   onOpenWorkspace: (filter?: { severity?: Severity; workflowId?: string; status?: EngagementException['status'] }) => void;
 }) {
   const allExceptions = useMemo(() => exceptionsForEngagement(eng.id), [eng.id]);
@@ -964,7 +1020,7 @@ function ExceptionManagementTab({
    */
   const allWorkflowsView = useMemo(() => {
     const byId = new Map(groups.map(g => [g.workflowId, g]));
-    return MOCK_WORKFLOWS.map(wf => {
+    return workflows.map(wf => {
       const grp = byId.get(wf.id);
       const exceptions = (grp?.exceptions ?? []).filter(e =>
         (sevFilter === 'All' || e.severity === sevFilter) &&
@@ -1472,6 +1528,7 @@ function heatmapCellCls(count: number): string {
 
 export function HealthOverviewTab({
   eng,
+  workflows = MOCK_WORKFLOWS,
   onDrillToExceptions,
   onGoToWorkflows,
   onConfigureWorkflow,
@@ -1480,6 +1537,8 @@ export function HealthOverviewTab({
   hideInsightGenerator,
 }: {
   eng: Engagement;
+  /** Defaults to the demo set so existing callers keep today's behaviour. */
+  workflows?: MockWorkflow[];
   /** Navigate to the Exception Management sub-tab (same browser tab). */
   onDrillToExceptions: () => void;
   /** Navigate to the Workflows sub-tab (same browser tab). */
@@ -1501,9 +1560,9 @@ export function HealthOverviewTab({
   const labels = {
     kpi1Label: isAutomation ? 'Total Workflows' : 'Controls in Scope',
     kpi1Sub: isAutomation
-      ? `${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Frequency').length} live · ${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Ad-hoc').length} ad-hoc`
-      : `${MOCK_WORKFLOWS.length} test workflows linked`,
-    kpi1Value: isAutomation ? MOCK_WORKFLOWS.length : eng.controls,
+      ? `${workflows.filter(wf => wf.cadence.kind === 'Frequency').length} live · ${workflows.filter(wf => wf.cadence.kind === 'Ad-hoc').length} ad-hoc`
+      : `${workflows.length} test workflows linked`,
+    kpi1Value: isAutomation ? workflows.length : eng.controls,
     kpi2Label: `Open ${issueWordCap}`,
     kpi3Label: isIA ? 'Action Plans Open' : 'In Progress',
     kpi4Label: isAutomation ? 'Health' : (isCompliance ? 'Pass Rate' : 'Coverage'),
@@ -1610,7 +1669,7 @@ export function HealthOverviewTab({
     const events = ENGAGEMENT_ACTIVITY[eng.id] || [];
     type Row = { workflowId: string; name: string; counts: number[]; total: number };
     const rows = new Map<string, Row>();
-    MOCK_WORKFLOWS.forEach(wf => {
+    workflows.forEach(wf => {
       rows.set(wf.id, { workflowId: wf.id, name: wf.name, counts: Array(heatmapDays).fill(0), total: 0 });
     });
     events.forEach(ev => {
@@ -1877,7 +1936,7 @@ export function HealthOverviewTab({
             </div>
           </div>
           <div className="space-y-1">
-            {MOCK_WORKFLOWS.map(wf => {
+            {workflows.map(wf => {
               const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
               const tier = effectivenessTier(eff);
               return (
@@ -1959,7 +2018,7 @@ export function HealthOverviewTab({
             return top && top[1] >= 2 ? { vendor: top[0], count: top[1] } : null;
           })();
           // Anomaly: a frequency workflow whose last run is older than 24h (silent failure)
-          const silentMonitor = MOCK_WORKFLOWS.find(wf => wf.cadence.kind === 'Frequency' && /(\d+)d ago/.test(wf.lastRun));
+          const silentMonitor = workflows.find(wf => wf.cadence.kind === 'Frequency' && /(\d+)d ago/.test(wf.lastRun));
           return (
             <>
               {vendorPattern && (
@@ -1998,7 +2057,7 @@ export function HealthOverviewTab({
           </div>
         </div>
         <div className="space-y-4">
-          {groupBySubProcess(MOCK_WORKFLOWS).map(group => (
+          {groupBySubProcess(workflows).map(group => (
             <div key={group.subProcess}>
               <div className="flex items-center gap-2 mb-2">
                 <Layers size={12} className="text-text-muted" />
@@ -2144,15 +2203,23 @@ const SEVERITY_MIN_OPTIONS: Severity[] = ['Critical', 'High', 'Medium', 'Low'];
 
 function WorkflowConfigDrawer({
   workflowId,
+  workflows = MOCK_WORKFLOWS,
   onClose,
   onSaved,
 }: {
   workflowId: string;
+  /** Defaults to the demo set so existing callers keep today's behaviour. */
+  workflows?: MockWorkflow[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const wf = MOCK_WORKFLOWS.find(w => w.id === workflowId);
+  const wf = workflows.find(w => w.id === workflowId);
   const initialSchedule: string = wf?.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf?.cadence.label ?? 'Daily 6 AM';
+  // A drafted cadence ("Monthly") isn't in the preset list — keep it selectable
+  // rather than rendering a select with nothing matching.
+  const scheduleOptions: readonly string[] = SCHEDULE_OPTIONS.includes(initialSchedule as typeof SCHEDULE_OPTIONS[number])
+    ? SCHEDULE_OPTIONS
+    : [initialSchedule, ...SCHEDULE_OPTIONS];
   const [schedule, setSchedule] = useState<string>(initialSchedule);
   const [threshold, setThreshold] = useState<string>('0.85');
   const [retry, setRetry] = useState<string>('3x');
@@ -2202,7 +2269,7 @@ function WorkflowConfigDrawer({
           <div>
             <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Schedule</label>
             <div className="grid grid-cols-2 gap-2">
-              {SCHEDULE_OPTIONS.map(s => (
+              {scheduleOptions.map(s => (
                 <button
                   key={s}
                   onClick={() => setSchedule(s)}

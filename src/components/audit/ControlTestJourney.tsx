@@ -13,6 +13,7 @@ import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import type { Engagement } from '../../data/engagements';
 import { attrCode, racmRowsForProcess } from '../../data/racm';
+import { draftedRacmRows } from '../../data/draftedRegisterStore';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { buildWpControls, downloadControlWorkingPaper, type WpControl } from './workingPaper';
 
@@ -59,7 +60,8 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
 
   const wpControl: WpControl | null = useMemo(() => {
     if (!control) return null;
-    const riskByControl = new Map(racmRowsForProcess(engagement.process).map(r => [r.controlId, r.riskDescription]));
+    const rows = draftedRacmRows(engagement.id) ?? racmRowsForProcess(engagement.process);
+    const riskByControl = new Map(rows.map(r => [r.controlId, r.riskDescription]));
     return buildWpControls([control], {
       health: engagement.health,
       owner: engagement.owner,

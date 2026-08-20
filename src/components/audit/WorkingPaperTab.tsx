@@ -9,6 +9,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, type RACMRow } from '../../data/racm';
+import { draftedRacmRows } from '../../data/draftedRegisterStore';
 import { CURRENT_USER, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { buildWpControls, downloadWorkingPaper, downloadControlWorkingPaper } from './workingPaper';
@@ -95,7 +96,10 @@ export default function WorkingPaperTab({ engagement }: Props) {
   const title = isIA ? 'Audit Report' : 'Working Paper';
   const titleShort = isIA ? 'Report' : 'Paper';
 
-  const racmRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
+  const racmRows = useMemo(
+    () => draftedRacmRows(engagement.id) ?? racmRowsForProcess(engagement.process),
+    [engagement.id, engagement.process],
+  );
   const papers = useMemo(() => racmRows.map((r, i) => deriveControlPaper(r, engagement, i)), [racmRows, engagement]);
 
   // Working-paper rows (.xlsx) — built from the shared engagement workspace so the

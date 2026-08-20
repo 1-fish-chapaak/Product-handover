@@ -26,6 +26,7 @@ import {
   type RecommendedEngagement, type RecommendedRisk,
 } from './oneClickAuditData';
 import { addCreatedEngagements } from '../../data/createdEngagementsStore';
+import { addDraftedRegisters, type DraftedRegister } from '../../data/draftedRegisterStore';
 import type { Engagement } from '../../data/engagements';
 
 type Step = 'setup' | 'thinking' | 'engagements' | 'controls' | 'workflows' | 'review' | 'live';
@@ -208,6 +209,11 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
     });
   };
 
+  // Ira grounds the plan in the uploaded SOPs / DOAs, so the CTA stays disabled
+  // until at least one document has finished parsing.
+  const parsing = uploads.some(u => u.status === 'parsing');
+  const canGenerate = uploads.some(u => u.status === 'ready');
+
   /* ── thinking choreography ── */
   const thinkingPhases = useMemo(() => {
     const phases: { icon: typeof Database; label: string; detail: string }[] = [
@@ -302,11 +308,33 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
     };
   };
 
+  /** The register the user just reviewed, kept alongside the engagement so it opens
+   *  with its own risks, controls and workflows instead of generic library seeds.
+   *  Only ticked items are persisted, matching the `controls` count set above. */
+  const toDraftedRegister = (engagementId: string, r: RecommendedEngagement): DraftedRegister => ({
+    engagementId,
+    process: r.process,
+    risks: r.risks
+      .filter(x => x.selected)
+      .map(({ id, title, description, severity }) => ({ id, title, description, severity })),
+    controls: r.controls
+      .filter(c => c.selected)
+      .map(({ id, controlId, riskId, title, description, frequency, controlType, automation, isKey }) =>
+        ({ id, controlId, riskId, title, description, frequency, controlType, automation, isKey })),
+    workflows: r.workflows
+      .filter(w => w.selected)
+      .map(({ id, name, description, cadence, controlId }) => ({ id, name, description, cadence, controlId })),
+  });
+
   useEffect(() => {
     if (step !== 'live') return;
     if (!createdRef.current) {
       createdRef.current = true;
-      addCreatedEngagements(selectedEngs.map(toEngagement));
+      const created = selectedEngs.map(toEngagement);
+      addCreatedEngagements(created);
+      // Stored for every created engagement; only the Internal Audit / Automation
+      // surfaces read it today — SOX and Compliance seed their own workspaces.
+      addDraftedRegisters(created.map((e, i) => toDraftedRegister(e.id, selectedEngs[i])));
     }
     setLiveIdx(0);
     const t = setInterval(() => {
@@ -596,18 +624,28 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
                         <Toggle checked={webSearch} onChange={setWebSearch} ariaLabel="Toggle web search" />
                       </div>
 
-                      {/* CTA */}
+                      {/* CTA — Ira needs at least one parsed SOP / DOA before it can draft. */}
                       <button
                         type="button"
                         onClick={() => setStep('thinking')}
-                        className="mt-5 w-full h-12 rounded-xl bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white text-[0.9375rem] font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-[0_8px_24px_-8px_rgba(106,18,205,0.55)] hover:shadow-[0_10px_30px_-8px_rgba(106,18,205,0.65)]"
+                        disabled={!canGenerate}
+                        aria-describedby="oca-generate-hint"
+                        className={`mt-5 w-full h-12 rounded-xl text-[0.9375rem] font-semibold flex items-center justify-center gap-2 transition-all ${
+                          canGenerate
+                            ? 'bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-[0_8px_24px_-8px_rgba(106,18,205,0.55)] hover:shadow-[0_10px_30px_-8px_rgba(106,18,205,0.65)]'
+                            : 'bg-canvas border border-canvas-border text-ink-300 cursor-not-allowed'
+                        }`}
                       >
-                        <Sparkles size={16} />
+                        {parsing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                         Generate my audit plan
                         <ArrowRight size={15} />
                       </button>
-                      <p className="mt-2.5 text-center text-[0.6875rem] text-ink-400">
-                        Takes about 15 seconds · nothing goes live without your sign-off
+                      <p id="oca-generate-hint" className="mt-2.5 text-center text-[0.6875rem] text-ink-400">
+                        {canGenerate
+                          ? 'Takes about 15 seconds · nothing goes live without your sign-off'
+                          : parsing
+                            ? 'Reading your documents…'
+                            : 'Upload at least one SOP or DOA so Ira can ground the plan'}
                       </p>
                     </motion.div>
                   </div>

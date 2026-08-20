@@ -30,6 +30,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan } from '../../context/CurrentUserContext';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, attrCode, type RACMRow, type ControlAttribute } from '../../data/racm';
+import { draftedRacmRows } from '../../data/draftedRegisterStore';
 import { CURRENT_USER } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 
@@ -326,7 +327,10 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
   const logEvent = useAuditLog();
   const { can } = useCan();
   const ws = useEngagementWorkspace();
-  const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
+  const allRows = useMemo(
+    () => draftedRacmRows(engagement.id) ?? racmRowsForProcess(engagement.process),
+    [engagement.id, engagement.process],
+  );
   const groupsBySub = useMemo(() => buildControlGroups(allRows), [allRows]);
   const subProcessNames = useMemo(() => Array.from(groupsBySub.keys()), [groupsBySub]);
   const allControls = useMemo(() => {
