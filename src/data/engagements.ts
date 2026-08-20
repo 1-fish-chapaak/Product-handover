@@ -170,6 +170,27 @@ export const ENGAGEMENTS: Engagement[] = [
     ],
   },
   {
+    // The roll-forward demo: this cycle's interim arrives already tested AND
+    // countersigned (see signedInterim in sox-icfr/mockData.ts), so the Roll
+    // forward flow — parent picked, dates derived, materiality inherited, scope
+    // restricted to what passed — can be walked without concluding an audit by
+    // hand first. Altura (SOX-104) stays the testing demo; this one exists to
+    // be rolled forward.
+    id: 'eng-sox-rf', code: 'SOX-105', name: 'FY27 ICFR — Altura Renewables',
+    description: 'FY 2026-27 ICFR cycle for the renewables arm — interim testing complete and countersigned, ready to roll forward to year end.',
+    type: 'SOX / ICFR', process: 'O2C', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
+    status: 'Active', periodStart: 'Apr 2026', periodEnd: 'Mar 2027', controls: 10,
+    health: 80, openIssues: 0, lastActivity: '6d ago', nextScheduled: 'Roll-forward planning',
+    entity: 'Altura Renewables Ltd',
+    soxProcesses: ['Order to Cash', 'Treasury'], soxSeedMode: 'live',
+    startDate: '2026-04-01', endDate: '2027-03-31',
+    milestones: [
+      { label: 'Interim sign-off', date: '2026-08-14' },
+      { label: 'Roll-forward fieldwork', date: '2026-12-15' },
+      { label: 'Year-end sign-off', date: '2027-04-15' },
+    ],
+  },
+  {
     id: 'eng-3', code: 'ENG-003', name: 'AP Duplicate Invoice Monitor',
     description: 'Always-on monitoring for duplicate AP invoice posting — daily scan against vendor, amount, invoice number, and date.',
     type: 'Automation', subtype: 'CCM', process: 'P2P', framework: 'Internal Policy', owner: 'Priya Singh',

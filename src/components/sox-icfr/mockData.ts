@@ -1888,6 +1888,44 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
   }];
 }
 
+/** The roll-forward demo's audit (eng-sox-rf): one interim, tested and signed
+ *  by BOTH hands — which is what "concluded" means to the New audit wizard's
+ *  round gates — so Roll forward is walkable on this engagement from the first
+ *  click. Its results stay live on the controls (the seed concludes all but
+ *  one control per process), which is exactly what the wizard's scope step
+ *  reads for a signed-but-live parent. No icfrConclusion on purpose: an
+ *  interim never produces the final year answer. */
+function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
+  if (!controls.length) return [];
+  const year = Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  const processes = Array.from(new Set(controls.map(c => c.process)));
+  return [{
+    id: `audit-${meta.id ?? 'eng'}-int`,
+    period: `FY ${year - 1}-${String(year).slice(-2)}`,
+    yearBasis: 'fy',
+    fiscalYear: year,
+    periodSpan: `Apr ${year - 1} – Mar ${year}`,
+    round: 'interim',
+    // Cut-off at end of July: the roll-forward the wizard derives from this
+    // starts 01 Aug and runs to the year end.
+    windowFrom: `${year - 1}-04-01`,
+    windowTo: `${year - 1}-07-31`,
+    scopeKind: 'racm',
+    scopeNames: processes,
+    scopeIds: [],
+    files: [{ name: `altura-renewables-tb-fy${String(year).slice(-2)}.xlsx`, kind: 'tb' }],
+    materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5, pmPct: 75, ctPct: 5 },
+    overall: 12,
+    signoff: {
+      preparer: { by: 'A. Mehta', at: `12 Aug ${year - 1}` },
+      reviewer: { by: 'J. Fernandes', at: `14 Aug ${year - 1}` },
+    },
+    by: meta.owner ?? 'A. Mehta',
+    role: 'auditor',
+    at: `01 Apr ${year - 1}`,
+  }];
+}
+
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
@@ -1986,7 +2024,11 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);
-  const audits = rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls);
+  const audits = rich ? libraryAudits(meta.processes ?? [], controls)
+    // The roll-forward demo — a countersigned interim instead of the open
+    // year-end every other engagement gets. See signedInterim.
+    : meta.id === 'eng-sox-rf' ? signedInterim(meta, controls)
+    : singleAudit(meta, controls);
   stampPopulationWindows(controls, audits);
   return {
     ...base,

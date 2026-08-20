@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet,
-  Grid3x3, Landmark, Paperclip, Pencil, Plus, Scale, Sparkles, Star, Trash2, Upload, X,
+  Grid3x3, Landmark, Lock, Paperclip, Pencil, Plus, Scale, Sparkles, Star, Trash2, Upload, X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
@@ -10,17 +10,19 @@ import { StepRail } from '../audit/sox-testing/ScopingWizard';
 import { FormSelect } from '../shared/FilterSelect';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import {
-  BASIS_OPTIONS, ruleOverall,
+  BASIS_OPTIONS, currentFyEnd, ruleOverall,
   type GroupEntity, type MaterialityBasis,
 } from '../audit/sox-testing/soxTestingData';
+import { auditStatus } from './auditPortfolio';
 import {
-  chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
+  auditCovers, chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
   entitiesFor, entitiesInFiles, entityTotals, mergeScopeEntities, racmsForEntities,
 } from './auditScope';
+import { conclusionOf } from './helpers';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
-import { AUDIT_ROUNDS, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
+import { AUDIT_ROUNDS, type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -74,34 +76,194 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
+export default function NewAuditWizard({ onClose, prefillFrom }: {
+  onClose: () => void;
+  /** Set when the sheet was opened by a Roll forward button (user ask — one
+   *  screen, one rulebook: the separate roll-forward sheet is gone). The wizard
+   *  opens on this audit's year with the next pass pre-picked: interim →
+   *  roll-forward, roll-forward → year-end, and past a year-end into the next
+   *  year's interim. Every gate still applies — a blocked round stays blocked,
+   *  with its reason showing, rather than being forced through. */
+  prefillFrom?: AuditRecord;
+}) {
   const { eng, role, createAudit, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const [step, setStep] = useState(0);
 
+  /** What the Roll forward button on `prefillFrom` means, resolved once. */
+  const prefill = prefillFrom ? {
+    basis: (prefillFrom.yearBasis === 'cy' ? 'cy' : 'fy') as 'fy' | 'cy',
+    year: prefillFrom.round === 'yearend' ? prefillFrom.fiscalYear + 1 : prefillFrom.fiscalYear,
+    round: (prefillFrom.round === 'interim' ? 'rollforward'
+      : prefillFrom.round === 'rollforward' ? 'yearend'
+      : 'interim') as AuditRound,
+  } : null;
+
   // ── Period ───────────────────────────────────────────────────────────────
-  // One shape only (user ask): the dates are picked by hand. The named-cycle
-  // shortcuts — financial year, calendar year, quarter — were removed, so there
-  // is no year type to choose between and no derived window to fall back on.
-  // The window this audit tests IS the From / To below.
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-  const customValid = !!customFrom && !!customTo && customFrom <= customTo;
+  // Financial year first, round second, dates last (user ask) — the year decides
+  // which rounds are even available, and the round decides what the dates can
+  // be, so the questions run in dependency order. The free From/To mode this
+  // step used to be is gone: every audit is now one of the three rounds inside a
+  // named year, and the only date a user ever types is the interim cut-off.
+  const [yearBasis, setYearBasis] = useState<'fy' | 'cy'>(prefill?.basis ?? 'fy');
+  // The year the cycle ENDS on (FY 2026-27 ⇒ 2027), matching AuditRecord.fiscalYear.
+  const [year, setYear] = useState<number>(prefill ? prefill.year : currentFyEnd);
   const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-  /** Which round of the cycle this is. SOX is not tested once a year: interim
-   *  covers the first stretch, roll-forward extends it towards the year end, and
-   *  the year-end round tests as of the balance-sheet date. It is the auditor's
-   *  judgement, so it is asked rather than inferred. With the named cycles gone
-   *  it is a label for which pass this is — the round no longer computes dates
-   *  of its own, because there is no cycle left to split. */
-  const [round, setRound] = useState<AuditRound>('interim');
+  // The current year plus a step either side and two ahead — audits are planned
+  // for the running year or the coming one (user ask), never created inline.
+  // Cheap enough to rebuild per render, which lets a Roll forward arriving from
+  // an older cycle add its year instead of rendering as an unlabelled value.
+  const yearMid = yearBasis === 'fy' ? currentFyEnd() : currentFyEnd() - 1;
+  const yearOptions = [yearMid - 1, yearMid, yearMid + 1, yearMid + 2];
+  if (prefill && prefill.basis === yearBasis && !yearOptions.includes(prefill.year)) yearOptions.unshift(prefill.year);
 
-  const periodLabel = customValid ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}` : 'Custom period';
-  const periodSpan = 'Custom range';
-  const windowFrom = customFrom;
-  const windowTo = customTo;
+  const yearLabelOf = (b: 'fy' | 'cy', y: number) => (b === 'fy' ? `FY ${y - 1}-${String(y).slice(-2)}` : `CY ${y}`);
+  const yearSpanOf = (b: 'fy' | 'cy', y: number) => (b === 'fy' ? `Apr ${y - 1} – Mar ${y}` : `Jan – Dec ${y}`);
+  const yearStart = yearBasis === 'fy' ? `${year - 1}-04-01` : `${year}-01-01`;
+  const yearEnd = yearBasis === 'fy' ? `${year}-03-31` : `${year}-12-31`;
+  const periodLabel = yearLabelOf(yearBasis, year);
+  const periodSpan = yearSpanOf(yearBasis, year);
+
+  const shiftDay = (iso: string, days: number) => {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /** Which round of the cycle this is. Starts unanswered (user ask): the date
+   *  fields don't render until it is, because what they can hold depends on it. */
+  const [round, setRound] = useState<AuditRound | null>(null);
+  /** The concluded interim a roll-forward extends — its parent. */
+  const [parentId, setParentId] = useState<string | null>(null);
+  /** Interim / year-end From — prefilled with the year start, editable. */
+  const [fromDate, setFromDate] = useState('');
+  /** The interim cut-off. The one date in the flow that is genuinely the
+   *  auditor's to pick. */
+  const [cutoff, setCutoff] = useState('');
+
+  // ── Round availability ───────────────────────────────────────────────────
+  // Interim + roll-forward, or year-end alone — those are the two ways coverage
+  // legitimately reaches the year end, and these gates keep every other
+  // combination uncreatable rather than merely inadvisable.
+  const sameYearAudits = useMemo(
+    () => eng.audits.filter(a => a.yearBasis === yearBasis && a.fiscalYear === year),
+    [eng.audits, yearBasis, year],
+  );
+  const hasYearEnd = sameYearAudits.some(a => a.round === 'yearend');
+  const yearInterims = sameYearAudits.filter(a => a.round === 'interim');
+  // Concluded = signed by preparer AND reviewer, or archived — auditStatus's
+  // meaning of the word (user ask). An unsigned interim is still someone's open
+  // work, and a roll-forward can only extend an answer that has been given.
+  const concludedInterims = useMemo(
+    () => sameYearAudits.filter(a => a.round === 'interim' && auditStatus(a, eng) === 'concluded'),
+    [sameYearAudits, eng],
+  );
+
+  /** null = available; a string = why it isn't. A greyed-out option with no
+   *  explanation sends people to support (user ask), so the reason renders. */
+  const roundGate: Record<AuditRound, string | null> = {
+    interim: hasYearEnd ? `A year-end audit already covers ${periodLabel}.` : null,
+    rollforward: concludedInterims.length > 0 ? null
+      : yearInterims.length > 0
+        ? `Sign off the ${periodLabel} interim first — a roll-forward extends a concluded interim.`
+        : `Create and conclude an interim audit for ${periodLabel} first.`,
+    yearend: hasYearEnd ? `A year-end audit already exists for ${periodLabel}.` : null,
+  };
+
+  /** What an audit concluded, control by control. A concluded audit's results
+   *  live in one of two places: on its archive snapshot once a later cycle has
+   *  started, or still on the controls themselves while it is the signed live
+   *  cycle — this reads whichever holds them. The results are only READ here;
+   *  they stay on the audit that produced them, never copied forward. */
+  const verdictsFor = (a: AuditRecord) => (a.archive
+    ? a.archive.conclusions.map(v => ({ id: v.controlId, wpRef: v.wpRef, description: v.description, process: v.process, conclusion: v.conclusion }))
+    : eng.controls.filter(c => auditCovers(a, c, eng.id)).map(c => ({ id: c.id, wpRef: c.wpRef, description: c.description, process: c.process, conclusion: conclusionOf(eng, c) })));
+  const effectiveIdsOf = (a: AuditRecord) => verdictsFor(a).filter(v => v.conclusion === 'Effective').map(v => v.id);
+
+  /** The controls this roll-forward carries — starts as everything the parent
+   *  concluded effective, narrowable but never widenable past that list. */
+  const [rfPicked, setRfPicked] = useState<string[]>([]);
+  const toggleRf = (id: string) =>
+    setRfPicked(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+
+  /** Changing the year restarts everything under it — round availability and
+   *  every date depend on the answer, so stale picks must not survive it. */
+  const changeYear = (b: 'fy' | 'cy', y: number) => {
+    setYearBasis(b);
+    setYear(y);
+    setRound(null);
+    setParentId(null);
+    setFromDate('');
+    setCutoff('');
+    setRfPicked([]);
+  };
+
+  const applyRound = (r: AuditRound, preferredParentId?: string) => {
+    setRound(r);
+    // Prefill, don't dictate: interim and year-end open on the year start and
+    // stay editable. Roll-forward's dates are derived below and never held in
+    // state — deriving on render is what makes them impossible to edit.
+    setFromDate(r === 'rollforward' ? '' : yearStart);
+    setCutoff('');
+    // The interim the Roll forward button was pressed on when there was one,
+    // else the newest concluded interim by cut-off.
+    const pick = r === 'rollforward'
+      ? concludedInterims.find(a => a.id === preferredParentId)
+        ?? [...concludedInterims].sort((a, b) => b.windowTo.localeCompare(a.windowTo))[0]
+      : undefined;
+    setParentId(pick?.id ?? null);
+    setRfPicked(pick ? effectiveIdsOf(pick) : []);
+  };
+  const pickRound = (r: AuditRound) => {
+    if (roundGate[r]) return;
+    applyRound(r);
+  };
+
+  // Opened from a Roll forward button: pre-pick the next pass, once, on mount.
+  // A gated round is NOT forced through — the sheet opens on the right year
+  // with the round unchosen and the gate's reason showing, which is the answer
+  // to "why can't I roll this forward" rather than a silently broken prefill.
+  useEffect(() => {
+    if (!prefill || roundGate[prefill.round]) return;
+    applyRound(prefill.round, prefillFrom!.id);
+    // Mount-only by design — re-running would stamp the prefill back over the
+    // user's later choices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Swapping the parent swaps whose conclusions the scope is built from, so
+   *  the carried list resets to the new parent's effective controls. */
+  const changeParent = (id: string) => {
+    setParentId(id);
+    const a = concludedInterims.find(x => x.id === id);
+    setRfPicked(a ? effectiveIdsOf(a) : []);
+  };
+
+  const parent = concludedInterims.find(a => a.id === parentId);
+  // The parent's conclusions split the roll-forward's world in two: effective
+  // controls may carry forward, everything else is excluded with its reason. A
+  // control that failed at interim needs a full retest after remediation — a
+  // roll-forward can't extend evidence that didn't hold — and one never tested
+  // has nothing to extend.
+  const parentVerdicts = parent ? verdictsFor(parent) : [];
+  const rfEffective = parentVerdicts.filter(v => v.conclusion === 'Effective');
+  const rfExcluded = parentVerdicts.filter(v => v.conclusion !== 'Effective');
+  // The derived window. Roll-forward picks up the day after its parent stopped
+  // and runs to the year end — a gap or an overlap between the two is a hole in
+  // the year's coverage that no later screen would catch, so neither date is a
+  // choice. Year-end always closes on the year end for the same reason: the
+  // ICFR opinion is given as of that date.
+  const windowFrom = round === 'rollforward' ? (parent ? shiftDay(parent.windowTo, 1) : '') : fromDate;
+  const windowTo = round === 'interim' ? cutoff : yearEnd;
+  // The interim cut-off must stop short of the year end — a cut-off ON it is a
+  // year-end audit wearing the wrong name. maxDate on the picker enforces it at
+  // the source, and this mirrors that for the Continue gate.
+  const periodValid = round === 'interim' ? !!fromDate && !!cutoff && fromDate <= cutoff && cutoff < yearEnd
+    : round === 'rollforward' ? !!parent
+    : round === 'yearend' ? !!fromDate && fromDate <= yearEnd
+    : false;
 
   // ── Files (optional) ─────────────────────────────────────────────────────
   // Provenance rides with the file from the moment it is picked — it is a
@@ -159,6 +321,18 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     { label: 'Significant deficiency', band: `≥ ${money(sd)} · ${sdPct}% of overall`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
     { label: 'Material weakness', band: `≥ ${money(overall)} or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
   ];
+
+  /** The rule this audit will actually be created with. A roll-forward reads
+   *  its parent's, verbatim (user ask) — an interim and its roll-forward are
+   *  two halves of one year, and two figures for one year would grade the same
+   *  deficiency two different ways. Everything else reads the step's inputs.
+   *  The 75 / 5 fallbacks match what every reader of pmPct / ctPct assumes for
+   *  audits created before the wizard asked for them. */
+  const matFinal = round === 'rollforward' && parent
+    ? { ...parent.materiality, pmPct: parent.materiality.pmPct ?? 75, ctPct: parent.materiality.ctPct ?? 5, overall: parent.overall }
+    : { basisLabel: basisOpt.label, benchmark, pct, pmPct, ctPct, overall };
+  const matPerf = matFinal.overall * matFinal.pmPct / 100;
+  const matTrivial = matFinal.overall * matFinal.ctPct / 100;
 
   // ── Scope ────────────────────────────────────────────────────────────────
   const [scopeKind, setScopeKind] = useState<AuditScopeKind>('entity');
@@ -448,38 +622,56 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
   // Files is skippable on purpose — everything else must be answered.
   // Materiality & files gates on the materiality half only: the TB / GL half is
   // optional, so an empty file list must never block Continue.
-  const canContinue = step === 0 ? customValid
-    : step === 1 ? benchmark > 0 && (basis === 'custom' || pct > 0)
+  const canContinue = step === 0 ? periodValid
+    // Roll-forward inherits the rule read-only, so its materiality half has
+    // nothing to answer — the step is only its (optional) files.
+    : step === 1 ? (round === 'rollforward' || (benchmark > 0 && (basis === 'custom' || pct > 0)))
     // Scoping by RACM means picking controls: a RACM ticked with nothing
     // under it covers nothing, so Continue waits for at least one row.
     // Every company the auditor moved owes a reason before the step will pass
     // (user ask) — the scope is the audit's defence, so it can't leave here
     // with an unexplained change in it.
-    : step === 2 ? (scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0)
+    : step === 2 ? (round === 'rollforward'
+      ? rfPicked.length > 0
+      : scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0)
     : true;
 
   const create = () => {
+    if (!round) return;
+    const isRf = round === 'rollforward' && !!parent;
+    /** A roll-forward's scope is controls, whichever side the parent was scoped
+     *  on — the carried list IS the scope, so it is stored as hand-picked
+     *  controlIds and the covers() precedence does the rest. */
+    const rfNames = Array.from(new Set(rfEffective.filter(v => rfPicked.includes(v.id)).map(v => v.process)));
     createAudit({
       period: periodLabel,
-      yearBasis: 'custom',
-      // The year the window closes in — the only year a hand-picked range names.
-      fiscalYear: Number(customTo.slice(0, 4)),
+      // A real fy/cy again — the 'custom' this used to stamp kept every audit
+      // created here off the engagement's coverage timeline, which only groups
+      // named cycles (auditsByYear).
+      yearBasis,
+      fiscalYear: year,
       periodSpan,
       round,
       windowFrom,
       windowTo,
-      scopeKind,
-      scopeNames: pickedNames,
-      scopeIds: scopeKind === 'entity' ? scopedEntities.map(r => r.id) : [],
+      // A roll-forward records the interim it extends — the parent is a hard
+      // requirement, not a breadcrumb: dates and (downstream) materiality and
+      // scope all read from it.
+      rolledFromId: isRf ? parent!.id : undefined,
+      scopeKind: isRf ? 'racm' : scopeKind,
+      scopeNames: isRf ? rfNames : pickedNames,
+      scopeIds: !isRf && scopeKind === 'entity' ? scopedEntities.map(r => r.id) : [],
       // Only the RACM side picks control by control; scoping by entity lets the
       // entities' processes decide, so it leaves this empty on purpose.
-      controlIds: scopeKind === 'racm' ? pickedControls : [],
+      controlIds: isRf ? rfPicked : scopeKind === 'racm' ? pickedControls : [],
       // The overrules travel with the audit — the reason a company is in or out
       // is only worth asking for if it survives past the wizard.
-      scopeNotes: scopeKind === 'entity' && scopeChanges.length ? scopeChanges : undefined,
+      scopeNotes: !isRf && scopeKind === 'entity' && scopeChanges.length ? scopeChanges : undefined,
       files: files.map(f => ({ name: f.name, kind: f.kind })),
-      materiality: { basisLabel: basisOpt.label, benchmark, pct, pmPct, ctPct },
-      overall,
+      // matFinal already resolved the roll-forward question: the parent's rule
+      // verbatim, or the step's own inputs.
+      materiality: { basisLabel: matFinal.basisLabel, benchmark: matFinal.benchmark, pct: matFinal.pct, pmPct: matFinal.pmPct, ctPct: matFinal.ctPct },
+      overall: matFinal.overall,
     });
     // The answers given upstairs become the files' records, so every control on
     // this audit inherits them and none is asked again.
@@ -494,9 +686,11 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
     addToast({
       type: 'success',
       title: 'Audit created',
-      message: scopeKind === 'entity'
-        ? `${periodLabel} — ${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope, ${coveragePct}% of the group.`
-        : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
+      message: isRf
+        ? `${periodLabel} roll-forward — ${rfPicked.length} control${rfPicked.length === 1 ? '' : 's'} carried forward from the ${parent!.period} interim.`
+        : scopeKind === 'entity'
+          ? `${periodLabel} — ${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope, ${coveragePct}% of the group.`
+          : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
     });
     onClose();
   };
@@ -567,55 +761,174 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="flex-1">
         {step === 0 && (
-          <StepShell title="Audit period" sub="The window this audit tests, and which pass of the year it is.">
-            {/* The app's own picker, not the native one (user ask): a
-                <input type="date"> opens the OS calendar, which ignores the
-                product theme entirely — the same reason native <select> is
-                avoided here. It portals, so the sheet's scroll can't clip it,
-                and minDate stops To being set before From at the source. */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>From</label>
-                <CustomDatePicker value={customFrom} onChange={setCustomFrom} />
-              </div>
-              <div>
-                <label className={labelCls}>To</label>
-                <CustomDatePicker value={customTo} onChange={setCustomTo} minDate={customFrom || undefined} />
-              </div>
-            </div>
-            {customFrom && customTo && !customValid && (
-              <p className="text-[11.5px] text-risk-700 mt-2">The From date must be on or before the To date.</p>
+          <StepShell title="Audit period" sub="Which year this audit belongs to, which pass of it this is, and the window that pass covers.">
+            {/* Year first (user ask): interim, roll-forward and year-end only
+                mean anything relative to a financial year, so everything below
+                depends on this answer — changing it resets the rest.
+
+                Except a roll-forward (user ask): its year was answered when the
+                parent interim was created, and the same year carries through —
+                so the basis toggle goes away and the year renders locked, like
+                the dates. Re-asking would invite editing a settled answer, and
+                changing it here would silently reset the round. */}
+            {round === 'rollforward' && parent ? (
+              <>
+                <label className={labelCls}>Financial year</label>
+                <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                  <span>{periodLabel} · {periodSpan}</span>
+                  <Lock size={12} className="text-ink-400 shrink-0" />
+                </div>
+                <p className="text-[11px] text-ink-400 mt-1.5">Set with the interim this roll-forward continues — one year, answered once.</p>
+              </>
+            ) : (
+              <>
+                <label className={labelCls}>Year runs</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([['fy', 'Apr – Mar'], ['cy', 'Jan – Dec']] as const).map(([b, label]) => (
+                    <button
+                      key={b}
+                      onClick={() => changeYear(b, b === 'fy' ? currentFyEnd() : currentFyEnd() - 1)}
+                      className={cn(
+                        'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all cursor-pointer',
+                        yearBasis === b
+                          ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
+                          : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className={`${labelCls} mt-4`}>Financial year</label>
+                <FormSelect
+                  value={String(year)}
+                  options={yearOptions.map(y => ({ value: String(y), label: `${yearLabelOf(yearBasis, y)}  ·  ${yearSpanOf(yearBasis, y)}` }))}
+                  onChange={v => changeYear(yearBasis, Number(v))}
+                  className={selectCls}
+                  ariaLabel="Financial year"
+                />
+              </>
             )}
 
-            {/* Round is asked for every audit now. It carries no dates of its
-                own — the From / To above are the window — so the buttons name
-                the pass and the hint says what that pass is for. */}
+            {/* The round decides what the dates can be, so it is asked before
+                they render. Interim + roll-forward, or year-end alone — the two
+                legitimate routes to the year end — is what the disabled states
+                enforce, and a disabled option always says why. */}
             <label className={`${labelCls} mt-4`}>Round</label>
             <div className="grid grid-cols-3 gap-1.5">
-              {AUDIT_ROUNDS.map(r => (
-                <button
-                  key={r.id}
-                  onClick={() => setRound(r.id)}
-                  className={cn(
-                    'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all cursor-pointer',
-                    round === r.id
-                      ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
-                      : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
-                  )}
-                >
-                  {r.label}
-                </button>
-              ))}
+              {AUDIT_ROUNDS.map(r => {
+                const gate = roundGate[r.id];
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => pickRound(r.id)}
+                    disabled={!!gate}
+                    aria-disabled={!!gate || undefined}
+                    title={gate ?? undefined}
+                    className={cn(
+                      'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all',
+                      gate
+                        ? 'border-canvas-border bg-canvas text-ink-300 cursor-not-allowed'
+                        : round === r.id
+                          ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15 cursor-pointer'
+                          : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40 cursor-pointer',
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
             </div>
-            <p className="text-[11px] text-ink-400 mt-1.5">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>
+            {round && <p className="text-[11px] text-ink-400 mt-1.5">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>}
+            {AUDIT_ROUNDS.filter(r => roundGate[r.id]).map(r => (
+              <p key={r.id} className="text-[11px] text-ink-400 mt-1.5 flex items-start gap-1.5">
+                <Lock size={11} className="shrink-0 mt-[1px]" />
+                <span><span className="font-semibold text-ink-500">{r.label}</span> — {roundGate[r.id]}</span>
+              </p>
+            ))}
+
+            {/* Roll-forward's parent — the concluded interim it extends. Sits
+                between the round and the dates because the dates derive from it. */}
+            {round === 'rollforward' && (
+              <>
+                <label className={`${labelCls} mt-4`}>Continues from</label>
+                <FormSelect
+                  value={parentId ?? ''}
+                  options={concludedInterims.map(a => ({
+                    value: a.id,
+                    label: `${a.period} interim  ·  ${fmtDate(a.windowFrom)} – ${fmtDate(a.windowTo)}`,
+                  }))}
+                  onChange={changeParent}
+                  className={selectCls}
+                  ariaLabel="Parent interim audit"
+                />
+                <p className="text-[11px] text-ink-400 mt-1.5">
+                  The interim whose evidence this roll-forward extends to the year end.
+                </p>
+              </>
+            )}
+
+            {/* Dates render only once the round is chosen — what they can hold
+                depends on it. Interim: From editable, To is the auditor's
+                cut-off, capped a day short of the year end (a cut-off ON it is a
+                year-end audit wearing the wrong name). Roll-forward: both
+                derived, neither editable — a gap or overlap against the parent
+                is a coverage hole nothing downstream would catch. Year-end: runs
+                to the year end, because that is the date the opinion speaks to. */}
+            {round && (
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div>
+                  <label className={labelCls}>From</label>
+                  {round === 'rollforward' ? (
+                    <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                      <span>{windowFrom ? fmtDate(windowFrom) : '—'}</span>
+                      <Lock size={12} className="text-ink-400 shrink-0" />
+                    </div>
+                  ) : (
+                    <CustomDatePicker
+                      value={fromDate}
+                      onChange={setFromDate}
+                      minDate={yearStart}
+                      maxDate={round === 'interim' ? (cutoff || shiftDay(yearEnd, -1)) : yearEnd}
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>{round === 'interim' ? 'To — interim cut-off' : 'To'}</label>
+                  {round === 'interim' ? (
+                    <CustomDatePicker
+                      value={cutoff}
+                      onChange={setCutoff}
+                      minDate={fromDate || yearStart}
+                      maxDate={shiftDay(yearEnd, -1)}
+                    />
+                  ) : (
+                    <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                      <span>{fmtDate(yearEnd)}</span>
+                      <Lock size={12} className="text-ink-400 shrink-0" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {round === 'rollforward' && parent && (
+              <p className="text-[11px] text-ink-400 mt-1.5">
+                Starts the day after the {parent.period} interim's cut-off and runs to the year end — derived, so the two windows can't gap or overlap.
+              </p>
+            )}
 
             <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
               <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
               <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                {customValid
-                  ? <>This <span className="font-semibold text-ink-900">{AUDIT_ROUNDS.find(r => r.id === round)!.label.toLowerCase()}</span> audit covers{' '}
-                    <span className="font-semibold text-ink-900">{fmtDate(customFrom)} – {fmtDate(customTo)}</span>.</>
-                  : 'Pick a From and To date to set the window this audit covers.'}
+                {!round
+                  ? <>Pick which pass of <span className="font-semibold text-ink-900">{periodLabel}</span> this audit is — the dates follow from it.</>
+                  : periodValid
+                    ? <>This <span className="font-semibold text-ink-900">{AUDIT_ROUNDS.find(r => r.id === round)!.label.toLowerCase()}</span> audit covers{' '}
+                      <span className="font-semibold text-ink-900">{fmtDate(windowFrom)} – {fmtDate(windowTo)}</span> of {periodLabel}.</>
+                    : round === 'interim'
+                      ? 'Pick the cut-off — the date interim testing stops. Everything after it is what a roll-forward or year-end will cover.'
+                      : 'Pick the concluded interim this roll-forward continues from.'}
               </p>
             </div>
           </StepShell>
@@ -723,7 +1036,41 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
               })}
             </div>
 
-            {/* The threshold — the half Continue gates on. */}
+            {/* Roll-forward inherits the parent's rule, read-only (user ask):
+                an interim and its roll-forward are two halves of one year, and
+                two materiality figures for one year would grade the same
+                deficiency two different ways. Display only — nothing here can
+                be edited, and the create() payload reads matFinal, not inputs. */}
+            {round === 'rollforward' && parent ? (
+              <div className="mt-6 pt-5 border-t border-canvas-border">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h4 className="text-[13px] font-semibold text-ink-900">Materiality rule</h4>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                    <Lock size={10} /> Inherited
+                  </span>
+                </div>
+                <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+                  Carried from the {parent.period} interim and not editable here — an interim and its
+                  roll-forward are two halves of one year, and two figures would grade the same
+                  deficiency two different ways.
+                </p>
+                <div className="rounded-xl border border-canvas-border bg-white p-3.5">
+                  {([
+                    ['Overall materiality', money(matFinal.overall), matFinal.basisLabel, true],
+                    ['Performance materiality', money(matPerf), `${matFinal.pmPct}% of overall — the working threshold for testing`, false],
+                    ['Clearly trivial', money(matTrivial), `${matFinal.ctPct}% of overall — below this, differences are passed`, false],
+                  ] as const).map(([label, value, note, strong], i) => (
+                    <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className={cn('text-[12px]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
+                        <span className={cn('tabular-nums', strong ? 'text-[14px] font-bold text-ink-900' : 'text-[12.5px] text-ink-800')}>{value}</span>
+                      </div>
+                      <div className="text-[10.5px] text-ink-400 mt-0.5">{note}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
             <div className="mt-6 pt-5 border-t border-canvas-border">
               <h4 className="text-[13px] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
               <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
@@ -832,10 +1179,77 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
-        {step === 2 && (
+        {/* ── Roll-forward scope: the parent decides ─────────────────────────
+            No entity/RACM choice here (user ask) — a roll-forward can only
+            carry controls the parent interim tested and concluded effective.
+            The list is narrowable, never widenable: what failed or went
+            untested is shown excluded, each with its reason. */}
+        {step === 2 && round === 'rollforward' && parent && (
+          <StepShell title="What this audit covers" sub={`A roll-forward re-tests what the ${parent.period} interim already proved — its scope is the parent's effective controls.`}>
+            <p className="mb-2 px-1 text-[11px] text-ink-500">
+              <span className="font-semibold text-ink-900 tabular-nums">{rfPicked.length}</span> of {rfEffective.length} effective control{rfEffective.length === 1 ? '' : 's'} carried forward
+            </p>
+            <div className="border border-canvas-border rounded-xl overflow-hidden">
+              {rfEffective.length === 0 ? (
+                <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
+                  The {parent.period} interim concluded nothing effective — there is nothing to roll forward.
+                </p>
+              ) : rfEffective.map(v => {
+                const on = rfPicked.includes(v.id);
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => toggleRf(v.id)}
+                    className="w-full flex items-start gap-3 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0 bg-white hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
+                  >
+                    <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors',
+                      on ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white')}>
+                      {on && <Check size={11} strokeWidth={3} />}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[12.5px] text-ink-900 truncate">
+                        <span className="font-semibold">{v.wpRef}</span> · {v.description}
+                      </span>
+                      <span className="block text-[11px] text-ink-400 mt-0.5">{v.process} · Effective at interim — reduced sample, no design retest</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {rfExcluded.length > 0 && (
+              <>
+                <h5 className="text-[12px] font-semibold text-ink-900 mt-4 mb-0.5">Not carried forward</h5>
+                <p className="text-[11px] text-ink-500 mb-2 leading-relaxed">
+                  A control that failed at interim needs a full retest after remediation — a roll-forward
+                  can't extend evidence that didn't hold. One never tested has nothing to extend; it
+                  belongs in a year-end audit.
+                </p>
+                <div className="border border-canvas-border rounded-xl overflow-hidden">
+                  {rfExcluded.map(v => (
+                    <div key={v.id} className="flex items-start gap-3 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0 bg-white opacity-50">
+                      <X size={14} className="text-ink-400 shrink-0 mt-0.5" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[12.5px] text-ink-900 truncate">
+                          <span className="font-semibold">{v.wpRef}</span> · {v.description}
+                        </span>
+                        <span className="block text-[11px] text-ink-400 mt-0.5">
+                          {v.process} · {v.conclusion === 'Ineffective' ? 'Failed at interim — full retest after remediation' : 'Not tested at interim'}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </StepShell>
+        )}
+
+        {step === 2 && !(round === 'rollforward' && parent) && (
           <StepShell title="What this audit covers" sub="Scope by entity or by RACM — one or the other, then pick as many as the audit covers.">
             <div className="grid grid-cols-2 gap-1.5 mb-4">
               {([['entity', 'By entity', Building2], ['racm', 'By RACM', Grid3x3]] as const).map(([id, title, Icon]) => (
@@ -1233,32 +1647,44 @@ export default function NewAuditWizard({ onClose }: { onClose: () => void }) {
             <div className="rounded-xl border border-canvas-border bg-white p-4">
               {/* Same order the steps ran in — Period, then materiality and its
                   files, then what they scoped. */}
-              {/* The dates ARE the period now, so "· Custom range" after them
-                  would just say the same thing twice. Round always shows —
-                  every audit answers it. */}
-              <ReviewRow label="Period" value={periodLabel} />
-              <ReviewRow label="Round" value={AUDIT_ROUNDS.find(r => r.id === round)!.label} />
-              <ReviewRow label="Materiality" value={<>₹{overall} Cr <span className="font-normal text-ink-400">· {basisOpt.label}</span></>} />
-              <ReviewRow label="Performance materiality" value={<>{money(perf)} <span className="font-normal text-ink-400">· {pmPct}% of overall</span></>} />
-              <ReviewRow label="Clearly trivial" value={<>{money(trivial)} <span className="font-normal text-ink-400">· {ctPct}% of overall</span></>} />
+              <ReviewRow label="Financial year" value={<>{periodLabel} <span className="font-normal text-ink-400">· {periodSpan}</span></>} />
+              <ReviewRow label="Round" value={AUDIT_ROUNDS.find(r => r.id === round)?.label ?? '—'} />
+              {round === 'rollforward' && parent && (
+                <ReviewRow label="Continues from" value={`${parent.period} interim`} />
+              )}
+              <ReviewRow label="Window" value={windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : '—'} />
+              {/* matFinal, not the step's inputs — a roll-forward reviews the
+                  rule it will actually be created with: its parent's. */}
+              <ReviewRow label="Materiality" value={<>₹{matFinal.overall} Cr <span className="font-normal text-ink-400">· {matFinal.basisLabel}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
+              <ReviewRow label="Performance materiality" value={<>{money(matPerf)} <span className="font-normal text-ink-400">· {matFinal.pmPct}% of overall</span></>} />
+              <ReviewRow label="Clearly trivial" value={<>{money(matTrivial)} <span className="font-normal text-ink-400">· {matFinal.ctPct}% of overall</span></>} />
               <ReviewRow
                 label="TB / GL"
                 value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}
               />
-              <ReviewRow
-                label={scopeKind === 'entity' ? 'Entities' : 'RACMs'}
-                value={pickedNames.join(', ')}
-              />
-              {scopeKind === 'racm' && (
+              {round === 'rollforward' ? (
                 <ReviewRow
-                  label="Controls"
-                  value={<>{pickedControls.length} selected{keyOnly && <span className="font-normal text-ink-400"> · key controls only</span>}</>}
+                  label="Carried forward"
+                  value={<>{rfPicked.length} control{rfPicked.length === 1 ? '' : 's'} <span className="font-normal text-ink-400">· effective at interim</span></>}
                 />
+              ) : (
+                <>
+                  <ReviewRow
+                    label={scopeKind === 'entity' ? 'Entities' : 'RACMs'}
+                    value={pickedNames.join(', ')}
+                  />
+                  {scopeKind === 'racm' && (
+                    <ReviewRow
+                      label="Controls"
+                      value={<>{pickedControls.length} selected{keyOnly && <span className="font-normal text-ink-400"> · key controls only</span>}</>}
+                    />
+                  )}
+                </>
               )}
               {/* Where the auditor overruled the trial balance, and why. This is
                   the part of the scope that isn't self-evident from the numbers,
                   so it's the part worth re-reading before creating the audit. */}
-              {scopeKind === 'entity' && scopeChanges.length > 0 && (
+              {round !== 'rollforward' && scopeKind === 'entity' && scopeChanges.length > 0 && (
                 <ReviewRow
                   label="Scope changes"
                   value={(

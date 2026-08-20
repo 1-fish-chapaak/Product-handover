@@ -10,7 +10,6 @@ import EmptyState from '../shared/EmptyState';
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
 import NewAuditWizard from './NewAuditWizard';
-import RollForwardSheet from './RollForwardSheet';
 import { formatINR, retestAtRisk } from './helpers';
 import { entitiesFor, processesFor } from './auditScope';
 import {
@@ -517,7 +516,9 @@ export default function EngagementOverview() {
   const sheets = (
     <AnimatePresence>
       {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
-      {rolling && <RollForwardSheet prior={rolling} onClose={() => setRolling(null)} />}
+      {/* Roll forward opens the same wizard prefilled (user ask) — one screen,
+          one rulebook. The old standalone roll-forward sheet is gone. */}
+      {rolling && <NewAuditWizard prefillFrom={rolling} onClose={() => setRolling(null)} />}
     </AnimatePresence>
   );
 

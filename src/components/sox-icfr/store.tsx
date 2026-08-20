@@ -1629,7 +1629,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           ...prev.audits.map((a, i) => (i === liveIdx && archive
             // The outgoing audit keeps its results, and its ICFR conclusion with
             // them. Sign-off is per audit, so whatever it was signed as stands.
-            ? { ...a, archive, signoff: { ...a.signoff, icfrConclusion: icfrConclusion(prev) } }
+            // Except an interim: its window never reaches the year end, so it
+            // archives WITHOUT a final-year verdict (user ask) — the opinion
+            // belongs to the roll-forward or year-end that closes the year.
+            ? { ...a, archive, signoff: { ...a.signoff, ...(a.round !== 'interim' ? { icfrConclusion: icfrConclusion(prev) } : {}) } }
             : a)),
         ],
         controls: prev.controls.map(c => (resetIds.has(c.id) ? untested(c) : c)),
@@ -3154,7 +3157,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         ...(step === 'preparer'
           ? { preparer: { by: prev.preparer, at: 'just now' } }
           : { reviewer: { by: prev.reviewer, at: 'just now' } }),
-        icfrConclusion: icfrConclusion(prev),
+        // The ICFR opinion is given as of the year-end date, so only a round
+        // whose window reaches it can stamp one. An interim's signature
+        // concludes the ROUND — and unlocks its roll-forward — but the year's
+        // answer waits for the roll-forward or year-end (user ask). Stamping
+        // here used to hand every interim a final-year verdict it never earned.
+        ...(a.round !== 'interim' ? { icfrConclusion: icfrConclusion(prev) } : {}),
       };
       return { ...prev, audits: prev.audits.map((x, i) => (i === idx ? { ...x, signoff } : x)) };
     });

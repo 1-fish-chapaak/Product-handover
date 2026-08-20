@@ -631,12 +631,17 @@ function signoffRows(eng: IcfrEngagement): [string, string][] {
   // engagement to the audit, and the engagement-level field is never written.
   // Reading it here left the paper printing NOT YET SIGNED over a countersigned
   // cycle. Same derivation as isEngagementLocked, for the same reason.
-  const so = eng.audits.find(a => !a.archive)?.signoff ?? {};
+  const live = eng.audits.find(a => !a.archive);
+  const so = live?.signoff ?? {};
   const mwOpen = openMaterialWeaknesses(eng).length;
   return [
     ['Prepared by', so.preparer ? `${so.preparer.by} — signed off ${so.preparer.at}` : `${eng.preparer} — NOT YET SIGNED`],
     ['Countersigned by', so.reviewer ? `${so.reviewer.by} — countersigned ${so.reviewer.at}` : `${eng.reviewer} — NOT YET COUNTERSIGNED`],
-    ['ICFR conclusion', so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
+    // An interim never carries the year's opinion — its window stops short of
+    // the year end, so the paper says so instead of printing a live verdict.
+    ['ICFR conclusion', live?.round === 'interim'
+      ? 'Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round'
+      : so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
     ['Audit status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
   ];
 }

@@ -102,3 +102,20 @@ export async function openFromLibrary(page: Page, name: string) {
   await page.waitForTimeout(1100);
   await expect(page.getByRole('heading', { name })).toBeVisible();
 }
+
+/** Pass the New audit sheet's Audit period step under the rounds model.
+ *
+ * The year arrives prefilled (current financial year) and the dates don't
+ * render until a round is chosen, so the step is: pick Interim, then take
+ * Today as the cut-off — always inside the running year and before its end,
+ * so always valid. From needs no touch; it prefills with the year start.
+ * The calendar renders in a PORTAL outside the sheet, so its days are looked
+ * up on `page`, not on `sheet`. */
+export async function fillAuditPeriod(page: Page, sheet: ReturnType<Page['getByRole']>) {
+  await sheet.getByRole('button', { name: 'Interim', exact: true }).click();
+  await page.waitForTimeout(300);
+  await sheet.getByRole('button', { name: 'dd/mm/yyyy' }).first().click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.waitForTimeout(300);
+}

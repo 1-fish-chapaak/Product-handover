@@ -1,4 +1,5 @@
 import { test, expect } from './_helpers';
+import { fillAuditPeriod } from './_sox_helpers';
 
 /**
  * The group's shape survives into the New audit → Scope step.
@@ -53,15 +54,10 @@ test('the Scope step keeps the group hierarchy, with the toggles in one column',
   await page.getByRole('button', { name: /New audit/ }).first().click();
   await page.waitForTimeout(700);
 
-  // Period → Materiality & files → Scope. The date pickers are the app's own
-  // component (a button, calendar in a portal), so days are found on `page`.
+  // Period → Materiality & files → Scope. Step 1 is the rounds model now:
+  // pick Interim, take Today as the cut-off.
   const audit = page.getByRole('dialog', { name: 'New audit' });
-  for (let i = 0; i < 2; i++) {
-    await audit.getByRole('button', { name: /dd\/mm\/yyyy/ }).first().click();
-    await page.waitForTimeout(300);
-    await page.getByRole('button', { name: 'Today', exact: true }).click();
-    await page.waitForTimeout(300);
-  }
+  await fillAuditPeriod(page, audit);
   await audit.getByRole('button', { name: /Continue/ }).click();   // → Materiality & files
   await page.waitForTimeout(600);
   await audit.getByRole('button', { name: /Continue/ }).click();   // → Scope
@@ -124,12 +120,7 @@ test('the live Altura group carries its chain into the Scope step', async ({ pag
   await page.waitForTimeout(700);
 
   const audit = page.getByRole('dialog', { name: 'New audit' });
-  for (let i = 0; i < 2; i++) {
-    await audit.getByRole('button', { name: /dd\/mm\/yyyy/ }).first().click();
-    await page.waitForTimeout(300);
-    await page.getByRole('button', { name: 'Today', exact: true }).click();
-    await page.waitForTimeout(300);
-  }
+  await fillAuditPeriod(page, audit);
   await audit.getByRole('button', { name: /Continue/ }).click();
   await page.waitForTimeout(600);
   await audit.getByRole('button', { name: /Continue/ }).click();
