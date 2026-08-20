@@ -1926,6 +1926,54 @@ function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
   }];
 }
 
+/** The roll-forward demo's interim failures — one per retest story the scope
+ *  step tells. A TOE-only failure (design held, the sample didn't): its design
+ *  carries into the roll-forward and only operating is retested. A TOD failure:
+ *  the design itself is retested too. Both come with an open finding, because
+ *  "failed controls and their deficiencies all go" is the rule the demo shows. */
+function rfDemoFailures(controls: Control[]): Control[] {
+  const o2c = controls.filter(c => c.process === 'Order to Cash');
+  const trs = controls.filter(c => c.process === 'Treasury');
+  const toeFailId = o2c[2]?.id;      // effective in the 'live' seed — flip TOE
+  const todFailId = trs[1]?.id;      // flip TOD; its TOE never ran (TOD gates TOE)
+  return controls.map(c => {
+    if (c.id === toeFailId) {
+      return { ...c, operating: { ...c.operating, conclusion: 'Ineffective' as const, testedBy: 'A. Mehta', testedAt: '18 Jul 2026' } };
+    }
+    if (c.id === todFailId) {
+      return {
+        ...c,
+        design: { ...c.design, conclusion: 'Ineffective' as const, testedBy: 'A. Mehta', testedAt: '10 Jul 2026' },
+        operating: { ...c.operating, conclusion: 'Not tested' as const, testedBy: null, testedAt: null },
+      };
+    }
+    return c;
+  });
+}
+
+/** Their open findings — raised at interim, still open, so they ride into the
+ *  roll-forward the way createAudit already carries every open exception. */
+function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
+  const failed = controls.filter(c => c.design.conclusion === 'Ineffective' || c.operating.conclusion === 'Ineffective');
+  return failed.map((c, i) => ({
+    id: `def-rf-0${i + 1}`,
+    controlId: c.id,
+    track: c.design.conclusion === 'Ineffective' ? ('design' as const) : ('operating' as const),
+    description: c.design.conclusion === 'Ineffective'
+      ? 'The design has no step that catches a change made after approval — the walkthrough traced one straight through.'
+      : 'Two of the sampled items were released without the required second signature.',
+    rootCause: c.design.conclusion === 'Ineffective'
+      ? 'Post-approval edits are not routed back for re-approval.'
+      : 'The approval matrix is not enforced in the release run.',
+    likelihood: 'Reasonably possible' as const,
+    magnitude: i === 0 ? 3.4 : 1.6,
+    mwIndicators: [],
+    // Freshly raised — no fix planned yet; that is the roll-forward's opening state.
+    remediation: { action: '', date: null, owner: 'R. Iyer', status: 'Open' as const },
+    status: 'Identified' as const,
+  }));
+}
+
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
@@ -1995,6 +2043,10 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   if (rich) controls = alturaPayeeControl(controls);
   // …and one has two routes through it, with a draw that only touched one.
   if (rich) controls = alturaPathControl(controls);
+  // The roll-forward demo's two interim failures — set BEFORE the run record
+  // below is built from the controls, so the register and the run agree.
+  const rfDemo = meta.id === 'eng-sox-rf';
+  if (rfDemo) controls = rfDemoFailures(controls);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -2020,7 +2072,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // fails five of the controls those runs concluded on, and a run record states
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
-  const deficiencies = rich ? alturaDeficiencies(controls) : [];
+  const deficiencies = rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);

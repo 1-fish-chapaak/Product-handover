@@ -48,6 +48,9 @@ function untested(c: Control): Control {
     design: {
       ...c.design,
       conclusion: 'Not tested',
+      // A carry is one roll-forward's statement about one interim — it does
+      // not survive into the cycle after that.
+      carriedFrom: undefined,
       override: undefined,
       testedBy: null,
       testedAt: null,
@@ -1635,7 +1638,43 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
             ? { ...a, archive, signoff: { ...a.signoff, ...(a.round !== 'interim' ? { icfrConclusion: icfrConclusion(prev) } : {}) } }
             : a)),
         ],
-        controls: prev.controls.map(c => (resetIds.has(c.id) ? untested(c) : c)),
+        // A roll-forward retests TOD only where TOD failed (user ask): a design
+        // the parent interim concluded effective CARRIES — marked, so the
+        // control page says where the conclusion came from — and only the
+        // operating track starts over. Everything else (failed design, or any
+        // non-roll-forward audit) resets in full, exactly as before. The
+        // parent's verdicts are read from wherever they live: still on the
+        // controls while the parent is the live signed cycle, or from its
+        // archive snapshot once a later audit displaced it.
+        controls: (() => {
+          const rfParent = draft.round === 'rollforward' && draft.rolledFromId
+            ? prev.audits.find(a => a.id === draft.rolledFromId)
+            : undefined;
+          const parentDesignOf = (id: string) => {
+            if (!rfParent) return undefined;
+            if (rfParent.archive) return rfParent.archive.conclusions.find(x => x.controlId === id)?.design;
+            const c = prev.controls.find(x => x.id === id);
+            return c ? trackResult(c.design) : undefined;
+          };
+          return prev.controls.map(c => {
+            if (!resetIds.has(c.id)) return c;
+            const fresh = untested(c);
+            if (rfParent && parentDesignOf(c.id) === 'Effective') {
+              const carriedFrom = `${rfParent.period} interim`;
+              return {
+                ...fresh,
+                design: rfParent.archive
+                  // The parent's evidence went into its archive with it — the
+                  // carried conclusion stands on the marker alone.
+                  ? { ...fresh.design, conclusion: 'Effective' as const, carriedFrom }
+                  // The parent's results were still live — the walkthrough and
+                  // design points genuinely back the conclusion, so they travel.
+                  : { ...c.design, carriedFrom },
+              };
+            }
+            return fresh;
+          });
+        })(),
         // A CLOSED exception is a conclusion about a control, so it cannot outlive
         // the result it came from — it lives on in the archive above, never deleted.
         //

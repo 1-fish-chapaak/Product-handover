@@ -177,10 +177,10 @@ export const ENGAGEMENTS: Engagement[] = [
     // hand first. Altura (SOX-104) stays the testing demo; this one exists to
     // be rolled forward.
     id: 'eng-sox-rf', code: 'SOX-105', name: 'FY27 ICFR — Altura Renewables',
-    description: 'FY 2026-27 ICFR cycle for the renewables arm — interim testing complete and countersigned, ready to roll forward to year end.',
+    description: 'FY 2026-27 ICFR cycle for the renewables arm — interim countersigned with two open findings, ready to roll forward to year end.',
     type: 'SOX / ICFR', process: 'O2C', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
     status: 'Active', periodStart: 'Apr 2026', periodEnd: 'Mar 2027', controls: 10,
-    health: 80, openIssues: 0, lastActivity: '6d ago', nextScheduled: 'Roll-forward planning',
+    health: 60, openIssues: 2, lastActivity: '6d ago', nextScheduled: 'Roll-forward planning',
     entity: 'Altura Renewables Ltd',
     soxProcesses: ['Order to Cash', 'Treasury'], soxSeedMode: 'live',
     startDate: '2026-04-01', endDate: '2027-03-31',

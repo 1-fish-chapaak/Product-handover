@@ -18,7 +18,7 @@ import {
   auditCovers, chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
   entitiesFor, entitiesInFiles, entityTotals, mergeScopeEntities, racmsForEntities,
 } from './auditScope';
-import { conclusionOf } from './helpers';
+import { conclusionOf, trackResult } from './helpers';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
@@ -178,8 +178,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *  cycle — this reads whichever holds them. The results are only READ here;
    *  they stay on the audit that produced them, never copied forward. */
   const verdictsFor = (a: AuditRecord) => (a.archive
-    ? a.archive.conclusions.map(v => ({ id: v.controlId, wpRef: v.wpRef, description: v.description, process: v.process, conclusion: v.conclusion }))
-    : eng.controls.filter(c => auditCovers(a, c, eng.id)).map(c => ({ id: c.id, wpRef: c.wpRef, description: c.description, process: c.process, conclusion: conclusionOf(eng, c) })));
+    ? a.archive.conclusions.map(v => ({ id: v.controlId, wpRef: v.wpRef, description: v.description, process: v.process, conclusion: v.conclusion, design: v.design }))
+    : eng.controls.filter(c => auditCovers(a, c, eng.id)).map(c => ({ id: c.id, wpRef: c.wpRef, description: c.description, process: c.process, conclusion: conclusionOf(eng, c), design: trackResult(c.design) })));
   const effectiveIdsOf = (a: AuditRecord) => verdictsFor(a).filter(v => v.conclusion === 'Effective').map(v => v.id);
 
   /** The controls this roll-forward carries — starts as everything the parent
@@ -242,14 +242,20 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   };
 
   const parent = concludedInterims.find(a => a.id === parentId);
-  // The parent's conclusions split the roll-forward's world in two: effective
-  // controls may carry forward, everything else is excluded with its reason. A
-  // control that failed at interim needs a full retest after remediation — a
-  // roll-forward can't extend evidence that didn't hold — and one never tested
-  // has nothing to extend.
+  // The parent's conclusions split the roll-forward's world in three (user
+  // ask): effective controls carry (design travels, operating re-tested to
+  // year end, narrowable); FAILED controls come along MANDATORILY with their
+  // open findings — no untick, an open finding must not be droppable from
+  // scope — and TOD is retested only where TOD itself failed; controls the
+  // interim never touched stay out, because a roll-forward has nothing of
+  // theirs to extend — they wait for the year-end audit.
   const parentVerdicts = parent ? verdictsFor(parent) : [];
   const rfEffective = parentVerdicts.filter(v => v.conclusion === 'Effective');
-  const rfExcluded = parentVerdicts.filter(v => v.conclusion !== 'Effective');
+  const rfFailed = parentVerdicts.filter(v => v.conclusion === 'Ineffective');
+  const rfExcluded = parentVerdicts.filter(v => v.conclusion !== 'Effective' && v.conclusion !== 'Ineffective');
+  /** Open findings riding with a control into the roll-forward. */
+  const openDefCount = (controlId: string) =>
+    eng.deficiencies.filter(d => d.controlId === controlId && d.status !== 'Closed').length;
   // The derived window. Roll-forward picks up the day after its parent stopped
   // and runs to the year end — a gap or an overlap between the two is a hole in
   // the year's coverage that no later screen would catch, so neither date is a
@@ -632,7 +638,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     // (user ask) — the scope is the audit's defence, so it can't leave here
     // with an unexplained change in it.
     : step === 2 ? (round === 'rollforward'
-      ? rfPicked.length > 0
+      // The mandatory full-retest group counts — a roll-forward that carries
+      // only failed controls is still a real audit.
+      ? rfPicked.length + rfFailed.length > 0
       : scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0)
     : true;
 
@@ -640,9 +648,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     if (!round) return;
     const isRf = round === 'rollforward' && !!parent;
     /** A roll-forward's scope is controls, whichever side the parent was scoped
-     *  on — the carried list IS the scope, so it is stored as hand-picked
-     *  controlIds and the covers() precedence does the rest. */
-    const rfNames = Array.from(new Set(rfEffective.filter(v => rfPicked.includes(v.id)).map(v => v.process)));
+     *  on — the carried list plus the mandatory full-retest group IS the scope,
+     *  stored as hand-picked controlIds so the covers() precedence does the rest. */
+    const rfIds = [...rfPicked, ...rfFailed.map(v => v.id)];
+    const rfNames = Array.from(new Set(parentVerdicts.filter(v => rfIds.includes(v.id)).map(v => v.process)));
     createAudit({
       period: periodLabel,
       // A real fy/cy again — the 'custom' this used to stamp kept every audit
@@ -663,7 +672,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       scopeIds: !isRf && scopeKind === 'entity' ? scopedEntities.map(r => r.id) : [],
       // Only the RACM side picks control by control; scoping by entity lets the
       // entities' processes decide, so it leaves this empty on purpose.
-      controlIds: isRf ? rfPicked : scopeKind === 'racm' ? pickedControls : [],
+      controlIds: isRf ? rfIds : scopeKind === 'racm' ? pickedControls : [],
       // The overrules travel with the audit — the reason a company is in or out
       // is only worth asking for if it survives past the wizard.
       scopeNotes: !isRf && scopeKind === 'entity' && scopeChanges.length ? scopeChanges : undefined,
@@ -687,7 +696,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       type: 'success',
       title: 'Audit created',
       message: isRf
-        ? `${periodLabel} roll-forward — ${rfPicked.length} control${rfPicked.length === 1 ? '' : 's'} carried forward from the ${parent!.period} interim.`
+        ? `${periodLabel} roll-forward — ${rfPicked.length} control${rfPicked.length === 1 ? '' : 's'} carried forward from the ${parent!.period} interim${rfFailed.length ? `, ${rfFailed.length} failed control${rfFailed.length === 1 ? '' : 's'} in for a full retest` : ''}.`
         : scopeKind === 'entity'
           ? `${periodLabel} — ${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope, ${coveragePct}% of the group.`
           : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
@@ -1189,14 +1198,15 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             The list is narrowable, never widenable: what failed or went
             untested is shown excluded, each with its reason. */}
         {step === 2 && round === 'rollforward' && parent && (
-          <StepShell title="What this audit covers" sub={`A roll-forward re-tests what the ${parent.period} interim already proved — its scope is the parent's effective controls.`}>
+          <StepShell title="What this audit covers" sub={`What the ${parent.period} interim proved carries forward, and what it failed comes along for a full retest — with its open findings.`}>
             <p className="mb-2 px-1 text-[11px] text-ink-500">
               <span className="font-semibold text-ink-900 tabular-nums">{rfPicked.length}</span> of {rfEffective.length} effective control{rfEffective.length === 1 ? '' : 's'} carried forward
+              {rfFailed.length > 0 && <> · <span className="font-semibold text-ink-900 tabular-nums">{rfFailed.length}</span> failed — full retest</>}
             </p>
             <div className="border border-canvas-border rounded-xl overflow-hidden">
               {rfEffective.length === 0 ? (
                 <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
-                  The {parent.period} interim concluded nothing effective — there is nothing to roll forward.
+                  The {parent.period} interim concluded nothing effective{rfFailed.length ? ' — only the failed controls below come along, for a full retest' : ' — there is nothing to roll forward'}.
                 </p>
               ) : rfEffective.map(v => {
                 const on = rfPicked.includes(v.id);
@@ -1214,20 +1224,59 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       <span className="block text-[12.5px] text-ink-900 truncate">
                         <span className="font-semibold">{v.wpRef}</span> · {v.description}
                       </span>
-                      <span className="block text-[11px] text-ink-400 mt-0.5">{v.process} · Effective at interim — reduced sample, no design retest</span>
+                      {/* No sample-size promise here (user ask) — how big the
+                          draw is stays the auditor's call on the control page. */}
+                      <span className="block text-[11px] text-ink-400 mt-0.5">{v.process} · Effective at interim — design carries, operating retested to year end</span>
                     </span>
                   </button>
                 );
               })}
             </div>
 
+            {/* ── Failed at interim: mandatory, no checkbox (user ask) ────────
+                "Wo saara jaaye" — a control the interim failed cannot be left
+                out of the roll-forward, because dropping an open finding from
+                scope is the one move a wizard must not allow. Each row says
+                what its retest is: TOD is retested only where TOD failed; a
+                TOE-only failure keeps its carried design and re-tests the
+                operating side in full. Open findings ride along. */}
+            {rfFailed.length > 0 && (
+              <>
+                <h5 className="text-[12px] font-semibold text-ink-900 mt-4 mb-0.5">Full retest — failed at interim</h5>
+                <p className="text-[11px] text-ink-500 mb-2 leading-relaxed">
+                  Always in scope — a failed control and its open findings can't be left behind by the
+                  round that exists to close the year.
+                </p>
+                <div className="border border-canvas-border rounded-xl overflow-hidden">
+                  {rfFailed.map(v => {
+                    const defs = openDefCount(v.id);
+                    return (
+                      <div key={v.id} className="flex items-start gap-3 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0 bg-white">
+                        <Lock size={13} className="text-ink-400 shrink-0 mt-0.5" />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[12.5px] text-ink-900 truncate">
+                            <span className="font-semibold">{v.wpRef}</span> · {v.description}
+                          </span>
+                          <span className="block text-[11px] text-ink-400 mt-0.5">
+                            {v.process} · {v.design === 'Effective'
+                              ? 'TOD carried — operating retested in full'
+                              : 'TOD failed at interim — design retested too'}
+                            {defs > 0 && <> · <span className="font-semibold text-high-700">{defs} open finding{defs === 1 ? '' : 's'} carr{defs === 1 ? 'ies' : 'y'} with it</span></>}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
             {rfExcluded.length > 0 && (
               <>
                 <h5 className="text-[12px] font-semibold text-ink-900 mt-4 mb-0.5">Not carried forward</h5>
                 <p className="text-[11px] text-ink-500 mb-2 leading-relaxed">
-                  A control that failed at interim needs a full retest after remediation — a roll-forward
-                  can't extend evidence that didn't hold. One never tested has nothing to extend; it
-                  belongs in a year-end audit.
+                  Not tested at interim — a roll-forward has nothing of theirs to extend. These wait for
+                  the year-end audit.
                 </p>
                 <div className="border border-canvas-border rounded-xl overflow-hidden">
                   {rfExcluded.map(v => (
@@ -1238,7 +1287,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           <span className="font-semibold">{v.wpRef}</span> · {v.description}
                         </span>
                         <span className="block text-[11px] text-ink-400 mt-0.5">
-                          {v.process} · {v.conclusion === 'Ineffective' ? 'Failed at interim — full retest after remediation' : 'Not tested at interim'}
+                          {v.process} · Not tested at interim — belongs in a year-end audit
                         </span>
                       </span>
                     </div>
@@ -1665,7 +1714,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               {round === 'rollforward' ? (
                 <ReviewRow
                   label="Carried forward"
-                  value={<>{rfPicked.length} control{rfPicked.length === 1 ? '' : 's'} <span className="font-normal text-ink-400">· effective at interim</span></>}
+                  value={<>
+                    {rfPicked.length} control{rfPicked.length === 1 ? '' : 's'} <span className="font-normal text-ink-400">· effective at interim</span>
+                    {rfFailed.length > 0 && <> + {rfFailed.length} <span className="font-normal text-ink-400">· full retest</span></>}
+                  </>}
                 />
               ) : (
                 <>

@@ -155,11 +155,13 @@ test('the roll-forward path: locked derived dates, inherited materiality, restri
   await sheet.getByRole('button', { name: /Continue/ }).click();      // → Scope
   await page.waitForTimeout(500);
 
-  // Scope is the parent's effective controls — no entity/RACM chooser — with
-  // everything else excluded and told why.
+  // Scope: effective controls carry (design travels), failed controls come
+  // along MANDATORILY for a full retest with their open findings, untouched
+  // ones wait for year-end — no entity/RACM chooser anywhere.
   await expect(sheet.getByRole('button', { name: /By entity/ })).toHaveCount(0);
   await expect(sheet.getByText(/carried forward/).first()).toBeVisible();
-  await expect(sheet.getByText(/Effective at interim — reduced sample/).first()).toBeVisible();
+  await expect(sheet.getByText(/Effective at interim — design carries/).first()).toBeVisible();
+  await expect(sheet.getByText('Full retest — failed at interim')).toBeVisible();
   await sheet.getByRole('button', { name: /Continue/ }).click();      // → Review
   await page.waitForTimeout(400);
 
@@ -201,8 +203,38 @@ test('the roll-forward demo engagement opens ready to roll', async ({ page }) =>
   await expect(sheet.getByText('Inherited')).toBeVisible();
   await sheet.getByRole('button', { name: /Continue/ }).click();
   await page.waitForTimeout(500);
-  await expect(sheet.getByText(/Effective at interim — reduced sample/).first()).toBeVisible();
+  await expect(sheet.getByText(/Effective at interim — design carries/).first()).toBeVisible();
+  // The demo seeds one TOE-only failure (design carries, operating retested)
+  // and one TOD failure (design retested too) — both locked into scope with
+  // their open findings named, plus the untouched controls left for year-end.
+  await expect(sheet.getByText('Full retest — failed at interim')).toBeVisible();
+  await expect(sheet.getByText('TOD carried — operating retested in full')).toBeVisible();
+  await expect(sheet.getByText('TOD failed at interim — design retested too')).toBeVisible();
+  await expect(sheet.getByText(/1 open finding carries with it/).first()).toBeVisible();
   await expect(sheet.getByText('Not carried forward')).toBeVisible();
+
+  // Create it, then prove the carry landed in the audit itself: O2C-01 passed
+  // at interim, so inside the roll-forward its TOD step names the carried
+  // conclusion instead of asking for the test again — and TOE stands unlocked.
+  await sheet.getByRole('button', { name: /Continue/ }).click();      // → Review
+  await page.waitForTimeout(400);
+  await sheet.getByRole('button', { name: /Create/ }).last().click();
+  await page.waitForTimeout(1200);
+  await expect(page.getByRole('dialog', { name: 'New audit' })).toHaveCount(0);
+  // Which tab the create lands on varies by shell — normalise onto the SOX
+  // testing register, whose rows are "Open {period} audit" + a round label.
+  const soxTab = page.getByRole('button', { name: 'SOX testing', exact: true });
+  if (await soxTab.count()) {
+    await soxTab.first().click();
+    await page.waitForTimeout(700);
+  }
+  await page.getByRole('button', { name: /Open FY 2026-27 audit/ }).filter({ hasText: 'Roll-forward' }).first().click();
+  await page.waitForTimeout(1000);
+  await page.getByRole('button', { name: 'Control Library', exact: true }).last().click();
+  await page.waitForTimeout(800);
+  await page.getByRole('button', { name: /^Open O2C-01/ }).first().click();
+  await page.waitForTimeout(1000);
+  await expect(page.getByText(/Carried from the FY 2026-27 interim/).first()).toBeVisible();
 });
 
 test('a signed interim claims no year opinion', async ({ page }) => {
