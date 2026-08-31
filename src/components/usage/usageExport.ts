@@ -1,266 +1,174 @@
 /**
  * Platform Usage as a CSV.
  *
- * The export carries the same four things the screen does, in the same words:
- * whose view it is, what window it covers, which assumptions produced the value
- * figures, and the one line coverage note saying what is not counted. A figure
- * that leaves the building without them is a figure somebody will quote back
- * without them.
- *
- * The four work volume units are written as four rows and never as a total, the
- * same rule the screen holds to. An unpriced cost is written as an empty cell
- * with its reason next to it rather than as a zero.
+ * The guide asks the export to carry whose view it is, what window it covers,
+ * which assumptions produced the figures, and the coverage note, so that a
+ * number pasted into a board pack can still be defended six weeks later. It
+ * reads the same `snapshot()` the page renders, so the file and the screen
+ * cannot drift apart.
  */
 
+import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  COVERAGE_NOTE, dataAsOfLabel, formatDate,
-} from '../../data/platform-usage';
-import {
-  PERSONA_TITLE, SETTING_SHORT, SOURCE_FIELD, SOURCE_LABEL,
-  fmtOneDp, priorLabel,
+  PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type NumericSetting, type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
-/** One CSV cell, quoted only when it has to be. */
-function cell(value: string | number | null): string {
-  if (value === null) return '';
+const ASSUMPTIONS: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
+
+const cell = (value: string | number): string => {
   const text = String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
+};
 
-const row = (...cells: (string | number | null)[]): string => cells.map(cell).join(',');
+const row = (...values: (string | number)[]): string => values.map(cell).join(',');
 
-/** The header every export opens with, so a file can be read on its own. */
-export function exportHeader(data: UsageSnapshot): string[][] {
-  const settings = data.settings;
-  const keys: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
-  return [
-    ['Platform Usage'],
-    ['Viewing as', PERSONA_TITLE[data.scope.persona]],
-    ['Scope', data.scope.label],
-    ['Window', `${data.period.label}, ${formatDate(data.period.from)} to ${formatDate(data.period.to)}`],
-    ['Compared with', data.prior ? priorLabel(data.period) : 'nothing, there is no earlier window of the same length'],
-    ['Data as of', dataAsOfLabel().replace('Data as of ', '')],
-    ['What this covers', COVERAGE_NOTE],
-    [],
-    ['Assumptions behind every value figure'],
-    ['Setting', 'Value', 'Where it came from'],
-    ...keys.map(key => [
-      SETTING_SHORT[key],
-      String(settings[key]),
-      SOURCE_LABEL[settings[SOURCE_FIELD[key]] as keyof typeof SOURCE_LABEL],
-    ]),
-  ];
-}
-
-/** The whole view as rows. */
-export function buildUsageCsv(
-  data: UsageSnapshot,
-  volumeBuckets: { label: string; runs: number; chat: number }[],
-): string {
+export function usageCsv(data: UsageSnapshot): string {
+  const { scope, period, settings, value, cost } = data;
   const lines: string[] = [];
-  const push = (...cells: (string | number | null)[]) => lines.push(row(...cells));
-  const section = (title: string) => {
-    lines.push('');
-    push(title);
-  };
 
-  for (const header of exportHeader(data)) lines.push(row(...header));
+  lines.push(row('Platform Usage'));
+  lines.push(row('View', `${PERSONA_TITLE[scope.persona]}: ${PERSONA_SCOPE_LABEL[scope.persona]}`));
+  if (scope.team) lines.push(row('Team', scope.team));
+  lines.push(row('Window', `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)}`));
+  lines.push(row('Compared with', priorLabel(period)));
+  lines.push(row('Data', dataAsOfLabel()));
+  lines.push(row('Coverage note', COVERAGE_NOTE));
+  lines.push('');
 
-  section('Value (estimated, from the assumptions above)');
-  push('Figure', 'Value', 'Compared with the previous window');
-  push('Hours saved', fmtOneDp(data.value.hours), data.priorValue ? fmtOneDp(data.priorValue.hours) : null);
-  push('Money saved (INR)', Math.round(data.value.money), data.priorValue ? Math.round(data.priorValue.money) : null);
-  push('People equivalent', fmtOneDp(data.value.people), data.priorValue ? fmtOneDp(data.priorValue.people) : null);
-  push('Rows worked through', data.value.rows, data.priorValue ? data.priorValue.rows : null);
-  push('Machine time (hours)', fmtOneDp(data.value.machineHours), null);
+  lines.push(row('Assumption', 'Value', 'Source', 'Note'));
+  ASSUMPTIONS.forEach(key => {
+    lines.push(row(
+      SETTING_SHORT[key],
+      key === 'hourlyRate' ? settings[key] : key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : settings[key],
+      SOURCE_LABEL[settings.source[key]],
+      settings.note[key],
+    ));
+  });
+  lines.push(row('Limit', '', '', REVIEW_PROXY_NOTE));
+  lines.push('');
 
-  section('Cost to run (your contract, not an estimate)');
-  push('Figure', 'Value', 'Note');
-  push(
-    'Charged by your contract (INR)',
-    data.cost.lookupRupees === null ? null : Math.round(data.cost.lookupRupees),
-    data.cost.noContract
-      ? 'your contract prices have not been loaded yet'
-      : data.cost.complete
-        ? 'every recorded call is priced by the contract'
-        : `${data.cost.unpriced.reduce((sum, row) => sum + row.calls, 0)} calls are on APIs the contract does not price yet`,
-  );
-  push('Paid lookups recorded', data.cost.lookupCalls, `${data.lookups.failed} failed, which are not charged`);
-  push('Concierge job cost (USD)', fmtOneDp(data.cost.conciergeUsd), 'recorded in dollars by the tools, never converted here');
-  push('Net value (INR)', data.net.net === null ? null : Math.round(data.net.net), data.net.headline === 'Net value' ? 'work avoided less what the contract charged' : 'not computed while the contract prices are missing');
+  lines.push(row('Figure', 'Value', 'How it is known'));
+  lines.push(row('Successful runs', value.runs, 'measured'));
+  lines.push(row('Populations covered', value.populations, 'measured'));
+  lines.push(row('Rows covered (each population once)', value.coveredRows, 'measured'));
+  lines.push(row('Row checks performed (repeats included)', value.checksPerformed, 'measured'));
+  lines.push(row('Machine time', fmtDuration(value.machineHours), 'measured'));
+  lines.push(row('Hours if done by hand', fmtHours(value.manualHours), 'estimated'));
+  lines.push(row('Hours saved', fmtHours(value.hoursSaved), 'estimated'));
+  lines.push(row('The same work in money (INR)', Math.round(value.rupees), 'estimated'));
+  lines.push(row('People freed, full time', fmtPeople(value.people), 'estimated'));
+  lines.push(row('Charged by the contract (INR)', Math.round(cost.totalPaise / 100), 'measured'));
+  lines.push(row('Net value (INR)', Math.round(data.netRupees), 'estimated'));
+  lines.push(row('Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'));
+  lines.push('');
 
-  section('Value over time');
-  push('Bucket', 'Runs', 'Rows', 'Hours saved', 'Worth (INR)');
-  for (const bucket of data.overTime) {
-    push(bucket.label, bucket.runs, bucket.rows, fmtOneDp(bucket.hours), Math.round(bucket.money));
+  lines.push(row('How much the pace matters'));
+  lines.push(row('Rows checked by hand per hour', 'Hours by hand', 'The same work in money (INR)'));
+  data.sensitivity.forEach(s => lines.push(row(s.rate, fmtHours(s.hours), Math.round(s.rupees))));
+  lines.push('');
+
+  lines.push(row('Over time. A population is credited once, to the window that first tested it'));
+  lines.push(row('Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided', 'Value (INR)'));
+  data.buckets.forEach(b => lines.push(row(b.label, b.runs, b.checks, b.newRows, fmtHours(b.hours), Math.round(b.rupees))));
+  lines.push('');
+
+  lines.push(row('Control coverage'));
+  lines.push(row('Controls in the library', data.coverage.controlsInLibrary));
+  lines.push(row('Controls exercised', data.coverage.tested.length));
+  lines.push(row('Controls never tested in this window', data.coverage.neverTested.length));
+  lines.push(row('Share of the library exercised', fmtPct(data.coverage.pctTested)));
+  data.coverage.neverTested.forEach(c => lines.push(row('Never tested', c.id, c.name, c.owner)));
+  lines.push('');
+
+  lines.push(row('Cost by lookup'));
+  lines.push(row('Lookup', 'Vendor', 'Calls', 'Billing unit', 'Cost (INR)'));
+  cost.lines.forEach(line => lines.push(row(line.name, line.vendor ?? '', line.calls, line.billingUnit ?? '', line.paise / 100)));
+  cost.unpriced.forEach(line => lines.push(row(line.name, line.vendor ?? '', line.calls, 'no contract price yet', '')));
+  lines.push('');
+
+  lines.push(row('Exceptions by severity'));
+  data.exceptions.bySeverity.forEach(s => lines.push(row(s.label, s.value)));
+  lines.push(row('Open', data.exceptions.open));
+  lines.push(row('Findings raised before de-duplication shipped', data.exceptions.beforeDeduplication));
+  lines.push('');
+
+  lines.push(row('Risks'));
+  lines.push(row('On the register', data.risks.total));
+  lines.push(row('With no control', data.risks.unmapped.length));
+  lines.push(row('Critical with no control', data.risks.criticalUnmapped.length));
+  lines.push('');
+
+  lines.push(row('What keeps failing'));
+  lines.push(row('Check', 'Failures', 'Runs', 'Failure rate', 'Machine time wasted'));
+  data.reliability.rows.forEach(r => lines.push(row(r.workflowName, r.failures, r.runs, fmtPct(r.failureRatePct), fmtDuration(r.wastedHours))));
+  lines.push('');
+
+  lines.push(row('How long open findings have been open'));
+  data.ageing.buckets.forEach(b => lines.push(row(b.label, b.value)));
+  lines.push(row('Open in total', data.ageing.open));
+  if (data.ageing.excludedLegacy > 0) {
+    lines.push(row('Left out: raised before de-duplication shipped, so not guaranteed distinct', data.ageing.excludedLegacy));
   }
+  lines.push('');
 
-  section('Control coverage');
-  push('Controls exercised in this window', data.coverage.exercised);
-  push('Controls in the library', data.coverage.total);
-  push('Coverage percent', fmtOneDp(data.coverage.pct));
-  section('Never exercised, ever (ignores the window)');
-  push('Control', 'Owner');
-  for (const control of data.never.controls) push(`${control.id} ${control.name}`, control.owner);
-  for (const workflow of data.never.workflows) push(`Workflow: ${workflow}`, null);
+  lines.push(row('Whether the findings were real. The rate is out of classified findings only'));
+  lines.push(row('Called real', data.quality.truePositives));
+  lines.push(row('Called a false alarm', data.quality.falsePositives));
+  lines.push(row('Not yet classified', data.quality.unclassified));
+  lines.push(row('False alarm rate', data.quality.falsePositiveRatePct === null ? 'nothing classified yet' : fmtPct(data.quality.falsePositiveRatePct)));
+  data.quality.byRootCause.forEach(r => lines.push(row('Root cause', r.label, r.value)));
+  data.quality.byFalsePositiveReason.forEach(r => lines.push(row('Why the rule fired anyway', r.label, r.value)));
+  lines.push('');
 
-  section('Exceptions caught');
-  push('Severity', 'Raised', 'Still open');
-  for (const severity of data.exceptions.bySeverity) push(severity.severity, severity.total, severity.open);
-  push('Without a run reference', data.exceptions.untraced, null);
+  lines.push(row('What the assistant noticed. The two kinds are never added together'));
+  lines.push(row('Inside one check', data.insights.perRun));
+  lines.push(row('Across an engagement', data.insights.consolidated));
+  data.insights.bySeverity.forEach(s => lines.push(row(s.label, s.value)));
+  lines.push('');
 
-  section('Work volume by unit (four units, never summed)');
-  push('Unit', 'Count');
-  push('Workflow runs', data.volume.workflowRuns);
-  push('Bulk runs', data.volume.bulkRuns);
-  push('Chat questions', data.volume.chatQuestions);
-  push('Concierge jobs', data.volume.conciergeJobs);
-  push('Bucket', 'Workflow runs', 'Chat questions');
-  for (const bucket of volumeBuckets) push(bucket.label, bucket.runs, bucket.chat);
+  lines.push(row('The engagement portfolio'));
+  data.portfolio.byStatus.forEach(s => lines.push(row(s.label, s.value)));
+  lines.push(row('Changes recorded in this window', data.portfolio.changesInPeriod));
+  lines.push('');
+  lines.push(row('Engagement', 'Owner', 'Reviewer', 'Controls tested', 'Of', 'Findings open', 'Plans open', 'Report', 'Period ends'));
+  data.portfolio.strip.forEach(e => lines.push(row(
+    `${e.code} · ${e.name}`, e.owner, e.reviewer, e.controlsTested, e.controlsTotal,
+    e.exceptionsOpen, e.actionPlansOpen, e.reportState === 'none' ? 'not started' : e.reportState,
+    formatDate(e.auditPeriodEnd),
+  )));
+  lines.push('');
 
-  section('Reliability by workflow');
-  push('Workflow', 'Runs', 'Failed', 'Failure percent', 'Hours lost');
-  for (const line of data.reliability) {
-    push(line.workflow, line.total, line.failed, fmtOneDp(line.failurePct), fmtOneDp(line.wastedHours));
-  }
-
-  section('Stuck runs');
-  push('Workflow', 'Ran by', 'When', 'State', 'Times in this window', 'What the engine said');
-  for (const run of data.stuck) {
-    push(run.workflow, run.ranBy, formatDate(run.at), run.status, run.repeats, run.error);
-  }
-
-  section('AI usage by area');
-  push('Area', 'Volume', 'Unit', 'How well it is known', 'Detail');
-  for (const line of data.aiUsage) {
-    push(line.area, line.volume, line.volumeUnit, line.accuracy, line.detail);
-  }
+  lines.push(row('AI usage by surface'));
+  lines.push(row('Surface', 'Count', 'What can be said about money'));
+  data.aiUsage.forEach(a => lines.push(row(a.surface, a.count, a.money)));
 
   if (data.people.length > 0) {
-    section('Your team, by outcome (alphabetical, never ranked)');
-    push('Member', 'Runs', 'Exceptions found', 'Waiting on them');
-    for (const person of data.people) push(person.name, person.runs, person.exceptionsFound, person.waitingOnThem);
+    lines.push('');
+    lines.push(row(`${scope.team ?? 'Team'} · work by outcome (alphabetical, not a ranking)`));
+    lines.push(row('Person', 'Runs', 'Exceptions found', 'Resolved'));
+    data.people.forEach(p => lines.push(row(p.name, p.runs, p.exceptionsFound, p.exceptionsResolved)));
   }
 
-  if (data.queue.length > 0) {
-    section('Waiting on you');
-    push('Item', 'Kind', 'Due', 'State');
-    for (const item of data.queue) {
-      push(item.title, item.kind, item.dueAt === null ? null : formatDate(item.dueAt), item.overdue ? 'overdue' : 'on track');
-    }
-  }
-
-  section('Created in this window');
-  push('Kind', 'Created');
-  for (const created of data.created) push(created.label, created.count);
-
-  section('Dashboards, widgets and alerts');
-  push('Dashboards built', data.product.dashboardsCreated);
-  push('Widgets created or changed', data.product.widgetsChanged);
-  push('Alerts fired', data.product.alertsFired);
-  push('Alerts fired with no person', data.product.alertsAutomatic);
-
-  section('Reports');
-  push('Reports made', data.reports.made);
-  push('Times worked on', data.reports.activity);
-  push('Shared', data.reports.shared);
-  push('Action plans open', data.reports.actionPlansOpen);
-  push('Action plans closed', data.reports.actionPlansClosed);
-
-  section('Sample validation');
-  push('Passed', data.sampling.passed);
-  push('Failed', data.sampling.failed);
-  push('Errored, needs a person', data.sampling.error);
-  push('Queued or running', data.sampling.inFlight);
-
-  section('Insights generated');
-  push('Severity', 'Insights');
-  for (const line of data.insights.bySeverity) push(line.severity, line.count);
-  push('Per run', data.insights.perRun);
-  push('Consolidated', data.insights.consolidated);
-
-  section('Risks');
-  push('Recorded', data.risks.total);
-  push('With a control', data.risks.mapped);
-  push('With no control', data.risks.unmapped);
-  push('Critical or high with no control', data.risks.unmappedSevere.length);
-  push('Written by the AI (percent)', fmtOneDp(data.risks.aiGeneratedShare));
-  push('Risk', 'Priority', 'Owner');
-  for (const risk of data.risks.unmappedSevere) push(`${risk.id} ${risk.name}`, risk.priority, risk.owner);
-
-  section('Engagements');
-  push('Status', 'Engagements');
-  for (const line of data.portfolio.byStatus) push(line.status, line.count);
-  push('Past their planned finish', data.portfolio.slipping.length);
-  push('Record changes in this window', data.portfolio.changes);
-  push('Engagement', 'Controls tested', 'Of', 'Exceptions open', 'Report');
-  for (const line of data.portfolio.strip) {
-    push(`${line.code} ${line.name}`, line.controlsTested, line.controlsTotal, line.exceptionsOpen, line.report);
-  }
-
-  section('Continuous monitoring');
-  push('Engagements monitoring continuously', data.ccm.engagementsOn);
-  push('Engagements in scope', data.ccm.engagementsTotal);
-  push('Bulk runs in this window', data.ccm.bulkRuns);
-  push('Engagement', 'Schedule', 'Must hold (percent)', 'Actually passing (percent)');
-  for (const line of data.ccm.thresholdRows) {
-    push(line.engagement, line.frequency, line.threshold, line.actual === null ? null : fmtOneDp(line.actual));
-  }
-
-  section('Paid lookups');
-  push('API', 'Successful calls', 'Runs', 'Failed', 'Touches personal data', 'Contract price (paise)', 'Charged per', 'Charged (INR)');
-  for (const line of data.lookups.rows) {
-    push(
-      line.name, line.calls, line.batches, line.failed, line.personalData ? 'yes' : 'no',
-      line.pricePaise, line.billingUnit, line.chargedPaise === null ? null : line.chargedPaise / 100,
-    );
-  }
-  section('Your contract prices');
-  push('API', 'Vendor', 'Charged per', 'Charge (INR)', 'In force from', 'Until', 'Set by');
-  for (const price of data.cost.prices) {
-    push(
-      price.apiName, price.vendor, price.billingUnit, price.pricePaise / 100,
-      formatDate(price.effectiveFrom),
-      price.effectiveTo === null ? 'in force' : formatDate(price.effectiveTo),
-      price.setBy,
-    );
-  }
-
-  section("What the assistant has learned");
-  push('Active memories', data.learn.active);
-  push('Awaiting approval', data.learn.pending);
-  push('Due for review', data.learn.dueReview);
-  push('Used in the last seven days', data.learn.usedThisWeek);
-
-  if (data.changes.rows.length > 0) {
-    section('Changes to the numbers behind the figures');
-    push('What changed', 'From', 'To', 'Where it came from', 'Who', 'When');
-    for (const change of data.changes.rows) {
-      push(change.field, change.from, change.to, change.source, change.by, formatDate(change.at));
-    }
-  }
+  lines.push('');
+  lines.push(row('Rows covered counts each population once however often it was re-tested. '
+    + `Failed runs are excluded from every saving and reported on their own, at ${fmtDuration(data.reliability.wastedHours)} of wasted machine time. `
+    + `Contract cost is the recorded volume at the price in force on the day, as per your contract. The window holds ${fmtInt(value.runs)} successful runs.`));
 
   return lines.join('\n');
 }
 
-/** The file name says whose view and which window, so two files never collide. */
-export function usageFileName(data: UsageSnapshot, extension: string): string {
-  const persona = PERSONA_TITLE[data.scope.persona].toLowerCase().replace(/\s+/g, '-');
-  return `platform-usage-${persona}-${formatDate(data.period.from).replace(/\s+/g, '-')}-to-${formatDate(data.period.to).replace(/\s+/g, '-')}.${extension}`;
-}
-
-export function downloadUsageCsv(
-  data: UsageSnapshot,
-  volumeBuckets: { label: string; runs: number; chat: number }[],
-): void {
-  const blob = new Blob([buildUsageCsv(data, volumeBuckets)], { type: 'text/csv;charset=utf-8' });
+export function downloadUsageCsv(data: UsageSnapshot) {
+  const blob = new Blob([usageCsv(data)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = usageFileName(data, 'csv');
+  link.download = usageFileName(data.scope, data.period, 'csv');
   document.body.appendChild(link);
   link.click();
-  link.remove();
+  document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export { usageFileName, fmtMoneyExact };

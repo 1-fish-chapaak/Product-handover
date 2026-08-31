@@ -1,25 +1,24 @@
 /**
  * Platform Usage as a real .pdf.
  *
- * The same payload the CSV carries, laid out to be read by somebody who was not
- * in the room: whose view it is, what window it covers, the four assumptions and
- * the coverage note on the first page, above any figure that rests on them.
+ * The same payload the CSV carries, laid out for somebody who was not in the
+ * room. Whose view it is, what window it covers, the four assumptions and the
+ * coverage note all sit on the first page, above any figure that rests on them.
  *
- * pdfmake and its font pack load on demand, the way the report export does it.
+ * pdfmake and its font pack load on demand, the way the report export does.
  * That is about 1.5 MB nothing else in the app needs in its initial bundle.
  *
  * Money is written as plain numbers under an "INR" heading rather than with a
- * rupee sign: the bundled Roboto is not guaranteed to carry the glyph, and a
+ * rupee sign. The bundled Roboto is not guaranteed to carry the glyph, and a
  * money figure printed as an empty box is worse than one printed as a word.
  */
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  PERSONA_TITLE, SETTING_SHORT, SOURCE_FIELD, SOURCE_LABEL,
-  fmtInt, fmtOneDp, fmtPct, priorLabel,
+  PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type NumericSetting, type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
-import { usageFileName } from './usageExport';
 
 const INK = '#0F0720';
 const MUTED = '#6B5D82';
@@ -33,7 +32,6 @@ interface PdfMake {
   createPdf: (def: unknown) => PdfDoc;
   addVirtualFileSystem?: (vfs: unknown) => void;
   vfs?: unknown;
-  setFonts: (fonts: unknown) => void;
 }
 
 let pdfMakePromise: Promise<PdfMake> | null = null;
@@ -41,280 +39,240 @@ let pdfMakePromise: Promise<PdfMake> | null = null;
 async function loadPdfMake(): Promise<PdfMake> {
   if (!pdfMakePromise) {
     pdfMakePromise = (async () => {
-      const [core, fonts] = await Promise.all([
-        import('pdfmake/build/pdfmake.min.js'),
-        import('pdfmake/build/vfs_fonts.js'),
+      const [pdfMakeModule, pdfFontsModule] = await Promise.all([
+        import('pdfmake/build/pdfmake'),
+        import('pdfmake/build/vfs_fonts'),
       ]);
-      const pdfMake = ((core as { default?: PdfMake }).default ?? core) as PdfMake;
-      const vfs = (fonts as { default?: unknown }).default ?? fonts;
+      const pdfMake = ((pdfMakeModule as unknown as { default?: PdfMake }).default ?? pdfMakeModule) as PdfMake;
+      const fonts = (pdfFontsModule as unknown as { default?: unknown }).default ?? pdfFontsModule;
+      const vfs = (fonts as { pdfMake?: { vfs?: unknown }; vfs?: unknown }).pdfMake?.vfs
+        ?? (fonts as { vfs?: unknown }).vfs
+        ?? fonts;
       if (typeof pdfMake.addVirtualFileSystem === 'function') pdfMake.addVirtualFileSystem(vfs);
       else pdfMake.vfs = vfs;
-      pdfMake.setFonts({
-        Roboto: {
-          normal: 'Roboto-Regular.ttf',
-          bold: 'Roboto-Medium.ttf',
-          italics: 'Roboto-Italic.ttf',
-          bolditalics: 'Roboto-MediumItalic.ttf',
-        },
-      });
       return pdfMake;
     })();
   }
   return pdfMakePromise;
 }
 
-const heading = (text: string): Content => ({ text, style: 'h2', margin: [0, 16, 0, 6] });
+const ASSUMPTIONS: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
 
-const sentence = (text: string): Content => ({ text, style: 'body', margin: [0, 0, 0, 8] });
+const heading = (text: string): Content => ({ text, fontSize: 12, bold: true, color: INK, margin: [0, 16, 0, 6] });
+const note = (text: string): Content => ({ text, fontSize: 8, color: MUTED, margin: [0, 0, 0, 6], lineHeight: 1.3 });
 
-function table(head: string[], rows: (string | number)[][], widths?: (string | number)[]): Content {
-  return {
-    table: {
-      headerRows: 1,
-      widths: widths ?? ['*', ...head.slice(1).map(() => 'auto')],
-      body: [
-        head.map(h => ({ text: h, style: 'th' })),
-        ...rows.map(row => row.map((cell, i) => ({
-          text: String(cell),
-          style: 'td',
-          alignment: i === 0 ? 'left' : 'right',
-        }))),
-      ],
+const table = (head: string[], rows: (string | number)[][]): Content => ({
+  margin: [0, 2, 0, 6],
+  layout: {
+    hLineWidth: (i: number) => (i === 1 ? 0.7 : 0.4),
+    vLineWidth: () => 0,
+    hLineColor: () => HAIRLINE,
+    paddingTop: () => 4,
+    paddingBottom: () => 4,
+    paddingLeft: () => 0,
+    paddingRight: () => 8,
+  },
+  table: {
+    headerRows: 1,
+    widths: head.map((_, i) => (i === 0 ? '*' : 'auto')),
+    body: [
+      head.map(h => ({ text: h, fontSize: 7.5, bold: true, color: MUTED })),
+      ...rows.map(r => r.map((cell, i) => ({
+        text: String(cell),
+        fontSize: 9,
+        color: INK,
+        alignment: i === 0 ? 'left' : 'right',
+      }))),
+    ],
+  },
+});
+
+export function usagePdfDefinition(data: UsageSnapshot) {
+  const { scope, period, settings, value, cost } = data;
+
+  const content: Content[] = [
+    { text: 'Platform Usage', fontSize: 20, bold: true, color: INK },
+    {
+      text: `${PERSONA_TITLE[scope.persona]} view · ${PERSONA_SCOPE_LABEL[scope.persona]}${scope.team ? ` · ${scope.team}` : ''}`,
+      fontSize: 10,
+      color: BRAND,
+      margin: [0, 4, 0, 0],
     },
-    layout: {
-      hLineWidth: (i: number, node: { table: { body: unknown[] } }) => (i === 0 || i === 1 || i === node.table.body.length ? 0.7 : 0.4),
-      vLineWidth: () => 0,
-      hLineColor: () => HAIRLINE,
-      paddingTop: () => 4,
-      paddingBottom: () => 4,
+    {
+      text: `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)} · compared with ${priorLabel(period)} · ${dataAsOfLabel()}`,
+      fontSize: 9,
+      color: MUTED,
+      margin: [0, 3, 0, 10],
     },
-    margin: [0, 0, 0, 6],
-  };
-}
+    note(COVERAGE_NOTE),
 
-/** The whole view as a document definition. */
-function buildDoc(data: UsageSnapshot): Record<string, unknown> {
-  const keys: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
-  const content: Content[] = [];
-
-  content.push({ text: 'Platform Usage', style: 'h1' });
-  content.push({
-    text: [
-      { text: `Viewing as ${PERSONA_TITLE[data.scope.persona]}`, bold: true },
-      `  ·  ${data.scope.label}  ·  ${data.period.label}, ${formatDate(data.period.from)} to ${formatDate(data.period.to)}  ·  ${dataAsOfLabel()}`,
-    ],
-    style: 'meta',
-    margin: [0, 6, 0, 2],
-  });
-  content.push({
-    text: data.prior
-      ? `Every change on this page compares with ${priorLabel(data.period)}.`
-      : 'There is no earlier window of the same length, so nothing is compared.',
-    style: 'meta',
-    margin: [0, 0, 0, 10],
-  });
-  content.push({ text: COVERAGE_NOTE, style: 'note', margin: [0, 0, 0, 12] });
-
-  content.push(heading('The assumptions every value figure rests on'));
-  content.push(table(
-    ['Setting', 'Value', 'Where it came from'],
-    keys.map(key => [
-      SETTING_SHORT[key],
-      key === 'hourlyRate' ? `${fmtInt(data.settings[key])} INR` : String(data.settings[key]),
-      SOURCE_LABEL[data.settings[SOURCE_FIELD[key]] as keyof typeof SOURCE_LABEL],
-    ]),
-    ['*', 'auto', 'auto'],
-  ));
-
-  content.push(heading('What the work was worth'));
-  content.push(sentence(
-    `The platform saved ${fmtOneDp(data.value.hours)} hours in this window, from ${fmtInt(data.value.rowRuns)} runs `
-    + `over ${fmtInt(data.value.rows)} rows and ${fmtInt(data.value.testRuns)} control tests. `
-    + 'Every figure in this section is an estimate built from the assumptions above.',
-  ));
-  content.push(table(
-    ['Figure', 'This window', 'Previous window'],
-    [
-      ['Hours saved', fmtOneDp(data.value.hours), data.priorValue ? fmtOneDp(data.priorValue.hours) : 'no window'],
-      ['Money saved, INR', fmtInt(data.value.money), data.priorValue ? fmtInt(data.priorValue.money) : 'no window'],
-      ['People equivalent', fmtOneDp(data.value.people), data.priorValue ? fmtOneDp(data.priorValue.people) : 'no window'],
-      ['Rows worked through', fmtInt(data.value.rows), data.priorValue ? fmtInt(data.priorValue.rows) : 'no window'],
-      ['Machine time, hours', fmtOneDp(data.value.machineHours), data.priorValue ? fmtOneDp(data.priorValue.machineHours) : 'no window'],
-    ],
-  ));
-
-  content.push(heading('What it cost to run'));
-  content.push(sentence(
-    data.cost.noContract
-      ? `The contract prices for this workspace have not been loaded yet, so no cost is claimed. `
-        + `${fmtInt(data.cost.lookupCalls)} paid lookups were recorded.`
-      : `${fmtInt(data.cost.lookupCalls)} paid lookups cost ${fmtInt(data.cost.lookupRupees ?? 0)} INR, as per your contract.`,
-  ));
-  content.push(table(
-    ['Figure', 'Value'],
-    [
-      ['Charged by your contract, INR', data.cost.lookupRupees === null ? 'contract not loaded' : fmtInt(data.cost.lookupRupees)],
-      ['Paid lookups recorded', fmtInt(data.cost.lookupCalls)],
-      ['Not priced by the contract yet', fmtInt(data.cost.unpriced.reduce((sum, row) => sum + row.calls, 0)) + ' calls'],
-      ['Concierge job cost, USD', fmtOneDp(data.cost.conciergeUsd)],
-      [data.net.headline + ', INR', data.net.net === null ? fmtInt(data.net.workAvoided) + ' of work avoided' : fmtInt(data.net.net)],
-    ],
-  ));
-  if (data.cost.prices.length > 0) {
-    content.push(table(
-      ['Your contract price', 'Charged per', 'Charge, INR', 'In force from'],
-      data.cost.prices.map(price => [
-        price.apiName,
-        price.billingUnit,
-        fmtOneDp(price.pricePaise / 100),
-        formatDate(price.effectiveFrom),
+    heading('What the figures assume'),
+    table(
+      ['Assumption', 'Value', 'Source'],
+      ASSUMPTIONS.map(key => [
+        SETTING_SHORT[key],
+        key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : fmtInt(settings[key]),
+        SOURCE_LABEL[settings.source[key]],
       ]),
-      ['*', 'auto', 'auto', 'auto'],
-    ));
+    ),
+    note(REVIEW_PROXY_NOTE),
+
+    heading('What it was worth'),
+    table(
+      ['Figure', 'Value', 'How it is known'],
+      [
+        ['Successful runs', fmtInt(value.runs), 'measured'],
+        ['Rows covered, each population once', fmtInt(value.coveredRows), 'measured'],
+        ['Row checks performed, repeats included', fmtInt(value.checksPerformed), 'measured'],
+        ['Machine time', fmtDuration(value.machineHours), 'measured'],
+        ['Hours if done by hand', fmtHours(value.manualHours), 'estimated'],
+        ['Hours saved', fmtHours(value.hoursSaved), 'estimated'],
+        ['The same work in money, INR', fmtInt(value.rupees), 'estimated'],
+        ['People freed, full time', fmtPeople(value.people), 'estimated'],
+        ['Charged by the contract, INR', fmtInt(cost.totalPaise / 100), 'measured'],
+        ['Net value, INR', fmtInt(data.netRupees), 'estimated'],
+        ['Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'],
+      ],
+    ),
+    note('Failed runs are excluded from every saving above and reported on their own line. Rows covered counts each population once however often it was re-tested, and the repeats appear on the checks-performed line.'),
+
+    heading('How much the pace matters'),
+    table(
+      ['Rows checked by hand per hour', 'Hours by hand', 'The same work in money, INR'],
+      data.sensitivity.map(s => [fmtInt(s.rate), fmtHours(s.hours), fmtInt(s.rupees)]),
+    ),
+
+    heading('Control coverage'),
+    table(
+      ['Figure', 'Value'],
+      [
+        ['Controls in the library', fmtInt(data.coverage.controlsInLibrary)],
+        ['Controls exercised in this window', fmtInt(data.coverage.tested.length)],
+        ['Controls never tested in this window', fmtInt(data.coverage.neverTested.length)],
+        ['Share of the library exercised', fmtPct(data.coverage.pctTested)],
+      ],
+    ),
+
+    heading('The risk picture'),
+    table(
+      ['Figure', 'Value'],
+      [
+        ['Risks on the register', fmtInt(data.risks.total)],
+        ['Risks with no control', fmtInt(data.risks.unmapped.length)],
+        ['Critical risks with no control', fmtInt(data.risks.criticalUnmapped.length)],
+      ],
+    ),
+
+    heading('What was caught'),
+    table(
+      ['Severity', 'Exceptions'],
+      data.exceptions.bySeverity.map(s => [s.label, fmtInt(s.value)]),
+    ),
+    note(`${fmtInt(data.exceptions.open)} of these are still open. A finding never closes itself, so open means nobody has dealt with it yet rather than that the problem is still there.`),
+
+    heading('How long open findings have been open'),
+    table(['Age', 'Findings'], data.ageing.buckets.map(b => [b.label, fmtInt(b.value)])),
+    note(
+      data.ageing.excludedLegacy > 0
+        ? `${fmtInt(data.ageing.excludedLegacy)} findings are left out because they were raised before de-duplication shipped and nothing guarantees they are distinct.`
+        : 'Age runs from the day a finding was first raised. A repeat occurrence never created a second row.',
+    ),
+
+    heading('Whether the findings were real'),
+    table(
+      ['Verdict', 'Findings'],
+      [
+        ['Called real', fmtInt(data.quality.truePositives)],
+        ['Called a false alarm', fmtInt(data.quality.falsePositives)],
+        ['Not yet classified', fmtInt(data.quality.unclassified)],
+      ],
+    ),
+    note(
+      data.quality.falsePositiveRatePct === null
+        ? 'Nothing has been classified in this window, so there is no rate. Nought per cent would read as perfection when it really means nobody has looked.'
+        : `${fmtPct(data.quality.falsePositiveRatePct)} of the classified findings were the rule firing on something that was fine. A rising rate means a control's rule wants tuning, not that the team is failing.`,
+    ),
+
+    heading('What the assistant noticed'),
+    table(
+      ['Kind', 'Insights'],
+      [
+        ['Inside one check', fmtInt(data.insights.perRun)],
+        ['Across an engagement', fmtInt(data.insights.consolidated)],
+      ],
+    ),
+    note('The two kinds are never added together. A consolidated insight summarises the per-run ones, so a total would count the same observation twice.'),
+  ];
+
+  if (data.portfolio.strip.length > 0) {
+    content.push(
+      heading('Where each open engagement has got to'),
+      table(
+        ['Engagement', 'Controls tested', 'Findings open', 'Plans open', 'Report'],
+        data.portfolio.strip.map(e => [
+          `${e.code} · ${e.name}`,
+          `${fmtInt(e.controlsTested)} of ${fmtInt(e.controlsTotal)}`,
+          fmtInt(e.exceptionsOpen),
+          fmtInt(e.actionPlansOpen),
+          e.reportState === 'none' ? 'not started' : e.reportState,
+        ]),
+      ),
+      note('Sorted by the date the audit period ends, soonest first. Sorted by a date rather than by a person.'),
+    );
   }
 
-  content.push(heading('Value over time'));
-  content.push(table(
-    ['Bucket', 'Runs', 'Rows', 'Hours saved', 'Worth, INR'],
-    data.overTime.map(b => [b.label, fmtInt(b.runs), fmtInt(b.rows), fmtOneDp(b.hours), fmtInt(b.money)]),
-  ));
-
-  content.push(heading('What it covered'));
-  content.push(sentence(
-    `The platform exercised ${fmtInt(data.coverage.exercised)} of ${fmtInt(data.coverage.total)} controls in this window, `
-    + `which is ${fmtPct(data.coverage.pct)} of the library. ${fmtInt(data.never.controls.length)} controls have never been `
-    + 'exercised in any window, and that count deliberately ignores the window above.',
-  ));
-  if (data.never.controls.length > 0) {
-    content.push(table(
-      ['Never exercised, ever', 'Owner'],
-      data.never.controls.map(c => [`${c.id} ${c.name}`, c.owner]),
-      ['*', 'auto'],
-    ));
+  if (cost.lines.length > 0) {
+    content.push(
+      heading('What the contract charged'),
+      table(
+        ['Lookup', 'Calls', 'Billed', 'Cost, INR'],
+        cost.lines.map(line => [
+          line.name,
+          fmtInt(line.calls),
+          line.billingUnit === 'run' ? `${fmtInt(line.batches)} runs` : `${fmtInt(line.calls)} rows`,
+          fmtInt(line.paise / 100),
+        ]),
+      ),
+    );
   }
 
-  content.push(heading('What the platform caught'));
-  content.push(table(
-    ['Severity', 'Raised', 'Still open'],
-    data.exceptions.bySeverity.map(s => [s.severity, fmtInt(s.total), fmtInt(s.open)]),
-  ));
-
-  content.push(heading('Work volume, four units that are never added together'));
-  content.push(table(
-    ['Unit', 'Count'],
-    [
-      ['Workflow runs', fmtInt(data.volume.workflowRuns)],
-      ['Bulk runs', fmtInt(data.volume.bulkRuns)],
-      ['Chat questions', fmtInt(data.volume.chatQuestions)],
-      ['Concierge jobs', fmtInt(data.volume.conciergeJobs)],
-    ],
-  ));
-
-  if (data.stuck.length > 0) {
-    content.push(heading('What is stuck, in the engine’s own words'));
-    content.push(table(
-      ['Workflow', 'State', 'Times', 'What the engine said'],
-      data.stuck.map(run => [run.workflow, run.status, fmtInt(run.repeats), run.error]),
-      ['auto', 'auto', 'auto', '*'],
-    ));
+  if (cost.unpriced.length > 0) {
+    content.push(note(`Not priced by the contract yet, so counted and charged nothing: ${cost.unpriced.map(l => l.name).join(', ')}. The reminder goes to our operations team.`));
   }
 
-  content.push(heading('AI usage by area'));
-  content.push(table(
-    ['Area', 'Volume', 'How well it is known'],
-    data.aiUsage.map(row => [row.area, `${fmtInt(row.volume)} ${row.volumeUnit}`, row.accuracy]),
-    ['*', 'auto', 'auto'],
-  ));
+  content.push(
+    heading('What the AI did'),
+    table(['Surface', 'Count'], data.aiUsage.map(a => [a.surface, fmtInt(a.count)])),
+    note(data.aiUsage.map(a => `${a.surface}: ${a.money}`).join(' · ')),
+  );
 
   if (data.people.length > 0) {
-    content.push(heading('The team, by outcome'));
-    content.push(sentence('Alphabetical. Nobody here is ranked, compared or averaged.'));
-    content.push(table(
-      ['Member', 'Runs', 'Exceptions found', 'Waiting on them'],
-      data.people.map(p => [p.name, fmtInt(p.runs), fmtInt(p.exceptionsFound), fmtInt(p.waitingOnThem)]),
-    ));
-  }
-
-  content.push(heading('Risks'));
-  content.push(sentence(
-    `${fmtInt(data.risks.unmappedSevere.length)} critical and high risks have no control covering them, out of `
-    + `${fmtInt(data.risks.total)} recorded. ${fmtPct(data.risks.aiGeneratedShare)} of the register was written by the AI.`,
-  ));
-  if (data.risks.unmappedSevere.length > 0) {
-    content.push(table(
-      ['Risk with no control', 'Priority', 'Owner'],
-      data.risks.unmappedSevere.map(r => [`${r.id} ${r.name}`, r.priority, r.owner]),
-      ['*', 'auto', 'auto'],
-    ));
-  }
-
-  content.push(heading('Engagements and continuous monitoring'));
-  content.push(table(
-    ['Status', 'Engagements'],
-    data.portfolio.byStatus.map(s => [s.status, fmtInt(s.count)]),
-  ));
-  content.push(table(
-    ['Engagement on a schedule', 'Schedule', 'Must hold', 'Actually passing'],
-    data.ccm.thresholdRows.map(r => [
-      r.engagement,
-      r.frequency,
-      fmtPct(r.threshold),
-      r.actual === null ? 'too few tests' : fmtPct(r.actual),
-    ]),
-    ['*', 'auto', 'auto', 'auto'],
-  ));
-
-  content.push(heading('What the assistant has learned'));
-  content.push(table(
-    ['Figure', 'Value'],
-    [
-      ['Active memories', fmtInt(data.learn.active)],
-      ['Awaiting approval', fmtInt(data.learn.pending)],
-      ['Due for review', fmtInt(data.learn.dueReview)],
-      ['Used in the last seven days', fmtInt(data.learn.usedThisWeek)],
-    ],
-  ));
-
-  if (data.changes.rows.length > 0) {
-    content.push(heading('Changes to the numbers a person or the platform set'));
-    content.push(table(
-      ['What changed', 'From', 'To', 'Who', 'When'],
-      data.changes.rows.map(c => [c.field, c.from ?? '', c.to ?? '', c.by, formatDate(c.at)]),
-      ['*', 'auto', 'auto', 'auto', 'auto'],
-    ));
+    content.push(
+      heading(`${scope.team ?? 'Team'} · work by outcome`),
+      table(
+        ['Person', 'Runs', 'Exceptions found', 'Resolved'],
+        data.people.map(p => [p.name, fmtInt(p.runs), fmtInt(p.exceptionsFound), fmtInt(p.exceptionsResolved)]),
+      ),
+      note('Alphabetical. It records what each person worked on rather than comparing them.'),
+    );
   }
 
   return {
-    info: { title: `Platform Usage, ${PERSONA_TITLE[data.scope.persona]}, ${data.period.label}` },
     pageSize: 'A4',
     pageMargins: [44, 44, 44, 52],
     content,
-    footer: (page: number, pages: number) => ({
+    defaultStyle: { font: 'Roboto', fontSize: 9, color: INK },
+    footer: (current: number, total: number) => ({
+      margin: [44, 0, 44, 0],
       columns: [
-        { text: `Platform Usage  ·  ${data.scope.label}  ·  ${data.period.label}`, style: 'foot' },
-        { text: `${page} of ${pages}`, style: 'foot', alignment: 'right' },
+        { text: `Platform Usage · ${PERSONA_TITLE[scope.persona]} view · ${period.label}`, fontSize: 7.5, color: MUTED },
+        { text: `${current} of ${total}`, fontSize: 7.5, color: MUTED, alignment: 'right' },
       ],
-      margin: [44, 12, 44, 0],
     }),
-    styles: {
-      h1: { fontSize: 20, bold: true, color: INK },
-      h2: { fontSize: 12, bold: true, color: BRAND },
-      body: { fontSize: 10, color: INK, lineHeight: 1.35 },
-      meta: { fontSize: 9, color: MUTED },
-      note: { fontSize: 9, color: MUTED, italics: true, lineHeight: 1.3 },
-      th: { fontSize: 8, bold: true, color: MUTED },
-      td: { fontSize: 9, color: INK },
-      foot: { fontSize: 8, color: MUTED },
-    },
-    defaultStyle: { font: 'Roboto' },
   };
 }
 
-export async function downloadUsagePdf(
-  data: UsageSnapshot,
-  _volumeBuckets: { label: string; runs: number; chat: number }[],
-): Promise<void> {
-  void _volumeBuckets;
+export async function downloadUsagePdf(data: UsageSnapshot) {
   const pdfMake = await loadPdfMake();
-  pdfMake.createPdf(buildDoc(data)).download(usageFileName(data, 'pdf'));
+  pdfMake.createPdf(usagePdfDefinition(data)).download(usageFileName(data.scope, data.period, 'pdf'));
 }

@@ -1,512 +1,411 @@
-import { test, expect, type Page } from './_helpers';
-
 /**
- * Platform Usage — the acceptance tests out of the build spec.
+ * Platform Usage. The build spec's acceptance tests, run against the real page.
  *
- * Every one of these is a claim the page makes about itself: that the lens is a
- * lens and not a key, that a partial cost is never printed under a complete
- * sounding label, that the never run list ignores the window, that nothing sorts
- * people, and that an engine error reaches the reader in the engine's own words.
- * The page's whole claim to being trustworthy is these rules, so they are tested
- * rather than described.
- *
- * Needs the Vite dev server on the URL in playwright.config.ts.
+ * `Platform-Usage-Build-Spec_2.pdf` ends every metric with an acceptance line
+ * and asks for one seeded customer carrying the worked example's numbers so
+ * every tile can be checked against arithmetic done by hand. That is most of
+ * this file. It opens the page as a CFO and checks section 5's six figures,
+ * then checks the section 9 rules a later change could quietly break: coverage
+ * counted once, failed runs kept out of savings, a table under every chart, a
+ * list behind every count, a per-person table nobody can sort, and a page that
+ * never writes anything.
  */
 
-const KEYS = [
-  'irame.platformUsage.settings.v3',
-  'irame.platformUsage.changes.v3',
-];
+import { test, expect, enterWorkspace, type Page } from './_helpers';
 
-/** The platform-side config key. No screen writes it; a test stands in for ops. */
-const CONTRACT_KEY = 'irame.platformUsage.contract.v1';
-
-async function openUsageAs(page: Page, userId: string) {
-  await page.addInitScript(([id, keys]) => {
-    try {
-      window.localStorage.setItem('auth.currentUserId', id as string);
-      // A bill or a price entered by one test must never cost another's window.
-      (keys as string[]).forEach(key => window.localStorage.removeItem(key));
-    } catch { /* private mode */ }
-  }, [userId, KEYS] as const);
-  await page.goto('/');
-  // `?view=` does not whitelist this route, so use the app's own nav event.
-  await page.evaluate(() =>
-    window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
-      detail: { kind: 'control', id: '', view: 'platform-usage' },
-    })));
+/** Open the page from the left menu, without reloading the app. */
+async function gotoUsage(page: Page) {
+  await page.getByRole('button', { name: /^Platform Usage$/ }).first().click();
   await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toBeVisible();
+  await page.waitForTimeout(800);
 }
 
-/** A workspace whose contract has not been loaded yet. */
-async function withNoContract(page: Page) {
-  await page.addInitScript(key => {
-    try { window.localStorage.setItem(key as string, '[]'); } catch { /* private mode */ }
-  }, CONTRACT_KEY);
+async function openUsage(page: Page) {
+  await page.goto('/');
+  await enterWorkspace(page);
+  await gotoUsage(page);
 }
 
-/** One block, matched on its own heading. */
-const block = (page: Page, name: string) =>
-  page.locator('[data-usage-block]').filter({ has: page.getByRole('heading', { name, exact: true }) }).first();
+/** Strip one permission from System Admin, which is how the view changes. */
+async function stripPermission(page: Page, description: string) {
+  await page.getByRole('button', { name: /^Admin$/ }).first().click();
+  await page.getByRole('button', { name: /Roles & Permissions/ }).first().click();
+  await page.getByText('System Admin', { exact: true }).first().click();
+  // The segmented control's label is lowercase, upper-cased by CSS.
+  await page.getByRole('button', { name: 'edit', exact: true }).first().click();
+  await page.locator('input[placeholder*="earch"]').first().fill('Usage');
+  await page.getByText(description, { exact: true }).first().click();
+  await page.getByRole('button', { name: /Save Changes/ }).first().click();
+  await page.waitForTimeout(600);
+}
 
-const lens = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
+const OWNER_PERMISSION = 'View workspace-wide platform usage and adoption metrics';
+const TEAM_PERMISSION = 'See named member and team activity in Platform Usage';
 
-/* ──────────────────────────────────────────────────────────────────────────
- * The lens
- * ────────────────────────────────────────────────────────────────────────── */
+test.describe('Platform Usage', () => {
+  test('opens on the highest view the role may read, and says so in one line', async ({ page }) => {
+    await openUsage(page);
 
-test.describe('the lens is a lens, not a key', () => {
-  test('an admin is offered all three, and the scope line always says which', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    await expect(lens(page, 'CFO')).toBeVisible();
-    await expect(lens(page, 'Head of Team')).toBeVisible();
-    await expect(lens(page, 'Internal Auditor')).toBeVisible();
-
-    await expect(page.getByText(/^Viewing as CFO · Whole company ·/)).toBeVisible();
-    await lens(page, 'Head of Team').click();
-    await expect(page.getByText(/^Viewing as Head of Team · My team ·/)).toBeVisible();
-    await lens(page, 'Internal Auditor').click();
-    await expect(page.getByText(/^Viewing as Internal Auditor · Just me ·/)).toBeVisible();
+    await expect(page.locator('h1 + p')).toHaveText('Is this paying for itself?');
+    await expect(page.getByText(/Viewing as CFO · Whole company/)).toBeVisible();
   });
 
-  test('a viewer is never offered a view above their entitlement, and still gets their own', async ({ page }) => {
-    await openUsageAs(page, 'u-viewer');
-    await expect(page.getByText(/^Viewing as Internal Auditor · Just me ·/)).toBeVisible();
-    await expect(lens(page, 'CFO')).toHaveCount(0);
-    await expect(lens(page, 'Head of Team')).toHaveCount(0);
-    // Not an empty page: their own view is fully rendered.
-    await expect(block(page, 'Waiting on you')).toBeVisible();
+  test('the switch is a lens: it only ever narrows down your own line', async ({ page }) => {
+    await openUsage(page);
+
+    // A CFO may look at their own team and at their own work. There is no
+    // fourth option, and nothing here reaches sideways into another team.
+    const swtch = page.locator('div', { has: page.getByRole('button', { name: 'CFO', exact: true }) }).last();
+    await expect(swtch.getByRole('button', { name: 'CFO', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: 'Internal Auditor', exact: true }).click();
+    await page.waitForTimeout(600);
+
+    await expect(page.locator('h1 + p')).toHaveText('What is waiting on me?');
+    await expect(page.getByText(/Viewing as Internal Auditor · Your own work only/)).toBeVisible();
+
+    // Narrowing to one person takes the money off the page with it.
+    await expect(page.locator('#cost')).toHaveCount(0);
   });
 
-  test('an auditor sees hours and never rupees on their own view', async ({ page }) => {
-    await openUsageAs(page, 'u-auditor');
-    const work = block(page, 'Your work');
-    await expect(work).toBeVisible();
-    await expect(work).toContainText('Time you saved');
-    await expect(work).not.toContainText('₹');
-    // No comparison of any kind reaches this view.
-    const page_text = await page.locator('main, body').first().innerText();
-    expect(page_text).not.toMatch(/team average|percentile|compared with the team/i);
+  test('the CFO lands on this quarter, compared with the quarter before', async ({ page }) => {
+    await openUsage(page);
+    await expect(page.getByText(/This quarter, 1 Jan 2026 to 31 Mar 2026/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'This quarter' })).toHaveAttribute('aria-pressed', 'true');
+    // Every tile states the comparison in words. A tile that moved says which
+    // way and by how much; one that did not says it is about the same, and
+    // draws no arrow, because an arrow beside "level" contradicts itself.
+    await expect(page.getByText(/(About the same as|on) the quarter before/).first()).toBeVisible();
   });
-});
 
-/* ──────────────────────────────────────────────────────────────────────────
- * Answers first
- * ────────────────────────────────────────────────────────────────────────── */
+  test('the quarter is the guide\'s worked example, to the rupee', async ({ page }) => {
+    await openUsage(page);
+    const headline = page.locator('#headline');
 
-test.describe('the page answers before it asks', () => {
-  test('every view opens with at most three attention cards, each with one action', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
+    // 340 successful runs over populations of 1,428,000 rows, in 8.5 hours.
+    await expect(headline).toContainText('1,428,000');
+    await expect(headline).toContainText('340');
+    await expect(headline).toContainText('8.5');
+
+    // 1,428,000 rows at 200 an hour is 7,140 hours by hand, and at 1,200 rupees
+    // an hour that is 85.68 lakh.
+    await expect(headline).toContainText('7,140');
+    await expect(headline).toContainText('₹85.7 lakh');
+
+    // 7,140 less 8.5 is 7,131.5, rounded down because a saving never rounds up.
+    await expect(headline).toContainText('7,131');
+
+    // 7,140 hours over the 480 a person works in a quarter is about 15 people.
+    await expect(headline).toContainText('15');
+    await expect(headline).toContainText('480');
+
+    // The contract charged ₹18,400, leaving ₹85.5 lakh.
+    const cost = page.locator('#cost');
+    await expect(cost).toContainText('₹18,400');
+    await expect(cost).toContainText('₹85.5 lakh');
+  });
+
+  test('the hero says net value only while the cost is complete', async ({ page }) => {
+    await openUsage(page);
+    const hero = page.locator('#hero');
+
+    // One lookup in this window has no contract price yet, so the cost is not
+    // complete and the hero must not print a net figure minus an unknown.
+    const heading = await hero.locator('h3').innerText();
+    if (heading === 'Net value') {
+      await expect(hero).toContainText('spent running the platform');
+    } else {
+      expect(heading).toBe('Work avoided');
+      await expect(hero).toContainText('is not complete yet');
+      await expect(hero.getByText('cost to run')).toBeVisible();
+    }
+
+    // Whichever state it is in, the four tiles are always there.
+    await expect(hero).toContainText('hours saved');
+    await expect(hero).toContainText('money saved');
+    await expect(hero).toContainText('people equivalent');
+    await expect(hero).toContainText('cost to run');
+  });
+
+  test('coverage counts a population once, and says so next to the repeats', async ({ page }) => {
+    await openUsage(page);
+    const coverage = page.locator('#coverage');
+
+    await expect(coverage).toContainText('1,428,000');
+    await expect(coverage).toContainText('checks performed');
+
+    // The repeats are far larger than the coverage. If these two ever match,
+    // the count-once rule has been lost and the page is inflating itself.
+    const text = await coverage.innerText();
+    const checks = Number(text.match(/([\d,]+)\s*\n?\s*checks performed/)?.[1].replace(/,/g, '') ?? 0);
+    expect(checks).toBeGreaterThan(1_428_000 * 10);
+  });
+
+  test('failed runs are reported on their own and kept out of every saving', async ({ page }) => {
+    await openUsage(page);
+    // The owner's headline counts successful runs only.
+    await expect(page.locator('#headline')).toContainText('successful runs');
+    await expect(page.locator('#volume')).toContainText('runs that failed');
+  });
+
+  test('every chart has a table one click away', async ({ page }) => {
+    await openUsage(page);
+    const toggles = page.getByRole('button', { name: /^Table$/ });
+    const count = await toggles.count();
+    expect(count).toBeGreaterThan(2);
+
+    for (let i = 0; i < count; i += 1) {
+      const toggle = toggles.nth(0); // the list re-renders as each one flips
+      await toggle.scrollIntoViewIfNeeded();
+      await toggle.click();
+      await page.waitForTimeout(120);
+    }
+    await expect(page.getByRole('button', { name: /^Chart$/ }).first()).toBeVisible();
+    await expect(page.locator('table').first()).toBeVisible();
+  });
+
+  test('every count opens its list, with a name and a date', async ({ page }) => {
+    await openUsage(page);
+    const drills = page.getByRole('button', { name: /^Open the / });
+    expect(await drills.count()).toBeGreaterThan(3);
+
+    const drill = drills.first();
+    await drill.scrollIntoViewIfNeeded();
+    await drill.click();
+    // The list names the thing, who made it and when. Looking for a date is how
+    // we know it is a real list rather than the same count rendered twice.
+    const list = page.locator('[data-usage-block] ul li').filter({ hasText: /\d{4}/ }).first();
+    await expect(list).toBeVisible();
+  });
+
+  test('the assumptions are on screen with their source, and two states are visible', async ({ page }) => {
+    await openUsage(page);
+    const assumptions = page.locator('#assumptions');
+    await assumptions.scrollIntoViewIfNeeded();
+
+    // The rate has not met its guard, so it is still labelled a starting value
+    // and says how far short of the sample it is.
+    await expect(assumptions).toContainText('Rows checked by hand per hour');
+    await expect(assumptions).toContainText('starting value');
+
+    // The control-test hours have met both guards, so they measured themselves.
+    await expect(assumptions).toContainText('Hours per manual control test');
+    await expect(assumptions).toContainText("based on your team's measured pace");
+
+    // The two that can never be measured say why.
+    await expect(assumptions).toContainText('No software can see salaries');
+  });
+
+  test('one assumption swings everything, and the page shows the swing', async ({ page }) => {
+    await openUsage(page);
+    const sensitivity = page.locator('#sensitivity');
+    await sensitivity.scrollIntoViewIfNeeded();
+    // 1,428,000 rows at 100 an hour and 1,200 an hour comes to 1.71 crore, and
+    // at 800 an hour it comes to 21.4 lakh.
+    await expect(sensitivity).toContainText('₹1.7 cr');
+    await expect(sensitivity).toContainText('₹21.4 lakh');
+  });
+
+  test('the attention strip carries at most three cards, each with one action', async ({ page }) => {
+    await openUsage(page);
     const strip = page.locator('section[aria-label="Needs your attention"]');
-    await expect(strip).toBeVisible();
     const cards = strip.locator('li');
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
     expect(count).toBeLessThanOrEqual(3);
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       await expect(cards.nth(i).locator('button')).toHaveCount(1);
     }
   });
 
-  test('every block leads with a sentence rather than a number', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const blocks = page.locator('[data-usage-block]');
-    const total = await blocks.count();
-    expect(total).toBeGreaterThan(10);
-    for (let i = 0; i < total; i++) {
-      const text = (await blocks.nth(i).innerText()).replace(/\s+/g, ' ').trim();
-      // A block either opens on a sentence or on its own empty state, and both
-      // are sentences: a bare figure under the heading is the failure.
-      expect(text.length).toBeGreaterThan(40);
+  test('the period selector moves the whole page', async ({ page }) => {
+    await openUsage(page);
+    await page.getByRole('button', { name: 'This month' }).click();
+    await page.waitForTimeout(600);
+    await expect(page.getByText(/This month, 1 Mar 2026 to 31 Mar 2026/)).toBeVisible();
+    await expect(page.locator('#headline')).toContainText('this month');
+  });
+
+  test('never exercised ignores the period selector', async ({ page }) => {
+    await openUsage(page);
+    const never = page.locator('#never');
+    await never.scrollIntoViewIfNeeded();
+
+    await expect(never).toContainText('This block ignores the window');
+    const quarter = await never.innerText();
+
+    await page.getByRole('button', { name: 'This month' }).click();
+    await page.waitForTimeout(600);
+    await never.scrollIntoViewIfNeeded();
+    const month = await never.innerText();
+
+    // Only the footnote about the window may move. The never-ever lede must not.
+    expect(month.split('Separately')[0]).toBe(quarter.split('Separately')[0]);
+  });
+
+  test('the CSV carries the scope, the window, the assumptions and the coverage note', async ({ page }) => {
+    await openUsage(page);
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'CSV' }).click(),
+    ]);
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const csv = Buffer.concat(chunks).toString('utf8');
+
+    expect(csv).toContain('CFO: Whole company');
+    expect(csv).toContain('This quarter');
+    expect(csv).toContain('Rows checked by hand per hour');
+    expect(csv).toContain('starting value');
+    expect(csv).toContain('It does not count edits, reviews, views or time spent');
+    expect(csv).toContain('1428000');
+    expect(csv).toContain('18400');
+  });
+
+  test('the head-of-team view opens on what is stuck, with the real error text', async ({ page }) => {
+    await openUsage(page);
+    await stripPermission(page, OWNER_PERMISSION);
+    await gotoUsage(page);
+
+    await expect(page.locator('h1 + p')).toHaveText('Is anything stuck?');
+    await expect(page.getByText(/Viewing as Head of Team · Your team only/)).toBeVisible();
+    // A team lead's default window is the month, not the quarter.
+    await expect(page.getByRole('button', { name: 'This month' })).toHaveAttribute('aria-pressed', 'true');
+
+    const stuck = page.locator('#stuck');
+    await expect(stuck).toContainText('Vendor Master Change Monitor');
+    await expect(stuck).toContainText('Rows 24,001 onward were never read.');
+
+    // Savings sit at the bottom of this view, under everything actionable.
+    const blocks = await page.locator('[data-usage-block] h3').allTextContents();
+    expect(blocks[0]).toBe('What is stuck right now');
+    expect(blocks[blocks.length - 1]).toBe('What it was worth');
+  });
+
+  test('the one per-person table is alphabetical and cannot be sorted', async ({ page }) => {
+    await openUsage(page);
+    await stripPermission(page, OWNER_PERMISSION);
+    await gotoUsage(page);
+
+    const people = page.locator('#people');
+    await people.scrollIntoViewIfNeeded();
+    await expect(people).toContainText('rather than comparing them');
+
+    // No header is a button, a link, or anything else somebody could click to sort.
+    const headers = people.locator('th');
+    expect(await headers.count()).toBeGreaterThan(0);
+    expect(await headers.locator('button, a, [role=button]').count()).toBe(0);
+
+    const names = await people.locator('tbody tr td:first-child').allTextContents();
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test('the auditor view is only theirs, in hours and never in rupees', async ({ page }) => {
+    await openUsage(page);
+    await stripPermission(page, OWNER_PERMISSION);
+    await stripPermission(page, TEAM_PERMISSION);
+    await gotoUsage(page);
+
+    await expect(page.locator('h1 + p')).toHaveText('What is waiting on me?');
+    await expect(page.getByText(/Viewing as Internal Auditor · Your own work only/)).toBeVisible();
+
+    // One view offered, so there is no switch: a control with one option is
+    // furniture.
+    await expect(page.getByRole('button', { name: 'CFO', exact: true })).toHaveCount(0);
+
+    const blocks = await page.locator('[data-usage-block] h3').allTextContents();
+    expect(blocks[0]).toBe('What is waiting on you');
+
+    // No money anywhere on this view, so no cost block and no rupee figure.
+    await expect(page.locator('#cost')).toHaveCount(0);
+    const body = await page.locator('main, body').first().innerText();
+    expect(body).not.toContain('₹');
+
+    await expect(page.locator('#my-work')).toContainText('hours you saved');
+  });
+
+  test('insights are split by kind and never added together', async ({ page }) => {
+    await openUsage(page);
+    const insights = page.locator('#insights');
+    await insights.scrollIntoViewIfNeeded();
+
+    await expect(insights).toContainText('inside individual checks');
+    await expect(insights).toContainText('reading whole');
+    await expect(insights).toContainText('would count the same observation twice');
+
+    // Two lists rather than one, because one list would need one total.
+    await expect(insights.getByRole('button', { name: /written inside one check/ })).toHaveCount(1);
+    await expect(insights.getByRole('button', { name: /written across an engagement/ })).toHaveCount(1);
+  });
+
+  test('ageing runs from the day a finding was raised, and says what open means', async ({ page }) => {
+    await openUsage(page);
+    const ageing = page.locator('#ageing');
+    await ageing.scrollIntoViewIfNeeded();
+
+    await expect(ageing).toContainText('0 to 7 days');
+    await expect(ageing).toContainText('8 to 30 days');
+    await expect(ageing).toContainText('More than 30 days');
+    await expect(ageing).toContainText('not that the problem is still there');
+
+    // The 30-plus bucket opens its list, oldest first, each with its owner.
+    const drill = ageing.getByRole('button', { name: /open more than 30 days/ });
+    if (await drill.count()) {
+      await drill.first().click();
+      await expect(ageing.locator('ul li').first()).toContainText('owned by');
     }
   });
 
-  test('an attention card takes the reader to the block it is about', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    await page.getByRole('button', { name: 'See which' }).first().click();
-    await expect(block(page, 'Risks')).toBeInViewport({ timeout: 4000 });
+  test('the false-alarm rate divides by classified findings only', async ({ page }) => {
+    await openUsage(page);
+    const quality = page.locator('#quality');
+    await quality.scrollIntoViewIfNeeded();
+
+    await expect(quality).toContainText('Called real');
+    await expect(quality).toContainText('Called a false alarm');
+    // The unclassified findings are their own bar and never join the divisor.
+    await expect(quality).toContainText('Nobody has looked yet');
+    await expect(quality).toContainText('It does not mean the team is failing');
   });
 
-  /**
-   * Every card, on every lens, has to end somewhere.
-   *
-   * The CFO's view carries no stuck block, so its repeated-failure card used to
-   * scroll to an element that was not there and silently do nothing. A card that
-   * does nothing is worse than no card, so each one is clicked here and has to
-   * either bring its block into view or leave the page for the thing itself.
-   */
-  for (const [userId, lensName] of [['u-admin', 'CFO'], ['u-admin', 'Head of Team'], ['u-auditor', null]] as const) {
-    test(`every attention card on the ${lensName ?? 'Internal Auditor'} view leads somewhere`, async ({ page }) => {
-      await openUsageAs(page, userId);
-      if (lensName) await lens(page, lensName).click();
+  test('the process strip shows where each open engagement has got to', async ({ page }) => {
+    await openUsage(page);
+    const portfolio = page.locator('#portfolio');
+    await portfolio.scrollIntoViewIfNeeded();
 
-      const cards = page.locator('section[aria-label="Needs your attention"] li');
-      const count = await cards.count();
-      expect(count).toBeGreaterThan(0);
+    await expect(portfolio).toContainText('Where each open engagement has got to');
+    await expect(portfolio).toContainText('Controls tested');
+    await expect(portfolio).toContainText('Findings open');
+    await expect(portfolio).toContainText('Plans open');
 
-      for (let i = 0; i < count; i++) {
-        // A fresh page per card: one card's navigation must not eat the next.
-        if (i > 0) {
-          await page.evaluate(() =>
-            window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
-              detail: { kind: 'control', id: '', view: 'platform-usage' },
-            })));
-          await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toBeVisible();
-          if (lensName) await lens(page, lensName).click();
-        }
-
-        await page.locator('section[aria-label="Needs your attention"] li').nth(i).locator('button').click();
-        await page.waitForTimeout(900);
-
-        const stillHere = await page.getByRole('heading', { name: 'Platform Usage', level: 1 }).count();
-        if (stillHere === 0) continue; // it left the page for the record itself
-
-        // It stayed, so one of the page's own blocks must now be at the top.
-        const atTop = await page.locator('[data-usage-block]').evaluateAll(blocks =>
-          blocks.some(el => {
-            const rect = el.getBoundingClientRect();
-            return el.id !== '' && rect.top > -60 && rect.top < 420;
-          }));
-        expect(atTop).toBe(true);
-      }
-    });
-  }
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-01 to PU-05 — the value, and the honest cost
- * ────────────────────────────────────────────────────────────────────────── */
-
-test.describe('value and cost', () => {
-  test('the cost appears from the contract, and says where it came from', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const cost = block(page, 'Cost to run');
-    await expect(cost).toBeVisible();
-    await expect(cost).toContainText('as per your contract');
-    await expect(cost).toContainText('Charged by your contract');
-    // Nothing on the page asks anybody for a price or a bill.
-    await expect(cost.getByRole('button', { name: /enter|save|add|bill|price/i })).toHaveCount(0);
-    await expect(cost.locator('input')).toHaveCount(0);
+    // Sorted by a date rather than by a person, which is what stops it being a
+    // ranking through the back door.
+    await expect(portfolio).toContainText('Sorted by a date rather than by a person');
   });
 
-  test('the hero is Net value once the contract prices it, and shows the deduction', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const value = block(page, 'Net value');
-    await expect(value).toBeVisible();
-    await expect(value).toContainText('of work avoided, less');
+  test('the page reads and never writes: no approve or reject anywhere on it', async ({ page }) => {
+    await openUsage(page);
+    const memory = page.locator('#memory');
+    await memory.scrollIntoViewIfNeeded();
+
+    await expect(memory).toContainText('This page only');
+    await expect(memory.getByRole('button', { name: /^Approve$/ })).toHaveCount(0);
+    await expect(memory.getByRole('button', { name: /^Reject$/ })).toHaveCount(0);
+    await expect(memory.getByRole('button', { name: 'Open Smart Learn' }).first()).toBeVisible();
   });
 
-  test('with no contract loaded the hero is Work avoided and the cost block is honestly empty', async ({ page }) => {
-    await withNoContract(page);
-    await openUsageAs(page, 'u-admin');
-    const value = block(page, 'Work avoided');
-    await expect(value).toBeVisible();
-    await expect(value).toContainText('of work avoided');
-    await expect(page.getByRole('heading', { name: 'Net value' })).toHaveCount(0);
+  test('what was created counts five things, and controls is one of them', async ({ page }) => {
+    await openUsage(page);
+    const created = page.locator('#created');
+    await created.scrollIntoViewIfNeeded();
 
-    const cost = block(page, 'Cost to run');
-    await expect(cost).toContainText('Your contract prices have not been loaded yet');
-    await expect(cost).toContainText('paid lookups');
-    // The absence is stated, never printed as a zero cost.
-    await expect(cost).not.toContainText('₹0');
-  });
-
-  test('the contract rows behind the figure are named, with the price and the unit', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const cost = block(page, 'Cost to run');
-    await cost.scrollIntoViewIfNeeded();
-    await cost.getByRole('button', { name: /The contract rows behind this figure/ }).click();
-    await expect(cost).toContainText('irame operations');
-    await expect(cost).toContainText(/per (run|row)/);
-  });
-
-  test('a per-run API charges once for a run, not once per row', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const cost = block(page, 'Cost to run');
-    await cost.scrollIntoViewIfNeeded();
-    await cost.getByRole('button', { name: /What each API charged/ }).click();
-    const row = cost.locator('tbody tr', { hasText: 'CIN API Check' }).first();
-    await expect(row).toContainText('per run');
-    const cells = await row.locator('td').allInnerTexts();
-    // Columns: API, successful calls, runs, price, charged. A per-run API's charge
-    // is its runs times its price, which is far less than its calls times price.
-    const calls = Number(cells[1].replace(/[^0-9]/g, ''));
-    const runs = Number(cells[2].replace(/[^0-9]/g, ''));
-    const charged = Number(cells[4].replace(/[^0-9.]/g, ''));
-    expect(runs).toBeLessThan(calls);
-    expect(Math.round(charged)).toBe(Math.round(runs * 12));
-  });
-
-  test('every value figure shows the assumptions it rests on, and where they came from', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const value = block(page, 'Net value');
-    await expect(value).toContainText('rows a person checks by hand in an hour');
-    await expect(value).toContainText("based on your team's measured pace");
-    await expect(value).toContainText('for one auditor hour');
-    await expect(value).toContainText('(starting value)');
-  });
-
-  test('the assumptions carry their own change history', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    const drill = page.getByRole('button', { name: /Assumptions changed/ }).first();
-    await expect(drill).toBeVisible();
-    await drill.click();
-    await expect(page.getByText('the platform, on its own').first()).toBeVisible();
-  });
-});
-
-test.describe('nobody at the customer types a number', () => {
-  test('the page offers no input of any kind, and states its own assumptions', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-
-    // Every block open, so a field hiding inside a drill would be caught too.
-    const drills = page.locator('[data-usage-block] button[aria-expanded="false"]');
-    for (let i = await drills.count(); i > 0; i--) {
-      await drills.first().click().catch(() => { /* it opened something else */ });
+    await expect(created).toContainText('Created, not activity');
+    // Five tables, named in the lede. An empty one shows a designed zero rather
+    // than the unmeasured empty state, so the noun is on screen either way.
+    const text = await created.innerText();
+    for (const noun of ['engagement', 'control', 'risk', 'dashboard', 'report']) {
+      expect(text.toLowerCase()).toContain(noun);
     }
-
-    // The period selector's custom range is the page's only input, and it is
-    // closed until asked for. Nothing else on the page takes a value.
-    await expect(page.locator('[data-usage-block] input, [data-usage-block] select, [data-usage-block] textarea')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Pin$/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Save this price|Enter this bill|Enter a bill/ })).toHaveCount(0);
-
-    // And the numbers it rests on are stated under the figures they produce.
-    await expect(block(page, 'Net value')).toContainText('rows a person checks by hand in an hour');
   });
-
-  test('the contract is versioned, so a renegotiation does not rewrite an old window', async ({ page }) => {
-    await openUsageAs(page, 'u-admin');
-    // A window that spans the renegotiation, so both rows are behind the figure.
-    // A window that does not is charged by one row, which is the point of them.
-    await page.getByRole('button', { name: 'Since you started', exact: true }).click();
-    const cost = block(page, 'Cost to run');
-    await cost.scrollIntoViewIfNeeded();
-    await cost.getByRole('button', { name: /The contract rows behind this figure/ }).click();
-    const rows = cost.locator('li', { hasText: 'PAN Basic API Check' });
-    // Two rows for one API: the one that was in force, and the one that replaced
-    // it. Both are readable, and neither can be edited from here.
-    await expect(rows).toHaveCount(2);
-    await expect(cost).toContainText('until');
-    await expect(cost).toContainText('in force');
-  });
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-06 · PU-07 — coverage, and the count that ignores the window
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('the never run list ignores the period selector', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const never = block(page, 'Never exercised, ever');
-  const before = (await never.innerText()).replace(/\s+/g, ' ');
-
-  await page.getByRole('button', { name: 'Since you started', exact: true }).click();
-  await expect(page.getByText(/Since you started, 1 Oct 2025/)).toBeVisible();
-
-  const after = (await never.innerText()).replace(/\s+/g, ' ');
-  expect(after).toBe(before);
-});
-
-test('coverage counts a control once however many times it ran', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const coverage = block(page, 'Control coverage');
-  await expect(coverage).toContainText('a control run fifty times counts once here');
-  await expect(coverage).toContainText(/\d+% of the library/);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-09 — four units, never summed
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('the four work units are never added together', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const volume = block(page, 'Work volume by unit');
-  await expect(volume).toContainText('Workflow runs');
-  await expect(volume).toContainText('Bulk runs');
-  await expect(volume).toContainText('Chat questions');
-  await expect(volume).toContainText('Concierge jobs');
-  await expect(volume).toContainText('they are never added together');
-  const text = await volume.innerText();
-  expect(text).not.toMatch(/total (actions|work|activity)/i);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-11 — the engine's own words
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('a stuck run shows the engine error verbatim, and names a repeat', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  await lens(page, 'Head of Team').click();
-  const stuck = block(page, 'What is stuck');
-  await expect(stuck).toBeVisible();
-  const text = await stuck.innerText();
-  // A real engine string, not a summary of one.
-  expect(text).toMatch(/failed at step 4|timed out after 120s|not found in|returned 503|Out of memory|credential expired|Waiting on input/);
-  expect(text).toMatch(/run-\d{5}/);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-13 — nobody is ranked
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('the per person table is alphabetical and cannot be re-sorted', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  await lens(page, 'Head of Team').click();
-  const people = block(page, 'Your team, by outcome');
-  await expect(people).toBeVisible();
-
-  const names = await people.locator('tbody tr td:first-child').allInnerTexts();
-  expect(names.length).toBeGreaterThan(0);
-  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
-
-  // No header is a button, a link, or anything else a click could reorder.
-  await expect(people.locator('th button, th a, th [role="button"]')).toHaveCount(0);
-  const text = await people.innerText();
-  expect(text).not.toMatch(/average|rank|share of|%/i);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-12 — no blended AI cost, ever
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('AI usage carries an accuracy label on every row and never says AI cost', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const ai = block(page, 'AI usage by area');
-  await expect(ai).toBeVisible();
-  const rows = ai.locator('li');
-  const count = await rows.count();
-  expect(count).toBe(5);
-  for (let i = 0; i < count; i++) {
-    await expect(rows.nth(i)).toContainText(/exact|estimated|not measured|no record/);
-  }
-  await expect(ai).toContainText('Concierge job cost');
-  const whole = await page.locator('body').innerText();
-  expect(whole).not.toMatch(/\bAI cost\b/);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-14 — the queue reaches the thing that needs doing
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('every queue item is one click from the thing it is about', async ({ page }) => {
-  await openUsageAs(page, 'u-auditor');
-  const queue = block(page, 'Waiting on you');
-  await expect(queue).toBeVisible();
-  const items = queue.locator('ul > li button');
-  const count = await items.count();
-  expect(count).toBeGreaterThan(0);
-  await items.first().click();
-  // The click leaves the page for the thing that needs doing.
-  await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toHaveCount(0);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-22 · PU-23 — every count opens its list
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('a count opens the list of what it counted, with who made each one', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const dashboards = block(page, 'Dashboards, widgets and alerts');
-  await dashboards.scrollIntoViewIfNeeded();
-  await dashboards.getByRole('button', { name: /Name the \d+ dashboards/ }).click();
-  const rows = dashboards.locator('ul li');
-  expect(await rows.count()).toBeGreaterThan(0);
-  await expect(rows.first()).toContainText(/\d{4}/);
-});
-
-test('a worker fired alert is labelled automatic rather than left blank', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const dashboards = block(page, 'Dashboards, widgets and alerts');
-  await dashboards.scrollIntoViewIfNeeded();
-  await dashboards.getByRole('button', { name: /See the alerts that fired/ }).click();
-  await expect(dashboards).toContainText('automatic, no person involved');
-});
-
-test('reports made and reports worked on are never added together', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const reports = block(page, 'Reports');
-  await expect(reports).toContainText('Reports made');
-  await expect(reports).toContainText('Times worked on');
-  await expect(reports).toContainText('never added up');
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-24 · PU-25 · PU-26 — the audit's own numbers
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('an errored validation is shown apart from a failed one', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const sampling = block(page, 'Sample validation');
-  await expect(sampling).toContainText('Errored, needs a person');
-  await expect(sampling).toContainText('Failed');
-});
-
-test('consolidated insights are counted apart from the per run ones', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const insights = block(page, 'Insights generated');
-  await expect(insights).toContainText('about a single run');
-  await expect(insights).toContainText('pull a whole engagement together');
-});
-
-test('the unmapped severe risks are named, not just counted', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const risks = block(page, 'Risks');
-  await risks.scrollIntoViewIfNeeded();
-  await expect(risks).toContainText(/critical and high risks?( in the register)? (have|has) no control/);
-  await risks.getByRole('button', { name: /Name the \d+ with no control/ }).click();
-  await expect(risks.locator('tbody tr').first()).toContainText(/RSK-\d+/);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Every chart has a table
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('every chart offers the numbers behind it', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const overTime = block(page, 'Value over time');
-  await overTime.scrollIntoViewIfNeeded();
-  await overTime.getByRole('button', { name: 'Table' }).click();
-  await expect(overTime.locator('th').first()).toBeVisible();
-  const heads = await overTime.locator('th').allInnerTexts();
-  expect(heads.join(' ')).toMatch(/HOURS SAVED/i);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * The exports carry their own context
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('the CSV export carries the scope, the window, the assumptions and the coverage note', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'CSV' }).click(),
-  ]);
-  const stream = await download.createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk as Buffer);
-  const csv = Buffer.concat(chunks).toString('utf8');
-
-  expect(csv).toContain('Viewing as,CFO');
-  expect(csv).toContain('Scope,the whole company');
-  expect(csv).toMatch(/Window,"/);
-  expect(csv).toContain('What this covers,');
-  expect(csv).toContain('Assumptions behind every value figure');
-  expect(csv).toContain('Work volume by unit (four units, never summed)');
-  // The cost comes from the contract, and the contract itself is in the file.
-  expect(csv).toContain('Your contract prices');
-  expect(csv).toMatch(/Charged by your contract \(INR\),\d+/);
-  expect(csv).toMatch(/irame operations/);
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * The coverage note, on every view
- * ────────────────────────────────────────────────────────────────────────── */
-
-test('the page always says what it does not cover', async ({ page }) => {
-  await openUsageAs(page, 'u-admin');
-  for (const name of ['CFO', 'Head of Team', 'Internal Auditor']) {
-    await lens(page, name).click();
-    await expect(page.getByText(/It does not count edits, reviews, views or time spent/)).toBeVisible();
-  }
 });

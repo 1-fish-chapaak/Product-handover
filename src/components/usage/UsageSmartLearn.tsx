@@ -1,47 +1,40 @@
 /**
- * PU-20 — Smart Learn, the assistant's memory.
+ * PU-20. What the assistant has learned, and how much of it is being used.
  *
  * The same four numbers the Smart Learn screen computes, scoped to whoever is
- * reading: an auditor sees their own memories, a head of team sees the team tier
- * including the proposals waiting on them, a CFO sees the company. Recall count
- * and last recalled are real fields written on every use, so "is learned
- * knowledge actually being used" is measured rather than estimated.
+ * reading: an auditor sees their own memories, a team lead sees the team tier
+ * including proposals waiting on their approval, the whole-company view sees
+ * everything.
  *
- * The empty state matters here more than anywhere else on the page: memory can be
- * switched off, and four zeros that look measured would be a lie about a feature
- * that is not running.
+ * There are no approve and reject buttons here. An earlier draft put them on
+ * this block, which contradicts the page's own rule: it reads, it never writes.
+ * The pending count is shown and it links to Smart Learn, where approving
+ * already has its own confirmation and its own audit trail. Same rule
+ * everywhere on this page. It may link to an action; it never performs one.
  */
 
-import { ArrowRight, Check, X } from 'lucide-react';
-import {
-  fmtInt,
-  type Scope, type SmartLearn as SmartLearnFigures,
-} from '../../data/platform-usage-metrics';
-import type { PlatformMemory } from '../../data/memoryStore';
-import { Block, Drill, Empty, Fig, Stat, StatRow } from './usageKit';
+import { fmtInt, openLabel, type LearnFigures, type Scope } from '../../data/platform-usage-metrics';
+import { Block, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow } from './usageKit';
 
 export function SmartLearn({
-  learn,
-  scope,
-  onOpenSmartLearn,
-  onApprove,
-  onReject,
+  learn, scope, onOpenSmartLearn,
 }: {
-  learn: SmartLearnFigures;
+  learn: LearnFigures;
   scope: Scope;
   onOpenSmartLearn: () => void;
-  onApprove: (memory: PlatformMemory) => void;
-  onReject: (memory: PlatformMemory) => void;
 }) {
-  const whose = scope.persona === 'auditor' ? 'about you' : scope.persona === 'head_of_team' ? 'for your team' : 'across the company';
+  const mine = scope.persona === 'auditor';
+  const title = mine ? 'What the assistant has learned about you' : 'What the assistant has learned';
 
-  if (learn.nothingYet) {
+  // Memory switched off, or nothing learned yet. Four zeros would look measured,
+  // and the assistant not having learned anything is a different fact.
+  if (learn.active.length === 0 && learn.pending.length === 0) {
     return (
-      <Block id="memory" title="What the assistant has learned" lede={null}>
+      <Block id="memory" title={title} lede={null}>
         <Empty
-          kind="unmeasured"
-          title={`The assistant has not learned anything ${whose} yet.`}
-          detail="Either memory is switched off for this workspace or nothing has been saved to it. Four zeros here would look like a measurement, so there are none."
+          kind="quiet"
+          title={`The assistant hasn't learned anything for ${mine ? 'you' : scope.subject} yet.`}
+          detail="It saves what somebody tells it about how they work, and a team rule only ever goes live once a person approves it."
         />
       </Block>
     );
@@ -50,70 +43,88 @@ export function SmartLearn({
   return (
     <Block
       id="memory"
-      title="What the assistant has learned"
+      title={title}
       lede={
-        <>
-          The assistant is holding <Fig>{fmtInt(learn.active)}</Fig> things {whose}, and it used{' '}
-          <Fig>{fmtInt(learn.usedThisWeek)}</Fig> of them in the last seven days
-          {learn.pending > 0 && <>. <Fig>{fmtInt(learn.pending)}</Fig> more are waiting for somebody to approve or reject</>}
-          {learn.dueReview > 0 && <>, and <Fig>{fmtInt(learn.dueReview)}</Fig> are due a review</>}.
-        </>
+        learn.pending.length > 0
+          ? (
+            <>
+              <Fig>{fmtInt(learn.active.length)}</Fig>{' '}
+              {learn.active.length === 1 ? 'thing is' : 'things are'} in use, and{' '}
+              <Fig>{fmtInt(learn.pending.length)}</Fig>{' '}
+              {learn.pending.length === 1 ? 'is' : 'are'} waiting for somebody to approve{' '}
+              {learn.pending.length === 1 ? 'it' : 'them'}.
+            </>
+          )
+          : (
+            <>
+              <Fig>{fmtInt(learn.active.length)}</Fig>{' '}
+              {learn.active.length === 1 ? 'thing is' : 'things are'} in use and nothing is waiting on
+              approval.
+            </>
+          )
       }
-      hint="The same figures the Smart Learn screen shows, narrowed to what you can see."
       action={
-        <button type="button" onClick={onOpenSmartLearn} className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
-          Open Smart Learn <ArrowRight size={12} />
+        <button type="button" onClick={onOpenSmartLearn} className="text-[0.75rem] font-medium text-brand-700 hover:underline">
+          Open Smart Learn
         </button>
       }
-      table={
-        <div className="space-y-4">
-          <StatRow>
-            <Stat value={fmtInt(learn.active)} label="Active memories" />
-            <Stat value={fmtInt(learn.pending)} label="Awaiting approval" />
-            <Stat value={fmtInt(learn.dueReview)} label="Due for review" />
-            <Stat
-              value={fmtInt(learn.usedThisWeek)}
-              label="Used in the last seven days"
-              sub={learn.totalRecalls === null ? undefined : `${fmtInt(learn.totalRecalls)} recalls in total`}
-            />
-          </StatRow>
+    >
+      <StatRow>
+        <Stat label="In use" value={fmtInt(learn.active.length)} />
+        <Stat label="Awaiting approval" value={fmtInt(learn.pending.length)} />
+        <Stat label="Due for review" value={fmtInt(learn.dueReview)} />
+        <Stat
+          label="Recalled in the last 7 days"
+          value={learn.recallsThisWeek === null ? '—' : fmtInt(learn.recallsThisWeek)}
+          sub={
+            learn.recallsThisWeek === null
+              ? 'Recorded for the whole company only, so there is no figure at this scope.'
+              : 'Counted on each use, not estimated.'
+          }
+        />
+      </StatRow>
 
-          {learn.pendingRows.length > 0 && (
-            <Drill label={`Decide the ${fmtInt(learn.pendingRows.length)} waiting on you`} hideLabel="Hide the proposals">
-              <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-                {learn.pendingRows.map(memory => (
-                  <li key={memory.id} className="py-3 flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-[0.875rem] text-ink-800">{memory.statement}</p>
-                      <p className="text-[0.75rem] text-ink-500">
-                        {memory.scope} · {memory.source}
-                        {memory.pendingNote ? ` · ${memory.pendingNote}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onApprove(memory)}
-                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-700 hover:border-brand-200 hover:text-brand-700"
-                      >
-                        <Check size={13} /> Approve
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onReject(memory)}
-                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-canvas-border text-[0.75rem] text-ink-700 hover:border-risk-200 hover:text-risk-700"
-                      >
-                        <X size={13} /> Reject
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Drill>
-          )}
+      {learn.pending.length > 0 && (
+        <div className="mt-4">
+          <Drill label={openLabel(learn.pending.length, 'waiting for approval', 'waiting for approval')}>
+            <MadeList>
+              {learn.pending.map(memory => (
+                <MadeRow
+                  key={memory.id}
+                  name={memory.statement}
+                  madeBy={memory.source}
+                  when={memory.learnedOn}
+                  note="approve or reject it in Smart Learn"
+                  onOpen={onOpenSmartLearn}
+                />
+              ))}
+            </MadeList>
+          </Drill>
         </div>
-      }
-      footer="Every approval, rejection and renewal writes a row into the product's change log."
-    />
+      )}
+
+      {learn.active.length > 0 && (
+        <div className="mt-2">
+          <Drill label={openLabel(learn.active.length, 'in use', 'in use')}>
+            <MadeList>
+              {learn.active.map(memory => (
+                <MadeRow
+                  key={memory.id}
+                  name={memory.statement}
+                  madeBy={memory.approvedBy ?? memory.source}
+                  when={memory.approvedOn ?? memory.learnedOn}
+                  note={`recalled ${fmtInt(memory.recallCount ?? 0)} times`}
+                />
+              ))}
+            </MadeList>
+          </Drill>
+        </div>
+      )}
+
+      <p className="mt-3 text-[0.75rem] text-ink-500 leading-relaxed max-w-[80ch]">
+        Approving is a decision with its own record, so it happens in Smart Learn. This page only
+        reads.
+      </p>
+    </Block>
   );
 }

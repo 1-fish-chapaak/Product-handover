@@ -1,371 +1,396 @@
 /**
- * The blocks a person acts on today.
+ * What a team lead and an auditor open the page for: what is stuck, what keeps
+ * failing, how the testing is going, and what is waiting on one person.
  *
- * PU-11 stuck runs · PU-10 reliability · PU-13 per-person outcomes ·
- * PU-14 my queue.
- *
- * These are the reason the Head of Team view exists. A team lead cannot act on
- * "the platform saved eighteen lakh". They can act on one workflow that has
- * failed four times this week with the same error, which is why the stuck block
- * opens their view and carries the engine's own words rather than a count.
- *
- * PU-13 is where the no ranking rule is enforced in code: fixed alphabetical
- * sort, no share of the team's work, no averages, and every member present
- * whether they ran anything or not.
+ * The team table here is the only per-person table in the product's usage
+ * reporting. It is alphabetical, and no code path reorders it.
  */
 
-import { AlertCircle, ArrowRight, PauseCircle, XCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../data/platform-usage';
 import {
-  fmtHours, fmtInt, fmtOneDp, fmtPct, fmtSpan,
-  type Period, type PersonRow, type QueueItem, type ReliabilityRow, type StuckRun,
+  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, openLabel,
+  SOURCE_LABEL,
+  type CcmFigures, type ExceptionFigures, type Period, type PersonRow, type QueueFigures,
+  type ReliabilityRow, type SamplingFigures, type StuckRun, type UsageSettings, type ValueFigures,
 } from '../../data/platform-usage-metrics';
-import { Bars, Block, DataTable, Empty, Fig, Stat, StatRow } from './usageKit';
+import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow, Working } from './usageKit';
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-11 — what is stuck
- * ────────────────────────────────────────────────────────────────────────── */
-
-const STATUS_ICON = {
-  failed: XCircle,
-  blocked: AlertCircle,
-  paused: PauseCircle,
-  complete: AlertCircle,
-} as const;
-
-const STATUS_TONE: Record<string, string> = {
-  failed: 'text-risk-700',
-  blocked: 'text-risk-700',
-  paused: 'text-mitigated-700',
-};
-
-const STATUS_WORD: Record<string, string> = {
-  failed: 'failed',
-  blocked: 'blocked',
-  paused: 'waiting on a person',
-};
+/* ── What is stuck right now ─────────────────────────────────────────────── */
 
 /**
- * Stuck runs.
- *
- * Every failed, blocked or long paused run, with the engine's error text as the
- * engine wrote it. Nothing here is summarised, because a summarised error is an
- * error nobody can fix. Where one workflow has hit the same error more than once
- * the row says how many times, since that is one job to do rather than four.
+ * The first thing a team lead sees, and the reason the savings sit at the
+ * bottom of their view. Nobody can act on "85 lakh saved". They can act on "this
+ * check failed four times with the same error", so the error text is printed in
+ * full rather than summarised into a status word.
  */
-export function StuckRuns({
-  stuck,
-  period,
-  subject,
-  onOpenRuns,
+export function StuckNow({
+  stuck, period, onOpenRun,
 }: {
   stuck: StuckRun[];
   period: Period;
-  subject: string;
-  onOpenRuns: () => void;
+  onOpenRun: (workflowId: string) => void;
 }) {
   if (stuck.length === 0) {
     return (
-      <Block id="stuck" title="What is stuck" lede={null}>
-        <Empty
-          kind="quiet"
-          title={`Nothing is stuck for ${subject}.`}
-          detail="Every run in this window either finished or is still inside its first day."
-        />
+      <Block id="stuck" title="What is stuck right now" lede={null}>
+        <Empty kind="quiet" title="Nothing is stuck." detail="Every check that ran in this window either passed or was re-run successfully." />
       </Block>
     );
   }
 
-  const failed = stuck.filter(s => s.status === 'failed').length;
-  const waiting = stuck.filter(s => s.status === 'paused').length;
-  const blocked = stuck.filter(s => s.status === 'blocked').length;
-  const worst = stuck.filter(s => s.repeats > 1).sort((a, b) => b.repeats - a.repeats)[0];
+  const repeated = stuck.find(s => s.repeats > 1);
 
   return (
     <Block
       id="stuck"
-      title="What is stuck"
+      title="What is stuck right now"
       lede={
-        <>
-          <Fig>{fmtInt(stuck.length)}</Fig> runs are stuck for {subject} {period.phrase}:{' '}
-          <Fig>{fmtInt(failed)}</Fig> failed
-          {blocked > 0 && <>, <Fig>{fmtInt(blocked)}</Fig> blocked</>}
-          {waiting > 0 && <> and <Fig>{fmtInt(waiting)}</Fig> waiting on a person for more than a day</>}.
-          {worst && (
-            <> One of them accounts for most of it: <Fig>{worst.workflow}</Fig> has failed{' '}
-              <Fig>{fmtInt(worst.repeats)}</Fig> times with the same error, so fixing that one clears most of the queue.</>
-          )}
-        </>
+        repeated
+          ? (
+            <>
+              <Fig>{repeated.run.workflowName}</Fig> has failed <Fig>{fmtInt(repeated.repeats)}</Fig> times
+              with the same error{repeated.repeats < stuck.length
+                ? <>, and <Fig>{fmtInt(stuck.length - repeated.repeats)}</Fig> other checks are waiting on somebody {period.phrase}</>
+                : <>, and nothing has re-run since</>}.
+            </>
+          )
+          : (
+            <>
+              <Fig>{fmtInt(stuck.length)}</Fig> {stuck.length === 1 ? 'check is' : 'checks are'} waiting
+              on somebody {period.phrase}.
+            </>
+          )
       }
-      hint="A run is stuck when it failed, was blocked, or has been waiting on a person for more than 24 hours."
-      action={
-        <button type="button" onClick={onOpenRuns} className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
-          Open the run history <ArrowRight size={12} />
-        </button>
-      }
-      chart={
-        <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-          {stuck.map(run => {
-            const Icon = STATUS_ICON[run.status];
-            return (
-              <li key={run.id} className="py-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] font-medium text-ink-900">{run.workflow}</p>
-                    <p className="mt-0.5 text-[0.875rem] text-ink-700 break-words">{run.error}</p>
-                    <p className="mt-1 text-[0.75rem] text-ink-500">
-                      {run.ranBy} · {formatDateTime(run.at)} · {run.id}
-                      {run.repeats > 1 && <> · same error {fmtInt(run.repeats)} times in this window</>}
-                    </p>
-                  </div>
-                  <span className={`inline-flex items-center gap-1 shrink-0 text-[0.75rem] font-medium ${STATUS_TONE[run.status]}`}>
-                    <Icon size={13} /> {STATUS_WORD[run.status]}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      }
-      table={
-        <DataTable
-          head={['Workflow', 'Ran by', 'When', 'State', 'Times']}
-          rows={stuck.map(run => [run.workflow, run.ranBy, formatDate(run.at), STATUS_WORD[run.status], fmtInt(run.repeats)])}
-          numericFrom={4}
-        />
-      }
-    />
+    >
+      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+        {stuck.map(({ run, repeats }) => (
+          <li key={run.id} className="py-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenRun(run.workflowId)}
+                  className="text-[0.875rem] font-medium text-ink-900 hover:text-brand-700 hover:underline text-left"
+                >
+                  {run.workflowName}
+                </button>
+                <p className="mt-1 text-[0.875rem] text-ink-700 leading-relaxed max-w-[80ch]">
+                  {run.errorText}
+                </p>
+                <p className="mt-1 text-[0.75rem] text-ink-500">
+                  {run.status === 'blocked' ? 'Blocked' : 'Failed'} · {formatDateTime(run.completedAt)} · started by{' '}
+                  {run.scheduled ? 'the schedule' : run.actor.name}
+                  {repeats > 1 && <> · {fmtInt(repeats)} times with this error</>}
+                </p>
+              </div>
+              <AlertTriangle size={15} className="text-risk-600 shrink-0 mt-0.5" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Block>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-10 — reliability
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── What keeps failing, and what it burned ──────────────────────────────── */
 
-/**
- * Reliability by workflow, and the hours failures burned.
- *
- * Failed runs never add to what was saved. They are reported here instead, as
- * wasted machine time, which is the most honest and least flattering way to say
- * it. A workflow with no runs in the window produces no row rather than a
- * misleading zero.
- */
 export function Reliability({
-  rows,
-  wasted,
-  period,
+  rows, wastedHours, period,
 }: {
   rows: ReliabilityRow[];
-  wasted: { hours: number; runs: number };
+  wastedHours: number;
   period: Period;
 }) {
   if (rows.length === 0) {
     return (
-      <Block title="Reliability by workflow" lede={null}>
-        <Empty kind="quiet" title="No runs started in this window, so there is no failure rate to report." />
+      <Block id="reliability" title="What keeps failing" lede={null}>
+        <Empty kind="quiet" title={`Nothing failed ${period.phrase}.`} />
       </Block>
     );
   }
 
   const worst = rows[0];
-  const clean = rows.filter(r => r.failed === 0).length;
 
   return (
     <Block
-      title="Reliability by workflow"
-      lede={
-        worst.failed === 0 ? (
-          <>Every workflow that ran {period.phrase} finished. Nothing failed, so nothing was wasted.</>
-        ) : (
-          <>
-            <Fig>{worst.workflow}</Fig> is the least reliable workflow {period.phrase}, failing{' '}
-            <Fig>{fmtPct(worst.failurePct)}</Fig> of its <Fig>{fmtInt(worst.total)}</Fig> runs.
-            Failed runs burned <Fig>{fmtSpan(wasted.hours)}</Fig> of machine time across{' '}
-            <Fig>{fmtInt(wasted.runs)}</Fig> runs, and none of it counts towards what the platform saved.
-            {clean > 0 && <> <Fig>{fmtInt(clean)}</Fig> workflows did not fail once.</>}
-          </>
-        )
-      }
-      chart={
-        <Bars
-          rows={rows.map(r => ({
-            label: r.workflow,
-            value: r.failurePct,
-            note: `${fmtInt(r.failed)} failed of ${fmtInt(r.total)} runs${r.failed > 0 ? `, ${fmtSpan(r.wastedHours)} lost` : ''}`,
-          }))}
-          format={fmtPct}
-          tone="risk"
-          scaleTo={100}
-        />
-      }
-      table={
-        <DataTable
-          head={['Workflow', 'Runs', 'Failed', 'Failure rate', 'Hours lost']}
-          rows={rows.map(r => [r.workflow, fmtInt(r.total), fmtInt(r.failed), fmtPct(r.failurePct), fmtOneDp(r.wastedHours)])}
-        />
-      }
-      footer="Failure rate counts runs that started inside the window, so a run still going is counted where it began."
-    />
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-13 — per-person outcomes
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * The team's work by outcome.
- *
- * Alphabetical, and the sort cannot be changed by a click or by a URL. No
- * shares, no ranks, no team average: "you ran 62, the team average is 51" is a
- * ranking through the back door and is banned too. Somebody with no runs still
- * appears, because leaving them out ranks them as well.
- */
-export function PerPersonOutcomes({ people, period, team }: { people: PersonRow[]; period: Period; team: string }) {
-  if (people.length === 0) {
-    return (
-      <Block title="Your team, by outcome" lede={null}>
-        <Empty kind="quiet" title="Nobody is on this team yet." />
-      </Block>
-    );
-  }
-
-  const active = people.filter(p => p.runs > 0).length;
-  const waiting = people.reduce((s, p) => s + p.waitingOnThem, 0);
-
-  return (
-    <Block
-      title="Your team, by outcome"
+      id="reliability"
+      title="What keeps failing"
       lede={
         <>
-          <Fig>{fmtInt(active)}</Fig> of {team}'s <Fig>{fmtInt(people.length)}</Fig> members ran something{' '}
-          {period.phrase}, and <Fig>{fmtInt(waiting)}</Fig> items are open against the team.
-          This table is alphabetical and cannot be sorted any other way.
+          <Fig>{worst.workflowName}</Fig> failed <Fig>{fmtInt(worst.failures)}</Fig> of{' '}
+          <Fig>{fmtInt(worst.runs)}</Fig> runs {period.phrase}. Failed runs burned{' '}
+          <Fig>{fmtDuration(wastedHours)}</Fig> of machine time and produced nothing, so none of it
+          is in any saving on this page.
         </>
       }
-      hint="The order is the alphabet, and it is the only order this table has."
+      chart={<Bars rows={rows.map(r => ({ label: r.workflowName, value: r.failureRatePct, note: `${fmtInt(r.failures)} of ${fmtInt(r.runs)} runs` }))} format={fmtPct} tone="risk" scaleTo={100} />}
       table={
         <DataTable
-          head={['Member', 'Runs', 'Exceptions found', 'Waiting on them']}
-          rows={people.map(p => [p.name, fmtInt(p.runs), fmtInt(p.exceptionsFound), fmtInt(p.waitingOnThem)])}
+          head={['Check', 'Failures', 'Runs', 'Failure rate', 'Machine time wasted']}
+          rows={rows.map(r => [r.workflowName, fmtInt(r.failures), fmtInt(r.runs), fmtPct(r.failureRatePct), fmtDuration(r.wastedHours)])}
         />
       }
-      footer="Names appear on the work they did, and the work is what is counted."
+      footer={worst.commonError ? <>The error that came back most often: {worst.commonError}</> : undefined}
     />
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-14 — my queue
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── Sampling ────────────────────────────────────────────────────────────── */
 
-const KIND_LABEL: Record<QueueItem['kind'], string> = {
-  exception: 'Exception',
-  'control test': 'Control test',
-  approval: 'Approval',
-  'action plan': 'Action plan',
-};
-
-/**
- * What is waiting on the reader.
- *
- * Overdue first, and each row goes straight to the thing that needs doing. This
- * is the auditor's whole reason to open the page, so it opens their view and
- * nothing else sits above it.
- */
-export function MyQueue({ queue, onOpen }: { queue: QueueItem[]; onOpen: (item: QueueItem) => void }) {
-  if (queue.length === 0) {
+export function SamplingOutcomes({ sampling, period }: { sampling: SamplingFigures; period: Period }) {
+  if (sampling.total === 0) {
     return (
-      <Block id="queue" title="Waiting on you" lede={null}>
-        <Empty kind="quiet" title="You are clear." detail="Nothing is assigned to you and nothing is overdue." />
+      <Block id="sampling" title="Sampling outcomes" lede={null}>
+        <Empty kind="quiet" title={`No sample was validated ${period.phrase}.`} />
       </Block>
     );
   }
 
-  const overdue = queue.filter(q => q.overdue).length;
+  const count = (o: string) => sampling.counts.find(c => c.outcome === o)?.value ?? 0;
+
+  return (
+    <Block
+      id="sampling"
+      title="Sampling outcomes"
+      lede={
+        <>
+          <Fig>{fmtInt(count('passed'))}</Fig> {count('passed') === 1 ? 'sample' : 'samples'} passed,{' '}
+          <Fig>{fmtInt(count('failed'))}</Fig> failed and <Fig>{fmtInt(count('errored'))}</Fig> errored{' '}
+          {period.phrase}.
+          {count('errored') > 0 && (
+            <> An errored run is not a failed control, so it is counted separately. Somebody has to
+              look at it before it means anything.</>
+          )}
+        </>
+      }
+      chart={<Bars rows={sampling.counts.map(c => ({ label: c.outcome, value: c.value }))} />}
+      table={<DataTable head={['Outcome', 'Samples']} rows={sampling.counts.map(c => [c.outcome, fmtInt(c.value)])} />}
+    >
+      <div className="mb-4">
+        <Drill label={openLabel(sampling.total, 'validation', 'validations')}>
+          <MadeList>
+            {sampling.rows.map(s => (
+              <MadeRow key={s.id} name={s.controlName} madeBy={`${s.outcome} · sample of ${fmtInt(s.sampleSize)} · ${s.actor.name}`} when={formatDate(s.at)} />
+            ))}
+          </MadeList>
+        </Drill>
+      </div>
+    </Block>
+  );
+}
+
+/* ── Continuous monitoring ───────────────────────────────────────────────── */
+
+export function CcmCoverage({ ccm, period }: { ccm: CcmFigures; period: Period }) {
+  if (ccm.rows.length === 0) {
+    return (
+      <Block id="ccm" title="Continuous monitoring" lede={null}>
+        <Empty kind="quiet" title="No engagement runs on a schedule yet." detail="Continuous monitoring is a mode of an engagement rather than a separate feature, so this block fills in as engagements are put on a schedule." />
+      </Block>
+    );
+  }
+
+  return (
+    <Block
+      id="ccm"
+      title="Continuous monitoring"
+      lede={
+        <>
+          <Fig>{fmtInt(ccm.engagementsOnSchedule)}</Fig> of{' '}
+          <Fig>{fmtInt(ccm.engagementsTotal)}</Fig> engagements{' '}
+          {ccm.engagementsOnSchedule === 1 ? 'runs' : 'run'} on a schedule
+          {ccm.below > 0 && <>, and <Fig>{fmtInt(ccm.below)}</Fig> of them are below the pass rate they are configured to hold</>}.
+          {ccm.medianLagDays !== null && (
+            <> A scheduled check caught things about <Fig>{fmtOneDp(ccm.medianLagDays)}</Fig> days
+              after they happened {period.phrase}.</>
+          )}
+        </>
+      }
+      hint="Re-testing the same population does not add coverage. What it shortens is the gap between an event and the platform catching it, and that is the figure credited here."
+      table={
+        <DataTable
+          head={['Engagement', 'Threshold', 'Actual pass rate', 'Approval levels', 'Alerts']}
+          rows={ccm.rows.map(r => [
+            r.engagementName,
+            fmtPct(r.thresholdPct),
+            r.actualPct === null ? 'nothing settled yet' : fmtPct(r.actualPct),
+            fmtInt(r.approvalLevels),
+            r.alertsOn ? 'on' : 'off',
+          ])}
+        />
+      }
+    />
+  );
+}
+
+/* ── The team, alphabetically, and never ranked ──────────────────────────── */
+
+/**
+ * Everybody on the team and what they worked on.
+ *
+ * Alphabetical, and the sort order is not a prop, a state or a URL parameter, so
+ * there is no way to reorder it. Section 12 of the guide makes this a build rule
+ * rather than a style choice. A table that sorts by output works as a league
+ * table however it is labelled.
+ */
+
+export function TeamWork({ people, period, team }: { people: PersonRow[]; period: Period; team: string }) {
+  if (people.length === 0) {
+    return (
+      <Block id="people" title={`${team} · work by outcome`} lede={null}>
+        <Empty kind="quiet" title="Nobody on this team recorded work in this window." />
+      </Block>
+    );
+  }
+
+  return (
+    <Block
+      id="people"
+      title={`${team} · work by outcome`}
+      lede={<>Everybody on {team} and what they worked on {period.phrase}.</>}
+      hint="Alphabetical, and there is no way to sort it by output, by click or by URL. It records what each person worked on rather than comparing them."
+      table={
+        <DataTable
+          head={['Person', 'Runs', 'Exceptions found', 'Resolved', 'Last active']}
+          rows={people.map(p => [
+            p.name,
+            fmtInt(p.runs),
+            fmtInt(p.exceptionsFound),
+            fmtInt(p.exceptionsResolved),
+            p.lastActive ? formatDate(p.lastActive) : 'not in this window',
+          ])}
+        />
+      }
+    />
+  );
+}
+
+/* ── The auditor's queue ─────────────────────────────────────────────────── */
+
+export function MyQueue({ queue, onOpen }: { queue: QueueFigures; onOpen: (item: QueueFigures['items'][number]) => void }) {
+  if (queue.items.length === 0) {
+    return (
+      <Block id="queue" title="What is waiting on you" lede={null}>
+        <Empty kind="quiet" title="Nothing is waiting on you." detail="No exception, review or action plan is assigned to you at the moment." />
+      </Block>
+    );
+  }
 
   return (
     <Block
       id="queue"
-      title="Waiting on you"
+      title="What is waiting on you"
       lede={
-        <>
-          <Fig>{fmtInt(queue.length)}</Fig> {queue.length === 1 ? 'item is' : 'items are'} waiting on you
-          {overdue > 0 ? <>, and <Fig>{fmtInt(overdue)}</Fig> of them {overdue === 1 ? 'is' : 'are'} past the date {overdue === 1 ? 'it' : 'they'} should have been cleared.</> : ', and everything is inside its date.'}
-        </>
+        queue.overdue > 0
+          ? (
+            <>
+              <Fig>{fmtInt(queue.items.length)}</Fig> {queue.items.length === 1 ? 'item is' : 'items are'} yours,
+              and <Fig>{fmtInt(queue.overdue)}</Fig> {queue.overdue === 1 ? 'is' : 'are'} past{' '}
+              {queue.overdue === 1 ? 'its' : 'their'} date. Those are first.
+            </>
+          )
+          : (
+            <>
+              <Fig>{fmtInt(queue.items.length)}</Fig> {queue.items.length === 1 ? 'item is' : 'items are'} yours.
+              None are overdue.
+            </>
+          )
       }
-      hint="Only your items. Nobody else's work appears anywhere on this view."
-      chart={
-        <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-          {queue.map(item => (
-            <li key={`${item.kind}-${item.id}`} className="py-3">
-              <button type="button" onClick={() => onOpen(item)} className="text-left w-full group">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] text-ink-900 group-hover:text-brand-700">{item.title}</p>
-                    <p className="mt-0.5 text-[0.75rem] text-ink-500">
-                      {KIND_LABEL[item.kind]} · {item.detail}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 text-[0.75rem] tabular-nums ${item.overdue ? 'text-risk-700 font-medium' : 'text-ink-400'}`}>
-                    {item.dueAt === null ? 'no date' : item.overdue ? `overdue, due ${formatDate(item.dueAt)}` : `due ${formatDate(item.dueAt)}`}
-                  </span>
-                </div>
+    >
+      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+        {queue.items.map(item => (
+          <li key={item.id} className="py-2.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => onOpen(item)}
+                className="text-[0.875rem] text-ink-800 text-left hover:text-brand-700 hover:underline truncate"
+              >
+                {item.title}
               </button>
-            </li>
-          ))}
-        </ul>
-      }
-      table={
-        <DataTable
-          head={['Item', 'Kind', 'Due', 'State']}
-          rows={queue.map(item => [
-            item.title,
-            KIND_LABEL[item.kind],
-            item.dueAt === null ? 'no date' : formatDate(item.dueAt),
-            item.overdue ? 'overdue' : 'on track',
-          ])}
-          numericFrom={99}
-        />
-      }
-    />
+              <span className={`text-[0.75rem] shrink-0 tabular-nums ${item.overdue ? 'text-risk-700 font-medium' : 'text-ink-400'}`}>
+                {item.overdue ? 'overdue · ' : 'due '}{formatDate(item.dueAt)}
+              </span>
+            </div>
+            <p className="text-[0.75rem] text-ink-500">{item.detail}</p>
+          </li>
+        ))}
+      </ul>
+    </Block>
   );
 }
 
-/** The auditor's own three numbers, said without a comparison of any kind. */
+/* ── The auditor's own work ──────────────────────────────────────────────── */
+
 export function MyWork({
-  runs,
-  failed,
-  exceptions,
-  openExceptions,
-  hours,
-  period,
+  value, exceptions, period, settings,
 }: {
-  runs: number;
-  failed: number;
-  exceptions: number;
-  openExceptions: number;
-  hours: number;
+  value: ValueFigures;
+  exceptions: ExceptionFigures;
   period: Period;
+  settings: UsageSettings;
 }) {
+  if (value.runs === 0 && exceptions.total === 0) {
+    return (
+      <Block id="my-work" title="Your own work" lede={null}>
+        <Empty kind="quiet" title={`You started nothing ${period.phrase}.`} />
+      </Block>
+    );
+  }
+
   return (
     <Block
-      title="Your work"
+      id="my-work"
+      title="Your own work"
       lede={
         <>
-          You started <Fig>{fmtInt(runs)}</Fig> runs {period.phrase}, found{' '}
-          <Fig>{fmtInt(exceptions)}</Fig> exceptions and saved <Fig>{fmtHours(hours)}</Fig> against doing the
-          same work by hand.
+          You started <Fig>{fmtInt(value.runs)}</Fig> successful{' '}
+          {value.runs === 1 ? 'run' : 'runs'} {period.phrase} and found{' '}
+          <Fig>{fmtInt(exceptions.total)}</Fig>{' '}
+          {exceptions.total === 1 ? 'exception' : 'exceptions'}
+          {exceptions.total > 0 && (
+            <>, <Fig>{fmtInt(exceptions.open)}</Fig> of which{' '}
+              {exceptions.open === 1 ? 'is' : 'are'} still open</>
+          )}.
         </>
       }
-      hint="Your own numbers only. Nobody else appears anywhere on this view."
-      table={
-        <StatRow>
-          <Stat value={fmtInt(runs)} label="Runs you started" sub={`${fmtInt(failed)} failed`} />
-          <Stat value={fmtInt(exceptions)} label="Exceptions you found" sub={`${fmtInt(openExceptions)} still open`} />
-          <Stat value={fmtHours(hours)} label="Time you saved" sub="against doing it by hand" />
-        </StatRow>
-      }
-    />
+    >
+      <StatRow>
+        <Stat value={fmtInt(value.runs)} label="runs you started" />
+        <Stat value={fmtInt(exceptions.total)} label="exceptions you found" />
+        <Stat value={fmtInt(exceptions.resolved)} label="of those, closed" />
+        <Stat
+          value={fmtHours(value.hoursSaved)}
+          label="hours you saved"
+          sub="What your runs would have taken by hand, less the time the machine took."
+        />
+      </StatRow>
+
+      {value.coveredRows > 0 && (
+        <Working
+          title="How the hours are worked out"
+          rows={[
+            {
+              expr: `${fmtInt(value.coveredRows)} rows`,
+              means: `you checked ${period.phrase}, with each population counted once`,
+              source: 'measured',
+            },
+            {
+              expr: `÷ ${fmtInt(settings.manualReviewRate)} rows an hour`,
+              means: 'what one person gets through by hand',
+              source: SOURCE_LABEL[settings.source.manualReviewRate],
+            },
+            { expr: `= ${fmtHours(value.manualHours)} hours`, means: 'the same work done by hand', source: 'estimated' },
+            { expr: `less ${fmtDuration(value.machineHours)}`, means: 'what the machine actually took', source: 'measured' },
+            {
+              expr: `= ${fmtHours(value.hoursSaved)} hours saved`,
+              means: 'rounded down, so the saving is never overstated',
+              source: 'estimated',
+            },
+          ]}
+        />
+      )}
+    </Block>
   );
 }

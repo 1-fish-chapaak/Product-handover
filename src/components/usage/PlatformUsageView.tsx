@@ -1,106 +1,74 @@
 /**
- * Platform Usage — one page, three readers.
+ * Platform Usage. One page, three readers, one question.
  *
- * Built from `Platform-Usage-Build-Spec_6.pdf`. The page answers one question:
- * is the platform earning its keep? A CFO asks it as "is this paying for
- * itself", a team lead as "is anything stuck", an auditor as "what is waiting on
- * me". So this is one page with a lens at the top rather than three pages. The
- * lens changes whose data you see and which block comes first. It never changes
- * the layout, the wording, or the names of things, so somebody who changes role
- * never has to learn the page again.
+ * Built from `Platform-Usage-Build-Spec_2.pdf` (11 Aug 2026). The page answers
+ * one question: is the platform earning its keep? A CFO asks it as "is this
+ * paying for itself", a head of team as "is anything stuck", an internal
+ * auditor as "what is waiting on me". It is one page with a "Viewing as" switch
+ * at the top rather than three pages, and the switch changes whose data you see
+ * and which block comes first. It never changes the layout, the wording or the
+ * names of things, so somebody who changes roles never has to relearn the page.
  *
- * ## The lens is a lens, not a key
+ * ## Three rules hold the switch
  *
- * Entitlement comes from the permissions the signed in role actually holds, and
- * a view somebody is not entitled to is never offered:
+ * **It is a lens, not a key.** Switching never shows anybody data they could not
+ * otherwise see. A view the reader is not entitled to is not offered.
  *
- *   ad_usage         the whole company, and the cost figures
- *   ad_usage_people  their own team, and themselves
- *   ad_usage_self    themselves, and nothing else
+ * **Down your own line only.** You can narrow into your own team or into your
+ * own work. You can never look sideways into somebody else's team.
  *
- * You can narrow down your own line. You can never look sideways into somebody
- * else's team. Switching shows nobody anything they could not otherwise see, so
- * the switch is a convenience rather than a privilege.
+ * **The screen always says what you are looking at**, in one line above the
+ * blocks: who, what scope, which window, how fresh.
  *
  * ## Answers first, machinery never
  *
  * Every view opens with at most three attention cards, each a sentence with one
- * thing to do, then with blocks that lead with a sentence rather than a tile. A
- * reader who reads only those sentences understands the whole page.
+ * thing to do, then blocks that lead with a sentence rather than a tile.
+ * Somebody who reads only those sentences understands the whole page. It works
+ * with zero setup: no form is ever the price of seeing your numbers.
  *
- * There is no editor anywhere on this page. The assumptions behind the value
- * figures measure themselves from the customer's own recorded pace, and the one
- * number a person types, the vendor's monthly bill, lives in Administration
- * behind its own permission. When the page needs it, it asks as an attention
- * card and hands the reader over.
+ * There is no editor anywhere in this feature. The two measurable assumptions
+ * replace themselves from the customer's own recorded history and the two that
+ * cannot be measured are labelled defaults. Lookup prices are contract terms our
+ * operations team seeds when the deal is signed, so cost appears by itself and
+ * says "as per your contract".
  *
- * ## What this page will not do
+ * ## Read-only, without exception
  *
- * No seat or licence counts, because seats are not a concept here. No benchmarks
- * against other companies, because no such data exists. No per user cost. No
- * alerts and no thresholds: the page reports, it does not notify. And nothing
- * here ranks people.
+ * No control on this page changes state. Blocks link to the screen that owns an
+ * action; they never perform one. Nothing ranks people, no figure is
+ * benchmarked against another company, and there are no seats or licences here
+ * because they are not a concept in this product.
  */
 
 import { useMemo, useState } from 'react';
-import { CalendarRange, Download, FileText } from 'lucide-react';
+import { CalendarRange, Download, FileText, Lock } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
-import { approveMemory, rejectMemory, useMemorySessionVersion } from '../../data/memorySession';
-import type { PlatformMemory } from '../../data/memoryStore';
+import { useMemorySessionVersion } from '../../data/memorySession';
+import { ANCHOR, COVERAGE_NOTE, dataAsOfLabel, formatDate, isoDay } from '../../data/platform-usage';
 import {
-  ANCHOR, COVERAGE_NOTE, RUNS, TRACED_EXCEPTIONS, dataAsOfLabel, formatDate, isoDay,
-} from '../../data/platform-usage';
-import {
-  PERSONA_QUESTION, PERSONA_TITLE, applyCalibration, attentionCards, loadSettings,
-  period as buildPeriod, periodOptions, snapshot, volumeOverTime,
+  DEFAULT_PERIOD, PERSONA_QUESTION, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REFUSAL,
+  calibrate, entitledViews, period as buildPeriod, periodOptions, personaFor, snapshot,
   type AttentionCard, type AttentionTarget, type CustomRange, type Persona, type PeriodId,
-  type QueueItem, type Scope,
-  type UsageSettings,
+  type QueueFigures, type Scope,
 } from '../../data/platform-usage-metrics';
 import { AttentionStrip, BlockGroup } from './usageKit';
 import {
-  AiUsageByArea, CostToRunBlock, CreatedThisPeriod, HeadlineValue, ValueOverTime, WorkVolume,
+  AiUsageByArea, AssumptionsReference, CostAndNetValue, HeadlineValue, NetValueHero,
+  SensitivityBlock, ValueOverTime,
 } from './UsageValueBlocks';
-import { ControlCoverage, ExceptionsCaughtBlock, NeverExercisedBlock } from './UsageCoverageBlocks';
-import { MyQueue, MyWork, PerPersonOutcomes, Reliability, StuckRuns } from './UsageOperationsBlocks';
-import { DashboardsAndAlerts, InsightsGenerated, ReportsMade, SamplingOutcomes } from './UsageProductBlocks';
-import { CcmCoverage, EngagementPortfolioBlock, RiskPictureBlock } from './UsagePortfolioBlocks';
+import { ControlCoverage, ExceptionsCaught, NeverTested, RiskPicture } from './UsageCoverageBlocks';
+import { CcmCoverage, MyQueue, MyWork, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
+import { CreatedThisPeriod, DashboardsAndAlerts, EngagementPortfolio, ReportsMade, WorkVolume } from './UsageProductBlocks';
+import { AiInsights, FindingQuality, FindingsAgeing } from './UsageFindingBlocks';
 import { SmartLearn } from './UsageSmartLearn';
 import { downloadUsageCsv } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
 
-/** What the lens shows, said as the data rather than as a job title. */
-const LENS_SCOPE: Record<Persona, string> = {
-  cfo: 'Whole company',
-  head_of_team: 'My team',
-  auditor: 'Just me',
-};
-
-/**
- * Which block on this page an attention card is about.
- *
- * Not every target has a block on every view: the stuck runs live on the head of
- * team's view only, for instance. So a card knows both where it would scroll and
- * where to send a reader whose view does not carry that block.
- */
-const CARD_BLOCK: Record<AttentionTarget, string> = {
-  stuck: 'stuck',
-  risks: 'risks',
-  controls: 'never',
-  sampling: 'sampling',
-  queue: 'queue',
-  memory: 'memory',
-};
-
-/** Scroll to a block this view definitely renders. */
-function scrollToBlock(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-/** Where the fact itself lives, when the page cannot show it on this view. */
+/** Where a card sends a reader whose view has no block for it. */
 const CARD_ELSEWHERE: Record<AttentionTarget, string> = {
   stuck: 'workflow-library',
   risks: 'audit-risk-register',
@@ -129,94 +97,90 @@ export default function PlatformUsageView() {
 
   /* ── The assumptions, which look after themselves ───────────────────────── */
 
-  // The weekly calibration job, run as the page is read. Once the guards pass
-  // the two measurable numbers switch to the customer's own recorded pace,
-  // silently and audited. Nobody is asked to confirm anything, because at the
-  // scale this runs at nobody would. It settles before the first render, so no
-  // reader ever sees the starting value flash to the measured one.
-  const [settings] = useState<UsageSettings>(() => applyCalibration(loadSettings()));
+  // The weekly job, run as the page is read. Once both guards pass, a measured
+  // value quietly replaces a starting one. Nobody is asked to confirm it,
+  // because at ten thousand people nobody clicks. It settles before the first
+  // render, so no reader watches a starting value flash to a measured one.
+  const [settings] = useState(() => calibrate());
 
-  /* ── Who is reading, and what they may see ──────────────────────────────── */
+  /* ── Who is reading, and how far up they may see ────────────────────────── */
 
   const me = users.find(u => u.email === currentUser?.email);
   const myTeam = me?.team && me.team !== '—' ? me.team : null;
   const myName = me?.name ?? currentUser?.name ?? '';
 
+  // The highest view this role may read. Everyone gets at least their own work:
+  // this page is self-serve, and no request or approval stands in front of it.
+  const ceiling: Persona = useMemo(
+    () => personaFor({ usage: can('ad_usage'), people: can('ad_usage_people'), self: can('ad_usage_self') }, myTeam),
+    [can, myTeam],
+  );
+
+  const views = useMemo(() => entitledViews(ceiling, myTeam), [ceiling, myTeam]);
+  const [requested, setRequested] = useState<Persona>(ceiling);
+
+  // The server resolves the requested view against the entitlement rather than
+  // trusting the client. An unentitled request is refused, never quietly
+  // downgraded and never rendered as an empty page.
+  const entitled = views.includes(requested);
+  const persona = entitled ? requested : ceiling;
+
   const canExport = can('ad_usage_export');
 
-  const entitled = useMemo<Persona[]>(() => {
-    const out: Persona[] = [];
-    if (can('ad_usage')) out.push('cfo');
-    if ((can('ad_usage') || can('ad_usage_people')) && myTeam) out.push('head_of_team');
-    // Everybody signed in always gets their own view. No request, no approval.
-    out.push('auditor');
-    return out;
-  }, [can, myTeam]);
-
-  const [persona, setPersona] = useState<Persona>(() => entitled[0]);
-  const lens = entitled.includes(persona) ? persona : entitled[0];
-
   const scope = useMemo<Scope>(() => {
-    if (lens === 'cfo') return { persona: 'cfo', label: 'the whole company' };
-    if (lens === 'head_of_team') {
-      return { persona: 'head_of_team', label: myTeam ?? 'your team', team: myTeam ?? undefined, userEmail: currentUser?.email, userName: myName };
+    if (persona === 'cfo') return { persona: 'cfo', subject: 'the company' };
+    if (persona === 'head_of_team') {
+      return { persona: 'head_of_team', subject: myTeam ?? 'your team', team: myTeam ?? undefined, userEmail: currentUser?.email, userName: myName };
     }
-    return { persona: 'auditor', label: 'your own work', userEmail: currentUser?.email, userName: myName };
-  }, [lens, myTeam, currentUser?.email, myName]);
-
-  /** Whose saving it is, said inside a sentence. */
-  const subject = lens === 'cfo' ? 'the company' : lens === 'head_of_team' ? (myTeam ?? 'your team') : 'you';
+    return { persona: 'auditor', subject: 'you', userEmail: currentUser?.email, userName: myName };
+  }, [persona, myTeam, currentUser?.email, myName]);
 
   // An auditor reads their own work in hours and never in rupees. "You saved 84
   // hours" is an achievement; "you saved ₹1,00,800" is somebody pricing them.
-  const showMoney = lens !== 'auditor';
+  const showMoney = persona !== 'auditor';
 
   /* ── The window ─────────────────────────────────────────────────────────── */
 
-  const options = useMemo(() => periodOptions(), []);
-  const [periodId, setPeriodId] = useState<PeriodId>(() => {
-    const wanted: PeriodId = 'this-quarter';
-    return options.some(o => o.id === wanted) ? wanted : options[0].id;
-  });
+  const [periodId, setPeriodId] = useState<PeriodId>(() => DEFAULT_PERIOD[ceiling]);
   const [custom, setCustom] = useState<CustomRange | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
+
+  // Until somebody picks a window for themselves, each view opens on the one it
+  // is meant to be read in: the quarter for a CFO, the month for the two views
+  // that are about what is happening now. Once a reader has chosen, switching
+  // views keeps their choice rather than overruling it.
+  const [periodChosen, setPeriodChosen] = useState(false);
+
+  const choosePeriod = (id: PeriodId) => {
+    setPeriodChosen(true);
+    setPeriodId(id);
+  };
+
+  const chooseView = (view: Persona) => {
+    setRequested(view);
+    if (!periodChosen) setPeriodId(DEFAULT_PERIOD[view]);
+  };
   const period = useMemo(() => buildPeriod(periodId, custom), [periodId, custom]);
 
   /* ── Every number on the view, assembled once ───────────────────────────── */
 
   const data = useMemo(
     () => snapshot(scope, period, settings),
-    // memoryVersion is a real input even though it is not read directly:
-    // approving a proposal on this page changes what PU-20 counts.
+    // memoryVersion is a real input even though it is not read directly: a
+    // decision taken on the Smart Learn screen changes what this page counts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scope, period, settings, memoryVersion],
-  );
-
-  const volumeBuckets = useMemo(() => volumeOverTime(period, scope), [period, scope]);
-
-  const cards = useMemo(
-    () => attentionCards(scope, period, {
-      risks: data.risks,
-      stuck: data.stuck,
-      never: data.never,
-      queue: data.queue,
-      sampling: data.sampling,
-      smartLearn: data.learn,
-    }),
-    [scope, period, data],
   );
 
   /* ── Acting on a card ───────────────────────────────────────────────────── */
 
   /**
-   * Acting on a card.
-   *
-   * It scrolls to the block when this view has one, and leaves for the thing
-   * itself when it does not. A card that silently does nothing is worse than no
-   * card, so there is no path here that ends in neither.
+   * This scrolls to the block when the view has one, and leaves for the thing
+   * itself when it does not. No path through here ends in neither, because a
+   * card that quietly does nothing is worse than no card at all.
    */
   const onAct = (card: AttentionCard) => {
-    const block = document.getElementById(CARD_BLOCK[card.target]);
+    const block = document.getElementById(card.target === 'controls' ? 'never' : card.target);
     if (block) {
       block.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -228,145 +192,185 @@ export default function PlatformUsageView() {
     navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
   };
 
-  const onOpenQueueItem = (item: QueueItem) => navigate(item.target.view, item.target.id ?? '');
-
-  const onApproveMemory = (memory: PlatformMemory) => {
-    approveMemory(memory, myName || 'you');
-    addToast({ type: 'success', message: 'Approved. The assistant will use it from the next question.' });
-  };
-
-  const onRejectMemory = (memory: PlatformMemory) => {
-    rejectMemory(memory, myName || 'you');
-    addToast({ type: 'success', message: 'Rejected. It is off the list and the decision is on the record.' });
-  };
-
-  /* ── The auditor's own three numbers ────────────────────────────────────── */
-
-  const myRuns = useMemo(
-    () => RUNS.filter(run => run.actor.email === currentUser?.email && run.completedAt !== null
-      && run.completedAt >= period.from && run.completedAt <= period.to),
-    [currentUser?.email, period],
-  );
-  const myExceptions = useMemo(
-    () => TRACED_EXCEPTIONS.filter(ex => ex.assignee === myName && ex.openedAt >= period.from && ex.openedAt <= period.to),
-    [myName, period],
-  );
+  const onOpenQueueItem = (item: QueueFigures['items'][number]) => navigate(item.target.view, item.target.id ?? '');
 
   /* ── Export ─────────────────────────────────────────────────────────────── */
 
   const onExportCsv = () => {
-    downloadUsageCsv(data, volumeBuckets);
+    downloadUsageCsv(data);
     addToast({ type: 'success', message: 'Exported. The file carries the scope, the window and the assumptions.' });
   };
 
   const onExportPdf = async () => {
-    await downloadUsagePdf(data, volumeBuckets);
+    await downloadUsagePdf(data);
     addToast({ type: 'success', message: 'Exported as a PDF, with the coverage note on the first page.' });
   };
 
+  /* ── A refusal, never a blank page ──────────────────────────────────────── */
+
+  if (!entitled) {
+    return (
+      <div className="h-full flex items-center justify-center bg-canvas px-6">
+        <div className="max-w-lg text-center">
+          <Lock size={20} className="mx-auto text-ink-400" />
+          <h1 className="mt-3 text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
+          <p className="mt-2 text-[0.875rem] text-ink-600 leading-relaxed">{REFUSAL}</p>
+          <button
+            type="button"
+            onClick={() => chooseView(ceiling)}
+            className="mt-4 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:text-brand-700"
+          >
+            Go to the {PERSONA_TITLE[ceiling]} view
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   /* ── The blocks, in the order each reader needs them ─────────────────────── */
 
-  const headline = (
-    <HeadlineValue
-      value={data.value}
-      priorValue={data.priorValue}
-      net={data.net}
-      cost={data.cost}
-      settings={settings}
+  const smartLearnBlock = <SmartLearn learn={data.learn} scope={scope} onOpenSmartLearn={openSmartLearn} />;
+
+  const exceptionsBlock = (
+    <ExceptionsCaught
+      exceptions={data.exceptions}
       period={period}
-      scope={scope}
-      subject={subject}
-      changes={data.changes}
-      showMoney={showMoney}
-      onOpenCost={() => scrollToBlock('cost')}
+      subject={scope.subject}
+      onOpenException={id => navigate('engagements', id)}
     />
   );
 
-  const valueOverTime = (
-    <ValueOverTime buckets={data.overTime} period={period} settings={settings} showMoney={showMoney} />
-  );
-
-  const smartLearnBlock = (
-    <SmartLearn
-      learn={data.learn}
-      scope={scope}
-      onOpenSmartLearn={openSmartLearn}
-      onApprove={onApproveMemory}
-      onReject={onRejectMemory}
-    />
-  );
-
+  /*
+   * CFO. Opens on the headline: hours, rupees and people this quarter, then
+   * cost and net value. Then value over time, coverage, the portfolio, the risk
+   * picture, what was caught, volume, what was created, the product surfaces,
+   * AI activity, and what the assistant knows. The cost figures and the
+   * assumptions strip live only here.
+   */
   const cfoView = (
     <>
       <BlockGroup title="What it was worth">
-        {headline}
-        <CostToRunBlock cost={data.cost} lookups={data.lookups} period={period} />
-        {valueOverTime}
+        <NetValueHero
+          value={data.value}
+          change={data.change}
+          cost={data.cost}
+          netRupees={data.netRupees}
+          period={period}
+          settings={settings}
+        />
+        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney />
+        <HeadlineValue
+          value={data.value}
+          prior={data.prior}
+          change={data.change}
+          period={period}
+          scope={scope}
+          settings={settings}
+          showMoney
+        />
       </BlockGroup>
 
       <BlockGroup title="What it covered">
-        <ControlCoverage coverage={data.coverage} period={period} scope={scope} />
-        <NeverExercisedBlock never={data.never} scope={scope} />
-        <EngagementPortfolioBlock portfolio={data.portfolio} period={period} onOpenEngagement={id => navigate('engagements', id)} />
-        <RiskPictureBlock risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
+        <ControlCoverage
+          coverage={data.coverage}
+          period={period}
+          checksPerformed={data.value.checksPerformed}
+          coveredRows={data.value.coveredRows}
+        />
+        <NeverTested coverage={data.coverage} period={period} />
+        <EngagementPortfolio
+          portfolio={data.portfolio}
+          period={period}
+          onOpenEngagement={id => navigate('engagements', id)}
+        />
+        <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
+      </BlockGroup>
+
+      <BlockGroup title="What it caught">
+        {exceptionsBlock}
+        <FindingsAgeing
+          ageing={data.ageing}
+          subject={scope.subject}
+          onOpenException={id => navigate('engagements', id)}
+        />
+        <FindingQuality quality={data.quality} period={period} />
       </BlockGroup>
 
       <BlockGroup title="What the platform did">
-        <ExceptionsCaughtBlock
-          exceptions={data.exceptions}
-          period={period}
-          subject={subject}
-          onOpenException={id => navigate('engagements', id)}
-        />
-        <SamplingOutcomes sampling={data.sampling} period={period} subject={subject} />
-        <WorkVolume volume={data.volume} overTime={volumeBuckets} subject={subject} period={period} onOpenRuns={() => navigate('workflow-library')} />
-        <CreatedThisPeriod created={data.created} period={period} subject={subject} />
-        <DashboardsAndAlerts product={data.product} period={period} subject={subject} />
-        <ReportsMade reports={data.reports} period={period} subject={subject} />
-        <InsightsGenerated insights={data.insights} period={period} subject={subject} />
+        <WorkVolume volume={data.volume} period={period} subject={scope.subject} onOpenRuns={() => navigate('workflow-library')} />
+        <CreatedThisPeriod created={data.created} period={period} />
+        <DashboardsAndAlerts product={data.product} period={period} />
+        <ReportsMade reports={data.reports} period={period} />
         <CcmCoverage ccm={data.ccm} period={period} />
       </BlockGroup>
 
       <BlockGroup title="What the AI did, and what it knows">
-        <AiUsageByArea rows={data.aiUsage} />
+        <AiUsageByArea rows={data.aiUsage} period={period} />
+        <AiInsights insights={data.insights} period={period} />
         {smartLearnBlock}
+      </BlockGroup>
+
+      <BlockGroup title="What it cost, and what it rests on">
+        <CostAndNetValue cost={data.cost} value={data.value} netRupees={data.netRupees} period={period} />
+        <SensitivityBlock rows={data.sensitivity} settings={settings} />
+        <AssumptionsReference settings={settings} />
       </BlockGroup>
     </>
   );
 
+  /*
+   * Head of Team. Opens on what is stuck, with the real error text on each run.
+   * A team lead cannot act on "₹85 lakh saved"; they can act on "this workflow
+   * failed four times this week with the same error", so the savings sit small
+   * at the bottom and the design trade-offs go this view's way.
+   */
   const headOfTeamView = (
     <>
       <BlockGroup title="What needs doing">
-        <StuckRuns stuck={data.stuck} period={period} subject={subject} onOpenRuns={() => navigate('workflow-library')} />
-        <Reliability rows={data.reliability} wasted={data.wasted} period={period} />
-        <NeverExercisedBlock never={data.never} scope={scope} />
+        <StuckNow stuck={data.stuck} period={period} onOpenRun={id => navigate('workflow-library', id)} />
+        <Reliability rows={data.reliability.rows} wastedHours={data.reliability.wastedHours} period={period} />
+        <NeverTested coverage={data.coverage} period={period} />
       </BlockGroup>
 
       <BlockGroup title="How the testing is going">
-        <SamplingOutcomes sampling={data.sampling} period={period} subject={subject} />
+        <SamplingOutcomes sampling={data.sampling} period={period} />
         <CcmCoverage ccm={data.ccm} period={period} />
-        <RiskPictureBlock risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
-        <ExceptionsCaughtBlock
-          exceptions={data.exceptions}
-          period={period}
-          subject={subject}
+        <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
+      </BlockGroup>
+
+      <BlockGroup title="What the team caught">
+        {exceptionsBlock}
+        <FindingsAgeing
+          ageing={data.ageing}
+          subject={scope.subject}
           onOpenException={id => navigate('engagements', id)}
         />
+        <FindingQuality quality={data.quality} period={period} />
       </BlockGroup>
 
       <BlockGroup title="What the team did">
-        <PerPersonOutcomes people={data.people} period={period} team={myTeam ?? 'your team'} />
-        <WorkVolume volume={data.volume} overTime={volumeBuckets} subject={subject} period={period} onOpenRuns={() => navigate('workflow-library')} />
-        <CreatedThisPeriod created={data.created} period={period} subject={subject} />
-        <DashboardsAndAlerts product={data.product} period={period} subject={subject} />
-        <ReportsMade reports={data.reports} period={period} subject={subject} />
-        <InsightsGenerated insights={data.insights} period={period} subject={subject} />
+        <TeamWork people={data.people} period={period} team={myTeam ?? 'your team'} />
+        <CreatedThisPeriod created={data.created} period={period} />
         {smartLearnBlock}
-        {headline}
+        <HeadlineValue
+          value={data.value}
+          prior={data.prior}
+          change={data.change}
+          period={period}
+          scope={scope}
+          settings={settings}
+          showMoney={showMoney}
+        />
       </BlockGroup>
     </>
   );
 
+  /*
+   * Internal Auditor. Their queue first, overdue first, each item one click
+   * from the thing that needs doing. Then their own numbers, in hours and never
+   * in rupees, and no other person appears anywhere on this view: no average,
+   * no percentile, no comparison of any kind.
+   */
   const auditorView = (
     <>
       <BlockGroup title="What needs you">
@@ -374,24 +378,9 @@ export default function PlatformUsageView() {
       </BlockGroup>
 
       <BlockGroup title="Your own work">
-        <MyWork
-          runs={myRuns.length}
-          failed={myRuns.filter(r => r.status === 'failed').length}
-          exceptions={myExceptions.length}
-          openExceptions={myExceptions.filter(ex => ex.status !== 'Resolved').length}
-          hours={data.value.hours}
-          period={period}
-        />
-        <ExceptionsCaughtBlock
-          exceptions={data.exceptions}
-          period={period}
-          subject={subject}
-          onOpenException={id => navigate('engagements', id)}
-        />
-        <WorkVolume volume={data.volume} overTime={volumeBuckets} subject={subject} period={period} onOpenRuns={() => navigate('workflow-library')} />
-        {headline}
-        {valueOverTime}
-        <InsightsGenerated insights={data.insights} period={period} subject={subject} />
+        <MyWork value={data.value} exceptions={data.exceptions} period={period} settings={settings} />
+        {exceptionsBlock}
+        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={false} />
       </BlockGroup>
 
       <BlockGroup title="What the assistant knows">{smartLearnBlock}</BlockGroup>
@@ -401,8 +390,8 @@ export default function PlatformUsageView() {
   /* ── The page ───────────────────────────────────────────────────────────── */
 
   const scopeLine = [
-    `Viewing as ${PERSONA_TITLE[lens]}`,
-    LENS_SCOPE[lens],
+    `Viewing as ${PERSONA_TITLE[persona]}`,
+    PERSONA_SCOPE_LABEL[persona] + (persona === 'head_of_team' && myTeam ? ` · ${myTeam}` : ''),
     period.id === 'custom' && custom
       ? `${formatDate(custom.from)} to ${formatDate(custom.to)}`
       : `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
@@ -411,9 +400,6 @@ export default function PlatformUsageView() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
-      {/* Header strip, the same shape Administration and the Knowledge Hub use:
-          one full bleed panel with the page title, the lens switch, and the
-          scope line that says what you are looking at. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
         <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 pb-5 border-b border-canvas-border relative overflow-hidden">
           <FloatingLines
@@ -431,26 +417,30 @@ export default function PlatformUsageView() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Platform Usage</h1>
-              <p className="mt-2 text-[1rem] text-ink-500 leading-relaxed max-w-2xl">
-                {PERSONA_QUESTION[lens]}
-              </p>
+              <p className="mt-2 text-[1rem] text-ink-500 leading-relaxed max-w-2xl">{PERSONA_QUESTION[persona]}</p>
             </div>
 
-            {entitled.length > 1 && (
+            {/*
+              * The switch. Only the views this reader is entitled to appear, so
+              * it can narrow down their own line and can never reach sideways
+              * into somebody else's team. One reader with one view sees no
+              * switch, because a control with one option is furniture.
+              */}
+            {views.length > 1 && (
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[0.75rem] text-ink-400">Viewing as</span>
+                <span className="text-[0.75rem] text-ink-500">Viewing as</span>
                 <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                  {entitled.map(option => (
+                  {views.map(view => (
                     <button
-                      key={option}
+                      key={view}
                       type="button"
-                      onClick={() => setPersona(option)}
-                      aria-pressed={lens === option}
+                      onClick={() => chooseView(view)}
+                      aria-pressed={persona === view}
                       className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
-                        lens === option ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-brand-700'
+                        persona === view ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-brand-700'
                       }`}
                     >
-                      {PERSONA_TITLE[option]}
+                      {PERSONA_TITLE[view]}
                     </button>
                   ))}
                 </div>
@@ -463,7 +453,7 @@ export default function PlatformUsageView() {
 
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {options.map(option => (
+                {periodOptions.map(option => (
                   <button
                     key={option.id}
                     type="button"
@@ -473,7 +463,7 @@ export default function PlatformUsageView() {
                         return;
                       }
                       setCustomOpen(false);
-                      setPeriodId(option.id);
+                      choosePeriod(option.id);
                     }}
                     aria-pressed={periodId === option.id}
                     className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
@@ -538,7 +528,7 @@ export default function PlatformUsageView() {
               <button
                 type="button"
                 onClick={() => {
-                  if (custom) setPeriodId('custom');
+                  if (custom) choosePeriod('custom');
                   setCustomOpen(false);
                 }}
                 className="h-8 px-3 rounded-md bg-brand-600 text-white text-[0.75rem] font-medium"
@@ -553,17 +543,16 @@ export default function PlatformUsageView() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 lg:px-12 xl:px-[124px] py-8 space-y-8 max-w-[1400px]">
           <section aria-label="Needs your attention">
             <h2 className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-400 mb-3">
               Needs your attention
             </h2>
-            <AttentionStrip cards={cards} onAct={onAct} />
+            <AttentionStrip cards={data.attention} onAct={onAct} />
           </section>
 
-          {lens === 'cfo' ? cfoView : lens === 'head_of_team' ? headOfTeamView : auditorView}
+          {persona === 'cfo' ? cfoView : persona === 'head_of_team' ? headOfTeamView : auditorView}
 
           <p className="text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed border-t border-canvas-border pt-4">
             {COVERAGE_NOTE}

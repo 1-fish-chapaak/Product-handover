@@ -1,42 +1,39 @@
 /**
- * How much of the library the platform touched, and what it caught.
+ * How much of the control library the platform touched, what it never touched,
+ * where the risk sits, and what was caught.
  *
- * PU-06 control coverage · PU-07 never exercised · PU-08 exceptions caught.
- *
- * PU-07 is the one figure on this page that rests on no assumption at all: a
- * control the platform has never run is a fact about the library, not about
- * April, so it deliberately ignores the period selector. That is what makes it
- * the hardest number here to argue with.
+ * The coverage block carries the guide's hardest rule: a population is counted
+ * once however often it is re-tested. The repeats are counted too, on the same
+ * block, under a name that says what they are.
  */
 
 import { formatDate } from '../../data/platform-usage';
 import {
-  fmtInt, fmtPct,
-  type Coverage, type ExceptionsCaught, type NeverExercised, type Period, type Scope,
+  fmtInt, fmtOneDp, fmtPct, openLabel,
+  type CoverageFigures, type ExceptionFigures, type Period, type RiskFigures, type Scope,
 } from '../../data/platform-usage-metrics';
-import { Bars, Block, DataTable, Drill, Empty, Fig, MadeList, Meter } from './usageKit';
+import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Meter, Stat, StatRow } from './usageKit';
+import { DeduplicationLimits } from './UsageValueBlocks';
 
-/* ── PU-06 ───────────────────────────────────────────────────────────────── */
+/* ── Control coverage ────────────────────────────────────────────────────── */
 
-/** Controls exercised at least once in the window, out of the whole library. */
 export function ControlCoverage({
-  coverage,
-  period,
-  scope,
+  coverage, period, checksPerformed, coveredRows,
 }: {
-  coverage: Coverage;
+  coverage: CoverageFigures;
   period: Period;
-  scope: Scope;
+  checksPerformed: number;
+  coveredRows: number;
 }) {
-  const whose = scope.persona === 'head_of_team' ? 'your team owns' : 'the library holds';
-
-  if (coverage.total === 0) {
+  if (coverage.controlsInLibrary === 0) {
     return (
       <Block id="coverage" title="Control coverage" lede={null}>
-        <Empty kind="quiet" title="No controls are recorded against this scope yet, so there is nothing to cover." />
+        <Empty kind="quiet" title="There are no controls in the library yet." />
       </Block>
     );
   }
+
+  const multiple = coveredRows > 0 ? checksPerformed / coveredRows : 0;
 
   return (
     <Block
@@ -44,211 +41,222 @@ export function ControlCoverage({
       title="Control coverage"
       lede={
         <>
-          The platform exercised <Fig>{fmtInt(coverage.exercised)}</Fig> of the{' '}
-          <Fig>{fmtInt(coverage.total)}</Fig> controls {whose}, {period.phrase}. That is{' '}
-          <Fig>{fmtPct(coverage.pct)}</Fig> of the library, whatever the run count: a control run fifty times
-          counts once here, because this is coverage rather than volume.
+          <Fig>{fmtInt(coverage.tested.length)}</Fig> of{' '}
+          <Fig>{fmtInt(coverage.controlsInLibrary)}</Fig> controls were exercised {period.phrase},
+          over populations holding <Fig>{fmtInt(coveredRows)}</Fig> rows.
         </>
       }
-      chart={
-        <div className="max-w-xl">
-          <p className="text-[2.5rem] font-semibold leading-none text-ink-900 tabular-nums">{fmtPct(coverage.pct)}</p>
-          <div className="mt-3">
-            <Meter
-              pct={coverage.pct}
-              label={`${fmtInt(coverage.exercised)} exercised, ${fmtInt(coverage.total - coverage.exercised)} untouched in this window`}
-            />
-          </div>
-          {coverage.untouched.length > 0 && (
-            <div className="mt-4">
-              <Drill label={`Which ${fmtInt(coverage.untouched.length)} were not exercised in this window`} hideLabel="Hide the controls">
-                <DataTable
-                  head={['Control', 'Owner']}
-                  rows={coverage.untouched.map(c => [`${c.id} ${c.name}`, c.owner])}
-                  numericFrom={99}
-                />
-              </Drill>
-            </div>
-          )}
-        </div>
-      }
+      hint="A population is counted once however often it is re-tested. Re-testing the same rows catches problems sooner, but it does not widen what is covered."
+      chart={<Meter pct={coverage.pctTested} label={`${fmtPct(coverage.pctTested)} of the library exercised`} />}
       table={
-        <div className="space-y-4">
-          <DataTable
-            head={['Control library', 'Controls']}
-            rows={[
-              ['Exercised in this window', fmtInt(coverage.exercised)],
-              ['Not exercised in this window', fmtInt(coverage.total - coverage.exercised)],
-              ['In the library', fmtInt(coverage.total)],
-            ]}
-          />
-          {coverage.untouched.length > 0 && (
-            <DataTable
-              head={['Not exercised in this window', 'Owner']}
-              rows={coverage.untouched.map(c => [`${c.id} ${c.name}`, c.owner])}
-              numericFrom={99}
-            />
-          )}
-        </div>
+        <DataTable
+          head={['Population', 'Checked by', 'Rows', 'Runs in this window']}
+          numericFrom={2}
+          rows={coverage.populations.map(p => [p.name, p.workflowName, fmtInt(p.size), fmtInt(p.runs)])}
+        />
       }
-      footer="Coverage counts a control as exercised when a run against it finished inside the window."
-    />
+      footer={
+        <>
+          Coverage counts <Fig>{fmtInt(coveredRows)}</Fig> rows. The platform performed{' '}
+          <Fig>{fmtInt(checksPerformed)}</Fig> row checks to do it, about{' '}
+          <Fig>{fmtOneDp(multiple)}</Fig> times over, because scheduled checks re-read the same
+          populations. Adding those together would give a badly inflated figure, so they appear here
+          as checks performed and stay out of the coverage line.
+        </>
+      }
+    >
+      <div className="mb-4">
+        <StatRow>
+          <Stat value={fmtInt(coverage.tested.length)} label="controls exercised" />
+          <Stat value={fmtInt(coverage.neverTested.length)} label="never tested in this window" />
+          <Stat value={fmtInt(coverage.populations.length)} label="populations under test" />
+          <Stat value={fmtInt(checksPerformed)} label="checks performed" sub="repeats included" />
+        </StatRow>
+      </div>
+      {coverage.tested.length > 0 && (
+        <div className="mb-4">
+          <Drill label={openLabel(coverage.tested.length, 'control that was tested', 'controls that were tested')}>
+            <MadeList>
+              {coverage.tested.map(c => (
+                <MadeRow key={c.id} name={`${c.id} · ${c.name}`} madeBy={`${fmtInt(c.runs)} tests`} when={formatDate(c.lastTested)} />
+              ))}
+            </MadeList>
+          </Drill>
+        </div>
+      )}
+    </Block>
   );
 }
 
-/* ── PU-07 ───────────────────────────────────────────────────────────────── */
+/* ── Never tested ────────────────────────────────────────────────────────── */
 
-/**
- * Never exercised, in any window.
- *
- * The period selector does not touch this block, and the block says so, because
- * a reader who changes the window and watches this number stay still should know
- * that is deliberate rather than broken.
- */
-export function NeverExercisedBlock({ never, scope }: { never: NeverExercised; scope: Scope }) {
-  const whose = scope.persona === 'head_of_team' ? "your team's" : 'the whole';
-  const owned = scope.persona === 'head_of_team' ? "your team's controls" : 'the controls in the library';
-  const nothing = never.controls.length === 0 && never.workflows.length === 0;
+export function NeverTested({ coverage, period }: { coverage: CoverageFigures; period: Period }) {
+  const { neverExercised, workflowsNeverRun } = coverage;
+  const nothingMissed = neverExercised.length === 0 && workflowsNeverRun.length === 0;
 
   return (
     <Block
       id="never"
-      title="Never exercised, ever"
+      title="Never exercised"
+      hint="This block ignores the window. Never means never, over the whole history, which is the one coverage figure with no setting behind it to argue with."
       lede={
-        nothing ? (
-          <>Every control in {whose} library has been exercised by the platform at least once, and every workflow has run. Nothing is sitting unused.</>
-        ) : (
-          <>
-            <Fig>{fmtInt(never.controls.length)}</Fig> of {owned} have never been exercised by the
-            platform, in any window
-            {never.workflows.length > 0 && <>, and <Fig>{fmtInt(never.workflows.length)}</Fig> workflows in the library have never run at all</>}.
-            This one ignores the period selector on purpose.
-          </>
-        )
+        nothingMissed
+          ? <>Every control in the library and every check in the library has run at least once.</>
+          : (
+            <>
+              <Fig>{fmtInt(neverExercised.length)}</Fig>{' '}
+              {neverExercised.length === 1 ? 'control has' : 'controls have'} never been exercised,
+              and <Fig>{fmtInt(workflowsNeverRun.length)}</Fig>{' '}
+              {workflowsNeverRun.length === 1 ? 'check has' : 'checks have'} never run. You cannot
+              rely on a control nobody has ever tested, whatever the coverage percentage says.
+            </>
+          )
       }
-      hint="Rests on no assumption of any kind. It is a count of records with nothing behind them."
-      table={
-        nothing ? (
-          <Empty kind="quiet" title="Nothing has gone untouched." />
-        ) : (
-          <div className="space-y-4">
-            {never.controls.length > 0 && (
-              <DataTable
-                head={['Control never exercised', 'Owner']}
-                rows={never.controls.map(c => [`${c.id} ${c.name}`, c.owner])}
-                numericFrom={99}
-              />
+      footer={
+        coverage.neverTested.length > 0
+          ? `Separately, ${fmtInt(coverage.neverTested.length)} ${coverage.neverTested.length === 1 ? 'control was' : 'controls were'} not exercised ${period.phrase}. That one moves with the window; the lists above do not.`
+          : undefined
+      }
+    >
+      {nothingMissed
+        ? <Empty kind="quiet" title="Nothing was missed." />
+        : (
+          <div className="space-y-2">
+            {neverExercised.length > 0 && (
+              <Drill label={openLabel(neverExercised.length, 'control never exercised', 'controls never exercised')}>
+                <MadeList>
+                  {neverExercised.map(c => (
+                    <MadeRow key={c.id} name={`${c.id} · ${c.name}`} madeBy={c.owner} when={c.process} />
+                  ))}
+                </MadeList>
+              </Drill>
             )}
-            {never.workflows.length > 0 && (
-              <DataTable head={['Workflow never run']} rows={never.workflows.map(w => [w])} numericFrom={99} />
+            {workflowsNeverRun.length > 0 && (
+              <Drill label={openLabel(workflowsNeverRun.length, 'check that has never run', 'checks that have never run')}>
+                <MadeList>
+                  {workflowsNeverRun.map(w => (
+                    <MadeRow key={w.id} name={w.name} madeBy="never run" when="no runs on record" />
+                  ))}
+                </MadeList>
+              </Drill>
             )}
           </div>
-        )
-      }
-    />
+        )}
+    </Block>
   );
 }
 
-/* ── PU-08 ───────────────────────────────────────────────────────────────── */
+/* ── The risk picture ────────────────────────────────────────────────────── */
 
-const SEVERITY_TONE: Record<string, string> = {
-  Critical: 'text-risk-700',
-  High: 'text-high-700',
-  Medium: 'text-mitigated-700',
-  Low: 'text-ink-600',
-};
-
-/**
- * What the platform caught.
- *
- * Counted, not estimated. Every exception here opens and traces back to the run
- * that raised it, and the ones with no run behind them are named as such rather
- * than quietly dropped from the count.
- */
-export function ExceptionsCaughtBlock({
-  exceptions,
-  period,
-  subject,
-  onOpenException,
-}: {
-  exceptions: ExceptionsCaught;
-  period: Period;
-  subject: string;
-  onOpenException: (engagementId: string) => void;
-}) {
-  if (exceptions.total === 0) {
+export function RiskPicture({ risks, scope, onOpenRisks }: { risks: RiskFigures; scope: Scope; onOpenRisks: () => void }) {
+  if (risks.total === 0) {
     return (
-      <Block id="exceptions" title="What the platform caught" lede={null}>
-        <Empty
-          kind="quiet"
-          title={`Nothing was raised for ${subject} in this window.`}
-          detail="No exception was raised by any run that finished inside it. This is a count of what happened, not an estimate."
-        />
+      <Block id="risks" title="The risk picture" lede={null}>
+        <Empty kind="quiet" title={scope.persona === 'head_of_team' ? 'No risks are recorded against your team.' : 'The risk register is empty.'} />
       </Block>
     );
   }
 
   return (
     <Block
-      id="exceptions"
-      title="What the platform caught"
+      id="risks"
+      title="The risk picture"
       lede={
-        <>
-          Runs raised <Fig>{fmtInt(exceptions.total)}</Fig> exceptions for {subject} {period.phrase},
-          of which <Fig>{fmtInt(exceptions.open)}</Fig> are still open. Every one of them opens the run that
-          raised it.
-        </>
+        risks.criticalUnmapped.length > 0
+          ? (
+            <>
+              <Fig>{fmtInt(risks.criticalUnmapped.length)}</Fig>{' '}
+              {risks.criticalUnmapped.length === 1 ? 'critical risk has' : 'critical risks have'} no
+              control covering {risks.criticalUnmapped.length === 1 ? 'it' : 'them'} at all, out of{' '}
+              <Fig>{fmtInt(risks.unmapped.length)}</Fig> uncovered and{' '}
+              <Fig>{fmtInt(risks.total)}</Fig> on the register.
+            </>
+          )
+          : (
+            <>
+              Every critical risk has a control against it. <Fig>{fmtInt(risks.unmapped.length)}</Fig> of{' '}
+              <Fig>{fmtInt(risks.total)}</Fig> risks{' '}
+              {risks.unmapped.length === 1 ? 'is' : 'are'} still uncovered at lower priorities.
+            </>
+          )
       }
-      hint="Counted from the exception register, by severity. Nothing here is estimated."
-      chart={
-        <div className="space-y-4">
-          <Bars
-            rows={exceptions.bySeverity.map(s => ({
-              label: s.severity,
-              value: s.total,
-              note: `${fmtInt(s.open)} still open`,
-            }))}
-            tone="risk"
-          />
-          <div>
-            <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400 mb-2">The newest three</p>
+      action={
+        <button type="button" onClick={onOpenRisks} className="text-[0.75rem] font-medium text-brand-700 hover:underline">
+          Open the register
+        </button>
+      }
+      chart={<Bars rows={risks.byPriority} tone={risks.criticalUnmapped.length > 0 ? 'risk' : 'brand'} />}
+      table={<DataTable head={['Priority', 'Risks']} rows={risks.byPriority.map(r => [r.label, fmtInt(r.value)])} />}
+      footer={<><Fig>{fmtInt(risks.raisedByAi)}</Fig> of these were proposed by the assistant rather than raised by a person.</>}
+    >
+      {risks.unmapped.length > 0 && (
+        <div className="mb-4">
+          <Drill label={openLabel(risks.unmapped.length, 'risk with no control', 'risks with no control')}>
             <MadeList>
-              {exceptions.newest.map(ex => (
-                <li key={ex.id} className="py-2">
-                  <button
-                    type="button"
-                    onClick={() => onOpenException(ex.engagementId)}
-                    className="text-left w-full group"
-                  >
-                    <div className="flex items-baseline justify-between gap-4">
-                      <span className="text-[0.875rem] text-ink-800 group-hover:text-brand-700 truncate">
-                        {ex.ref} {ex.title}
-                        {ex.amount ? `, ${ex.amount}` : ''}
-                      </span>
-                      <span className="text-[0.75rem] text-ink-400 shrink-0 tabular-nums">{formatDate(ex.openedAt)}</span>
-                    </div>
-                    <p className="text-[0.75rem] text-ink-500">
-                      <span className={SEVERITY_TONE[ex.severity]}>{ex.severity}</span> · raised by {ex.workflowName} ·{' '}
-                      {ex.runId ? `traced to run ${ex.runId}` : 'no run recorded against it'} · with {ex.assignee}
-                    </p>
-                  </button>
-                </li>
+              {risks.unmapped.map(r => (
+                <MadeRow key={r.id} name={`${r.id} · ${r.name}`} madeBy={r.raisedByAi ? null : r.owner} when={r.priority} note={r.category} />
               ))}
             </MadeList>
-          </div>
+          </Drill>
         </div>
+      )}
+    </Block>
+  );
+}
+
+/* ── What was caught ─────────────────────────────────────────────────────── */
+
+export function ExceptionsCaught({
+  exceptions, period, subject, onOpenException,
+}: {
+  exceptions: ExceptionFigures;
+  period: Period;
+  subject: string;
+  onOpenException: (id: string) => void;
+}) {
+  if (exceptions.total === 0) {
+    return (
+      <Block id="caught" title="What was caught" lede={null}>
+        <Empty kind="quiet" title={`Nothing was caught ${period.phrase}.`} detail="No exception was raised in this window. Findings are recorded whenever they happen, so the window was quiet and nothing went unrecorded." />
+      </Block>
+    );
+  }
+
+  const worst = exceptions.bySeverity.find(s => s.value > 0);
+
+  return (
+    <Block
+      id="caught"
+      title="What was caught"
+      lede={
+        <>
+          <Fig>{fmtInt(exceptions.total)}</Fig>{' '}
+          {exceptions.total === 1 ? 'exception was' : 'exceptions were'} raised across{' '}
+          {subject === 'you' ? 'your own work' : subject} {period.phrase},{' '}
+          <Fig>{fmtInt(exceptions.open)}</Fig> of them still open
+          {worst && <> and <Fig>{fmtInt(worst.value)}</Fig> at {worst.label.toLowerCase()} severity</>}.
+        </>
       }
-      table={
-        <DataTable
-          head={['Severity', 'Raised', 'Still open']}
-          rows={exceptions.bySeverity.map(s => [s.severity, fmtInt(s.total), fmtInt(s.open)])}
-        />
-      }
-      footer={
-        exceptions.untraced > 0
-          ? `${fmtInt(exceptions.untraced)} of these carry no reference to a run, so they are counted but cannot be traced. Linking them is a one column change in the product, and until it lands this page says so rather than hiding them.`
-          : 'Every exception in this window traces back to the run that raised it.'
-      }
-    />
+      chart={<Bars rows={exceptions.bySeverity.map(s => ({ label: s.label, value: s.value }))} tone="risk" />}
+      table={<DataTable head={['Severity', 'Exceptions']} rows={exceptions.bySeverity.map(s => [s.label, fmtInt(s.value)])} />}
+      footer={<DeduplicationLimits beforeDeduplication={exceptions.beforeDeduplication} />}
+    >
+      <div className="mb-4">
+        <Drill label={openLabel(exceptions.total, 'exception', 'exceptions')}>
+          <MadeList>
+            {exceptions.rows.map(ex => (
+              <MadeRow
+                key={ex.id}
+                name={`${ex.ref} · ${ex.title}`}
+                madeBy={`${ex.severity} · ${ex.status} · found by ${ex.workflowName}`}
+                when={formatDate(ex.detectedAt)}
+                note={`caught ${fmtOneDp((ex.detectedAt - ex.occurredAt) / 86_400_000)} days after it happened`}
+                onOpen={() => onOpenException(ex.engagementId)}
+              />
+            ))}
+          </MadeList>
+        </Drill>
+      </div>
+    </Block>
   );
 }

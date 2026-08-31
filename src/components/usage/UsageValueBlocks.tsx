@@ -1,258 +1,509 @@
 /**
- * What the work was worth, and what it cost.
+ * What the platform was worth, what it cost, and what those numbers rest on.
  *
- * PU-01 hours saved · PU-02 money · PU-03 people · PU-04 cost to run ·
- * PU-05 net value · PU-09 work volume · PU-12 AI usage by area ·
- * PU-19 lookup volume · PU-21 created this period.
- *
- * Two rules run through all of it. Every value figure is an estimate and says
- * so, with the assumptions it rests on printed underneath. And the cost side
- * shows what the vendor actually billed or nothing at all: a partial total under
- * a complete-sounding label is a defect, not a rounding.
+ * The headline is the guide's worked example rendered as a page. It prices the
+ * same work done by hand, at the assumed pace and the assumed rate, less the
+ * time the machine actually took. The cost block is the other column of that
+ * table, and it appears on the owner's view only.
  */
 
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowRight } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDate } from '../../data/platform-usage';
 import {
-  fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtOneDp, fmtPaise, fmtRate, fmtUsd,
-  deltaPct, grainFor, priorLabel,
-  type AiUsageRow, type ChangeHistory, type CostToRun, type CreatedCount, type LookupVolume,
-  type NetValue, type Period, type Scope, type TimeBucket, type UsageSettings, type ValueFigures,
-  type WorkVolume as WorkVolumeFigures,
+  DEDUPLICATION_LIMITS, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  fmtDuration, fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtOneDp, fmtPeople, fmtPrice, plural, priorLabel,
+  type AiUsageRow, type Bucket, type CostFigures, type NumericSetting, type Period, type Scope,
+  type Sensitivity, type UsageSettings, type ValueChange, type ValueFigures,
 } from '../../data/platform-usage-metrics';
 import ChartAutoSizer from './ChartAutoSizer';
-import { AccuracyTag, Bars, Block, DataTable, Drill, Empty, Fig, MadeList, MadeRow, RestsOn, Stat, StatRow } from './usageKit';
+import { Block, DataTable, Drill, Empty, Estimated, Fig, MadeList, MadeRow, RestsOn, Stat, StatRow, Working } from './usageKit';
 
-const BRAND = '#6A12CD';
-const BRAND_SOFT = '#DCBBFD';
-const HAIRLINE = '#E5E7EB';
-const INK_MUTED = '#6B5D82';
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-01 · PU-02 · PU-03 · PU-05 — the headline
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── PU-05 · The net-value hero, and the four tiles under it ─────────────── */
 
 /**
- * The hero.
+ * What the whole company view opens on.
  *
- * While the cost is unknown the hero is called "Work avoided" and shows what the
- * work was worth. It becomes "Net value" only when every month in the window has
- * its bill, because "net value" over one real number minus an unknown is not a
- * net of anything.
+ * PU-05 is net value: what the work was worth, less what running the platform
+ * charged. It only reads as net value when the cost is complete. While any
+ * lookup is running without a contract price against it, the hero reads "work
+ * avoided" instead, because "net value" minus an unknown is not net value, and
+ * a partial figure under a complete-sounding label is the one thing this page
+ * may never print.
  *
- * The auditor's view shows hours and never rupees. "You saved 84 hours" reads as
- * an achievement; "you saved ₹1,00,800" reads as somebody pricing your work.
+ * The four tiles are PU-01 to PU-04, each carrying its change against the
+ * window of the same length immediately before this one.
  */
-export function HeadlineValue({
-  value,
-  priorValue,
-  net,
-  cost,
-  settings,
-  period,
-  scope,
-  subject,
-  changes,
-  showMoney,
-  onOpenCost,
+export function NetValueHero({
+  value, change, cost, netRupees, period, settings,
 }: {
   value: ValueFigures;
-  priorValue: ValueFigures | null;
-  net: NetValue;
-  cost: CostToRun;
-  settings: UsageSettings;
+  change: ValueChange;
+  cost: CostFigures;
+  netRupees: number;
   period: Period;
-  scope: Scope;
-  subject: string;
-  changes: ChangeHistory;
-  showMoney: boolean;
-  onOpenCost: () => void;
+  settings: UsageSettings;
 }) {
-  const hoursDelta = deltaPct(value.hours, priorValue?.hours ?? null);
-  const hoursPerWindow = settings.hoursPerPersonPerMonth * period.months;
-
-  if (value.hours <= 0) {
+  if (value.runs === 0) {
     return (
-      <Block
-        id="value"
-        title={showMoney ? 'Work avoided' : 'Time saved'}
-        lede={null}
-        hint="What the platform did instead of a person, priced at the assumptions below."
-      >
+      <Block id="hero" title="What the platform was worth" lede={null}>
         <Empty
           kind="quiet"
-          title={`No completed runs for ${subject} in this window.`}
-          detail="A run has to finish and report the rows it worked through before there is anything to value. Nothing is being estimated here in the meantime."
+          title={`No checks finished ${period.phrase}.`}
+          detail="Nothing ran in this window, so there is nothing here to value. We do measure this; it was a quiet window."
         />
       </Block>
     );
   }
 
+  const costRupees = cost.totalPaise / 100;
+  const net = cost.complete;
+
   return (
     <Block
-      id="value"
-      title={showMoney ? net.headline : 'Time saved'}
-      lede={
-        <>
-          The platform saved {subject} <Fig>{fmtHours(value.hours)}</Fig> {period.phrase}
-          {hoursDelta !== null && <>, {hoursDelta >= 0 ? 'up' : 'down'} <Fig>{fmtOneDp(Math.abs(hoursDelta))}%</Fig> on {priorLabel(period)}</>}
-          {'. '}
-          It came from <Fig>{fmtInt(value.rowRuns)}</Fig> runs over <Fig>{fmtInt(value.rows)}</Fig> rows
-          {value.testRuns > 0 && <> and <Fig>{fmtInt(value.testRuns)}</Fig> control tests the platform ran instead of a person</>}.
-        </>
+      id="hero"
+      title={net ? 'Net value' : 'Work avoided'}
+      lede={null}
+      hint={
+        net
+          ? 'What the work was worth, less what running the platform charged under your contract.'
+          : 'What the work was worth. Not every lookup has a contract price yet, so nothing is subtracted from it.'
       }
-      hint="Every figure here is an estimate, built from the assumptions printed underneath."
-      footer={<RestsOn settings={settings} keys={showMoney ? ['manualReviewRate', 'manualControlTestHours', 'hourlyRate'] : ['manualReviewRate', 'manualControlTestHours']} history={changes} periodLabel={period.phrase} />}
     >
-      {showMoney && (
-        <div className="mb-5 rounded-lg bg-brand-50 px-5 py-4">
-          <p className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-brand-700">
-            {net.headline} · {period.label}
-          </p>
-          <p className="mt-1.5 text-[2.5rem] font-semibold leading-none text-ink-900 tabular-nums">
-            {fmtMoney(net.net ?? net.workAvoided)}
-          </p>
-          <p className="mt-2 text-[0.875rem] text-ink-700">
-            {net.cost === null ? (
-              <>
-                {fmtMoney(net.workAvoided)} of work avoided. Nothing is deducted yet: your contract prices have
-                not been loaded, so the page will not print a cost it does not have.
-              </>
-            ) : (
-              <>
-                {fmtMoney(net.workAvoided)} of work avoided, less {fmtMoneyExact(net.cost)} the paid lookups cost
-                as per your contract
-                {cost.unpriced.length > 0 && (
-                  <>. {fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))} calls sit on APIs your
-                    contract does not price yet, so they are counted and charged nothing</>
-                )}
-                .
-              </>
-            )}
-          </p>
-        </div>
-      )}
+      <div className="rounded-lg bg-brand-50/60 border border-brand-100 px-5 py-5">
+        <p className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-brand-700">
+          {net ? 'Net value' : 'Work avoided'} · {period.label}
+        </p>
+        <p className="mt-1.5 text-[2.5rem] font-semibold text-ink-900 leading-none tabular-nums">
+          {fmtMoney(net ? netRupees : value.rupees)}
+          <Estimated />
+        </p>
+        <p className="mt-2.5 text-[0.875rem] text-ink-600 leading-relaxed max-w-[76ch]">
+          {net
+            ? <>{fmtMoney(value.rupees)} of work avoided, less {fmtMoneyExact(costRupees)} spent running the platform.</>
+            : <>{fmtMoney(value.rupees)} of work avoided. No lookup in this window has a contract price against it yet, so there is nothing to subtract and the figure is not called net value.</>}
+        </p>
+      </div>
 
-      <StatRow>
-        <Stat
-          value={fmtHours(value.hours)}
-          label="Time saved"
-          delta={hoursDelta}
-          deltaLabel={priorLabel(period)}
-          size="md"
-        />
-        {showMoney && (
+      {/*
+        * Each tile says where its own number came from, in the same arithmetic
+        * a reader could do on a calculator. "Those hours at the assumed cost of
+        * an auditor hour" tells nobody anything; "7,140 hours at ₹1,200 an
+        * hour" can be checked, and argued with, which is the point.
+        */}
+      <div className="mt-4">
+        <StatRow>
           <Stat
-            value={fmtMoney(value.money)}
-            label="Money saved"
-            sub={`at ${fmtMoneyExact(settings.hourlyRate)} an hour`}
-            delta={deltaPct(value.money, priorValue?.money ?? null)}
+            value={<>{fmtHours(value.hoursSaved)}<Estimated /></>}
+            label="hours saved"
+            sub={<>{fmtHours(value.manualHours)} hours by hand, less {fmtDuration(value.machineHours)} of machine time.</>}
+            delta={change.hours}
             deltaLabel={priorLabel(period)}
           />
-        )}
-        {scope.persona === 'cfo' && (
           <Stat
-            value={fmtOneDp(value.people)}
-            label="People equivalent"
-            sub={`of a ${fmtInt(hoursPerWindow)}-hour window each`}
+            long
+            value={<>{fmtMoney(value.rupees)}<Estimated /></>}
+            label="money saved"
+            sub={<>{fmtHours(value.manualHours)} hours at {fmtMoneyExact(settings.hourlyRate)} an hour.</>}
+            delta={change.rupees}
+            deltaLabel={priorLabel(period)}
           />
-        )}
-        {showMoney && (
-          <div className="min-w-0">
-            <Stat
-              value={cost.lookupRupees === null ? '—' : fmtMoneyExact(cost.lookupRupees)}
-              label="Cost to run"
-              sub={cost.lookupRupees === null
-                ? `${fmtInt(cost.lookupCalls)} paid lookups recorded, contract not loaded`
-                : `${fmtInt(cost.lookupCalls)} paid lookups, at your contract price`}
-            />
-            <button type="button" onClick={onOpenCost} className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
-              What this covers <ArrowRight size={12} />
-            </button>
-          </div>
-        )}
-      </StatRow>
+          <Stat
+            value={<>{fmtPeople(value.people)}<Estimated /></>}
+            label="people equivalent"
+            sub={
+              <>
+                {fmtHours(value.manualHours)} hours over the{' '}
+                {fmtInt(settings.hoursPerPersonPerMonth * period.months)} hours one person works in{' '}
+                {period.label.toLowerCase().replace('this ', 'a ')}.
+              </>
+            }
+            delta={change.people}
+            deltaLabel={priorLabel(period)}
+          />
+          {cost.complete
+            ? (
+              <Stat
+                long
+                value={fmtMoneyExact(costRupees)}
+                label="cost to run"
+                sub={<>{plural(cost.lines.reduce((sum, l) => sum + l.calls, 0), 'verification lookup', 'verification lookups')}, at the price in your contract.</>}
+              />
+            )
+            : (
+              <Stat
+                value="—"
+                label="cost to run"
+                sub="No lookup here has a contract price against it yet, so there is no total to show."
+              />
+            )}
+        </StatRow>
+      </div>
+
+      {cost.unpriced.length > 0 && (
+        <p className="mt-4 pt-3 border-t border-canvas-border text-[0.75rem] text-ink-500 leading-relaxed max-w-[80ch]">
+          {plural(cost.unpriced.length, 'lookup ran', 'lookups ran')} that your contract does not
+          price yet: {cost.unpriced.map(l => l.name).join(', ')}.{' '}
+          {cost.unpriced.length === 1 ? 'Its calls are' : 'Their calls are'} counted and you are
+          charged nothing for {cost.unpriced.length === 1 ? 'it' : 'them'}. Getting{' '}
+          {cost.unpriced.length === 1 ? 'it' : 'them'} on the contract is our job, not yours.
+        </p>
+      )}
     </Block>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * Value over time
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── The headline ────────────────────────────────────────────────────────── */
 
-/** Hours saved per bucket, priced at the hourly rate. */
-export function ValueOverTime({
-  buckets,
-  period,
-  settings,
-  showMoney,
+export function HeadlineValue({
+  value, prior, change, period, scope, settings, showMoney,
 }: {
-  buckets: TimeBucket[];
+  value: ValueFigures;
+  prior: ValueFigures;
+  change: ValueChange;
   period: Period;
+  scope: Scope;
   settings: UsageSettings;
+  /** An auditor reads their own work in hours and never in rupees. */
   showMoney: boolean;
 }) {
-  const grain = grainFor(period);
-  const best = buckets.reduce((a, b) => (b.hours > a.hours ? b : a), buckets[0]);
-  const total = buckets.reduce((s, b) => s + b.hours, 0);
-
-  if (buckets.length === 0 || total <= 0) {
+  if (value.runs === 0) {
     return (
-      <Block title="Value over time" lede={null}>
-        <Empty kind="quiet" title="No completed runs in this window, so there is no shape to draw yet." />
+      <Block id="headline" title="What it was worth" lede={null}>
+        <Empty
+          kind="quiet"
+          title={`No checks finished ${period.phrase}.`}
+          detail="Nothing ran in this window, so there is nothing here to value. We do measure this; it was a quiet window."
+        />
       </Block>
     );
   }
 
+  // "The platform" for the whole company, the team's own name for a team lead.
+  const who = scope.subject === 'the company' ? 'The platform' : scope.subject;
+
+  const lede = showMoney
+    ? (
+      <>
+        {who} checked{' '}
+        <Fig>{fmtInt(value.coveredRows)}</Fig> rows {period.phrase} across <Fig>{fmtInt(value.runs)}</Fig> successful
+        runs. By hand that is about <Fig>{fmtHours(value.manualHours)}</Fig> hours and{' '}
+        <Fig>{fmtMoney(value.rupees)}</Fig> of auditor time. The machine took{' '}
+        <Fig>{fmtDuration(value.machineHours)}</Fig>.
+      </>
+    )
+    : (
+      <>
+        You checked <Fig>{fmtInt(value.coveredRows)}</Fig> rows {period.phrase} across{' '}
+        <Fig>{fmtInt(value.runs)}</Fig> successful runs. By hand that is about{' '}
+        <Fig>{fmtHours(value.manualHours)}</Fig> hours of work. The machine took{' '}
+        <Fig>{fmtDuration(value.machineHours)}</Fig>.
+      </>
+    );
+
+  /*
+   * The sum, written out.
+   *
+   * Every figure in the row above comes off the same chain, and the middle of
+   * that chain (the hours by hand) is the one nobody can see on the tiles. So
+   * the steps are printed under the row with the source of each input beside
+   * it, and a reader can check the whole thing on a calculator.
+   */
+  const hoursPerWindow = settings.hoursPerPersonPerMonth * period.months;
+  const source = (key: NumericSetting) => SOURCE_LABEL[settings.source[key]];
+
+  const working = [
+    {
+      expr: `${fmtInt(value.coveredRows)} rows`,
+      means: `checked ${period.phrase}, with each population counted once`,
+      source: 'measured',
+    },
+    {
+      expr: `÷ ${fmtInt(settings.manualReviewRate)} rows an hour`,
+      means: 'what one person gets through by hand',
+      source: source('manualReviewRate'),
+    },
+  ];
+
+  // The other branch: a run that tested a control without producing rows is
+  // priced as one manual test rather than as rows, so it only appears when
+  // there was one.
+  if (value.zeroRowRuns > 0) {
+    working.push({
+      expr: `+ ${fmtInt(value.zeroRowRuns)} × ${fmtOneDp(settings.manualControlTestHours)} hours`,
+      means: 'runs that tested a control without producing rows',
+      source: source('manualControlTestHours'),
+    });
+  }
+
+  working.push(
+    { expr: `= ${fmtHours(value.manualHours)} hours`, means: 'the same work done by hand', source: 'estimated' },
+    { expr: `less ${fmtDuration(value.machineHours)}`, means: 'what the machine actually took', source: 'measured' },
+    { expr: `= ${fmtHours(value.hoursSaved)} hours saved`, means: 'rounded down, so the saving is never overstated', source: 'estimated' },
+  );
+
+  if (showMoney) {
+    working.push({
+      expr: `${fmtHours(value.manualHours)} hours × ${fmtMoneyExact(settings.hourlyRate)} an hour`,
+      means: `= ${fmtMoneyExact(value.rupees)}, the blended cost of an auditor hour`,
+      source: source('hourlyRate'),
+    });
+  }
+
+  working.push({
+    expr: `${fmtHours(value.manualHours)} hours ÷ ${fmtInt(hoursPerWindow)} hours`,
+    means: `= ${fmtPeople(value.people)} people, at ${fmtInt(settings.hoursPerPersonPerMonth)} working hours a month across this window`,
+    source: source('hoursPerPersonPerMonth'),
+  });
+
+  return (
+    <Block id="headline" title="What it was worth" lede={lede}>
+      <StatRow>
+        <Stat
+          size="lg"
+          value={<>{fmtHours(value.hoursSaved)}<Estimated /></>}
+          label="hours saved"
+          sub="What the work would have taken by hand, less the time the machine took."
+          delta={change.hours}
+          deltaLabel={priorLabel(period)}
+        />
+        {showMoney && (
+          <Stat
+            size="lg"
+            long
+            value={<>{fmtMoney(value.rupees)}<Estimated /></>}
+            label="the same work by hand"
+            sub="What those hours would have cost in auditor time."
+            delta={change.rupees}
+            deltaLabel={priorLabel(period)}
+          />
+        )}
+        <Stat
+          size="lg"
+          value={<>{fmtPeople(value.people)}<Estimated /></>}
+          label="people freed, full time"
+          sub="How many full-time people those hours add up to over this window."
+          delta={change.people}
+          deltaLabel={priorLabel(period)}
+        />
+        <Stat
+          value={fmtInt(value.runs)}
+          label="successful runs"
+          sub={`Every figure here is built from these, over ${fmtInt(value.populations)} populations. ${fmtInt(prior.runs)} in ${priorLabel(period)}.`}
+        />
+      </StatRow>
+
+      <Working rows={working} />
+    </Block>
+  );
+}
+
+/* ── Value over time ─────────────────────────────────────────────────────── */
+
+/**
+ * What the window looked like week by week.
+ *
+ * The bars are runs, because runs are what vary. Coverage does not vary: once a
+ * population has been tested it stays tested, so it is credited to the bucket
+ * that first reached it and never counted again. The block therefore says where
+ * the coverage was reached and what the rest of the window bought instead, and
+ * it does not draw the same rows thirteen times.
+ */
+export function ValueOverTime({
+  buckets, period, settings, showMoney,
+}: {
+  buckets: Bucket[];
+  period: Period;
+  settings: UsageSettings;
+  showMoney: boolean;
+}) {
+  const active = buckets.filter(b => b.runs > 0);
+  if (active.length === 0) {
+    return (
+      <Block id="over-time" title="Value over time" lede={null}>
+        <Empty kind="quiet" title={`Nothing ran ${period.phrase}, so there is no shape to show.`} />
+      </Block>
+    );
+  }
+
+  const busiest = [...active].sort((a, b) => b.runs - a.runs)[0];
+  const bought = buckets.filter(b => b.newRows > 0);
+  const lastBought = bought[bought.length - 1];
+  const runsAfter = buckets
+    .filter(b => lastBought && b.from > lastBought.from)
+    .reduce((s, b) => s + b.runs, 0);
+
   return (
     <Block
+      id="over-time"
       title="Value over time"
       lede={
         <>
-          Hours saved {grain === 'week' ? 'each week' : 'each month'} in this window, priced at{' '}
-          <Fig>{fmtMoneyExact(settings.hourlyRate)}</Fig> an hour. The strongest {grain} was{' '}
-          <Fig>{best.label}</Fig> at <Fig>{fmtHours(best.hours)}</Fig>
-          {showMoney && <> ({fmtMoney(best.money)})</>}.
+          The busiest stretch was <Fig>{busiest.label}</Fig>, at <Fig>{fmtInt(busiest.runs)}</Fig>{' '}
+          {busiest.runs === 1 ? 'run' : 'runs'}.
+          {lastBought && (
+            <> All of the coverage {period.phrase} was reached by <Fig>{lastBought.label}</Fig>
+              {runsAfter > 0 && (
+                <>. The <Fig>{fmtInt(runsAfter)}</Fig> runs after that re-tested populations that
+                  were already covered, which catches problems sooner without widening the coverage</>
+              )}.
+            </>
+          )}
         </>
       }
+      hint="Bars are runs. A population is credited to the window once, on the day it was first tested, so no two bars count the same rows."
       chart={
-        <ChartAutoSizer height={230}>
+        <ChartAutoSizer height={220}>
           {({ width, height }) => (
-            <BarChart width={width} height={height} data={buckets} margin={{ top: 22, right: 4, bottom: 4, left: 4 }}>
-              <CartesianGrid stroke={HAIRLINE} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: INK_MUTED }} axisLine={{ stroke: HAIRLINE }} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: INK_MUTED }} axisLine={false} tickLine={false} width={52} tickFormatter={(v: number) => fmtInt(v)} />
+            <BarChart width={width} height={height} data={buckets} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+              <CartesianGrid stroke="#E5E7EB" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: '#6B5D82' }} tickLine={false} axisLine={false} width={40} allowDecimals={false} />
               <Tooltip
-                formatter={(v) => [fmtHours(Number(v)), 'Time saved']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${HAIRLINE}` }}
+                cursor={{ fill: '#F7F0FF' }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}
+                formatter={(v: unknown) => [`${fmtInt(Number(v) || 0)} runs`, 'Successful'] as [string, string]}
               />
-              <Bar dataKey="hours" radius={[3, 3, 0, 0]} maxBarSize={64}>
-                {/* Every bar carries its own figure, so nothing on this page
-                    relies on colour or on a hover to be read. */}
-                <LabelList
-                  dataKey="hours"
-                  position="top"
-                  formatter={(v) => fmtInt(Number(v))}
-                  style={{ fontSize: 12, fill: INK_MUTED, fontVariantNumeric: 'tabular-nums' }}
-                />
-                {buckets.map(b => (
-                  <Cell key={b.at} fill={b.label === best.label ? BRAND : BRAND_SOFT} />
-                ))}
-              </Bar>
+              <Bar dataKey="runs" fill="#6A12CD" radius={[3, 3, 0, 0]} />
             </BarChart>
           )}
         </ChartAutoSizer>
       }
       table={
         <DataTable
-          head={grain === 'week' ? ['Week', 'Runs', 'Rows', 'Hours saved', showMoney ? 'Worth' : 'Rows per run'] : ['Month', 'Runs', 'Rows', 'Hours saved', showMoney ? 'Worth' : 'Rows per run']}
-          rows={buckets.map(b => [
-            b.label,
-            fmtInt(b.runs),
-            fmtInt(b.rows),
-            fmtHours(b.hours),
-            showMoney ? fmtMoney(b.money) : fmtInt(b.runs === 0 ? 0 : b.rows / b.runs),
+          head={showMoney
+            ? ['Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided', 'Value']
+            : ['Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided']}
+          rows={buckets.map(b => (showMoney
+            ? [b.label, fmtInt(b.runs), fmtInt(b.checks), fmtInt(b.newRows), b.hours > 0 ? fmtHours(b.hours) : '—', b.rupees > 0 ? fmtMoney(b.rupees) : '—']
+            : [b.label, fmtInt(b.runs), fmtInt(b.checks), fmtInt(b.newRows), b.hours > 0 ? fmtHours(b.hours) : '—']))}
+        />
+      }
+      footer={<RestsOn settings={settings} keys={showMoney ? ['manualReviewRate', 'hourlyRate'] : ['manualReviewRate']} />}
+    />
+  );
+}
+
+/* ── Cost, and what is left ──────────────────────────────────────────────── */
+
+/**
+ * The only block that carries money out as well as in, and the only one an
+ * owner sees. Everything here is recorded volume priced at the contract, so it
+ * says "as per your contract" and means it.
+ */
+export function CostAndNetValue({
+  cost, value, netRupees, period,
+}: {
+  cost: CostFigures;
+  value: ValueFigures;
+  netRupees: number;
+  period: Period;
+}) {
+  const rupees = cost.totalPaise / 100;
+  const anyPriced = cost.lines.length > 0;
+
+  return (
+    <Block
+      id="cost"
+      title="What it cost, and what is left"
+      lede={
+        anyPriced
+          ? (
+            <>
+              The paid lookups cost <Fig>{fmtMoneyExact(rupees)}</Fig> {period.phrase}, as per your contract.
+              Against <Fig>{fmtMoney(value.rupees)}</Fig> of work avoided, that leaves{' '}
+              <Fig>{fmtMoney(netRupees)}</Fig>.
+            </>
+          )
+          : (
+            <>
+              No lookup in this window has a contract price against it yet, so the cost line is blank
+              instead of zero. Fixing that is our job.
+            </>
+          )
+      }
+      hint="Volume is recorded run by run. The price is a term of your contract, set by our operations team when the deal was signed."
+    >
+      {anyPriced && (
+        <>
+          <StatRow>
+            <Stat size="lg" long value={fmtMoneyExact(rupees)} label="charged by the contract" sub={`${fmtInt(cost.lines.reduce((s, l) => s + l.calls, 0))} recorded calls`} />
+            <Stat size="lg" long value={fmtMoney(netRupees)} label="net value" sub="work avoided, less what was charged" />
+            <Stat value={fmtInt(cost.lines.length)} label="lookups with a price" />
+            <Stat value={fmtInt(cost.unpriced.length)} label="lookups not priced yet" />
+          </StatRow>
+
+          <div className="mt-4">
+            <DataTable
+              head={['Lookup', 'Vendor', 'Calls', 'Charged for', 'Price', 'Cost']}
+              numericFrom={2}
+              rows={cost.lines.map(line => [
+                line.name,
+                line.vendor ?? '—',
+                fmtInt(line.calls),
+                line.billingUnit === 'run' ? `${fmtInt(line.batches)} runs` : `${fmtInt(line.calls)} rows`,
+                line.prices.length > 1
+                  ? line.prices.map(p => fmtPrice(p.pricePaise / 100)).join(' then ')
+                  : fmtPrice((line.pricePaise ?? 0) / 100),
+                fmtMoneyExact(line.paise / 100),
+              ])}
+            />
+          </div>
+        </>
+      )}
+
+      {cost.unpriced.length > 0 && (
+        <div className="mt-4">
+          <Empty
+            kind="unmeasured"
+            title={`${plural(cost.unpriced.length, 'lookup ran', 'lookups ran')} without a contract price: ${cost.unpriced.map(l => l.name).join(', ')}.`}
+            detail="Their calls are counted and charged nothing. The reminder goes to our operations team rather than to you, which is why it does not appear as an attention card. There would be nothing on it for you to do."
+          />
+        </div>
+      )}
+
+      <div className="mt-4 space-y-2">
+        <p className="text-[0.875rem] text-ink-700 leading-relaxed">
+          Nothing else here is turned into money. The Concierge recorded{' '}
+          <Fig>{fmtMoneyExact(cost.conciergePaise / 100)}</Fig> for itself across{' '}
+          <Fig>{fmtInt(cost.conciergeJobsPriced)}</Fig> jobs, and{' '}
+          <Fig>{fmtInt(cost.conciergeJobsUnpriceable)}</Fig> more have no cost code at all. Chat is
+          estimated from text length. The SOP-to-RACM pipeline records nothing about what it
+          consumes, and <Fig>{fmtInt(cost.sopCacheHits)}</Fig> of its{' '}
+          <Fig>{fmtInt(cost.sopJobs)}</Fig> jobs were served from the cache and used no AI at all.
+        </p>
+        <p className="text-[0.75rem] text-ink-500 leading-relaxed">
+          So there is no blended AI cost anywhere on this page. Half of it would be real and half a
+          guess, and nobody could defend that number if somebody questioned it.
+        </p>
+      </div>
+    </Block>
+  );
+}
+
+/* ── One assumption swings everything ────────────────────────────────────── */
+
+export function SensitivityBlock({ rows, settings }: { rows: Sensitivity[]; settings: UsageSettings }) {
+  if (rows.length === 0 || rows[1].rupees === 0) return null;
+  return (
+    <Block
+      id="sensitivity"
+      title="How much the pace matters"
+      lede={
+        <>
+          Everything above rests on one number: how many rows a person checks by hand in an hour.
+          At <Fig>{fmtInt(rows[0].rate)}</Fig> the saving is <Fig>{fmtMoney(rows[0].rupees)}</Fig>,
+          and at <Fig>{fmtInt(rows[2].rate)}</Fig> it is <Fig>{fmtMoney(rows[2].rupees)}</Fig>. The
+          same quarter is worth eight times as much at one end as the other, so every figure that
+          rests on the assumption is printed next to it.
+        </>
+      }
+      table={
+        <DataTable
+          head={['Rows checked by hand per hour', 'Hours by hand', 'The same work in money']}
+          rows={rows.map(r => [
+            r.rate === settings.manualReviewRate ? `${fmtInt(r.rate)} (what this page uses)` : fmtInt(r.rate),
+            fmtHours(r.hours),
+            fmtMoney(r.rupees),
           ])}
         />
       }
@@ -260,339 +511,132 @@ export function ValueOverTime({
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-04 · PU-19 — what it costs to run
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── The read-only reference behind the four assumptions ─────────────────── */
+
+const ASSUMPTION_ORDER: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
 
 /**
- * Cost to run.
+ * The four assumptions, their sources, and every change on the record.
  *
- * The volume the platform recorded, priced at the customer's own contract. Those
- * prices are set by irame when the deal is signed, so the figure simply appears
- * and says where it came from: as per your contract. There is no price form, no
- * bill screen and no override anywhere in the product, because none of these
- * numbers is the customer's to type.
- *
- * Where the contract does not price an API yet, those calls are named rather than
- * charged at a guess, and the total says it is short. With no contract loaded at
- * all the figure is absent rather than zero.
- *
- * The Concierge job cost is the one price the product records by itself. It is in
- * dollars, and it is shown as itself, added to nothing: a rupee total with a
- * silent conversion in it would be the blended figure this page refuses to draw.
+ * There is no editor and no input field, here or anywhere else in this feature.
+ * The two measurable ones replace themselves from the customer's own recorded
+ * history once both guards pass. The other two are labelled defaults and say why
+ * they will stay that way.
  */
-export function CostToRunBlock({
-  cost,
-  lookups,
-  period,
-}: {
-  cost: CostToRun;
-  lookups: LookupVolume;
-  period: Period;
-}) {
-  if (cost.noContract) {
-    return (
-      <Block id="cost" title="Cost to run" lede={null}>
-        <Empty
-          kind="unmeasured"
-          title="Your contract prices have not been loaded yet."
-          detail={`The platform recorded ${fmtInt(cost.lookupCalls)} paid lookups ${period.phrase}. What they cost is set in your contract, and it is seeded by irame rather than entered here, so this stays empty until it arrives. Nothing on the value side of this page depends on it.`}
-        />
-      </Block>
-    );
-  }
-
+export function AssumptionsReference({ settings }: { settings: UsageSettings }) {
+  const measured = ASSUMPTION_ORDER.filter(k => settings.source[k] === 'measured');
   return (
     <Block
-      id="cost"
-      title="Cost to run"
+      id="assumptions"
+      title="What the page assumes"
       lede={
-        <>
-          The <Fig>{fmtInt(cost.lookupCalls)}</Fig> paid lookups {period.phrase} cost{' '}
-          <Fig>{fmtMoneyExact(cost.lookupRupees ?? 0)}</Fig> as per your contract, which works out at{' '}
-          <Fig>{lookups.effectiveRatePaise === null ? 'nothing we can divide yet' : fmtRate(lookups.effectiveRatePaise)}</Fig>{' '}
-          a lookup across every API.
-          {cost.unpriced.length > 0 && (
+        measured.length > 0
+          ? (
             <>
-              {' '}
-              <Fig>{fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))}</Fig> of those calls are on
-              APIs your contract does not price yet, so they are counted here and charged nothing.
+              Four numbers cannot be read off a record, so they are assumed and labelled.{' '}
+              {measured.length === 1 ? 'One' : fmtInt(measured.length)} of them{' '}
+              {measured.length === 1 ? 'has' : 'have'} already been replaced by your own recorded
+              history.
             </>
-          )}
-        </>
+          )
+          : <>Four numbers cannot be read off a record. They are assumed and labelled as such, and your own history replaces them once there is enough of it.</>
       }
-      hint="The paid lookups are the platform's most literal cost: an outside vendor bills for each successful verification, at the price agreed in your contract."
-      footer="Prices and billing units are contract terms, set by irame when the deal is signed and versioned every time they change. The Concierge job cost is recorded in dollars by the tools themselves and is shown as itself, never converted into this total at a rate nobody agreed."
+      hint="Read only. Nothing on this page, or anywhere else in this feature, asks anyone to type a number."
     >
-      <StatRow>
-        <Stat
-          value={fmtMoneyExact(cost.lookupRupees ?? 0)}
-          label="Charged by your contract"
-          sub={cost.complete
-            ? `every recorded call is priced`
-            : `${fmtInt(cost.unpriced.reduce((sum, row) => sum + row.calls, 0))} calls not priced by the contract yet`}
-        />
-        <Stat value={fmtInt(cost.lookupCalls)} label="Paid lookups recorded" sub={`${fmtInt(lookups.failed)} failed, which are not charged`} />
-        <Stat value={fmtUsd(cost.conciergeUsd)} label="Concierge job cost" sub={`${fmtInt(cost.conciergeJobs)} jobs, ${fmtInt(cost.conciergeUnpriced)} of which record no cost`} />
-        <Stat value={fmtInt(lookups.personalDataCalls)} label="Lookups touching personal data" sub="passports, PAN, provident fund, driving licences" />
-      </StatRow>
+      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+        {ASSUMPTION_ORDER.map(key => (
+          <li key={key} className="py-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-[0.875rem] text-ink-800">{SETTING_SHORT[key]}</span>
+              <span className="text-[0.875rem] font-semibold text-ink-900 tabular-nums shrink-0">
+                {key === 'hourlyRate' ? fmtMoneyExact(settings[key]) : key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : fmtInt(settings[key])}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[0.75rem] text-ink-400">{SOURCE_LABEL[settings.source[key]]}</p>
+            <p className="mt-1 text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed">{settings.note[key]}</p>
+          </li>
+        ))}
+      </ul>
 
-      {cost.unpriced.length > 0 && (
-        <div className="mt-4 rounded-lg border border-dashed border-canvas-border bg-canvas px-4 py-3">
-          <p className="text-[0.875rem] text-ink-700">
-            Not priced by your contract yet:{' '}
-            {cost.unpriced.map(row => `${row.name}, ${fmtInt(row.calls)} calls`).join(' · ')}.
-          </p>
-          <p className="mt-1 text-[0.75rem] text-ink-500">
-            Those calls are counted and charged nothing. Adding them is a contract change on our side, so there
-            is nothing for you to enter.
-          </p>
-        </div>
-      )}
+      <div className="mt-4">
+        {settings.changes.length === 0
+          ? <Empty kind="quiet" title="Nothing has changed yet. Every value is the one it shipped with." />
+          : (
+            <Drill label={`${plural(settings.changes.length, 'change', 'changes')} on the record`} hideLabel="Hide the changes">
+              <MadeList>
+                {settings.changes.map((c, i) => (
+                  <MadeRow
+                    key={`${c.setting}-${i}`}
+                    name={`${SETTING_SHORT[c.setting]} · ${c.from ?? '—'} to ${c.to}`}
+                    madeBy={c.by}
+                    when={formatDate(c.at)}
+                    note={c.note}
+                  />
+                ))}
+              </MadeList>
+            </Drill>
+          )}
+      </div>
 
-      {lookups.rows.length > 0 && (
-        <div className="mt-4">
-          <Drill label={`What each API charged: ${fmtInt(lookups.rows.length)} APIs`} hideLabel="Hide the APIs">
-            <DataTable
-              head={['API', 'Successful calls', 'Runs', 'Your contract price', 'Charged']}
-              rows={lookups.rows.map(row => [
-                row.name,
-                fmtInt(row.calls),
-                fmtInt(row.batches),
-                row.pricePaise === null
-                  ? 'not in your contract'
-                  : `${fmtRate(row.pricePaise)} per ${row.billingUnit}`,
-                row.chargedPaise === null ? 'nothing' : fmtPaise(row.chargedPaise),
-              ])}
-            />
-            <p className="mt-2 text-[0.75rem] text-ink-500">
-              An API charged per row charges for every successful call. One charged per run charges once for the
-              whole run, however many rows it checked. Which of the two applies is a contract term, verified once
-              against the workflow's own program.
-            </p>
-          </Drill>
-        </div>
-      )}
-
-      {cost.prices.length > 0 && (
-        <div className="mt-3">
-          <Drill label={`The contract rows behind this figure: ${fmtInt(cost.prices.length)}`} hideLabel="Hide the contract">
-            <MadeList>
-              {cost.prices.map(row => (
-                <MadeRow
-                  key={`${row.lookupId}-${row.effectiveFrom}`}
-                  name={`${row.apiName}, ${fmtRate(row.pricePaise)} per ${row.billingUnit}`}
-                  madeBy={row.setBy}
-                  when={formatDate(row.effectiveFrom)}
-                  note={row.effectiveTo === null
-                    ? `${row.vendor} · in force`
-                    : `${row.vendor} · until ${formatDate(row.effectiveTo)}`}
-                />
-              ))}
-            </MadeList>
-            <p className="mt-2 text-[0.75rem] text-ink-500">
-              A renegotiation opens a new row rather than rewriting the old one, so a price change this month
-              never moves last month's figure.
-            </p>
-          </Drill>
-        </div>
-      )}
+      <p className="mt-4 text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed">
+        {REVIEW_PROXY_NOTE} Both guards have to pass before anything is replaced: at least 90 days
+        of history and a large enough sample, with the outliers trimmed, because an exception left
+        open over a weekend did not take 60 hours to review.
+      </p>
     </Block>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-12 — AI usage by area
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── Where the AI money goes, and what we can honestly say ───────────────── */
 
-/**
- * AI usage by area.
- *
- * Volume for every area, and an accuracy label on every row: exact, estimated,
- * not measured, or no record. The words "AI cost" appear nowhere on this page,
- * because four of the five areas record nothing about what they consumed and a
- * total assembled from one real number and three blanks is worse than no total.
- */
-export function AiUsageByArea({ rows }: { rows: AiUsageRow[] }) {
-  const exact = rows.filter(r => r.accuracy === 'exact');
+export function AiUsageByArea({ rows, period }: { rows: AiUsageRow[]; period: Period }) {
+  const busiest = [...rows].sort((a, b) => b.count - a.count)[0];
   return (
     <Block
-      title="AI usage by area"
+      id="ai-usage"
+      title="What the AI did"
       lede={
-        <>
-          Five areas of the product use AI, and the platform records what each one did.
-          Only <Fig>{fmtInt(exact.length)}</Fig> of them records what it consumed, so the rest carry a label
-          saying so rather than a figure that looks measured.
-        </>
+        busiest && busiest.count > 0
+          ? (
+            <>
+              The busiest AI surface {period.phrase} was <Fig>{busiest.surface}</Fig>, at{' '}
+              <Fig>{fmtInt(busiest.count)}</Fig> {busiest.countLabel}. Each one is reported on its
+              own, because what we can honestly say about the money behind them is different in
+              every case.
+            </>
+          )
+          : <>No AI surface was used {period.phrase}.</>
       }
-      hint="Nothing here is added into one AI spend figure. The Concierge job cost is the only money any of these areas records by itself."
-      table={
-        <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-          {rows.map(row => (
-            <li key={row.area} className="py-3 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[0.875rem] text-ink-900 font-medium">{row.area}</p>
-                <p className="text-[0.75rem] text-ink-500">{row.detail}</p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[0.875rem] text-ink-800 tabular-nums">
-                  {fmtInt(row.volume)} <span className="text-ink-400">{row.volumeUnit}</span>
-                </span>
-                {row.conciergeUsd !== undefined && (
-                  <span className="text-[0.875rem] text-ink-800 tabular-nums">{fmtUsd(row.conciergeUsd)}</span>
-                )}
-                <AccuracyTag value={row.accuracy} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      }
-    />
+    >
+      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+        {rows.map(row => (
+          <li key={row.surface} className="py-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-[0.875rem] text-ink-800">{row.surface}</span>
+              <span className="text-[0.875rem] font-semibold text-ink-900 tabular-nums shrink-0">
+                {fmtInt(row.count)} {row.countLabel}
+              </span>
+            </div>
+            <p className="mt-1 text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed">{row.money}</p>
+          </li>
+        ))}
+      </ul>
+    </Block>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-09 — work volume, four units
- * ────────────────────────────────────────────────────────────────────────── */
+/* ── The limits that travel with the finding counts ──────────────────────── */
 
-/**
- * Work volume by unit.
- *
- * Four counts, never summed — on screen or in the export. A chat question and a
- * bulk job are not the same kind of thing, and a single "42,000 actions" number
- * would be four incompatible units pretending to be one.
- */
-export function WorkVolume({
-  volume,
-  overTime,
-  subject,
-  period,
-  onOpenRuns,
-}: {
-  volume: WorkVolumeFigures;
-  overTime: { at: number; label: string; runs: number; chat: number }[];
-  subject: string;
-  period: Period;
-  onOpenRuns: () => void;
-}) {
-  const rows: { label: string; value: number; note?: string }[] = [
-    { label: 'Workflow runs', value: volume.workflowRuns, note: 'single executions, bulk runs counted separately' },
-    { label: 'Bulk runs', value: volume.bulkRuns, note: 'one bulk run fires several workflows' },
-    { label: 'Chat questions', value: volume.chatQuestions, note: volume.savedAsWorkflow > 0 ? `${fmtInt(volume.savedAsWorkflow)} were frozen into the workflow library` : undefined },
-    { label: 'Concierge jobs', value: volume.conciergeJobs, note: 'background jobs on the AI tools' },
-  ];
-
-  if (rows.every(r => r.value === 0)) {
-    return (
-      <Block title="Work volume by unit" lede={null}>
-        <Empty kind="quiet" title={`Nothing ran for ${subject} in this window.`} />
-      </Block>
-    );
-  }
-
+export function DeduplicationLimits({ beforeDeduplication }: { beforeDeduplication: number }) {
   return (
-    <Block
-      title="Work volume by unit"
-      lede={
-        <>
-          {subject === 'the company' ? 'The company' : subject} ran <Fig>{fmtInt(volume.workflowRuns)}</Fig> workflows {period.phrase},{' '}
-          <Fig>{fmtInt(volume.bulkRuns)}</Fig> bulk runs, asked <Fig>{fmtInt(volume.chatQuestions)}</Fig> questions
-          and started <Fig>{fmtInt(volume.conciergeJobs)}</Fig> Concierge jobs. Four kinds of work, four counts:
-          they are never added together.
-        </>
-      }
-      action={
-        <button type="button" onClick={onOpenRuns} className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:underline">
-          Open the workflow library <ArrowRight size={12} />
-        </button>
-      }
-      chart={
-        <div className="space-y-4">
-          <Bars rows={rows} />
-          {volume.newestRuns.length > 0 && (
-            <Drill label={`Name the runs behind that count: the newest ${fmtInt(volume.newestRuns.length)}`} hideLabel="Hide the runs">
-              <MadeList>
-                {volume.newestRuns.map(run => (
-                  <MadeRow
-                    key={run.id}
-                    name={run.workflow}
-                    madeBy={run.ranBy}
-                    when={formatDate(run.at)}
-                    note={`${run.id}${run.rows === null ? ', a control test' : `, ${fmtInt(run.rows)} rows`}`}
-                  />
-                ))}
-              </MadeList>
-              <p className="mt-2 text-[0.75rem] text-ink-500">
-                The workflow library holds every run, with its full record.
-              </p>
-            </Drill>
-          )}
-        </div>
-      }
-      table={
-        <DataTable
-          head={['Bucket', 'Workflow runs', 'Chat questions']}
-          rows={overTime.map(b => [b.label, fmtInt(b.runs), fmtInt(b.chat)])}
-        />
-      }
-      footer="Every answer the assistant gives stores the program behind it, so any answer on this page can be re-run against fresh data and checked."
-    />
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * PU-21 — created this period
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Created this period.
- *
- * Five tables, one pattern, real numbers on day one and history included: every
- * one of these already stamps when a record was saved and who saved it. What it
- * deliberately does not show is edits, reviews, views or time spent — the caption
- * says "created" because that is exactly what is countable today.
- */
-/** "1 audit programme", not "1 audit programmes". */
-function countedLabel(created: CreatedCount): string {
-  const plural = created.label.toLowerCase();
-  return created.count === 1 ? plural.replace(/s$/, '') : plural;
-}
-
-export function CreatedThisPeriod({ created, period, subject }: { created: CreatedCount[]; period: Period; subject: string }) {
-  const total = created.reduce((s, c) => s + c.count, 0);
-
-  return (
-    <Block
-      title="Created this period"
-      lede={
-        total === 0 ? (
-          <>Nothing new was created by {subject} {period.phrase}. This is a real zero rather than a gap in what the platform records.</>
-        ) : (
-          <>
-            {subject === 'the company' ? 'The company' : subject} created <Fig>{fmtInt(total)}</Fig> things{' '}
-            {period.phrase}: {created.filter(c => c.count > 0).map(c => `${fmtInt(c.count)} ${countedLabel(c)}`).join(', ')}.
-          </>
-        )
-      }
-      hint="Counts what was created. Edits, reviews and views need the wider event log and are not counted here."
-      table={
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-5">
-            {created.map(c => (
-              <Stat key={c.kind} value={fmtInt(c.count)} label={c.label} size="sm" />
-            ))}
-          </div>
-          {created.filter(c => c.count > 0).map(c => (
-            <Drill key={c.kind} label={`${c.label}: name the ${fmtInt(c.count)}`} hideLabel={`Hide the ${c.label.toLowerCase()}`}>
-              <MadeList>
-                {c.rows.map(row => (
-                  <MadeRow key={row.id} name={row.name} madeBy={row.createdBy} when={formatDate(row.createdAt)} />
-                ))}
-              </MadeList>
-            </Drill>
-          ))}
-        </div>
-      }
-    />
+    <div className="text-[0.75rem] text-ink-500 leading-relaxed space-y-1">
+      {DEDUPLICATION_LIMITS.map(line => <p key={line}>{line}</p>)}
+      {beforeDeduplication > 0 && (
+        <p>
+          {fmtInt(beforeDeduplication)} of the findings in this window predate de-duplication and are
+          counted apart from the rest.
+        </p>
+      )}
+    </div>
   );
 }

@@ -4,7 +4,7 @@
  * recharts 3.8's ResponsiveContainer reports a width of -1 inside a panel that
  * is laid out after mount, and draws a blank chart with no error at all. This
  * measures the element itself and hands the children real pixels, so a chart in
- * a folded section, a drawer or a modal draws the first time it is opened.
+ * a folded block, a drawer or a modal draws the first time it is opened.
  *
  * Nothing in this folder may use ResponsiveContainer.
  */
