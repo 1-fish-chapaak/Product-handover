@@ -161,8 +161,9 @@ export function ContractCost({
         anyPriced
           ? (
             <>
-              The paid lookups cost <Fig>{fmtMoneyExact(rupees)}</Fig> {period.phrase}, across{' '}
-              <Fig>{fmtInt(calls)}</Fig> calls on a contract price.
+              The paid lookups cost <Fig>{fmtMoneyExact(rupees)}</Fig> {period.phrase}. That is what
+              the contract charged for recorded volume, so it is a price somebody signed rather than
+              a figure worked out here.
             </>
           )
           : (
@@ -195,12 +196,16 @@ export function ContractCost({
     >
       {anyPriced && (
         <>
-          {cost.unpriced.length > 0 && (
-            <p className="text-[0.875rem] text-ink-600">
-              <Fig>{fmtInt(cost.unpriced.length)}</Fig>{' '}
-              {cost.unpriced.length === 1 ? 'lookup has' : 'lookups have'} no price yet.
-            </p>
-          )}
+          {/* The count sits in the body rather than in the fold, because the
+              activity tab prints its own larger count and a reader has to be
+              able to see both without opening anything. */}
+          <p className="text-[0.875rem] text-ink-600">
+            <Fig>{fmtInt(calls)}</Fig> calls on a contract price
+            {cost.unpriced.length > 0 && (
+              <>, and {fmtInt(cost.unpriced.length)}{' '}
+                {cost.unpriced.length === 1 ? 'lookup with' : 'lookups with'} no price yet</>
+            )}.
+          </p>
 
           {/* The twelve priced lines are the evidence behind the total, not the
               answer. They open when somebody wants to check the total. */}

@@ -742,19 +742,20 @@ test.describe('Platform Usage · the financial year window model', () => {
   test('the two windows differ on a line that has history behind it', async ({ page }) => {
     await openUsage(page);
 
-    const checksIn = async () => {
-      const hero = page.locator('#hero');
-      await hero.scrollIntoViewIfNeeded();
-      const text = await hero.innerText();
-      return Number((text.match(/across\s+([\d,]+)\s+checks/)?.[1] ?? '0').replace(/,/g, ''));
+    const passedIn = async () => {
+      await usageTab(page, 'Activity');
+      const volume = page.locator('#volume');
+      await volume.scrollIntoViewIfNeeded();
+      const text = await volume.innerText();
+      return Number((text.match(/([\d,]+)\s+passed/)?.[1] ?? '0').replace(/,/g, ''));
     };
 
-    const quarter = await checksIn();
+    const quarter = await passedIn();
     expect(quarter).toBe(340);
 
     await page.getByRole('button', { name: 'Year to date' }).click();
     await page.waitForTimeout(600);
-    const ytd = await checksIn();
+    const ytd = await passedIn();
 
     // Twelve months holds more successful checks than the last three of them.
     expect(ytd).toBeGreaterThan(quarter);
@@ -762,18 +763,42 @@ test.describe('Platform Usage · the financial year window model', () => {
 
   test('Q4 FY26 still reconciles to the worked example', async ({ page }) => {
     await openUsage(page);
-    const hero = page.locator('#hero');
 
     // 340 successful runs over populations of 1,428,000 rows, in 8.5 hours of
     // machine time, against a contract that charged 18,400 rupees. Extending
     // history back to 1 April 2025 must not move any of the four.
-    await expect(hero).toContainText('1,428,000');
-    await expect(hero).toContainText('340');
-    await expect(hero).toContainText('8.5');
-
     const cost = page.locator('#cost');
     await cost.scrollIntoViewIfNeeded();
     await expect(cost).toContainText('₹18,400');
+
+    await usageTab(page, 'Coverage');
+    const coverage = page.locator('#coverage');
+    await coverage.scrollIntoViewIfNeeded();
+    await expect(coverage).toContainText('1,428,000');
+
+    await usageTab(page, 'Activity');
+    const volume = page.locator('#volume');
+    await volume.scrollIntoViewIfNeeded();
+    await expect(volume).toContainText('340 passed');
+
+    /*
+     * Machine time has no block of its own on the page at the moment. The net
+     * value hero carried it and the hero is gone, so until the pack is built
+     * the figure is read from the export, which reads the same snapshot the
+     * page does and therefore cannot disagree with it.
+     */
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'CSV' }).click(),
+    ]);
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const csv = Buffer.concat(chunks).toString('utf8');
+    expect(csv).toContain('Machine time,8.5 hours');
+    expect(csv).toContain('Successful runs,340');
+    expect(csv).toContain('1428000');
+    expect(csv).toContain('18400');
   });
 
   test('the quarter coverage headline reconciles with its own bar list', async ({ page }) => {
