@@ -382,9 +382,9 @@ test.describe('Platform Usage', () => {
     }
   });
 
-  /* ── AC-16 · no input field anywhere ────────────────────────────────────── */
+  /* ── AC-16 · nothing asks the customer to supply data ───────────────────── */
 
-  test('AC-16 there is no input field anywhere in the feature', async ({ page }) => {
+  test('AC-16 nothing on the page asks the customer for a figure it would then treat as a fact', async ({ page }) => {
     await openUsage(page);
     for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
       await chooseView(page, view);
@@ -394,8 +394,64 @@ test.describe('Platform Usage', () => {
         await folds.first().click();
         await page.waitForTimeout(150);
       }
+      // No rate field, no pace field, no price field, on any view. A figure the
+      // customer typed is not a figure we could defend.
       await expect(page.locator('main input, main textarea, main select')).toHaveCount(0);
     }
+  });
+
+  test('AC-16 the window is a view control, so its two dates are the only fields in the feature', async ({ page }) => {
+    await openUsage(page);
+    await page.getByRole('button', { name: 'Custom', exact: true }).click();
+    await page.waitForTimeout(500);
+
+    const fields = page.locator('main input');
+    await expect(fields).toHaveCount(2);
+    await expect(page.getByLabel('Window starts')).toHaveAttribute('type', 'date');
+    await expect(page.getByLabel('Window ends')).toHaveAttribute('type', 'date');
+    // Nothing here is a figure. Both dates are bounded by the records themselves.
+    await expect(page.getByLabel('Window ends')).toHaveAttribute('max', '2026-03-31');
+  });
+
+  test('a custom range moves the window, and every figure that depends on it', async ({ page }) => {
+    await openUsage(page);
+    const worth = page.locator('#worth');
+    const quarter = await worth.innerText();
+    expect(quarter).toContain('340 successful runs');
+    expect(quarter).toContain('8.5 hours');
+    expect(quarter).toContain('7,131');
+    expect(quarter).toContain('15.4');
+
+    await page.getByRole('button', { name: 'Custom', exact: true }).click();
+    await page.waitForTimeout(400);
+    await page.getByLabel('Window starts').fill('2026-02-01');
+    await page.waitForTimeout(600);
+    await page.getByLabel('Window ends').fill('2026-02-28');
+    await page.waitForTimeout(900);
+
+    await expect(page.locator('header p').last()).toContainText('Custom range, 1 Feb 2026 to 28 Feb 2026');
+
+    const february = await worth.innerText();
+    expect(february).not.toBe(quarter);
+    expect(february).not.toContain('340 successful runs');
+    expect(february).not.toContain('8.5 hours');
+    expect(february).not.toContain('7,131');
+    expect(february).not.toContain('15.4');
+    expect(february).not.toContain('52,759,600');
+
+    /*
+     * Rows covered does not move, and that is the coverage rule rather than a
+     * figure that failed to update: February exercised the same eleven
+     * populations the quarter did, and a population is counted once however
+     * often it was re-tested. What moved is the effort, which is what the
+     * checks performed line is for.
+     */
+    expect(february).toContain('1,428,000 rows');
+
+    // The whole page moves with the window, not only the block that was open.
+    await chooseView(page, 'Activity');
+    await expect(page.locator('header p').last()).toContainText('Custom range, 1 Feb 2026 to 28 Feb 2026');
+    expect(await page.locator('#ran').innerText()).not.toContain('354 checks ran');
   });
 
   /* ── AC-17 · at most three groups open ──────────────────────────────────── */

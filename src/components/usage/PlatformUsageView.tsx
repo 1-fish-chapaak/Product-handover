@@ -28,12 +28,15 @@
  * ## Read and never write
  *
  * No control here changes a record the page reports on. Every route off it ends
- * at the screen that owns the action. There is no input field anywhere in the
- * feature: the two measurable assumptions replace themselves from the
- * customer's own recorded history, the two that cannot be measured are labelled
- * and derived, and lookup prices are contract terms our operations team seeds
- * when the deal is signed. The one write in the whole feature is the audit
- * event an export emits.
+ * at the screen that owns the action. Nothing asks the customer to supply data
+ * the page then treats as a fact: the two measurable assumptions replace
+ * themselves from the customer's own recorded history, the two that cannot be
+ * measured are labelled and derived, and lookup prices are contract terms our
+ * operations team seeds when the deal is signed. There is no rate field, no
+ * pace field and no price field, because a figure the customer typed is not a
+ * figure we can defend. The custom window's two dates are the only fields in
+ * the feature and they are a view control rather than data entry. The one write
+ * in the whole feature is the audit event an export emits.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -42,12 +45,12 @@ import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
-import { dataAsOfLabel, formatDate } from '../../data/platform-usage';
+import { ANCHOR, HISTORY_START, dataAsOfLabel, formatDate, isoDay } from '../../data/platform-usage';
 import { pack } from '../../data/audit-coverage';
 import {
   DEFAULT_PERIOD, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REFUSAL,
   calibrate, entitledViews, period as buildPeriod, periodOptions, personaFor, snapshot,
-  type Persona, type PeriodId, type Scope,
+  type CustomRange, type Persona, type PeriodId, type Scope,
 } from '../../data/platform-usage-metrics';
 import { Group, type GroupSpec } from './usageChrome';
 import { valueGroups } from './UsageValue';
@@ -199,7 +202,33 @@ export default function PlatformUsageView() {
   /* ── The window ──────────────────────────────────────────────────────────── */
 
   const [periodId, setPeriodId] = useState<PeriodId>(() => DEFAULT_PERIOD[ceiling]);
-  const period = useMemo(() => buildPeriod(periodId, null), [periodId]);
+
+  /*
+   * The custom range.
+   *
+   * A window control is a view control rather than data entry: it changes which
+   * records are counted and the page never treats a date as a fact about the
+   * customer's business the way it would treat a rate somebody typed. So these
+   * two fields are the only ones in the feature, and nothing else asks the
+   * reader to supply anything.
+   *
+   * It opens on whatever window is already showing rather than on two empty
+   * boxes, so the page never blanks while somebody is halfway through picking.
+   */
+  const [custom, setCustom] = useState<CustomRange | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const period = useMemo(() => buildPeriod(periodId, custom), [periodId, custom]);
+
+  const chooseWindow = (id: PeriodId) => {
+    if (id !== 'custom') {
+      setCustomOpen(false);
+      setPeriodId(id);
+      return;
+    }
+    setCustom(prev => prev ?? { from: period.from, to: period.to });
+    setPeriodId('custom');
+    setCustomOpen(true);
+  };
 
   /* ── Every figure on the page, assembled once ────────────────────────────── */
 
@@ -375,11 +404,11 @@ export default function PlatformUsageView() {
             <div className="flex items-center gap-2">
               <span className="text-[0.75rem] text-ink-400">Window</span>
               <div className="inline-flex flex-wrap rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {periodOptions.filter(o => o.id !== 'custom').map(option => (
+                {periodOptions.map(option => (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setPeriodId(option.id)}
+                    onClick={() => chooseWindow(option.id)}
                     aria-pressed={periodId === option.id}
                     className={pill(periodId === option.id)}
                   >
@@ -400,6 +429,46 @@ export default function PlatformUsageView() {
               </div>
             ) : null}
           </div>
+
+          {customOpen ? (
+            <div className="mt-4 flex flex-wrap items-end gap-4 rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
+              <label className="text-[0.75rem] text-ink-500">
+                From
+                <input
+                  type="date"
+                  aria-label="Window starts"
+                  value={isoDay(period.from)}
+                  min={isoDay(HISTORY_START)}
+                  max={isoDay(ANCHOR)}
+                  onChange={e => {
+                    const from = Date.parse(`${e.target.value}T00:00:00Z`);
+                    if (!Number.isNaN(from)) setCustom(prev => ({ from, to: prev?.to ?? ANCHOR }));
+                  }}
+                  className="mt-1 block h-8 px-2 rounded-lg border border-canvas-border bg-canvas text-[0.875rem] text-ink-900 tabular-nums"
+                />
+              </label>
+              <label className="text-[0.75rem] text-ink-500">
+                To
+                <input
+                  type="date"
+                  aria-label="Window ends"
+                  value={isoDay(period.to)}
+                  min={isoDay(HISTORY_START)}
+                  max={isoDay(ANCHOR)}
+                  onChange={e => {
+                    const to = Date.parse(`${e.target.value}T23:59:59Z`);
+                    if (!Number.isNaN(to)) setCustom(prev => ({ from: prev?.from ?? HISTORY_START, to }));
+                  }}
+                  className="mt-1 block h-8 px-2 rounded-lg border border-canvas-border bg-canvas text-[0.875rem] text-ink-900 tabular-nums"
+                />
+              </label>
+              <p className="text-[0.75rem] leading-relaxed text-ink-500 max-w-[52ch]">
+                Your records run from {formatDate(HISTORY_START)} to {formatDate(ANCHOR)}. Every figure on the
+                page moves with these two dates, and the comparison becomes the same number of days
+                immediately before them.
+              </p>
+            </div>
+          ) : null}
 
           <p className="mt-4 text-[0.75rem] leading-relaxed text-ink-500 tabular-nums">{headerLine}</p>
         </header>
