@@ -11,7 +11,7 @@
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
   ASSUMPTIONS, REVIEW_PROXY_NOTE, SCOPE_LABEL, SETTING_SHORT, SOURCE_LABEL,
-  fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
+  fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
@@ -31,7 +31,6 @@ export function usageCsv(data: UsageSnapshot): string {
   lines.push(row('Scope', SCOPE_LABEL[scope.level]));
   if (scope.team) lines.push(row('Team', scope.team));
   lines.push(row('Window', `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)}`));
-  lines.push(row('Compared with', priorLabel(period)));
   lines.push(row('Data', dataAsOfLabel()));
   lines.push(row('Coverage note', COVERAGE_NOTE));
   lines.push('');

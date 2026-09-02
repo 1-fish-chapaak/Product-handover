@@ -1,20 +1,25 @@
 /**
- * What a team lead and an auditor open the page for: what is stuck, what keeps
- * failing, how the testing is going, and what is waiting on one person.
+ * What is stuck, what keeps failing, and how the testing is going.
  *
- * The team table here is the only per-person table in the product's usage
- * reporting. It is alphabetical, and no code path reorders it.
+ * The per person table here is the only one in the product's usage reporting.
+ * It is alphabetical, and no code path reorders it. Opening it needs
+ * `ad_usage_people`, and a reader without that right sees the rest of the page
+ * rather than an empty one.
+ *
+ * The two blocks that only made sense to one of the three old readers, the
+ * auditor's own queue and the auditor's own hours, are gone with the readers.
+ * The queue is a home screen question rather than a reporting one, and the
+ * hours rested on a rate we invented.
  */
 
 import { AlertTriangle } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../data/platform-usage';
 import {
-  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, openLabel,
-  SOURCE_LABEL,
-  type CcmFigures, type ExceptionFigures, type Period, type PersonRow, type QueueFigures,
-  type ReliabilityRow, type SamplingFigures, type StuckRun, type UsageSettings, type ValueFigures,
+  fmtDuration, fmtInt, fmtOneDp, fmtPct, openLabel,
+  type CcmFigures, type Period, type PersonRow,
+  type ReliabilityRow, type SamplingFigures, type StuckRun,
 } from '../../data/platform-usage-metrics';
-import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow, Story } from './usageKit';
+import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow } from './usageKit';
 
 /* ── What is stuck right now ─────────────────────────────────────────────── */
 
@@ -293,11 +298,11 @@ export function CcmCoverage({ ccm, period }: { ccm: CcmFigures; period: Period }
  * table however it is labelled.
  */
 
-export function TeamWork({ people, period, team }: { people: PersonRow[]; period: Period; team: string }) {
+export function TeamWork({ people, period, subject }: { people: PersonRow[]; period: Period; subject: string }) {
   if (people.length === 0) {
     return (
-      <Block id="people" title={`${team} · work by outcome`} lede={null}>
-        <Empty kind="quiet" title="Nobody on this team recorded work in this window." />
+      <Block id="people" title="Who did what" lede={null}>
+        <Empty kind="quiet" title={`Nobody in ${subject} recorded work in this window.`} />
       </Block>
     );
   }
@@ -315,17 +320,17 @@ export function TeamWork({ people, period, team }: { people: PersonRow[]; period
   return (
     <Block
       id="people"
-      title={`${team} · work by outcome`}
+      title="Who did what"
       code="TEAM-WORK"
       figure={fmtInt(people.length)}
       context={
         <>
-          {people.length === 1 ? 'person' : 'people'} on {team} recorded work {period.phrase},{' '}
+          {people.length === 1 ? 'person' : 'people'} in {subject} recorded work {period.phrase},{' '}
           {fmtInt(runs)} {runs === 1 ? 'run' : 'runs'} and {fmtInt(found)}{' '}
           {found === 1 ? 'exception' : 'exceptions'} found between them
         </>
       }
-      lede={<>Everybody on {team} and what they worked on {period.phrase}.</>}
+      lede={<>Everybody in {subject} and what they worked on {period.phrase}.</>}
       hint="Alphabetical, and there is no way to sort it by output, by click or by URL. It records what each person worked on rather than comparing them."
       table={
         <DataTable
@@ -340,152 +345,5 @@ export function TeamWork({ people, period, team }: { people: PersonRow[]; period
         />
       }
     />
-  );
-}
-
-/* ── The auditor's queue ─────────────────────────────────────────────────── */
-
-export function MyQueue({ queue, onOpen }: { queue: QueueFigures; onOpen: (item: QueueFigures['items'][number]) => void }) {
-  if (queue.items.length === 0) {
-    return (
-      <Block id="queue" title="What is waiting on you" lede={null}>
-        <Empty kind="quiet" title="Nothing is waiting on you." detail="No exception, review or action plan is assigned to you at the moment." />
-      </Block>
-    );
-  }
-
-  return (
-    <Block
-      id="queue"
-      title="What is waiting on you"
-      code="MY-QUEUE"
-      figure={fmtInt(queue.items.length)}
-      tone={queue.overdue > 0 ? 'risk' : 'plain'}
-      context={<>{fmtInt(queue.overdue)} of them past their date</>}
-      lede={
-        queue.overdue > 0
-          ? (
-            <>
-              <Fig>{fmtInt(queue.items.length)}</Fig> {queue.items.length === 1 ? 'item is' : 'items are'} yours,
-              and <Fig>{fmtInt(queue.overdue)}</Fig> {queue.overdue === 1 ? 'is' : 'are'} past{' '}
-              {queue.overdue === 1 ? 'its' : 'their'} date. Those are first.
-            </>
-          )
-          : (
-            <>
-              <Fig>{fmtInt(queue.items.length)}</Fig> {queue.items.length === 1 ? 'item is' : 'items are'} yours.
-              None are overdue.
-            </>
-          )
-      }
-    >
-      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-        {queue.items.map(item => (
-          <li key={item.id} className="py-2.5">
-            <div className="flex items-baseline justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => onOpen(item)}
-                className="text-[0.875rem] text-ink-800 text-left hover:text-brand-700 hover:underline truncate"
-              >
-                {item.title}
-              </button>
-              <span className={`text-[0.75rem] shrink-0 tabular-nums ${item.overdue ? 'text-risk-700 font-medium' : 'text-ink-400'}`}>
-                {item.overdue ? 'overdue · ' : 'due '}{formatDate(item.dueAt)}
-              </span>
-            </div>
-            <p className="text-[0.75rem] text-ink-500">{item.detail}</p>
-          </li>
-        ))}
-      </ul>
-    </Block>
-  );
-}
-
-/* ── The auditor's own work ──────────────────────────────────────────────── */
-
-export function MyWork({
-  value, exceptions, period, settings,
-}: {
-  value: ValueFigures;
-  exceptions: ExceptionFigures;
-  period: Period;
-  settings: UsageSettings;
-}) {
-  if (value.runs === 0 && exceptions.total === 0) {
-    return (
-      <Block id="my-work" title="Your own work" lede={null}>
-        <Empty kind="quiet" title={`You started nothing ${period.phrase}.`} />
-      </Block>
-    );
-  }
-
-  return (
-    <Block
-      id="my-work"
-      title="Your own work"
-
-      lede={
-        <>
-          You started <Fig>{fmtInt(value.runs)}</Fig> successful{' '}
-          {value.runs === 1 ? 'run' : 'runs'} {period.phrase} and found{' '}
-          <Fig>{fmtInt(exceptions.total)}</Fig>{' '}
-          {exceptions.total === 1 ? 'exception' : 'exceptions'}
-          {exceptions.total > 0 && (
-            <>, <Fig>{fmtInt(exceptions.open)}</Fig> of which{' '}
-              {exceptions.open === 1 ? 'is' : 'are'} still open</>
-          )}.
-        </>
-      }
-    >
-      {/* The head carries the run count, so the block goes straight to the one
-          thing a figure cannot say: the sum behind the hours. */}
-      {value.manualHours > 0 && (
-  <Story
-              rows={[
-                value.coveredRows > 0
-                  ? {
-                    text: <>Checking the {fmtInt(value.coveredRows)} records by hand</>,
-                    value: `${fmtHours(value.manualHours)} hours`,
-                    note: <>if one person gets through {fmtInt(settings.manualReviewRate)} records an hour ({SOURCE_LABEL[settings.source.manualReviewRate]})</>,
-                  }
-                  : {
-                    // A run that tested a control without producing rows is still
-                    // work somebody did not do. It is priced as a manual control
-                    // test rather than by the row, and says so.
-                    text: <>Testing {value.zeroRowRuns === 1 ? 'that control' : 'those controls'} by hand</>,
-                    value: `${fmtHours(value.manualHours)} hours`,
-                    note: <>at {fmtOneDp(settings.manualControlTestHours)} hours a manual control test ({SOURCE_LABEL[settings.source.manualControlTestHours]})</>,
-                  },
-                { text: <>The platform did it in</>, value: fmtDuration(value.machineHours) },
-                {
-                  text: <>Time you did not spend</>,
-                  value: `${fmtHours(value.hoursSaved)} hours`,
-                  /*
-                   * 239 hours in a month, read next to the page's own assumption
-                   * that a person works 160, looks like the page has lost track
-                   * of what a month is. It has not: the work was more than one
-                   * person could have done in the window, which is the point.
-                   * Saying so in months makes that the finding rather than the
-                   * thing a reader spots and holds against the figure.
-                   */
-                  note: (
-                    <>
-                      rounded down, so the saving is never overstated
-                      {value.hoursSaved > settings.hoursPerPersonPerMonth && (
-                        <>. That is about {fmtOneDp(value.hoursSaved / settings.hoursPerPersonPerMonth)}{' '}
-                          months of one person&rsquo;s time, at {fmtInt(settings.hoursPerPersonPerMonth)}{' '}
-                          working hours a month, so it is more work than you could have done by hand in
-                          this window at all</>
-                      )}
-                    </>
-                  ),
-                  strong: true,
-                },
-              ]}
-            />
-      )}
-
-    </Block>
   );
 }

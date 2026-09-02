@@ -12,23 +12,31 @@
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   DEDUPLICATION_LIMITS,
-  fmtHours, fmtInt, fmtMoneyExact, fmtPrice, plural,
-  type AiUsageRow, type Bucket, type CostFigures, type Period, type UsageSettings,
+  fmtDuration, fmtInt, fmtMoneyExact, fmtPrice, plural,
+  type AiUsageRow, type Bucket, type CostFigures, type Period,
 } from '../../data/platform-usage-metrics';
 import ChartAutoSizer from './ChartAutoSizer';
-import { Block, DataTable, Drill, Empty, Fig, RestsOn } from './usageKit';
+import { Block, DataTable, Drill, Empty, Fig } from './usageKit';
 
+/**
+ * What ran, week by week.
+ *
+ * It used to carry an hours avoided column and the by-hand rate that produced
+ * it. Hours saved mixes a stock derived baseline with a flow, which is what
+ * made a year to date come out smaller than the quarter inside it, so it is off
+ * the page entirely and lives in the annual export. What is left is recorded
+ * volume: runs, row checks and rows newly covered.
+ */
 export function ValueOverTime({
-  buckets, period, settings,
+  buckets, period,
 }: {
   buckets: Bucket[];
   period: Period;
-  settings: UsageSettings;
 }) {
   const active = buckets.filter(b => b.runs > 0);
   if (active.length === 0) {
     return (
-      <Block id="over-time" title="Value over time" lede={null}>
+      <Block id="over-time" title="What ran, week by week" lede={null}>
         <Empty kind="quiet" title={`Nothing ran ${period.phrase}, so there is no shape to show.`} />
       </Block>
     );
@@ -59,7 +67,7 @@ export function ValueOverTime({
   return (
     <Block
       id="over-time"
-      title="Value over time"
+      title="What ran, week by week"
       lede={
         thin
           ? (
@@ -109,13 +117,13 @@ export function ValueOverTime({
       )}
       table={
         <DataTable
-          head={['Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided']}
+          head={['Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Machine time']}
           rows={buckets.map(b => [
-            b.label, fmtInt(b.runs), fmtInt(b.checks), fmtInt(b.newRows), b.hours > 0 ? fmtHours(b.hours) : '—',
+            b.label, fmtInt(b.runs), fmtInt(b.checks), fmtInt(b.newRows),
+            b.machineHours > 0 ? fmtDuration(b.machineHours) : '—',
           ])}
         />
       }
-      footer={<RestsOn settings={settings} keys={['manualReviewRate']} />}
     />
   );
 }

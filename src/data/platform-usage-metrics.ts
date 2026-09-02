@@ -49,6 +49,7 @@ import {
 } from './platform-usage';
 
 export type { AiInsight, EngagementRow, QueueItem, Run, TracedException, SampleValidation };
+import { pack as coveragePack, type CoveragePack } from './audit-coverage';
 import { pendingMemories, liveMemories } from './memorySession';
 import { RECALLS_THIS_WEEK } from './memoryStore';
 import type { PlatformMemory } from './memoryStore';
@@ -214,9 +215,6 @@ export interface Period {
   phrase: string;
   from: number;
   to: number;
-  /** The window of the same length immediately before this one. */
-  priorFrom: number;
-  priorTo: number;
   /** Fractional months, so a people-equivalent is right on a part month. */
   months: number;
   days: number;
@@ -269,15 +267,8 @@ function monthsCovered(from: number, to: number): number {
 }
 
 function make(id: WindowId, label: string, phrase: string, from: number, to: number): Period {
-  const span = to - from;
-  const days = Math.max(1, Math.round(span / DAY_MS));
-  return {
-    id, label, phrase, from, to,
-    priorFrom: from - span - 1,
-    priorTo: from - 1,
-    months: monthsCovered(from, to),
-    days,
-  };
+  const days = Math.max(1, Math.round((to - from) / DAY_MS));
+  return { id, label, phrase, from, to, months: monthsCovered(from, to), days };
 }
 
 /** Both windows, built together, because the page reads them together. */
@@ -302,15 +293,21 @@ export const windowOptions: { id: WindowId; label: string }[] = [
 /** The page opens on the quarter, because that is what the committee asks about. */
 export const DEFAULT_WINDOW: WindowId = 'quarter';
 
-/** What the comparison is against, said by its real length rather than "last period". */
-export function priorLabel(p: Period): string {
-  return p.id === 'fy-ytd' ? 'the year before' : 'the quarter before';
+/**
+ * How a window is headed in the pack: "Q4 FY26", "FY26 to date".
+ *
+ * The Indian financial year starts on 1 April, so the quarter that ends on the
+ * anchor is Q4 and the year it sits in is FY26. Worked out from the dates
+ * rather than written down, so the label can never drift from the window.
+ */
+export function windowShort(p: Period): string {
+  const d = new Date(p.from);
+  const fy = new Date(p.to);
+  const year = (fy.getUTCMonth() >= 3 ? fy.getUTCFullYear() + 1 : fy.getUTCFullYear()) % 100;
+  if (p.id === 'fy-ytd') return `FY${year} to date`;
+  const q = Math.floor((((d.getUTCMonth() - 3) + 12) % 12) / 3) + 1;
+  return `Q${q} FY${year}`;
 }
-
-const change = (now: number, before: number): number | null => {
-  if (before <= 0) return null;
-  return ((now - before) / before) * 100;
-};
 
 /* ──────────────────────────────────────────────────────────────────────────
  * The four assumptions, and how two of them fix themselves
@@ -617,17 +614,6 @@ function valueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures 
   };
 }
 
-/** The same calculation over the window immediately before this one. */
-function priorValueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures {
-  const shifted: Period = { ...p, from: p.priorFrom, to: p.priorTo };
-  return valueOf(runs, shifted, settings);
-}
-
-export interface ValueChange {
-  hours: number | null;
-  people: number | null;
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
  * Cost: the contract, never a form
  * ────────────────────────────────────────────────────────────────────────── */
@@ -752,7 +738,7 @@ export interface CoverageFigures {
   controlsInLibrary: number;
   tested: { id: string; name: string; runs: number; lastTested: number }[];
   /** Not exercised inside the window. A period fact, and labelled as one. */
-  neverTested: { id: string; name: string; process: string; owner: string }[];
+  neverTested: { id: string; name: string; process: string; owner: string; addedAt: number }[];
   /**
    * Never exercised at all, in the whole history.
    *
@@ -760,7 +746,7 @@ export interface CoverageFigures {
    * change nothing here. "Never" needs no setting behind it, which is what
    * makes it the one coverage figure nobody can argue with.
    */
-  neverExercised: { id: string; name: string; process: string; owner: string }[];
+  neverExercised: { id: string; name: string; process: string; owner: string; addedAt: number }[];
   /** Workflows that have never run once, on the same never-ever basis. */
   workflowsNeverRun: { id: string; name: string }[];
   pctTested: number;
@@ -808,9 +794,13 @@ function coverageOf(runs: Run[], samples: SampleValidation[], p: Period, scope: 
     .map(c => ({ id: c.id, name: c.name, runs: touched.get(c.id)!.runs, lastTested: touched.get(c.id)!.last }))
     .sort((a, b) => b.lastTested - a.lastTested);
 
+  // The day the control was written down, so a list of controls nobody has
+  // exercised can be read in the order they were promised rather than by name.
+  const addedAt = (id: string) => CONTROL_CREATIONS.find(c => c.id === id)?.at ?? HISTORY_START;
+
   const neverTested = inScopeControls
     .filter(c => !touched.has(c.id))
-    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner }));
+    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner, addedAt: addedAt(c.id) }));
 
   // Never means never, over the whole history, with the window taken off. A
   // control that has never once been exercised is a different and much harder
@@ -821,7 +811,7 @@ function coverageOf(runs: Run[], samples: SampleValidation[], p: Period, scope: 
 
   const neverExercised = inScopeControls
     .filter(c => !everTouched.has(c.id))
-    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner }));
+    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner, addedAt: addedAt(c.id) }));
 
   const ranWorkflows = new Set(runs.map(r => r.workflowId));
   const workflowsNeverRun = [...new Map(POPULATIONS
@@ -1122,8 +1112,11 @@ export interface PersonRow {
  * table however it is labelled.
  */
 function peopleOf(p: Period, scope: Scope): PersonRow[] {
-  if (scope.level !== 'team' || !scope.team) return [];
-  const names = [...new Set(RUNS.filter(r => r.team === scope.team).map(r => r.actor.name))];
+  // It follows the scope filter rather than one level of it. The table used to
+  // exist on the head of team view alone, so it returned nothing at every other
+  // scope, and a reader entitled to the whole company saw an empty table rather
+  // than the company.
+  const names = [...new Set(RUNS.filter(r => mine(scope, r.actor, r.team)).map(r => r.actor.name))];
   return names
     .map(name => {
       const runs = RUNS.filter(r => r.actor.name === name && inWindow(r.completedAt, p));
@@ -1544,10 +1537,16 @@ function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
 export interface UsageSnapshot {
   scope: Scope;
   period: Period;
+  /**
+   * The six lines the pack reads, on this window and this scope.
+   *
+   * They live next door in `audit-coverage.ts` because they are the committee's
+   * own questions rather than the platform's, but they come out of here so the
+   * page and both exports still read one object and cannot diverge.
+   */
+  committee: CoveragePack;
   settings: UsageSettings;
   value: ValueFigures;
-  prior: ValueFigures;
-  change: ValueChange;
   cost: CostFigures;
   coverage: CoverageFigures;
   risks: RiskFigures;
@@ -1576,7 +1575,6 @@ export interface UsageSnapshot {
 export function snapshot(scope: Scope, p: Period, settings: UsageSettings): UsageSnapshot {
   const runs = scopedRuns(scope);
   const value = valueOf(runs, p, settings);
-  const prior = priorValueOf(runs, p, settings);
   const cost = costOf(p, scope);
   const sampling = samplingOf(p, scope);
   const exceptions = exceptionsOf(p, scope);
@@ -1733,13 +1731,9 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
   return {
     scope,
     period: p,
+    committee: coveragePack(p, scope),
     settings,
     value,
-    prior,
-    change: {
-      hours: change(value.hoursSaved, prior.hoursSaved),
-      people: change(value.people, prior.people),
-    },
     cost,
     coverage,
     risks,

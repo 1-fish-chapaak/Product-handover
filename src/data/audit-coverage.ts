@@ -27,11 +27,35 @@
 import {
   ACTION_PLANS, ANCHOR, DAY_MS, ENGAGEMENT_ROWS, POPULATIONS, RISK_ROWS, RUNS,
   SAMPLE_VALIDATIONS, TRACED_EXCEPTIONS,
-  type ActionPlan, type EngagementRow, type TracedException,
+  type ActionPlan, type EngagementRow, type SampleValidation, type TracedException,
 } from './platform-usage';
-import { type Period } from './platform-usage-metrics';
+import type { Period, Scope } from './platform-usage-metrics';
 
 const inWindow = (at: number, p: Period) => at >= p.from && at <= p.to;
+
+/**
+ * How far the reader is looking, applied to a record.
+ *
+ * The scope filter on the page narrows to a team or to one person's own work,
+ * and a pack that ignored it would print the whole company's figures under a
+ * heading that said otherwise. Every record here carries a team, and most carry
+ * the person who owns it, so both narrowings land on the record rather than on
+ * the presentation.
+ */
+function owns(
+  scope: Scope,
+  team: string,
+  who: { email?: string; name?: string },
+): boolean {
+  if (scope.level === 'company') return true;
+  if (scope.level === 'team') return team === scope.team;
+  if (who.email && scope.userEmail) return who.email === scope.userEmail;
+  if (who.name && scope.userName) return who.name === scope.userName;
+  return false;
+}
+
+/** The whole company, for a call that has no reader in front of it. */
+export const WHOLE_COMPANY: Scope = { level: 'company', subject: 'the company' };
 
 /** The middle value, which a handful of very old findings cannot drag. */
 function median(values: number[]): number | null {
@@ -65,8 +89,9 @@ export interface PlanFigures {
   rows: EngagementRow[];
 }
 
-export function planOf(p: Period): PlanFigures {
-  const rows = ENGAGEMENT_ROWS.filter(e => e.createdAt <= p.to);
+export function planOf(p: Period, scope: Scope = WHOLE_COMPANY): PlanFigures {
+  const inScope = ENGAGEMENT_ROWS.filter(e => owns(scope, e.team, { name: e.owner }));
+  const rows = inScope.filter(e => e.createdAt <= p.to);
   const closed = rows.filter(e => e.actualEnd !== null && inWindow(e.actualEnd, p));
   const onTime = closed.filter(e => (e.actualEnd as number) <= e.plannedEnd);
 
@@ -76,7 +101,7 @@ export function planOf(p: Period): PlanFigures {
     .filter(e => e.actualEnd === null && e.plannedEnd < Math.min(p.to, ANCHOR))
     .sort((a, b) => a.plannedEnd - b.plannedEnd);
 
-  const everClosed = ENGAGEMENT_ROWS.some(e => e.actualEnd !== null);
+  const everClosed = inScope.some(e => e.actualEnd !== null);
 
   return {
     onTheBooks: rows.length,
@@ -103,10 +128,11 @@ export interface RiskCoverFigures {
   rows: typeof RISK_ROWS;
 }
 
-export function riskCoverOf(): RiskCoverFigures {
-  const uncovered = RISK_ROWS.filter(r => !r.mapped);
+export function riskCoverOf(scope: Scope = WHOLE_COMPANY): RiskCoverFigures {
+  const rows = RISK_ROWS.filter(r => owns(scope, r.team, { name: r.owner }));
+  const uncovered = rows.filter(r => !r.mapped);
   return {
-    total: RISK_ROWS.length,
+    total: rows.length,
     uncovered: uncovered.length,
     criticalUncovered: uncovered.filter(r => r.priority === 'Critical').length,
     rows: uncovered.sort((a, b) => a.name.localeCompare(b.name)),
@@ -126,17 +152,20 @@ export interface PopulationFigures {
   samples: number;
   /** How many times over the sample would have to grow to match. Null at nought. */
   multiple: number | null;
+  /** The validations themselves, so the count on the page opens its own list. */
+  rows: SampleValidation[];
 }
 
-export function populationOf(p: Period): PopulationFigures {
-  const samples = SAMPLE_VALIDATIONS.filter(s => inWindow(s.at, p));
+export function populationOf(p: Period, scope: Scope = WHOLE_COMPANY): PopulationFigures {
+  const samples = SAMPLE_VALIDATIONS.filter(s => inWindow(s.at, p) && owns(scope, s.team, s.actor));
   const sampledRows = samples.reduce((sum, s) => sum + s.sampleSize, 0);
 
   // A population is counted once however often it was re-tested, the same rule
   // the coverage block already holds. Re-reading one ledger every week is speed,
   // not coverage, and adding the repeats up would be the page's oldest trap.
   const testedIds = new Set(
-    RUNS.filter(r => r.status === 'passed' && r.rowsProcessed > 0 && inWindow(r.completedAt, p))
+    RUNS.filter(r => r.status === 'passed' && r.rowsProcessed > 0 && inWindow(r.completedAt, p)
+      && owns(scope, r.team, r.actor))
       .map(r => r.populationId),
   );
   const tested = POPULATIONS.filter(pop => testedIds.has(pop.id));
@@ -148,6 +177,7 @@ export function populationOf(p: Period): PopulationFigures {
     populations: tested.length,
     samples: samples.length,
     multiple: sampledRows > 0 ? Math.round(fullRows / sampledRows) : null,
+    rows: [...samples].sort((a, b) => b.at - a.at),
   };
 }
 
@@ -158,12 +188,15 @@ export function populationOf(p: Period): PopulationFigures {
 export interface DetectionFigures {
   medianDays: number | null;
   sample: number;
+  /** Everything the median was taken over, so the figure opens its own list. */
+  rows: TracedException[];
   buckets: { label: string; value: number; rows: TracedException[] }[];
   slowest: TracedException[];
 }
 
-export function detectionOf(p: Period): DetectionFigures {
-  const caught = TRACED_EXCEPTIONS.filter(ex => inWindow(ex.detectedAt, p) && ex.detectedAt >= ex.occurredAt);
+export function detectionOf(p: Period, scope: Scope = WHOLE_COMPANY): DetectionFigures {
+  const caught = TRACED_EXCEPTIONS.filter(ex => inWindow(ex.detectedAt, p) && ex.detectedAt >= ex.occurredAt
+    && owns(scope, ex.team, ex.assignee));
   const lag = (ex: TracedException) => (ex.detectedAt - ex.occurredAt) / DAY_MS;
 
   const bucket = (label: string, test: (days: number) => boolean) => {
@@ -174,6 +207,7 @@ export function detectionOf(p: Period): DetectionFigures {
   return {
     medianDays: median(caught.map(lag)),
     sample: caught.length,
+    rows: [...caught].sort((a, b) => b.detectedAt - a.detectedAt),
     buckets: [
       bucket('Same day', d => d < 1),
       bucket('1 to 7 days', d => d >= 1 && d <= 7),
@@ -190,6 +224,8 @@ export function detectionOf(p: Period): DetectionFigures {
 
 export interface FindingFigures {
   raised: number;
+  /** The findings raised in the window, so the count opens its own list. */
+  raisedRows: TracedException[];
   open: number;
   overdue: TracedException[];
   /**
@@ -205,9 +241,10 @@ export interface FindingFigures {
   bySeverity: { label: string; value: number; rows: TracedException[] }[];
 }
 
-export function findingsOf(p: Period): FindingFigures {
-  const raised = TRACED_EXCEPTIONS.filter(ex => inWindow(ex.detectedAt, p));
-  const unresolved = TRACED_EXCEPTIONS.filter(ex => ex.status !== 'Resolved');
+export function findingsOf(p: Period, scope: Scope = WHOLE_COMPANY): FindingFigures {
+  const scoped = TRACED_EXCEPTIONS.filter(ex => owns(scope, ex.team, ex.assignee));
+  const raised = scoped.filter(ex => inWindow(ex.detectedAt, p));
+  const unresolved = scoped.filter(ex => ex.status !== 'Resolved');
   const open = unresolved.filter(ex => !ex.beforeDeduplication);
 
   const severity = (['Critical', 'High', 'Medium', 'Low'] as const).map(label => {
@@ -217,6 +254,7 @@ export function findingsOf(p: Period): FindingFigures {
 
   return {
     raised: raised.length,
+    raisedRows: [...raised].sort((a, b) => b.detectedAt - a.detectedAt),
     open: open.length,
     // Past its date and nobody has closed it. Open on its own is not late.
     overdue: open
@@ -249,9 +287,10 @@ export interface ActionFigures {
   medianDaysToClose: number | null;
 }
 
-export function actionsOf(p: Period): ActionFigures {
-  const open = ACTION_PLANS.filter(a => a.closedAt === null);
-  const closed = ACTION_PLANS.filter(a => a.closedAt !== null && inWindow(a.closedAt, p));
+export function actionsOf(p: Period, scope: Scope = WHOLE_COMPANY): ActionFigures {
+  const scoped = ACTION_PLANS.filter(a => owns(scope, a.team, a.owner));
+  const open = scoped.filter(a => a.closedAt === null);
+  const closed = scoped.filter(a => a.closedAt !== null && inWindow(a.closedAt, p));
 
   const severityOf = (a: ActionPlan) =>
     TRACED_EXCEPTIONS.find(ex => ex.id === a.exceptionId)?.severity ?? null;
@@ -285,14 +324,14 @@ export interface CoveragePack {
  * One call, one set of numbers, the way `snapshot()` already works next door.
  * The page and anything that exports it read this and cannot diverge.
  */
-export function pack(p: Period): CoveragePack {
+export function pack(p: Period, scope: Scope = WHOLE_COMPANY): CoveragePack {
   return {
     period: p,
-    plan: planOf(p),
-    risks: riskCoverOf(),
-    population: populationOf(p),
-    detection: detectionOf(p),
-    findings: findingsOf(p),
-    actions: actionsOf(p),
+    plan: planOf(p, scope),
+    risks: riskCoverOf(scope),
+    population: populationOf(p, scope),
+    detection: detectionOf(p, scope),
+    findings: findingsOf(p, scope),
+    actions: actionsOf(p, scope),
   };
 }

@@ -16,7 +16,7 @@
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
   ASSUMPTIONS, REVIEW_PROXY_NOTE, SCOPE_LABEL, SETTING_SHORT, SOURCE_LABEL,
-  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
+  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
@@ -98,7 +98,7 @@ export function usagePdfDefinition(data: UsageSnapshot) {
       margin: [0, 4, 0, 0],
     },
     {
-      text: `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)} · compared with ${priorLabel(period)} · ${dataAsOfLabel()}`,
+      text: `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)} · ${dataAsOfLabel()}`,
       fontSize: 9,
       color: MUTED,
       margin: [0, 3, 0, 10],

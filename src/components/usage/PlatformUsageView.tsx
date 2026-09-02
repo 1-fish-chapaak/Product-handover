@@ -1,60 +1,46 @@
 /**
- * Platform Usage. One page, three readers, one question.
+ * Platform Usage. One reader, one job, two sections.
  *
- * Built from `Platform-Usage-Build-Spec_2.pdf` (11 Aug 2026). The page answers
- * one question: is the platform earning its keep? A CFO asks it as "is this
- * paying for itself", a head of team as "is anything stuck", an internal
- * auditor as "what is waiting on me". It is one page with a "Viewing as" switch
- * at the top rather than three pages, and the switch changes whose data you see
- * and which block comes first. It never changes the layout, the wording or the
- * names of things, so somebody who changes roles never has to relearn the page.
+ * The reader is the audit lead. The job is to be ready for the committee, and
+ * to know what is slipping before somebody else finds it. Everything on the
+ * page is that person's own record: there is no rate for an auditor hour, no
+ * saving worked out from one, and no figure here that we invented.
  *
- * ## Three rules hold the switch
+ * ## The shape
  *
- * **It is a lens, not a key.** Switching never shows anybody data they could not
- * otherwise see. A view the reader is not entitled to is not offered.
+ * **The pack.** Six lines and nothing else on the first screen, the quarter
+ * read against the financial year it sits in. Somebody who reads only the six
+ * sentences understands the quarter. Flows get two columns. Stocks get one
+ * figure and the date it is true at, because a stock has no quarter value and
+ * no year value and printing one as two columns makes the page read as broken.
  *
- * **Down your own line only.** You can narrow into your own team or into your
- * own work. You can never look sideways into somebody else's team.
+ * **What the platform did.** Everything else, twelve folded rows below the
+ * pack, each showing its own answer while closed so the whole thing reads as a
+ * contents page. Nothing is deleted. The change is that the first screen no
+ * longer competes with it.
  *
- * **The screen always says what you are looking at**, in one line above the
- * blocks: who, what scope, which window, how fresh.
+ * ## What is not here, and why
  *
- * ## Three tabs, the Knowledge Hub's
+ * The "Viewing as" switch and its three readers are gone. A CFO does not log
+ * into an internal audit tool, and what is waiting on me is a home screen
+ * question rather than a reporting one. What survives is scope: the whole
+ * company, one team, or your own work. It narrows, it never widens, and it
+ * never reaches sideways into somebody else's team.
  *
- * Value, Coverage and Activity, underlined on the foot of the header strip the
- * way the Knowledge Hub tabs its own page. Every reader gets the same three in
- * the same order, so the switch still never changes the shape of the page. What
- * the switch changes is which tab opens first and which blocks it holds: a CFO
- * lands on Value, a head of team and an auditor land on Activity, where what is
- * stuck and what is waiting on them live.
+ * There is no comparison against an earlier window anywhere. The year to
+ * date's own prior window starts before the records do, so a delta on it
+ * printed a hundred per cent fall that never happened.
  *
- * ## Answers first, machinery never
+ * ## Read only, without exception
  *
- * Every view opens with at most three attention cards, each a sentence with one
- * thing to do, and they sit above the tabs rather than on one, so no reader can
- * be standing on a tab that hides them. Under the cards are blocks that lead
- * with a sentence rather than a tile.
- * Somebody who reads only those sentences understands the whole page. It works
- * with zero setup: no form is ever the price of seeing your numbers.
- *
- * There is no editor anywhere in this feature. The two measurable assumptions
- * replace themselves from the customer's own recorded history and the two that
- * cannot be measured are labelled defaults. Lookup prices are contract terms our
- * operations team seeds when the deal is signed, so cost appears by itself and
- * says "as per your contract".
- *
- * ## Read-only, without exception
- *
- * No control on this page changes state. Blocks link to the screen that owns an
+ * No control on this page changes state. Rows link to the screen that owns an
  * action; they never perform one. Nothing ranks people, no figure is
- * benchmarked against another company, and there are no seats or licences here
- * because they are not a concept in this product.
+ * benchmarked against another company, and the one write in the whole feature
+ * is the audit event an export emits.
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { Activity, Download, FileText, ShieldCheck, TrendingUp } from 'lucide-react';
+import { ChevronRight, Download, FileText } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
@@ -63,77 +49,35 @@ import { useMemorySessionVersion } from '../../data/memorySession';
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
   DEFAULT_WINDOW, SCOPE_LABEL,
-  calibrate, scopeCeiling, scopeOptions, snapshot, windowOf, windowOptions,
-  type AttentionCard, type AttentionTarget, type QueueFigures, type Scope, type ScopeLevel,
+  calibrate, fmtDuration, fmtInt, fmtMoneyExact, fmtPct, scopeCeiling, scopeOptions, snapshot,
+  windowShort, windows,
+  type AttentionCard, type AttentionTarget, type Scope, type ScopeLevel, type UsageSnapshot,
   type WindowId,
 } from '../../data/platform-usage-metrics';
-import { AttentionStrip, BlockGroup, UsageTabs } from './usageKit';
+import { AttentionStrip } from './usageKit';
+import { UsagePack } from './UsagePack';
 import { AiUsageByArea, ContractCost, ValueOverTime } from './UsageValueBlocks';
 import { ControlCoverage, ExceptionsCaught, NeverTested, RiskPicture } from './UsageCoverageBlocks';
-import { CcmCoverage, MyQueue, MyWork, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
+import { CcmCoverage, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
 import { CreatedThisPeriod, DashboardsAndAlerts, EngagementPortfolio, ReportsMade, WorkVolume } from './UsageProductBlocks';
 import { AiInsights, FindingQuality, FindingsAgeing } from './UsageFindingBlocks';
-import { PastTheirDate, PlanCompletion } from './UsageCommitteeBlocks';
-import { pack } from '../../data/audit-coverage';
+import { PastTheirDate } from './UsageCommitteeBlocks';
 import { SmartLearn } from './UsageSmartLearn';
 import { downloadUsageCsv } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
 
-/* ── The three tabs ──────────────────────────────────────────────────────── */
+/* ── Section two, as a contents page ─────────────────────────────────────── */
 
-type TabId = 'value' | 'coverage' | 'activity';
-
-/**
- * Three tabs, the same three for every reader, so the "Viewing as" switch still
- * changes whose data you see and never the shape of the page. What differs by
- * reader is which tab opens first and which blocks a tab holds.
- */
-const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
-  { id: 'value', label: 'Value', icon: TrendingUp },
-  { id: 'coverage', label: 'Coverage', icon: ShieldCheck },
-  { id: 'activity', label: 'Activity', icon: Activity },
-];
-
-/**
- * The tab each block lives on, so an attention card can open the right tab
- * before it scrolls. Every anchor in `src/components/usage` appears here; a
- * block missing from this map would leave its card scrolling to nothing.
- */
-const TAB_OF_BLOCK: Record<string, TabId> = {
-  'over-time': 'value', 'my-work': 'value',
-  cost: 'value',
-  coverage: 'coverage', never: 'coverage', portfolio: 'coverage', risks: 'coverage',
-  'past-date': 'coverage', 'plan-completion': 'coverage',
-  ccm: 'coverage', sampling: 'coverage', caught: 'coverage', ageing: 'coverage', quality: 'coverage',
-  stuck: 'activity', reliability: 'activity', queue: 'activity', people: 'activity',
-  volume: 'activity', created: 'activity', dashboards: 'activity', reports: 'activity',
-  'ai-usage': 'activity', insights: 'activity', memory: 'activity',
+/** Where an attention card's block lives, so a card can open its row. */
+const ROW_OF_CARD: Partial<Record<AttentionTarget, string>> = {
+  stuck: 'stuck',
+  controls: 'monitoring',
+  risks: 'monitoring',
+  sampling: 'sampling',
+  memory: 'learn',
 };
 
-/**
- * Where each scope lands. The whole company opens on what the platform did.
- * Narrowed to a team or to your own work the first question is what is stuck
- * and what is waiting, which are both on Activity.
- */
-const DEFAULT_TAB: Record<ScopeLevel, TabId> = {
-  company: 'value',
-  team: 'activity',
-  person: 'activity',
-};
-
-/**
- * The card targets each view actually has a block for. A card aimed at anything
- * else leaves for the screen that owns the work rather than opening a tab on a
- * block this reader has not got. Keep this beside the tab definitions below: if
- * a block moves off a view, its line here moves with it.
- */
-const CARD_BLOCK_ON_VIEW: Record<ScopeLevel, AttentionTarget[]> = {
-  company: ['risks', 'controls', 'memory'],
-  team: ['stuck', 'risks', 'controls', 'sampling', 'memory'],
-  person: ['queue', 'memory'],
-};
-
-/** Where a card sends a reader whose view has no block for it. */
+/** Where a card goes when this reader's page has no row for it. */
 const CARD_ELSEWHERE: Record<AttentionTarget, string> = {
   stuck: 'workflow-library',
   risks: 'audit-risk-register',
@@ -142,6 +86,46 @@ const CARD_ELSEWHERE: Record<AttentionTarget, string> = {
   queue: 'my-queue',
   memory: 'knowledge-hub',
 };
+
+/**
+ * One folded row.
+ *
+ * The name and its own answer are both readable while closed, which is what
+ * makes twelve of these read as a contents page rather than a wall. The whole
+ * head is the control, because unlike the pack there is nothing else in the row
+ * competing to be clicked.
+ */
+function SectionRow({
+  id, title, answer, open, onToggle, children,
+}: {
+  id: string;
+  title: string;
+  answer: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div id={`row-${id}`} className="border-t border-canvas-border scroll-mt-6">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-baseline gap-4 px-6 py-4 text-left hover:bg-canvas transition-colors"
+      >
+        <ChevronRight
+          size={14}
+          className={`shrink-0 self-center text-ink-400 transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        <span className="text-[1rem] font-medium text-ink-900 shrink-0">{title}</span>
+        <span className="flex-1 min-w-0 text-right text-[0.875rem] text-ink-500 truncate tabular-nums">{answer}</span>
+      </button>
+      {open && <div className="pb-2">{children}</div>}
+    </div>
+  );
+}
+
+/* ── The page ────────────────────────────────────────────────────────────── */
 
 /** Deep links out to the thing that needs doing, the way the palette does. */
 function navigate(view: string, id = '') {
@@ -160,22 +144,17 @@ export default function PlatformUsageView() {
   const { addToast } = useToast();
   const memoryVersion = useMemorySessionVersion();
 
-  /* ── The assumptions, which look after themselves ───────────────────────── */
-
   // The weekly job, run as the page is read. Once both guards pass, a measured
-  // value quietly replaces a starting one. Nobody is asked to confirm it,
-  // because at ten thousand people nobody clicks. It settles before the first
-  // render, so no reader watches a starting value flash to a measured one.
+  // value quietly replaces a starting one. It settles before the first render,
+  // so no reader watches a starting value flash to a measured one.
   const [settings] = useState(() => calibrate());
 
-  /* ── Who is reading, and how far up they may see ────────────────────────── */
+  /* ── Who is reading, and how far they may see ───────────────────────────── */
 
   const me = users.find(u => u.email === currentUser?.email);
   const myTeam = me?.team && me.team !== '—' ? me.team : null;
   const myName = me?.name ?? currentUser?.name ?? '';
 
-  // The widest this role may look. Everyone gets at least their own work: this
-  // page is self-serve, and no request or approval stands in front of it.
   const ceiling: ScopeLevel = useMemo(
     () => scopeCeiling({ usage: can('ad_usage'), people: can('ad_usage_people'), self: can('ad_usage_self') }, myTeam),
     [can, myTeam],
@@ -184,12 +163,13 @@ export default function PlatformUsageView() {
   const levels = useMemo(() => scopeOptions(ceiling, myTeam), [ceiling, myTeam]);
   const [requested, setRequested] = useState<ScopeLevel>(ceiling);
 
-  // The server resolves the requested scope against the entitlement rather than
-  // trusting the client, so a scope above the reader's rights is clamped back
-  // to their own ceiling and never widens what they can see.
+  // The requested scope is resolved against the entitlement rather than
+  // trusted, so a scope above the reader's rights is clamped back to their own
+  // ceiling and never widens what they can see.
   const level = levels.includes(requested) ? requested : ceiling;
 
   const canExport = can('ad_usage_export');
+  const canSeePeople = can('ad_usage_people');
 
   const scope = useMemo<Scope>(() => {
     if (level === 'company') return { level: 'company', subject: 'the company' };
@@ -199,101 +179,50 @@ export default function PlatformUsageView() {
     return { level: 'person', subject: 'you', userEmail: currentUser?.email, userName: myName };
   }, [level, myTeam, currentUser?.email, myName]);
 
-  /* ── The window ─────────────────────────────────────────────────────────── */
+  /* ── The two windows, read together ─────────────────────────────────────── */
 
-  // Two windows and no third. The page opens on the quarter, because that is
-  // the window the committee asks about, and the year to date is the context it
-  // gets read in.
-  const [windowId, setWindowId] = useState<WindowId>(DEFAULT_WINDOW);
+  const both = useMemo(() => windows(), []);
 
-  const chooseWindow = (id: WindowId) => setWindowId(id);
-
-  /* ── The tab ────────────────────────────────────────────────────────────── */
-
-  // Same rule as the window: each view opens on the tab it is meant to be read
-  // on, and once a reader has picked a tab for themselves, changing view keeps
-  // their choice rather than overruling it.
-  const [tab, setTab] = useState<TabId>(() => DEFAULT_TAB[ceiling]);
-  const [tabChosen, setTabChosen] = useState(false);
-
-  const chooseTab = (id: TabId) => {
-    setTabChosen(true);
-    setTab(id);
-  };
-
-  const chooseLevel = (next: ScopeLevel) => {
-    setRequested(next);
-    if (!tabChosen) setTab(DEFAULT_TAB[next]);
-  };
-  const period = useMemo(() => windowOf(windowId), [windowId]);
-
-  /* ── Every number on the view, assembled once ───────────────────────────── */
-
-  const data = useMemo(
-    () => snapshot(scope, period, settings),
+  const quarter = useMemo<UsageSnapshot>(
+    () => snapshot(scope, both.quarter, settings),
     // memoryVersion is a real input even though it is not read directly: a
     // decision taken on the Smart Learn screen changes what this page counts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scope, period, settings, memoryVersion],
+    [scope, both, settings, memoryVersion],
+  );
+  const ytd = useMemo<UsageSnapshot>(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => snapshot(scope, both.ytd, settings), [scope, both, settings, memoryVersion],
   );
 
   /*
-   * The committee's own figures, on the same window the page is reading.
-   *
-   * They are the whole company's, which is why they appear on the CFO view and
-   * nowhere else: a head of team may never look sideways at another team's
-   * work, and these numbers cannot be narrowed to one line of it.
+   * The pack always shows both windows. Section two shows one at a time,
+   * because a folded block of its own is a block, not a column, and printing
+   * every one of them twice would double a page the pack exists to shorten.
    */
-  const committee = useMemo(() => pack(period), [period]);
+  const [windowId, setWindowId] = useState<WindowId>(DEFAULT_WINDOW);
+  const data = windowId === 'fy-ytd' ? ytd : quarter;
+  const period = data.period;
 
-  /* ── Acting on a card ───────────────────────────────────────────────────── */
+  /* ── Which rows are open ────────────────────────────────────────────────── */
 
-  /**
-   * This opens the tab the block lives on, scrolls to it, and leaves for the
-   * thing itself when this reader's view has no such block. No path through
-   * here ends in neither, because a card that quietly does nothing is worse
-   * than no card at all.
-   *
-   * The block is waited for rather than read straight away: the tab it lives on
-   * may still be crossfading in, so `getElementById` on the next line would
-   * find nothing and send the reader away from a block that was about to
-   * appear.
-   */
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
+  const toggle = (id: string) => setOpenRows(prev => ({ ...prev, [id]: !prev[id] }));
+
   const onAct = (card: AttentionCard) => {
-    const leave = () => {
-      if (card.target === 'memory') {
-        openSmartLearn();
-        return;
-      }
-      navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
-    };
-
-    if (!CARD_BLOCK_ON_VIEW[level].includes(card.target)) {
-      leave();
+    const row = ROW_OF_CARD[card.target];
+    if (!row) {
+      if (card.target === 'memory') openSmartLearn();
+      else navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
       return;
     }
-
-    const blockId = card.target === 'controls' ? 'never' : card.target;
-    const owner = TAB_OF_BLOCK[blockId];
-    if (owner && owner !== tab) chooseTab(owner);
-
-    let tries = 0;
-    const reach = () => {
-      const block = document.getElementById(blockId);
-      if (block) {
-        block.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      }
-      if (tries++ > 20) {
-        leave();
-        return;
-      }
-      window.setTimeout(reach, 50);
-    };
-    reach();
+    setOpenRows(prev => ({ ...prev, [row]: true }));
+    // The row has to render open before it can be scrolled to, so this waits a
+    // frame rather than reading the DOM on the line that asked for it.
+    window.setTimeout(() => {
+      document.getElementById(`row-${row}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
   };
-
-  const onOpenQueueItem = (item: QueueFigures['items'][number]) => navigate(item.target.view, item.target.id ?? '');
 
   /* ── Export ─────────────────────────────────────────────────────────────── */
 
@@ -307,60 +236,68 @@ export default function PlatformUsageView() {
     addToast({ type: 'success', message: 'Exported as a PDF, with the coverage note on the first page.' });
   };
 
-  /*
-   * There is no page-level figure strip.
-   *
-   * Every block now carries its own figure in its head, the way the AI insight
-   * cards do everywhere else in this product. A strip on top of that printed
-   * the same four numbers twice on one screen, which was the loudest complaint
-   * about this page and the easiest to fix: one figure, one place.
-   */
+  /* ── The twelve ─────────────────────────────────────────────────────────── */
 
-  /* ── The blocks, in the order each reader needs them ─────────────────────── */
+  const cost = data.cost.totalPaise / 100;
+  const alertsOn = data.product.alertsConfigured.length;
 
-  const smartLearnBlock = <SmartLearn learn={data.learn} scope={scope} onOpenSmartLearn={openSmartLearn} />;
-
-  const exceptionsBlock = (
-    <ExceptionsCaught
-      exceptions={data.exceptions}
-      period={period}
-      subject={scope.subject}
-      onOpenException={id => navigate('engagements', id)}
-    />
-  );
-
-  /*
-   * CFO. Value opens first: hours, rupees and people this quarter, then the
-   * cost, the net figure and what it all rests on. Coverage carries what was
-   * tested and what that testing caught. Activity carries what the platform and
-   * the assistant did. The cost figures and the assumptions live only here.
-   */
-  const companyTabs: Record<TabId, ReactNode> = {
-    value: (
-      <>
-        <BlockGroup title="What the platform did">
-          <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
-        </BlockGroup>
-
-        <BlockGroup title="What it cost under the contract">
-          <ContractCost cost={data.cost} period={period} />
-        </BlockGroup>
-      </>
-    ),
-
-    coverage: (
-      <>
-        {/*
-          * Coverage first, the committee's questions last.
-          *
-          * The committee group used to open this tab, so a reader who came here
-          * to find out what was covered met an eighty row table of overdue
-          * action plans, three pages of it, before a single coverage figure. The
-          * overdue work is not less important; it is the answer to a different
-          * question, and it reads better once the tab has said what was tested
-          * and what that testing caught.
-          */}
-        <BlockGroup title="What it covered">
+  const rows: { id: string; title: string; answer: ReactNode; body: ReactNode }[] = [
+    {
+      id: 'volume',
+      title: 'Work volume',
+      answer: `${fmtInt(data.volume.runs)} checks ran, ${fmtDuration(data.value.machineHours)} of machine time`,
+      body: (
+        <>
+          <WorkVolume
+            volume={data.volume}
+            machineHours={data.value.machineHours}
+            period={period}
+            subject={scope.subject}
+            onOpenRuns={() => navigate('workflow-library')}
+          />
+          <ValueOverTime buckets={data.buckets} period={period} />
+          <CreatedThisPeriod created={data.created} period={period} />
+          {/* The per person table needs its own right. Without it the rest of
+              the page still opens, which is the difference between a narrower
+              page and an empty one. */}
+          {canSeePeople && <TeamWork people={data.people} period={period} subject={scope.subject} />}
+        </>
+      ),
+    },
+    {
+      id: 'reliability',
+      title: 'Runs and reliability',
+      answer: data.reliability.rows.length === 0
+        ? 'nothing failed'
+        : `${fmtInt(data.volume.failed)} runs failed, ${fmtDuration(data.reliability.wastedHours)} wasted`,
+      body: <Reliability rows={data.reliability.rows} wastedHours={data.reliability.wastedHours} period={period} />,
+    },
+    {
+      id: 'stuck',
+      title: 'What is stuck',
+      answer: data.stuck.length === 0 ? 'nothing is stuck' : `${fmtInt(data.stuck.length)} runs need somebody`,
+      body: (
+        <>
+          <StuckNow stuck={data.stuck} period={period} onOpenRun={id => navigate('workflow-library', id)} />
+          <PastTheirDate coverage={data.committee} period={period} onOpen={(view, id) => navigate(view, id)} />
+        </>
+      ),
+    },
+    {
+      id: 'sampling',
+      title: 'Sampling outcomes',
+      answer: data.sampling.total === 0
+        ? 'nobody sampled anything'
+        : `${fmtInt(data.sampling.total)} validations, ${data.sampling.passRatePct !== null ? `${fmtPct(data.sampling.passRatePct)} passed` : 'none settled yet'}`,
+      body: <SamplingOutcomes sampling={data.sampling} period={period} />,
+    },
+    {
+      id: 'monitoring',
+      title: 'Continuous monitoring',
+      answer: `${fmtInt(data.coverage.tested.length)} of ${fmtInt(data.coverage.controlsInLibrary)} controls exercised, ${fmtInt(data.risks.unmapped.length)} risks with no control`,
+      body: (
+        <>
+          <CcmCoverage ccm={data.ccm} period={period} />
           <ControlCoverage
             coverage={data.coverage}
             period={period}
@@ -368,164 +305,102 @@ export default function PlatformUsageView() {
             coveredRows={data.value.coveredRows}
           />
           <NeverTested coverage={data.coverage} period={period} />
-          <EngagementPortfolio
-            portfolio={data.portfolio}
-            period={period}
-            onOpenEngagement={id => navigate('engagements', id)}
-          />
           <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
-          <CcmCoverage ccm={data.ccm} period={period} />
-        </BlockGroup>
-
-        <BlockGroup title="What it caught">
-          {exceptionsBlock}
+        </>
+      ),
+    },
+    {
+      id: 'caught',
+      title: 'Exceptions caught',
+      answer: `${fmtInt(data.exceptions.total)} found, ${fmtInt(data.ageing.open)} still open`,
+      body: (
+        <>
+          <ExceptionsCaught
+            exceptions={data.exceptions}
+            period={period}
+            subject={scope.subject}
+            onOpenException={id => navigate('engagements', id)}
+          />
           <FindingsAgeing
             ageing={data.ageing}
             subject={scope.subject}
             onOpenException={id => navigate('engagements', id)}
           />
           <FindingQuality quality={data.quality} period={period} />
-        </BlockGroup>
-
-        <BlockGroup title="What the committee will ask">
-          <PastTheirDate
-            coverage={committee}
-            period={period}
-            onOpen={(view, id) => navigate(view, id)}
-          />
-          <PlanCompletion coverage={committee} period={period} />
-        </BlockGroup>
-      </>
-    ),
-
-    activity: (
-      <>
-        <BlockGroup title="What the platform did">
-          <WorkVolume volume={data.volume} period={period} subject={scope.subject} onOpenRuns={() => navigate('workflow-library')} />
-          <CreatedThisPeriod created={data.created} period={period} />
-          <DashboardsAndAlerts product={data.product} period={period} />
-          <ReportsMade reports={data.reports} period={period} />
-        </BlockGroup>
-
-        <BlockGroup title="What the AI did, and what it knows">
-          <AiUsageByArea rows={data.aiUsage} period={period} />
+        </>
+      ),
+    },
+    {
+      id: 'insights',
+      title: 'AI insights',
+      answer: `${fmtInt(data.insights.perRun + data.insights.consolidated)} raised by the assistant`,
+      body: (
+        <>
           <AiInsights insights={data.insights} period={period} />
-          {smartLearnBlock}
-        </BlockGroup>
-      </>
-    ),
-  };
-
-  /*
-   * Head of Team. Activity opens first, on what is stuck with the real error
-   * text on each run. A team lead cannot act on a lakh saved; they can act on
-   * "this workflow failed four times this week with the same error", so the
-   * savings sit on their own tab and the design trade-offs go this view's way.
-   */
-  const teamTabs: Record<TabId, ReactNode> = {
-    value: (
-      <BlockGroup title="What the team's work covered">
-        <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
-      </BlockGroup>
-    ),
-
-    coverage: (
-      <>
-        <BlockGroup title="How the testing is going">
-          <NeverTested coverage={data.coverage} period={period} />
-          <SamplingOutcomes sampling={data.sampling} period={period} />
-          <CcmCoverage ccm={data.ccm} period={period} />
-          <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
-        </BlockGroup>
-
-        <BlockGroup title="What the team caught">
-          {exceptionsBlock}
-          <FindingsAgeing
-            ageing={data.ageing}
-            subject={scope.subject}
-            onOpenException={id => navigate('engagements', id)}
-          />
-          <FindingQuality quality={data.quality} period={period} />
-        </BlockGroup>
-      </>
-    ),
-
-    activity: (
-      <>
-        <BlockGroup title="What needs doing">
-          <StuckNow stuck={data.stuck} period={period} onOpenRun={id => navigate('workflow-library', id)} />
-          <Reliability rows={data.reliability.rows} wastedHours={data.reliability.wastedHours} period={period} />
-        </BlockGroup>
-
-        <BlockGroup title="What the team did">
-          <TeamWork people={data.people} period={period} team={myTeam ?? 'your team'} />
-          <CreatedThisPeriod created={data.created} period={period} />
-          {smartLearnBlock}
-        </BlockGroup>
-      </>
-    ),
-  };
-
-  /*
-   * Internal Auditor. Activity opens first on their queue, overdue first, each
-   * item one click from the thing that needs doing. Their own numbers are in
-   * hours and never in rupees, and no other person appears anywhere on this
-   * view: no average, no percentile, no comparison of any kind.
-   */
-  const personTabs: Record<TabId, ReactNode> = {
-    value: (
-      <BlockGroup title="Your own work">
-        <MyWork value={data.value} exceptions={data.exceptions} period={period} settings={settings} />
-        <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
-      </BlockGroup>
-    ),
-
-    coverage: (
-      <BlockGroup title="What you caught">
-        {exceptionsBlock}
-        <FindingsAgeing
-          ageing={data.ageing}
-          subject={scope.subject}
-          onOpenException={id => navigate('engagements', id)}
+          <AiUsageByArea rows={data.aiUsage} period={period} />
+        </>
+      ),
+    },
+    {
+      id: 'portfolio',
+      title: 'Engagement portfolio',
+      answer: `${fmtInt(data.portfolio.open)} open, ${fmtInt(data.portfolio.slipping)} past their planned end`,
+      body: (
+        <EngagementPortfolio
+          portfolio={data.portfolio}
+          period={period}
+          onOpenEngagement={id => navigate('engagements', id)}
         />
-        <SamplingOutcomes sampling={data.sampling} period={period} />
-      </BlockGroup>
-    ),
+      ),
+    },
+    {
+      id: 'reports',
+      title: 'Reports made',
+      answer: data.reports.made.length === 0
+        ? 'no report was made'
+        : `${fmtInt(data.reports.made.length)} made, ${fmtInt(data.reports.shared.length)} shared`,
+      body: <ReportsMade reports={data.reports} period={period} />,
+    },
+    {
+      id: 'dashboards',
+      title: 'Dashboards and alerts',
+      answer: `${fmtInt(data.product.dashboardsBuilt.length)} dashboards built, ${fmtInt(alertsOn)} alerts set up`,
+      body: <DashboardsAndAlerts product={data.product} period={period} />,
+    },
+    {
+      id: 'cost',
+      title: 'What it cost under the contract',
+      answer: cost > 0 ? `${fmtMoneyExact(cost)} charged, as per your contract` : 'nothing charged',
+      body: <ContractCost cost={data.cost} period={period} />,
+    },
+    {
+      id: 'learn',
+      title: 'Smart Learn',
+      answer: `${fmtInt(data.learn.active.length)} things the assistant knows, ${fmtInt(data.learn.pending.length)} waiting on you`,
+      body: <SmartLearn learn={data.learn} scope={scope} onOpenSmartLearn={openSmartLearn} />,
+    },
+  ];
 
-    activity: (
-      <>
-        <BlockGroup title="What needs you">
-          <MyQueue queue={data.queue} onOpen={onOpenQueueItem} />
-        </BlockGroup>
-
-        <BlockGroup title="What the assistant knows">{smartLearnBlock}</BlockGroup>
-      </>
-    ),
-  };
-
-  const tabs = level === 'company' ? companyTabs : level === 'team' ? teamTabs : personTabs;
-
-  /* ── The page ───────────────────────────────────────────────────────────── */
+  /* ── The header line ────────────────────────────────────────────────────── */
 
   /*
-   * The whole sentence, even though the switch and the window pills each carry
-   * part of it.
+   * The whole sentence, even though the filter carries part of it.
    *
-   * It reads as a repetition on screen and it is not one: this line is what
-   * travels. A screenshot of this page lands in a board pack with no switch and
-   * no pills beside it, and a figure whose scope and window cannot be read off
-   * the same image is a figure nobody can defend six weeks later.
+   * A screenshot of this page lands in a board pack with no filter beside it,
+   * and a figure whose scope and windows cannot be read off the same image is a
+   * figure nobody can defend six weeks later.
    */
   const scopeLine = [
     SCOPE_LABEL[level] + (level === 'team' && myTeam ? ` · ${myTeam}` : ''),
-    `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
+    `${windowShort(both.quarter)}, ${formatDate(both.quarter.from)} to ${formatDate(both.quarter.to)}`,
+    `${windowShort(both.ytd)}, ${formatDate(both.ytd.from)} to ${formatDate(both.ytd.to)}`,
     dataAsOfLabel(),
   ].join(' · ');
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
       <div className="shrink-0">
-        <div className="bg-canvas-elevated px-6 lg:px-12 xl:px-[124px] pt-8 border-b border-canvas-border">
+        <div className="bg-canvas-elevated px-6 lg:px-12 xl:px-[124px] pt-8 pb-5 border-b border-canvas-border">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-[2.5rem] font-semibold tracking-tight text-ink-900 leading-[1.1]">Platform Usage</h1>
@@ -534,12 +409,10 @@ export default function PlatformUsageView() {
               </p>
             </div>
 
-            {/*
-              * The scope filter. It narrows and never widens: only the scopes
-              * this reader is entitled to appear, so it can never reach
-              * sideways into somebody else's team. A reader with one scope sees
-              * no filter, because a control with one option is furniture.
-              */}
+            {/* The scope filter narrows and never widens: only the scopes this
+                reader is entitled to appear, so it can never reach sideways
+                into somebody else's team. One option is furniture, so a reader
+                with one scope sees no filter at all. */}
             {levels.length > 1 && (
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[0.75rem] text-ink-500">Showing</span>
@@ -548,7 +421,7 @@ export default function PlatformUsageView() {
                     <button
                       key={option}
                       type="button"
-                      onClick={() => chooseLevel(option)}
+                      onClick={() => setRequested(option)}
                       aria-pressed={level === option}
                       className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
                         level === option ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-brand-700'
@@ -565,65 +438,69 @@ export default function PlatformUsageView() {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-[0.75rem] text-ink-500 tabular-nums">{scopeLine}</p>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {windowOptions.map(option => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => chooseWindow(option.id)}
-                    aria-pressed={windowId === option.id}
-                    className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
-                      windowId === option.id ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-brand-700'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+            {canExport && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={onExportCsv}>
+                  CSV
+                </Button>
+                <Button variant="primary" size="sm" leftIcon={<FileText size={14} />} onClick={onExportPdf}>
+                  PDF
+                </Button>
               </div>
-
-              {canExport && (
-                <>
-                  <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={onExportCsv}>
-                    CSV
-                  </Button>
-                  <Button variant="primary" size="sm" leftIcon={<FileText size={14} />} onClick={onExportPdf}>
-                    PDF
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* The tabs sit on the strip's own border, which is their underline
-              track, so the page grows one control rather than one more box. */}
-          <div className="mt-5 -mb-px">
-            <UsageTabs tabs={TABS} active={tab} onChange={chooseTab} />
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-6 lg:px-12 xl:px-[124px] py-6 space-y-6 max-w-[1400px]">
-          {/* The attention strip sits above the tabs' content rather than on a
-              tab, because at most three cards are the one thing every reader
-              must see whichever tab they are standing on. */}
+        <div className="px-6 lg:px-12 xl:px-[124px] py-6 space-y-8 max-w-[1400px]">
           <section aria-label="Needs your attention">
-            <AttentionStrip cards={data.attention} onAct={onAct} />
+            <AttentionStrip cards={quarter.attention} onAct={onAct} />
           </section>
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={tab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              className="space-y-8"
-            >
-              {tabs[tab]}
-            </motion.div>
-          </AnimatePresence>
+          <UsagePack quarter={quarter} ytd={ytd} />
+
+          <section aria-label="What the platform did">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <h2 className="text-[1.125rem] font-semibold text-ink-900">What the platform did</h2>
+
+              {/* The pack reads both windows side by side. These rows read one
+                  at a time, and the control says which. */}
+              <div className="inline-flex items-center gap-2">
+                <span className="text-[0.75rem] text-ink-500">Showing</span>
+                <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
+                  {[both.quarter, both.ytd].map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setWindowId(option.id)}
+                      aria-pressed={windowId === option.id}
+                      className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
+                        windowId === option.id ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-brand-700'
+                      }`}
+                    >
+                      {windowShort(option)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+              {rows.map(row => (
+                <SectionRow
+                  key={row.id}
+                  id={row.id}
+                  title={row.title}
+                  answer={row.answer}
+                  open={Boolean(openRows[row.id])}
+                  onToggle={() => toggle(row.id)}
+                >
+                  {row.body}
+                </SectionRow>
+              ))}
+            </div>
+          </section>
 
           <p className="text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed border-t border-canvas-border pt-4">
             {COVERAGE_NOTE}
