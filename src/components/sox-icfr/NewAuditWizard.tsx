@@ -165,7 +165,13 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *  explanation sends people to support (user ask), so the reason renders. */
   const roundGate: Record<AuditRound, string | null> = {
     interim: hasYearEnd ? `A year-end audit already covers ${periodLabel}.` : null,
-    rollforward: concludedInterims.length > 0 ? null
+    // A year-end round closes the year on the balance-sheet date, so there is
+    // nothing left for a roll-forward to extend towards — the same reason
+    // interim is blocked above. Without this the year-end could be signed and a
+    // roll-forward still opened after it, back-filling a window the ICFR opinion
+    // had already been given on.
+    rollforward: hasYearEnd ? `A year-end audit already closes ${periodLabel} — there is nothing left to extend towards.`
+      : concludedInterims.length > 0 ? null
       : yearInterims.length > 0
         ? `Sign off the ${periodLabel} interim first — a roll-forward extends a concluded interim.`
         : `Create and conclude an interim audit for ${periodLabel} first.`,
