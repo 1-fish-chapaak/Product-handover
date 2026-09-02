@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Typecheck with `npx tsc -b`, never `tsc --noEmit`. The root tsconfig has `files: []` so the plain form passes vacuously.
-- `npm run build` fails on two pre existing errors under `src/components/audit/`. Those are not yours. Check them first before assuming you caused a regression.
+- `npm run build` is green at commit `d8dc35b`. There are no pre existing errors to wave a regression away with. If the build breaks, you broke it. An earlier version of this plan claimed two standing errors under `src/components/audit/`; that was checked and it is false.
 - Tests: `npx playwright test tests/platform-usage.spec.ts`. The dev server must be on `http://localhost:5173`.
 - A background formatter rewrites files after each save. If an edit fails to apply, re read the file first.
 - The seed is fixed. No `Date.now()` and no `Math.random()` anywhere in `src/data/platform-usage*.ts`.
@@ -62,7 +62,7 @@
 - [ ] **Step 1: Write the failing test.** Assert no rupee figure representing a saving renders anywhere on the page, and that no persona switch exists in the DOM.
 - [ ] **Step 2: Run it and watch it fail.**
 - [ ] **Step 3: Delete the persona type and everything keyed on it.** `Persona`, the three `PERSONA_*` maps, `REFUSAL`, `entitledViews`, `personaFor`. Scope stays: whole company, a team, or your own work, still bounded by entitlement, still never sideways.
-- [ ] **Step 4: Delete the two invented assumptions.** Cost of an auditor hour, ₹1,200. Rows checked by hand in an hour, 200. Remove them from `calibrate` and from `snapshot()`. Hours per manual control test and working hours per person per month survive only where they feed an hours figure, never a rupee one.
+- [ ] **Step 4: Delete the invented rate.** Cost of an auditor hour, ₹1,200. Remove `hourlyRate` from `calibrate` and from `snapshot()`. **Correction to an earlier version of this step, which also said to delete the 200 rows an hour pace: do not.** `manualReviewRate` is the only input to `hoursSaved`, and `hoursPerPersonPerMonth` exists solely to turn `hoursSaved` into people. Deleting the pace deletes the hours the annual export is supposed to print. PRD section 6 is right and that earlier step was wrong. Keep the pace, keep its label, and let it feed hours only, never a rupee.
 - [ ] **Step 5: Gut `UsageValueBlocks.tsx`.** Delete `NetValueHero`, `HeadlineValue`, `SensitivityBlock`, `AssumptionsReference` and the net value arithmetic inside `CostAndNetValue`. Keep the recorded contract charge as a plain fact block and move it to section two. The ₹18,400 is a contract term and stays.
 - [ ] **Step 6: Run `npx tsc -b` and clear the fallout.**
 - [ ] **Step 7: Run tests, then commit.**
@@ -79,13 +79,18 @@
 - Consumes: `snapshot().pack` from Task 2.
 - Produces: `<UsagePack pack={...} onDrill={...} />`.
 
-Each line renders: the sentence that answers it, the quarter figure, the year to date figure, the honesty label where the figure is an inference, and one drill down. Read the PRD section 4 table for the exact six and their sources.
+Each line renders: the sentence that answers it, its figures, the honesty label where the figure is an inference, and one drill down. Read PRD section 4 for the exact six, their sources, and which are flows and which are stocks. Read PRD section 8.1 before you write any markup; it specifies the shape and it exists because the current page reads generic.
 
-- [ ] **Step 1: Write the failing test.** Six lines, in the PRD's order, each with two figures and a working drill down. Lines 1 and 2 carry their inference label on the same screen as the figure.
+**The stock and flow rule is not optional and it was measured, not guessed.** Coverage, populations, controls in library and percent tested are identical in both windows on this seed (1,428,000 rows, 11 populations, 14 controls, 71.4 percent) because the same populations are re-tested all year. Hours saved is 7,131.5 for the quarter and 7,104.8 for the year that contains it. Print those as two columns and the page looks broken. Flows get two columns, stocks get a date.
+
+- [ ] **Step 1: Write the failing test.** Six lines in the PRD's order. Flow lines carry two figures. Stock lines carry one figure and state their date. No stock figure appears as two columns. Lines 1 and 2 carry their inference label on the same screen as the figure. Each line opens a drill down.
 - [ ] **Step 2: Run it and watch it fail.**
-- [ ] **Step 3: Build the six lines.** Type and hairlines carry the hierarchy. This is a reading order, not a card grid. Somebody who reads only the six sentences understands the quarter.
+- [ ] **Step 3: Build the six lines** per PRD section 8.1. One bordered container, six hairline separated rows, column heads stated once at the top over the flow columns only. The sentence is the widest thing in the row. Figures are 20px Inter 600 with `tabular-nums`. The honesty label is 12px text under the sentence, not a pill. The drill down is named in the sentence, not a chevron.
 - [ ] **Step 4: Wire each drill down** to a list carrying a name, a maker and a date. A row with no person behind it says automatic.
-- [ ] **Step 5: Run tests, then commit.**
+- [ ] **Step 5: Delete the prior window machinery.** `Period.priorFrom`, `Period.priorTo`, `priorLabel()`, `priorValueOf()` and the snapshot's `prior` and `change` fields, on the page and in both exports. The year to date's prior window is 1 Apr 2024 to 31 Mar 2025, which is entirely before `HISTORY_START` and returns zeros, so anything rendering it prints a hundred percent fall that never happened. Verified, not assumed.
+- [ ] **Step 6: Give machine time a home.** 8.5 hours for Q4 FY26 lost its only renderer when the hero went, and AC-25 requires it visible. Put it in section two under work volume.
+- [ ] **Step 7: Keep hours saved and people off the page.** They stay in `snapshot()` for the annual export only, computed on the quarter, carrying their assumption label.
+- [ ] **Step 8: Run tests, then commit.**
 
 ---
 
@@ -97,7 +102,7 @@ Each line renders: the sentence that answers it, the quarter figure, the year to
 
 - [ ] **Step 1: Write the failing test.** The header states reader, scope, quarter with dates, year to date, and counted to date. Section two holds all twelve blocks from PRD section 5, closed by default, each opening.
 - [ ] **Step 2: Run it and watch it fail.**
-- [ ] **Step 3: Replace the header.** One line, no switch. Keep the scope filter and the export buttons.
+- [ ] **Step 3: Replace the header.** One line, no switch. Keep the scope filter and the export buttons. Note that Task 2 already converted the persona switch into the scope filter and renamed the entitlement helpers to `scopeCeiling`, `scopeOptions` and `Scope.level` with values `company`, `team` and `person`. Do not undo that. The entitlement bound survives, PRD section 2 requires it.
 - [ ] **Step 4: Render the pack, then section two.** Section two is folded, one block per row, opening in place.
 - [ ] **Step 5: Remove the persona only blocks** named above. `StuckNow` stays and moves into section two.
 - [ ] **Step 6: Keep the attention strip** at no more than three cards, each with one thing to do, each routing to the screen that owns the action.
@@ -124,6 +129,12 @@ Each line renders: the sentence that answers it, the quarter figure, the year to
 - Modify: `tests/platform-usage.spec.ts`
 
 The existing 711 line suite asserts the old page: three views, the switch, the net value hero, the sensitivity swing, the auditor's rupee free view. Those tests are now wrong, not failing.
+
+The obsolete set was identified during Task 2 and verified by running the suite: 28 passed, 15 failed, and every failure is on this list.
+
+Delete wholly, each asserts a behaviour that no longer exists: `opens on the highest view`, `same three tabs on every view`, `the switch is a lens`, `the CFO lands on this quarter compared with the quarter before`, `the quarter is the worked example to the rupee`, `the hero says net value only while the cost is complete`, `the assumptions are on screen with their source`, `one assumption swings everything`, `the period selector moves the whole page`, `the head of team view opens on what is stuck`, `the auditor view is only theirs`.
+
+Repoint rather than delete, the rule survives: `failed runs kept out of every saving` (the hero half is dead, the volume half is live), `never exercised ignores the window` (point This month at Year to date), `the CSV carries the scope` (one stale assertion, `CFO: Whole company` is now `Scope,Whole company`), `a thin window has no busiest stretch` (with two windows this seed has no thin window, so decide whether the rule can still be driven from the page at all and say which).
 
 - [ ] **Step 1: Delete every test that asserts a removed behaviour.** Name each one you delete in your report.
 - [ ] **Step 2: Keep every test that asserts a surviving rule.** Coverage counted once, failed runs excluded from savings, charts offering their table, counts opening their list, insights split and never summed, ageing from the day a finding was raised, the false alarm rate dividing by classified findings only, splits adding up, the alphabetical per person table, the page never writing.

@@ -62,18 +62,38 @@ The "Viewing as" switch is removed. Scope narrowing survives as a filter, whole 
 
 ## 4. The pack: six lines
 
-The first screen is six lines and nothing else. Each line carries the quarter and the financial year to date, one drill down to the underlying list, and where the figure is an inference rather than a fact it says so on the same screen as the number.
+The first screen is six lines and nothing else. Each line carries one drill down to the underlying list, and where the figure is an inference rather than a fact it says so on the same screen as the number.
 
-| # | Line | Computed from | Honesty label |
-| --- | --- | --- | --- |
-| 1 | Plan completion | `EngagementRow.status`, `plannedEnd`, `actualEnd` | The engagement list is treated as the approved annual plan. That is an inference and the block says so. |
-| 2 | Coverage | controls exercised over the control library, plus risks where `mapped` is false | Approximates the audit universe, because we do not hold an approved list of auditable entities. Labelled. |
-| 3 | Full population against sample | `Population.size` against `SampleValidation.sampleSize` | Fact |
-| 4 | Time to detection | `TracedException.occurredAt` to `detectedAt` | Fact |
-| 5 | Findings and their age | `severity`, `status`, `dueAt`, `detectedAt` | Fact. Findings raised before the content fingerprint shipped carry none, so they stay out of the ageing bars and are counted apart in a sentence. |
-| 6 | Overdue actions | `ActionPlan.dueAt` against `closedAt` | Fact |
+**Not every line gets two columns, and this is the correction that matters most.** Some of these figures are flows, meaning they accumulate over a window: runs, checks, findings raised, actions closed, money charged. Others are stocks, meaning they are a position at a moment: how much of the control library has been exercised, how many populations exist, how many actions are overdue right now. A stock does not have a quarter value and a year value. It has a value as at a date.
+
+This was measured, not assumed. On the current seed the quarter and the year to date both come to 1,428,000 rows covered, 11 populations, 14 controls in the library and 71.4 percent tested, because the same eleven populations are re-tested all year. Printed as two columns those lines read as a bug. Worse, hours saved computes to 7,131.5 for the quarter and 7,104.8 for the whole year that contains it, because the manual baseline is stock derived and the machine time subtracted from it is a flow. A year to date smaller than the quarter inside it is not a rounding problem, it is the wrong shape.
+
+So: **flows get two columns. Stocks get a date.**
+
+| # | Line | Type | Shape | Computed from | Honesty label |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Plan completion | flow | Quarter and year to date | `EngagementRow.status`, `plannedEnd`, `actualEnd` | The engagement list is treated as the approved annual plan. That is an inference and the block says so. |
+| 2 | Coverage | stock | As at 31 Mar 2026, one figure | controls exercised over the control library, plus risks where `mapped` is false | Approximates the audit universe, because we do not hold an approved list of auditable entities. Labelled. |
+| 3 | Full population against sample | stock and flow | Population size as at, validations performed in both windows | `Population.size` against `SampleValidation.sampleSize` | Fact |
+| 4 | Time to detection | flow | Quarter and year to date | `TracedException.occurredAt` to `detectedAt` | Fact |
+| 5 | Findings and their age | flow and stock | Raised in both windows, open as at | `severity`, `status`, `dueAt`, `detectedAt` | Fact. Findings raised before the content fingerprint shipped carry none, so they stay out of the ageing bars and are counted apart in a sentence. |
+| 6 | Overdue actions | stock | As at 31 Mar 2026, one figure | `ActionPlan.dueAt` against `closedAt` | Fact |
+
+This is how a committee pack already reads: activity for the period, position at period end. The two column head therefore sits over the flow columns only, and a stock line states its date in its own sentence.
+
+**Hours saved and people freed do not go on the page at all.** They mix a stock derived baseline with a flow, which is what produces the inverted year. They survive in the annual export, computed on the quarter, with their assumption label.
+
+**Machine time needs a home.** The 8.5 hours for Q4 FY26 is a real recorded figure and acceptance criterion AC-09 depends on it being visible. Its only renderer was the net value hero, which is being deleted. It moves to section two under work volume.
 
 Line 3 and line 4 together are continuous monitoring's own value claim, full population instead of sampling and detection in days instead of weeks. They are the two figures on this page that no competitor prints from real records, and they replace the invented rupee as the argument the page makes.
+
+**Two columns, and no third.** A flow line compares the quarter against the year to date and nothing else. There is no comparison against the previous quarter, no arrow, no percentage change. The year to date is the context the quarter is read in, and a second comparison on the same line would make six lines read as eighteen figures.
+
+The prior window machinery is deleted rather than merely unrendered. The year to date's own prior window is 1 Apr 2024 to 31 Mar 2025, which is entirely before `HISTORY_START` and holds zero records. Anything that rendered it would print a hundred percent fall that never happened. `Period.priorFrom`, `Period.priorTo`, `priorLabel()`, `priorValueOf()` and the `prior` and `change` fields on the snapshot all go, on the page and in both exports.
+
+**Scope defaults to the whole company.** The filter narrows to a team or to your own work. It never widens past the reader's entitlement and never looks sideways into another team.
+
+**Cold start.** A tenant with no engagements, no populations and no findings shows six lines in their unmeasured state, each naming the record it is waiting for and linking to the screen where that record gets created. It does not show six zeroes. Nothing happened and we do not measure this are different facts.
 
 ---
 
@@ -103,6 +123,10 @@ Nothing in this list is deleted. The change is that the first screen no longer c
 Contract cost stays. The ₹18,400 the customer was charged this quarter is a term of the contract and a recorded fact, not an estimate. It sits in section two under what it cost. What leaves is the saving, not the price.
 
 The annual export prints hours and coverage and, when no rate has been supplied, no rupees at all. Net value minus an unknown is not net value.
+
+**Where the rate comes from.** The same place the lookup prices come from. Operations seed it at contract time as a versioned row, the way the thirteen paid lookups are already seeded in `src/data/platform-usage.ts`. The customer never types it and there is no input field for it anywhere in this feature. On this seed no rate is supplied, deliberately, so the no rupees state is the state a reader can actually see and a test can actually assert.
+
+**Export permissions.** Opening the page needs `ad_usage`. The per person table needs `ad_usage_people`. Downloading either export needs `ad_usage_export` and writes an audit event, which is the one write in this feature and it is a log entry, not a change to any record the page reports on.
 
 ---
 
@@ -146,16 +170,40 @@ New, and the answer to the page looking generic.
 
 ---
 
+## 8.1 What the pack actually looks like
+
+The page reads generic today because every block is the same card with the same tile inside it. The fix is not more polish. It is removing the repeated chrome so hierarchy has somewhere to live. `DESIGN.md` is the component spec and it already prohibits most of what is wrong here: no hero metric template, no identical card grids, no side stripe wider than 1px outside Alert Cards, borders before shadows, flat at rest.
+
+**The pack is one block, not six.** Six cards side by side is the card grid the design system forbids. The pack is a single bordered container holding six hairline separated rows.
+
+**The two column heads are stated once**, at the top of the pack, not repeated on every row. `Q4 FY26` and `FY26 to date`, 12px Inter 600, right aligned over their columns.
+
+**Each row is: the sentence, then the two figures.** The sentence is the answer, 16px Inter 400, and it is the widest thing in the row. The figures are 20px Inter 600 with `tabular-nums`, right aligned in their columns. A reader who reads only the six sentences understands the quarter, which is the whole point of the shape.
+
+**The honesty label is text, not a badge.** 12px, directly under the sentence it qualifies, in the muted tone. A pill would make an inference look like a status.
+
+**The drill down is named in the sentence.** "Open the fourteen engagements", not a chevron and not a whole row click target. Varying the affordance is the design system's own instruction.
+
+**Type.** Inter throughout. Source Serif is reserved for heroes, section openers and evidence quotes, and this surface has none of those. On grid sizes only: 12, 14, 16, 18, 20. Never 11, 13, 15 or 17, whatever the ramp in `DESIGN.md` lists.
+
+**Numbers.** Every figure carries `tabular-nums`. Mixed width numerals are a bug.
+
+**Colour.** `brand-600` is the auditor's pen and stays under a tenth of the screen. Semantic colour never carries meaning alone, it is always paired with a word.
+
+**Section two is a list, not a wall.** One folded row per block, hairline between them, the block name and its one line answer visible while closed. Twelve closed rows should read as a contents page, which is exactly what it is.
+
+---
+
 ## 9. QA and UAT
 
 **Positive**
 
 1. Open the page as a user holding `ad_usage`. The header states the reader, the scope, the quarter with its dates, the year to date, and the counted to date.
-2. The first screen shows six lines, each with a quarter figure and a year to date figure.
+2. The first screen shows six lines. Flow lines carry a quarter figure and a year to date figure. Stock lines carry one figure and state the date it is measured at.
 3. Each of the six opens a list with names and dates.
 4. Section two is present, closed, and every block in it opens.
 5. Q4 FY26 reconciles to the worked example: 1,428,000 rows, 340 successful runs, 8.5 hours of machine time, ₹18,400 charged.
-6. The year to date column covers 1 Apr 2025 to 31 Mar 2026 and differs from the quarter on every line that has history behind it.
+6. The year to date column covers 1 Apr 2025 to 31 Mar 2026 and differs from the quarter on every flow line. On the current seed the flows that must differ are runs (340 against 1,380), checks performed (52,759,600 against 215,029,400) and the contract charge (₹18,400 against ₹23,402.25). Coverage does not appear as two columns at all, so it cannot fail this check.
 7. CSV and PDF exports carry the scope, both windows, the honesty labels and the coverage note.
 8. The annual export with no rate supplied prints hours and coverage and no rupee figure anywhere.
 
@@ -182,7 +230,7 @@ New, and the answer to the page looking generic.
 | --- | --- |
 | AC-01 | The page has exactly one reader. No persona switch exists in the DOM or the module. |
 | AC-02 | The first screen renders six lines, in the order given in section 4. |
-| AC-03 | Every one of the six lines shows a quarter figure and a financial year to date figure. |
+| AC-03 | Every flow line shows a quarter figure and a financial year to date figure. Every stock line shows one figure and states the date it is measured at. No stock figure is printed as two columns. |
 | AC-04 | Lines 1 and 2 print their inference label on the same screen as the figure. |
 | AC-05 | Every one of the six lines opens a drill down list carrying a name, a maker and a date. |
 | AC-06 | No rupee figure representing a saving appears anywhere on the page. |
@@ -191,15 +239,22 @@ New, and the answer to the page looking generic.
 | AC-09 | Q4 FY26 still reconciles to 1,428,000 rows, 340 runs, 8.5 hours and ₹18,400. |
 | AC-10 | The financial year to date window is 1 Apr 2025 to 31 Mar 2026. |
 | AC-11 | Every figure on the page and in both exports comes from one `snapshot()` call. |
-| AC-12 | No control on the page performs a write. |
+| AC-12 | No control on the page changes a record it reports on. No approve, no reject, no resolve. The one permitted write is the audit event an export emits. |
 | AC-13 | Section two contains all twelve blocks named in section 5, closed by default. |
 | AC-14 | No benchmark or target appears on any figure. |
 | AC-15 | The per person table is alphabetical and cannot be reordered by prop, state or URL. |
 | AC-16 | Every chart offers its table in one click, and no chart uses `ResponsiveContainer`. |
 | AC-17 | CSV and PDF carry the scope, both windows, the honesty labels and the coverage note. |
 | AC-18 | The annual export prints no rupee figure when no rate has been supplied. |
-| AC-19 | Visible copy contains no dashes and no analytics jargon. |
+| AC-19 | Visible copy on the page contains no em dash and no hyphenated compound. Table cells may use a dash as a blank. |
 | AC-20 | `npx tsc -b` reports no new errors, and the Playwright suite passes. |
+| AC-21 | No line in the pack shows a prior period comparison. No arrow, no percentage change, no delta against the previous quarter. |
+| AC-22 | With no records behind it, a line renders its unmeasured state naming the record it is waiting for, not a zero. |
+| AC-23 | There is no input field anywhere in this feature. The renewal rate is a seeded contract row, and on this seed it is absent. |
+| AC-24 | Scope defaults to the whole company and never resolves to a team the reader is not entitled to. |
+| AC-25 | Machine time for Q4 FY26 renders somewhere on the page as 8.5 hours. |
+| AC-26 | No prior window figure is computed or printed anywhere, on the page or in either export. `priorValueOf`, `priorLabel`, `Period.priorFrom`, `Period.priorTo` and the snapshot's `prior` and `change` fields no longer exist. |
+| AC-27 | Hours saved and people freed do not appear on the page. They appear in the annual export only, computed on the quarter, carrying their assumption label. |
 
 ---
 
