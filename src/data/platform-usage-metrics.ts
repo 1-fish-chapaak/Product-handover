@@ -240,7 +240,7 @@ export const REFUSAL =
  * The window
  * ────────────────────────────────────────────────────────────────────────── */
 
-export type PeriodId = 'this-month' | 'this-quarter' | 'this-year' | 'since-start' | 'custom';
+export type PeriodId = 'this-month' | 'this-quarter' | 'fy-to-date' | 'this-year' | 'since-start' | 'custom';
 
 export interface CustomRange { from: number; to: number }
 
@@ -269,6 +269,19 @@ const startOfQuarter = (ms: number) => {
   return Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3, 1);
 };
 const startOfYear = (ms: number) => Date.UTC(new Date(ms).getUTCFullYear(), 0, 1);
+/**
+ * The Indian financial year starts on 1 April.
+ *
+ * A calendar year to date resolves to 1 January, which on the anchor is the
+ * same window as the quarter and prints the same figures under a different
+ * name. The window a committee reads is this one, so it is offered as well as
+ * the calendar year rather than instead of it.
+ */
+const startOfFinancialYear = (ms: number) => {
+  const d = new Date(ms);
+  const year = d.getUTCMonth() < 3 ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
+  return Date.UTC(year, 3, 1);
+};
 
 /**
  * How many person-months a window is worth.
@@ -316,6 +329,8 @@ export function period(id: PeriodId, custom?: CustomRange | null): Period {
   switch (id) {
     case 'this-month':
       return make('this-month', 'This month', 'this month', startOfMonth(ANCHOR), ANCHOR);
+    case 'fy-to-date':
+      return make('fy-to-date', 'Financial year to date', 'this financial year so far', startOfFinancialYear(ANCHOR), ANCHOR);
     case 'this-year':
       return make('this-year', 'This year', 'this year', startOfYear(ANCHOR), ANCHOR);
     case 'since-start':
@@ -332,6 +347,7 @@ export function period(id: PeriodId, custom?: CustomRange | null): Period {
 export const periodOptions: { id: PeriodId; label: string }[] = [
   { id: 'this-month', label: 'This month' },
   { id: 'this-quarter', label: 'This quarter' },
+  { id: 'fy-to-date', label: 'Financial year to date' },
   { id: 'this-year', label: 'This year' },
   { id: 'since-start', label: 'Since you started' },
   { id: 'custom', label: 'Custom' },
@@ -348,6 +364,7 @@ export const DEFAULT_PERIOD: Record<Persona, PeriodId> = {
 export function priorLabel(p: Period): string {
   if (p.id === 'this-month') return 'the month before';
   if (p.id === 'this-quarter') return 'the quarter before';
+  if (p.id === 'fy-to-date') return 'the same stretch of the financial year before';
   if (p.id === 'this-year') return 'the year before';
   return `the ${p.days} days before`;
 }
@@ -754,9 +771,9 @@ export const SENSITIVITY_CAUSE =
 export function sensitivity(hoursSaved: number): Sensitivity[] {
   /*
    * The saved hours are priced, not the by-hand hours, so every row here ties
-   * to the saving printed at the top of the tab rather than sitting a little
-   * above it. ₹530 is the sum in `AUDITOR_RATE` at its exact figure; the page
-   * itself carries the round ₹550 a shade above it.
+   * to the saving printed at the top of the view rather than sitting a little
+   * above it. The first row is the sum in `AUDITOR_RATE` at its exact figure,
+   * which is the rate the page itself carries.
    */
   const rows: { basis: string; rate: number; from: string; ours: boolean }[] = [
     {
@@ -1361,6 +1378,8 @@ const asMade = (name: string, by: string | null, at: number, note?: string) => (
 
 export interface PersonRow {
   name: string;
+  /** Which team the person works in, said rather than compared. */
+  team: string;
   runs: number;
   exceptionsFound: number;
   exceptionsResolved: number;
@@ -1377,8 +1396,13 @@ export interface PersonRow {
  * table however it is labelled.
  */
 function peopleOf(p: Period, scope: Scope): PersonRow[] {
-  if (scope.persona !== 'head_of_team' || !scope.team) return [];
-  const names = [...new Set(RUNS.filter(r => r.team === scope.team).map(r => r.actor.name))];
+  // The whole company view answers "is the team actually using what we bought",
+  // so it lists everybody. A team lead sees their own team and nobody else's.
+  // Somebody reading their own work sees no table of people at all.
+  if (scope.persona === 'auditor') return [];
+  if (scope.persona === 'head_of_team' && !scope.team) return [];
+  const inScope = RUNS.filter(r => scope.persona === 'cfo' || r.team === scope.team);
+  const names = [...new Set(inScope.map(r => r.actor.name))];
   return names
     .map(name => {
       const runs = RUNS.filter(r => r.actor.name === name && inWindow(r.completedAt, p));
@@ -1387,6 +1411,7 @@ function peopleOf(p: Period, scope: Scope): PersonRow[] {
       const last = runs.length ? Math.max(...runs.map(r => r.completedAt)) : null;
       return {
         name,
+        team: RUNS.find(r => r.actor.name === name)?.team ?? '',
         runs: runs.length,
         exceptionsFound: found.length,
         exceptionsResolved: resolved.length,
