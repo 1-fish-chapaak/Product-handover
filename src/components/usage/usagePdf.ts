@@ -87,13 +87,15 @@ const table = (head: string[], rows: (string | number)[][]): Content => ({
   },
 });
 
-export function usagePdfDefinition(data: UsageSnapshot) {
+export function usagePdfDefinition(data: UsageSnapshot, view?: { title: string; reader: string }) {
   const { scope, period, settings, value, cost } = data;
 
   const content: Content[] = [
     { text: 'Platform Usage', fontSize: 20, bold: true, color: INK },
     {
-      text: `${PERSONA_TITLE[scope.persona]} view · ${PERSONA_SCOPE_LABEL[scope.persona]}${scope.team ? ` · ${scope.team}` : ''}`,
+      text: view
+        ? `${view.title}, for ${view.reader.toLowerCase()} · counting ${PERSONA_SCOPE_LABEL[scope.persona].toLowerCase()}${scope.team ? `, ${scope.team}` : ''}`
+        : `${PERSONA_TITLE[scope.persona]} view · ${PERSONA_SCOPE_LABEL[scope.persona]}${scope.team ? ` · ${scope.team}` : ''}`,
       fontSize: 10,
       color: BRAND,
       margin: [0, 4, 0, 0],
@@ -134,7 +136,7 @@ export function usagePdfDefinition(data: UsageSnapshot) {
         ['Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'],
       ],
     ),
-    note('Failed runs are excluded from every saving above and reported on their own line. Rows covered counts each population once however often it was re-tested, and the repeats appear on the checks-performed line.'),
+    note('Failed runs are excluded from every saving above and reported on their own line. Rows covered counts each population once however often it was re-tested, and the repeats appear on the checks performed line.'),
 
     heading('Where the auditor rate comes from'),
     table(
@@ -256,10 +258,10 @@ export function usagePdfDefinition(data: UsageSnapshot) {
 
   if (data.people.length > 0) {
     content.push(
-      heading(`${scope.team ?? 'Team'} · work by outcome`),
+      heading(`${scope.team ?? PERSONA_SCOPE_LABEL[scope.persona]} · work by outcome`),
       table(
-        ['Person', 'Runs', 'Exceptions found', 'Resolved'],
-        data.people.map(p => [p.name, fmtInt(p.runs), fmtInt(p.exceptionsFound), fmtInt(p.exceptionsResolved)]),
+        ['Person', 'Team', 'Runs', 'Exceptions found', 'Resolved'],
+        data.people.map(p => [p.name, p.team, fmtInt(p.runs), fmtInt(p.exceptionsFound), fmtInt(p.exceptionsResolved)]),
       ),
       note('Alphabetical. It records what each person worked on rather than comparing them.'),
     );
@@ -273,14 +275,14 @@ export function usagePdfDefinition(data: UsageSnapshot) {
     footer: (current: number, total: number) => ({
       margin: [44, 0, 44, 0],
       columns: [
-        { text: `Platform Usage · ${PERSONA_TITLE[scope.persona]} view · ${period.label}`, fontSize: 7.5, color: MUTED },
+        { text: `Platform Usage · ${view ? view.title : PERSONA_TITLE[scope.persona]} · ${period.label}`, fontSize: 7.5, color: MUTED },
         { text: `${current} of ${total}`, fontSize: 7.5, color: MUTED, alignment: 'right' },
       ],
     }),
   };
 }
 
-export async function downloadUsagePdf(data: UsageSnapshot) {
+export async function downloadUsagePdf(data: UsageSnapshot, view?: { title: string; reader: string }) {
   const pdfMake = await loadPdfMake();
-  pdfMake.createPdf(usagePdfDefinition(data)).download(usageFileName(data.scope, data.period, 'pdf'));
+  pdfMake.createPdf(usagePdfDefinition(data, view)).download(usageFileName(data.scope, data.period, 'pdf'));
 }

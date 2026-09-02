@@ -24,12 +24,25 @@ const cell = (value: string | number): string => {
 
 const row = (...values: (string | number)[]): string => values.map(cell).join(',');
 
-export function usageCsv(data: UsageSnapshot): string {
+/**
+ * Which view the reader was on when they exported.
+ *
+ * The page has three views over one set of figures, so the file says which one
+ * led and who it is built for. Optional, because the figures are the same
+ * whichever view produced them and a file with no view line is still true.
+ */
+export interface ExportView {
+  title: string;
+  reader: string;
+}
+
+export function usageCsv(data: UsageSnapshot, view?: ExportView): string {
   const { scope, period, settings, value, cost } = data;
   const lines: string[] = [];
 
   lines.push(row('Platform Usage'));
-  lines.push(row('View', `${PERSONA_TITLE[scope.persona]}: ${PERSONA_SCOPE_LABEL[scope.persona]}`));
+  if (view) lines.push(row('View', `${view.title}, for ${view.reader.toLowerCase()}`));
+  lines.push(row('Counting', `${PERSONA_SCOPE_LABEL[scope.persona]} (${PERSONA_TITLE[scope.persona]})`));
   if (scope.team) lines.push(row('Team', scope.team));
   lines.push(row('Window', `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)}`));
   lines.push(row('Compared with', priorLabel(period)));
@@ -152,9 +165,9 @@ export function usageCsv(data: UsageSnapshot): string {
 
   if (data.people.length > 0) {
     lines.push('');
-    lines.push(row(`${scope.team ?? 'Team'} · work by outcome (alphabetical, not a ranking)`));
-    lines.push(row('Person', 'Runs', 'Exceptions found', 'Resolved'));
-    data.people.forEach(p => lines.push(row(p.name, p.runs, p.exceptionsFound, p.exceptionsResolved)));
+    lines.push(row(`${scope.team ?? PERSONA_SCOPE_LABEL[scope.persona]} · work by outcome (alphabetical, not a ranking)`));
+    lines.push(row('Person', 'Team', 'Runs', 'Exceptions found', 'Resolved'));
+    data.people.forEach(p => lines.push(row(p.name, p.team, p.runs, p.exceptionsFound, p.exceptionsResolved)));
   }
 
   lines.push('');
@@ -165,8 +178,8 @@ export function usageCsv(data: UsageSnapshot): string {
   return lines.join('\n');
 }
 
-export function downloadUsageCsv(data: UsageSnapshot) {
-  const blob = new Blob([usageCsv(data)], { type: 'text/csv;charset=utf-8;' });
+export function downloadUsageCsv(data: UsageSnapshot, view?: ExportView) {
+  const blob = new Blob([usageCsv(data, view)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

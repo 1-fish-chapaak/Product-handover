@@ -231,13 +231,15 @@ export default function PlatformUsageView() {
 
   /* ── Export. The one write in the whole feature ──────────────────────────── */
 
+  const exportView = { title: VIEW_TITLE[view], reader: VIEW_READER[view] };
+
   const onExportCsv = () => {
-    downloadUsageCsv(data);
+    downloadUsageCsv(data, exportView);
     addToast({ type: 'success', message: 'Exported. The file carries the scope, the window and every assumption with its derivation.' });
   };
 
   const onExportPdf = async () => {
-    await downloadUsagePdf(data);
+    await downloadUsagePdf(data, exportView);
     addToast({ type: 'success', message: 'Exported as a PDF, with the coverage note and the rate derivation on the first pages.' });
   };
 
