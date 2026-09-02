@@ -15,9 +15,9 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
   fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
-  type NumericSetting, type UsageSnapshot,
+  type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
 const INK = '#0F0720';
@@ -56,7 +56,6 @@ async function loadPdfMake(): Promise<PdfMake> {
   return pdfMakePromise;
 }
 
-const ASSUMPTIONS: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
 
 const heading = (text: string): Content => ({ text, fontSize: 12, bold: true, color: INK, margin: [0, 16, 0, 6] });
 const note = (text: string): Content => ({ text, fontSize: 8, color: MUTED, margin: [0, 0, 0, 6], lineHeight: 1.3 });
@@ -127,7 +126,7 @@ export function usagePdfDefinition(data: UsageSnapshot) {
         ['Machine time', fmtDuration(value.machineHours), 'measured'],
         ['Hours if done by hand', fmtHours(value.manualHours), 'estimated'],
         ['Hours saved', fmtHours(value.hoursSaved), 'estimated'],
-        ['The same work in money, INR', fmtInt(value.rupees), 'estimated'],
+        ['What the hours saved are worth, INR', fmtInt(value.rupees), 'estimated'],
         ['People freed, full time', fmtPeople(value.people), 'estimated'],
         ['Charged by the contract, INR', fmtInt(cost.totalPaise / 100), 'measured'],
         ['Net value, INR', fmtInt(data.netRupees), 'estimated'],

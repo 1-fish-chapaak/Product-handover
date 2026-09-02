@@ -10,12 +10,11 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
   fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
-  type NumericSetting, type UsageSnapshot,
+  type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
-const ASSUMPTIONS: NumericSetting[] = ['manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth'];
 
 const cell = (value: string | number): string => {
   const text = String(value);
@@ -57,7 +56,7 @@ export function usageCsv(data: UsageSnapshot): string {
   lines.push(row('Machine time', fmtDuration(value.machineHours), 'measured'));
   lines.push(row('Hours if done by hand', fmtHours(value.manualHours), 'estimated'));
   lines.push(row('Hours saved', fmtHours(value.hoursSaved), 'estimated'));
-  lines.push(row('The same work in money (INR)', Math.round(value.rupees), 'estimated'));
+  lines.push(row('What the hours saved are worth (INR)', Math.round(value.rupees), 'estimated'));
   lines.push(row('People freed, full time', fmtPeople(value.people), 'estimated'));
   lines.push(row('Charged by the contract (INR)', Math.round(cost.totalPaise / 100), 'measured'));
   lines.push(row('Net value (INR)', Math.round(data.netRupees), 'estimated'));

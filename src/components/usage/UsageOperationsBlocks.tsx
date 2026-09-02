@@ -14,7 +14,7 @@ import {
   type CcmFigures, type ExceptionFigures, type Period, type PersonRow, type QueueFigures,
   type ReliabilityRow, type SamplingFigures, type StuckRun, type UsageSettings, type ValueFigures,
 } from '../../data/platform-usage-metrics';
-import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow, Working } from './usageKit';
+import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Stat, StatRow, Story } from './usageKit';
 
 /* ── What is stuck right now ─────────────────────────────────────────────── */
 
@@ -41,10 +41,39 @@ export function StuckNow({
 
   const repeated = stuck.find(s => s.repeats > 1);
 
+  /*
+   * One problem, one row.
+   *
+   * The same check failing four times with the same error was four rows of
+   * identical text, each one repeating "4 times with this error" under it. It
+   * reads as four things to fix when it is one, and the one real fact, that
+   * nobody has touched it since the first failure, was buried in the repetition.
+   * So the list groups on the check and the error text, keeps the most recent
+   * failure as the row's date, and says how many times and since when
+   * underneath. The figure in the head stays the run count, because that is
+   * what it says it is.
+   */
+  const groups = stuck.reduce<{ key: string; latest: StuckRun; runs: StuckRun[] }[]>((acc, item) => {
+    const key = `${item.run.workflowId}·${item.run.errorText}`;
+    const found = acc.find(g => g.key === key);
+    if (found) {
+      found.runs.push(item);
+      if (item.run.completedAt > found.latest.run.completedAt) found.latest = item;
+      return acc;
+    }
+    return [...acc, { key, latest: item, runs: [item] }];
+  }, []);
+
   return (
     <Block
       id="stuck"
       title="What is stuck right now"
+      code="RUN-STUCK"
+      figure={fmtInt(stuck.length)}
+      tone="risk"
+      context={groups.length < stuck.length
+        ? <>runs that failed and have not been re-run, {groups.length === 1 ? 'all of them the same problem' : `${fmtInt(groups.length)} problems between them`}</>
+        : 'runs that failed and have not been re-run'}
       lede={
         repeated
           ? (
@@ -64,30 +93,39 @@ export function StuckNow({
       }
     >
       <ul className="divide-y divide-canvas-border border-t border-canvas-border">
-        {stuck.map(({ run, repeats }) => (
-          <li key={run.id} className="py-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <button
-                  type="button"
-                  onClick={() => onOpenRun(run.workflowId)}
-                  className="text-[0.875rem] font-medium text-ink-900 hover:text-brand-700 hover:underline text-left"
-                >
-                  {run.workflowName}
-                </button>
-                <p className="mt-1 text-[0.875rem] text-ink-700 leading-relaxed max-w-[80ch]">
-                  {run.errorText}
-                </p>
-                <p className="mt-1 text-[0.75rem] text-ink-500">
-                  {run.status === 'blocked' ? 'Blocked' : 'Failed'} · {formatDateTime(run.completedAt)} · started by{' '}
-                  {run.scheduled ? 'the schedule' : run.actor.name}
-                  {repeats > 1 && <> · {fmtInt(repeats)} times with this error</>}
-                </p>
+        {groups.map(({ key, latest, runs }) => {
+          const { run } = latest;
+          const first = runs.reduce((a, b) => (a.run.completedAt <= b.run.completedAt ? a : b)).run;
+          return (
+            <li key={key} className="py-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onOpenRun(run.workflowId)}
+                    className="text-[0.875rem] font-medium text-ink-900 hover:text-brand-700 hover:underline text-left"
+                  >
+                    {run.workflowName}
+                  </button>
+                  <p className="mt-1 text-[0.875rem] text-ink-700 leading-relaxed max-w-[80ch]">
+                    {run.errorText}
+                  </p>
+                  <p className="mt-1 text-[0.75rem] text-ink-500">
+                    {run.status === 'blocked' ? 'Blocked' : 'Failed'} · last {formatDateTime(run.completedAt)} · started by{' '}
+                    {run.scheduled ? 'the schedule' : run.actor.name}
+                  </p>
+                  {runs.length > 1 && (
+                    <p className="mt-1 text-[0.75rem] text-ink-500">
+                      {fmtInt(runs.length)} runs with this same error, the first on {formatDateTime(first.completedAt)}, and
+                      nothing has run clean since.
+                    </p>
+                  )}
+                </div>
+                <AlertTriangle size={15} className="text-risk-600 shrink-0 mt-0.5" />
               </div>
-              <AlertTriangle size={15} className="text-risk-600 shrink-0 mt-0.5" />
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </Block>
   );
@@ -116,6 +154,10 @@ export function Reliability({
     <Block
       id="reliability"
       title="What keeps failing"
+      code="RUN-FAILED"
+      tone="risk"
+      figure={fmtDuration(wastedHours)}
+      context="of machine time burned by runs that produced nothing, and none of it is in any saving on this page"
       lede={
         <>
           <Fig>{worst.workflowName}</Fig> failed <Fig>{fmtInt(worst.failures)}</Fig> of{' '}
@@ -148,16 +190,29 @@ export function SamplingOutcomes({ sampling, period }: { sampling: SamplingFigur
   }
 
   const count = (o: string) => sampling.counts.find(c => c.outcome === o)?.value ?? 0;
+  // Running and queued samples are in the drill and in the total, so they have
+  // to be in the sentence too. "3 passed, 0 failed, 0 errored" above a link that
+  // opens 4 validations is a page a reader stops trusting.
+  const unsettled = sampling.total - count('passed') - count('failed') - count('errored');
 
   return (
     <Block
       id="sampling"
       title="Sampling outcomes"
+      code="SAMPLE-OUT"
+      figure={fmtInt(sampling.counts.find(c => c.outcome === 'passed')?.value ?? 0)}
+      of={fmtInt(sampling.total)}
+      context={<>samples passed {period.phrase}</>}
       lede={
         <>
           <Fig>{fmtInt(count('passed'))}</Fig> {count('passed') === 1 ? 'sample' : 'samples'} passed,{' '}
           <Fig>{fmtInt(count('failed'))}</Fig> failed and <Fig>{fmtInt(count('errored'))}</Fig> errored{' '}
           {period.phrase}.
+          {unsettled > 0 && (
+            <> <Fig>{fmtInt(unsettled)}</Fig> {unsettled === 1 ? 'is' : 'are'} still running or
+              waiting to start, so {unsettled === 1 ? 'it has' : 'they have'} no outcome yet. All{' '}
+              <Fig>{fmtInt(sampling.total)}</Fig> are in the list below.</>
+          )}
           {count('errored') > 0 && (
             <> An errored run is not a failed control, so it is counted separately. Somebody has to
               look at it before it means anything.</>
@@ -195,6 +250,9 @@ export function CcmCoverage({ ccm, period }: { ccm: CcmFigures; period: Period }
     <Block
       id="ccm"
       title="Continuous monitoring"
+      code="CCM-LAG"
+      figure={ccm.medianLagDays !== null ? `${Math.round(ccm.medianLagDays * 10) / 10} d` : '—'}
+      context={<>from a thing happening to a scheduled check catching it, across {fmtInt(ccm.engagementsOnSchedule)} engagements on a schedule</>}
       lede={
         <>
           <Fig>{fmtInt(ccm.engagementsOnSchedule)}</Fig> of{' '}
@@ -244,10 +302,29 @@ export function TeamWork({ people, period, team }: { people: PersonRow[]; period
     );
   }
 
+  /*
+   * This block used to render as a heading with a fold under it and nothing
+   * else: no figure, and its sentence folded away with the table. A reader saw
+   * "Management · work by outcome" and a link. So it carries its own figure now,
+   * and the figure is the team, not a ranking: how many people recorded work,
+   * and what they did between them.
+   */
+  const runs = people.reduce((sum, p) => sum + p.runs, 0);
+  const found = people.reduce((sum, p) => sum + p.exceptionsFound, 0);
+
   return (
     <Block
       id="people"
       title={`${team} · work by outcome`}
+      code="TEAM-WORK"
+      figure={fmtInt(people.length)}
+      context={
+        <>
+          {people.length === 1 ? 'person' : 'people'} on {team} recorded work {period.phrase},{' '}
+          {fmtInt(runs)} {runs === 1 ? 'run' : 'runs'} and {fmtInt(found)}{' '}
+          {found === 1 ? 'exception' : 'exceptions'} found between them
+        </>
+      }
       lede={<>Everybody on {team} and what they worked on {period.phrase}.</>}
       hint="Alphabetical, and there is no way to sort it by output, by click or by URL. It records what each person worked on rather than comparing them."
       table={
@@ -281,6 +358,10 @@ export function MyQueue({ queue, onOpen }: { queue: QueueFigures; onOpen: (item:
     <Block
       id="queue"
       title="What is waiting on you"
+      code="MY-QUEUE"
+      figure={fmtInt(queue.items.length)}
+      tone={queue.overdue > 0 ? 'risk' : 'plain'}
+      context={<>{fmtInt(queue.overdue)} of them past their date</>}
       lede={
         queue.overdue > 0
           ? (
@@ -343,6 +424,7 @@ export function MyWork({
     <Block
       id="my-work"
       title="Your own work"
+
       lede={
         <>
           You started <Fig>{fmtInt(value.runs)}</Fig> successful{' '}
@@ -356,41 +438,54 @@ export function MyWork({
         </>
       }
     >
-      <StatRow>
-        <Stat value={fmtInt(value.runs)} label="runs you started" />
-        <Stat value={fmtInt(exceptions.total)} label="exceptions you found" />
-        <Stat value={fmtInt(exceptions.resolved)} label="of those, closed" />
-        <Stat
-          value={fmtHours(value.hoursSaved)}
-          label="hours you saved"
-          sub="What your runs would have taken by hand, less the time the machine took."
-        />
-      </StatRow>
-
-      {value.coveredRows > 0 && (
-        <Working
-          title="How the hours are worked out"
-          rows={[
-            {
-              expr: `${fmtInt(value.coveredRows)} rows`,
-              means: `you checked ${period.phrase}, with each population counted once`,
-              source: 'measured',
-            },
-            {
-              expr: `÷ ${fmtInt(settings.manualReviewRate)} rows an hour`,
-              means: 'what one person gets through by hand',
-              source: SOURCE_LABEL[settings.source.manualReviewRate],
-            },
-            { expr: `= ${fmtHours(value.manualHours)} hours`, means: 'the same work done by hand', source: 'estimated' },
-            { expr: `less ${fmtDuration(value.machineHours)}`, means: 'what the machine actually took', source: 'measured' },
-            {
-              expr: `= ${fmtHours(value.hoursSaved)} hours saved`,
-              means: 'rounded down, so the saving is never overstated',
-              source: 'estimated',
-            },
-          ]}
-        />
+      {/* The head carries the run count, so the block goes straight to the one
+          thing a figure cannot say: the sum behind the hours. */}
+      {value.manualHours > 0 && (
+  <Story
+              rows={[
+                value.coveredRows > 0
+                  ? {
+                    text: <>Checking the {fmtInt(value.coveredRows)} records by hand</>,
+                    value: `${fmtHours(value.manualHours)} hours`,
+                    note: <>if one person gets through {fmtInt(settings.manualReviewRate)} records an hour ({SOURCE_LABEL[settings.source.manualReviewRate]})</>,
+                  }
+                  : {
+                    // A run that tested a control without producing rows is still
+                    // work somebody did not do. It is priced as a manual control
+                    // test rather than by the row, and says so.
+                    text: <>Testing {value.zeroRowRuns === 1 ? 'that control' : 'those controls'} by hand</>,
+                    value: `${fmtHours(value.manualHours)} hours`,
+                    note: <>at {fmtOneDp(settings.manualControlTestHours)} hours a manual control test ({SOURCE_LABEL[settings.source.manualControlTestHours]})</>,
+                  },
+                { text: <>The platform did it in</>, value: fmtDuration(value.machineHours) },
+                {
+                  text: <>Time you did not spend</>,
+                  value: `${fmtHours(value.hoursSaved)} hours`,
+                  /*
+                   * 239 hours in a month, read next to the page's own assumption
+                   * that a person works 160, looks like the page has lost track
+                   * of what a month is. It has not: the work was more than one
+                   * person could have done in the window, which is the point.
+                   * Saying so in months makes that the finding rather than the
+                   * thing a reader spots and holds against the figure.
+                   */
+                  note: (
+                    <>
+                      rounded down, so the saving is never overstated
+                      {value.hoursSaved > settings.hoursPerPersonPerMonth && (
+                        <>. That is about {fmtOneDp(value.hoursSaved / settings.hoursPerPersonPerMonth)}{' '}
+                          months of one person&rsquo;s time, at {fmtInt(settings.hoursPerPersonPerMonth)}{' '}
+                          working hours a month, so it is more work than you could have done by hand in
+                          this window at all</>
+                      )}
+                    </>
+                  ),
+                  strong: true,
+                },
+              ]}
+            />
       )}
+
     </Block>
   );
 }

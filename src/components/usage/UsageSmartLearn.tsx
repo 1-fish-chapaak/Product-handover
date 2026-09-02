@@ -44,6 +44,9 @@ export function SmartLearn({
     <Block
       id="memory"
       title={title}
+      code="AI-MEMORY"
+      figure={fmtInt(learn.active.length)}
+      context={<>things the assistant is using, {fmtInt(learn.pending.length)} waiting on a person</>}
       lede={
         learn.pending.length > 0
           ? (
@@ -69,9 +72,13 @@ export function SmartLearn({
         </button>
       }
     >
-      <StatRow>
-        <Stat label="In use" value={fmtInt(learn.active.length)} />
-        <Stat label="Awaiting approval" value={fmtInt(learn.pending.length)} />
+      {/*
+        * The head already says how many are in use and how many are waiting, so
+        * the strip carries what it has not said. Repeating both of them as tiles
+        * printed the same two numbers twice on one screen and left a reader
+        * checking whether they were really the same figure.
+        */}
+      <StatRow cols={2}>
         <Stat label="Due for review" value={fmtInt(learn.dueReview)} />
         <Stat
           label="Recalled in the last 7 days"

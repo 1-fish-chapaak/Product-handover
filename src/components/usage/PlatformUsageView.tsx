@@ -20,10 +20,21 @@
  * **The screen always says what you are looking at**, in one line above the
  * blocks: who, what scope, which window, how fresh.
  *
+ * ## Three tabs, the Knowledge Hub's
+ *
+ * Value, Coverage and Activity, underlined on the foot of the header strip the
+ * way the Knowledge Hub tabs its own page. Every reader gets the same three in
+ * the same order, so the switch still never changes the shape of the page. What
+ * the switch changes is which tab opens first and which blocks it holds: a CFO
+ * lands on Value, a head of team and an auditor land on Activity, where what is
+ * stuck and what is waiting on them live.
+ *
  * ## Answers first, machinery never
  *
  * Every view opens with at most three attention cards, each a sentence with one
- * thing to do, then blocks that lead with a sentence rather than a tile.
+ * thing to do, and they sit above the tabs rather than on one, so no reader can
+ * be standing on a tab that hides them. Under the cards are blocks that lead
+ * with a sentence rather than a tile.
  * Somebody who reads only those sentences understands the whole page. It works
  * with zero setup: no form is ever the price of seeing your numbers.
  *
@@ -41,12 +52,13 @@
  * because they are not a concept in this product.
  */
 
-import { useMemo, useState } from 'react';
-import { CalendarRange, Download, FileText, Lock } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Activity, CalendarRange, Download, FileText, Lock, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
-import FloatingLines from '../shared/FloatingLines';
+import { Button } from '../shared/Button';
 import { useMemorySessionVersion } from '../../data/memorySession';
 import { ANCHOR, COVERAGE_NOTE, dataAsOfLabel, formatDate, isoDay } from '../../data/platform-usage';
 import {
@@ -55,7 +67,7 @@ import {
   type AttentionCard, type AttentionTarget, type CustomRange, type Persona, type PeriodId,
   type QueueFigures, type Scope,
 } from '../../data/platform-usage-metrics';
-import { AttentionStrip, BlockGroup } from './usageKit';
+import { AttentionStrip, BlockGroup, UsageTabs } from './usageKit';
 import {
   AiUsageByArea, AssumptionsReference, CostAndNetValue, HeadlineValue, NetValueHero,
   SensitivityBlock, ValueOverTime,
@@ -64,9 +76,65 @@ import { ControlCoverage, ExceptionsCaught, NeverTested, RiskPicture } from './U
 import { CcmCoverage, MyQueue, MyWork, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
 import { CreatedThisPeriod, DashboardsAndAlerts, EngagementPortfolio, ReportsMade, WorkVolume } from './UsageProductBlocks';
 import { AiInsights, FindingQuality, FindingsAgeing } from './UsageFindingBlocks';
+import { PastTheirDate, PlanCompletion } from './UsageCommitteeBlocks';
+import { pack } from '../../data/audit-coverage';
 import { SmartLearn } from './UsageSmartLearn';
 import { downloadUsageCsv } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
+
+/* ── The three tabs ──────────────────────────────────────────────────────── */
+
+type TabId = 'value' | 'coverage' | 'activity';
+
+/**
+ * Three tabs, the same three for every reader, so the "Viewing as" switch still
+ * changes whose data you see and never the shape of the page. What differs by
+ * reader is which tab opens first and which blocks a tab holds.
+ */
+const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
+  { id: 'value', label: 'Value', icon: TrendingUp },
+  { id: 'coverage', label: 'Coverage', icon: ShieldCheck },
+  { id: 'activity', label: 'Activity', icon: Activity },
+];
+
+/**
+ * The tab each block lives on, so an attention card can open the right tab
+ * before it scrolls. Every anchor in `src/components/usage` appears here; a
+ * block missing from this map would leave its card scrolling to nothing.
+ */
+const TAB_OF_BLOCK: Record<string, TabId> = {
+  hero: 'value', 'over-time': 'value', headline: 'value', 'my-work': 'value',
+  cost: 'value', sensitivity: 'value', assumptions: 'value',
+  coverage: 'coverage', never: 'coverage', portfolio: 'coverage', risks: 'coverage',
+  'past-date': 'coverage', 'plan-completion': 'coverage',
+  ccm: 'coverage', sampling: 'coverage', caught: 'coverage', ageing: 'coverage', quality: 'coverage',
+  stuck: 'activity', reliability: 'activity', queue: 'activity', people: 'activity',
+  volume: 'activity', created: 'activity', dashboards: 'activity', reports: 'activity',
+  'ai-usage': 'activity', insights: 'activity', memory: 'activity',
+};
+
+/**
+ * Where each reader lands. A CFO is here for the money, so Value opens first. A
+ * head of team and an auditor are here for what is stuck and what is waiting on
+ * them, which are both on Activity.
+ */
+const DEFAULT_TAB: Record<Persona, TabId> = {
+  cfo: 'value',
+  head_of_team: 'activity',
+  auditor: 'activity',
+};
+
+/**
+ * The card targets each view actually has a block for. A card aimed at anything
+ * else leaves for the screen that owns the work rather than opening a tab on a
+ * block this reader has not got. Keep this beside the tab definitions below: if
+ * a block moves off a view, its line here moves with it.
+ */
+const CARD_BLOCK_ON_VIEW: Record<Persona, AttentionTarget[]> = {
+  cfo: ['risks', 'controls', 'memory'],
+  head_of_team: ['stuck', 'risks', 'controls', 'sampling', 'memory'],
+  auditor: ['queue', 'memory'],
+};
 
 /** Where a card sends a reader whose view has no block for it. */
 const CARD_ELSEWHERE: Record<AttentionTarget, string> = {
@@ -156,9 +224,23 @@ export default function PlatformUsageView() {
     setPeriodId(id);
   };
 
+  /* ── The tab ────────────────────────────────────────────────────────────── */
+
+  // Same rule as the window: each view opens on the tab it is meant to be read
+  // on, and once a reader has picked a tab for themselves, changing view keeps
+  // their choice rather than overruling it.
+  const [tab, setTab] = useState<TabId>(() => DEFAULT_TAB[ceiling]);
+  const [tabChosen, setTabChosen] = useState(false);
+
+  const chooseTab = (id: TabId) => {
+    setTabChosen(true);
+    setTab(id);
+  };
+
   const chooseView = (view: Persona) => {
     setRequested(view);
     if (!periodChosen) setPeriodId(DEFAULT_PERIOD[view]);
+    if (!tabChosen) setTab(DEFAULT_TAB[view]);
   };
   const period = useMemo(() => buildPeriod(periodId, custom), [periodId, custom]);
 
@@ -172,24 +254,60 @@ export default function PlatformUsageView() {
     [scope, period, settings, memoryVersion],
   );
 
+  /*
+   * The committee's own figures, on the same window the page is reading.
+   *
+   * They are the whole company's, which is why they appear on the CFO view and
+   * nowhere else: a head of team may never look sideways at another team's
+   * work, and these numbers cannot be narrowed to one line of it.
+   */
+  const committee = useMemo(() => pack(period), [period]);
+
   /* ── Acting on a card ───────────────────────────────────────────────────── */
 
   /**
-   * This scrolls to the block when the view has one, and leaves for the thing
-   * itself when it does not. No path through here ends in neither, because a
-   * card that quietly does nothing is worse than no card at all.
+   * This opens the tab the block lives on, scrolls to it, and leaves for the
+   * thing itself when this reader's view has no such block. No path through
+   * here ends in neither, because a card that quietly does nothing is worse
+   * than no card at all.
+   *
+   * The block is waited for rather than read straight away: the tab it lives on
+   * may still be crossfading in, so `getElementById` on the next line would
+   * find nothing and send the reader away from a block that was about to
+   * appear.
    */
   const onAct = (card: AttentionCard) => {
-    const block = document.getElementById(card.target === 'controls' ? 'never' : card.target);
-    if (block) {
-      block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const leave = () => {
+      if (card.target === 'memory') {
+        openSmartLearn();
+        return;
+      }
+      navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
+    };
+
+    if (!CARD_BLOCK_ON_VIEW[persona].includes(card.target)) {
+      leave();
       return;
     }
-    if (card.target === 'memory') {
-      openSmartLearn();
-      return;
-    }
-    navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
+
+    const blockId = card.target === 'controls' ? 'never' : card.target;
+    const owner = TAB_OF_BLOCK[blockId];
+    if (owner && owner !== tab) chooseTab(owner);
+
+    let tries = 0;
+    const reach = () => {
+      const block = document.getElementById(blockId);
+      if (block) {
+        block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (tries++ > 20) {
+        leave();
+        return;
+      }
+      window.setTimeout(reach, 50);
+    };
+    reach();
   };
 
   const onOpenQueueItem = (item: QueueFigures['items'][number]) => navigate(item.target.view, item.target.id ?? '');
@@ -227,6 +345,15 @@ export default function PlatformUsageView() {
     );
   }
 
+  /*
+   * There is no page-level figure strip.
+   *
+   * Every block now carries its own figure in its head, the way the AI insight
+   * cards do everywhere else in this product. A strip on top of that printed
+   * the same four numbers twice on one screen, which was the loudest complaint
+   * about this page and the easiest to fix: one figure, one place.
+   */
+
   /* ── The blocks, in the order each reader needs them ─────────────────────── */
 
   const smartLearnBlock = <SmartLearn learn={data.learn} scope={scope} onOpenSmartLearn={openSmartLearn} />;
@@ -241,117 +368,113 @@ export default function PlatformUsageView() {
   );
 
   /*
-   * CFO. Opens on the headline: hours, rupees and people this quarter, then
-   * cost and net value. Then value over time, coverage, the portfolio, the risk
-   * picture, what was caught, volume, what was created, the product surfaces,
-   * AI activity, and what the assistant knows. The cost figures and the
-   * assumptions strip live only here.
+   * CFO. Value opens first: hours, rupees and people this quarter, then the
+   * cost, the net figure and what it all rests on. Coverage carries what was
+   * tested and what that testing caught. Activity carries what the platform and
+   * the assistant did. The cost figures and the assumptions live only here.
    */
-  const cfoView = (
-    <>
-      <BlockGroup title="What it was worth">
-        <NetValueHero
-          value={data.value}
-          change={data.change}
-          cost={data.cost}
-          netRupees={data.netRupees}
-          period={period}
-          settings={settings}
-        />
-        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney />
-        <HeadlineValue
-          value={data.value}
-          prior={data.prior}
-          change={data.change}
-          period={period}
-          scope={scope}
-          settings={settings}
-          showMoney
-        />
-      </BlockGroup>
+  const cfoTabs: Record<TabId, ReactNode> = {
+    value: (
+      <>
+        <BlockGroup title="What it was worth">
+          <NetValueHero
+            value={data.value}
+            change={data.change}
+            cost={data.cost}
+            netRupees={data.netRupees}
+            period={period}
+            settings={settings}
+          />
+          {/* No separate headline block here: the hero above is the headline and
+              carries the whole sum, so a second block would say it all again. */}
+          <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney />
+        </BlockGroup>
 
-      <BlockGroup title="What it covered">
-        <ControlCoverage
-          coverage={data.coverage}
-          period={period}
-          checksPerformed={data.value.checksPerformed}
-          coveredRows={data.value.coveredRows}
-        />
-        <NeverTested coverage={data.coverage} period={period} />
-        <EngagementPortfolio
-          portfolio={data.portfolio}
-          period={period}
-          onOpenEngagement={id => navigate('engagements', id)}
-        />
-        <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
-      </BlockGroup>
+        <BlockGroup title="What it cost, and what it rests on">
+          <CostAndNetValue cost={data.cost} value={data.value} netRupees={data.netRupees} period={period} />
+          <SensitivityBlock rows={data.sensitivity} settings={settings} />
+          <AssumptionsReference settings={settings} />
+        </BlockGroup>
+      </>
+    ),
 
-      <BlockGroup title="What it caught">
-        {exceptionsBlock}
-        <FindingsAgeing
-          ageing={data.ageing}
-          subject={scope.subject}
-          onOpenException={id => navigate('engagements', id)}
-        />
-        <FindingQuality quality={data.quality} period={period} />
-      </BlockGroup>
+    coverage: (
+      <>
+        {/*
+          * Coverage first, the committee's questions last.
+          *
+          * The committee group used to open this tab, so a reader who came here
+          * to find out what was covered met an eighty row table of overdue
+          * action plans, three pages of it, before a single coverage figure. The
+          * overdue work is not less important; it is the answer to a different
+          * question, and it reads better once the tab has said what was tested
+          * and what that testing caught.
+          */}
+        <BlockGroup title="What it covered">
+          <ControlCoverage
+            coverage={data.coverage}
+            period={period}
+            checksPerformed={data.value.checksPerformed}
+            coveredRows={data.value.coveredRows}
+          />
+          <NeverTested coverage={data.coverage} period={period} />
+          <EngagementPortfolio
+            portfolio={data.portfolio}
+            period={period}
+            onOpenEngagement={id => navigate('engagements', id)}
+          />
+          <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
+          <CcmCoverage ccm={data.ccm} period={period} />
+        </BlockGroup>
 
-      <BlockGroup title="What the platform did">
-        <WorkVolume volume={data.volume} period={period} subject={scope.subject} onOpenRuns={() => navigate('workflow-library')} />
-        <CreatedThisPeriod created={data.created} period={period} />
-        <DashboardsAndAlerts product={data.product} period={period} />
-        <ReportsMade reports={data.reports} period={period} />
-        <CcmCoverage ccm={data.ccm} period={period} />
-      </BlockGroup>
+        <BlockGroup title="What it caught">
+          {exceptionsBlock}
+          <FindingsAgeing
+            ageing={data.ageing}
+            subject={scope.subject}
+            onOpenException={id => navigate('engagements', id)}
+          />
+          <FindingQuality quality={data.quality} period={period} />
+        </BlockGroup>
 
-      <BlockGroup title="What the AI did, and what it knows">
-        <AiUsageByArea rows={data.aiUsage} period={period} />
-        <AiInsights insights={data.insights} period={period} />
-        {smartLearnBlock}
-      </BlockGroup>
+        <BlockGroup title="What the committee will ask">
+          <PastTheirDate
+            coverage={committee}
+            period={period}
+            onOpen={(view, id) => navigate(view, id)}
+          />
+          <PlanCompletion coverage={committee} period={period} />
+        </BlockGroup>
+      </>
+    ),
 
-      <BlockGroup title="What it cost, and what it rests on">
-        <CostAndNetValue cost={data.cost} value={data.value} netRupees={data.netRupees} period={period} />
-        <SensitivityBlock rows={data.sensitivity} settings={settings} />
-        <AssumptionsReference settings={settings} />
-      </BlockGroup>
-    </>
-  );
+    activity: (
+      <>
+        <BlockGroup title="What the platform did">
+          <WorkVolume volume={data.volume} period={period} subject={scope.subject} onOpenRuns={() => navigate('workflow-library')} />
+          <CreatedThisPeriod created={data.created} period={period} />
+          <DashboardsAndAlerts product={data.product} period={period} />
+          <ReportsMade reports={data.reports} period={period} />
+        </BlockGroup>
+
+        <BlockGroup title="What the AI did, and what it knows">
+          <AiUsageByArea rows={data.aiUsage} period={period} />
+          <AiInsights insights={data.insights} period={period} />
+          {smartLearnBlock}
+        </BlockGroup>
+      </>
+    ),
+  };
 
   /*
-   * Head of Team. Opens on what is stuck, with the real error text on each run.
-   * A team lead cannot act on "₹85 lakh saved"; they can act on "this workflow
-   * failed four times this week with the same error", so the savings sit small
-   * at the bottom and the design trade-offs go this view's way.
+   * Head of Team. Activity opens first, on what is stuck with the real error
+   * text on each run. A team lead cannot act on a lakh saved; they can act on
+   * "this workflow failed four times this week with the same error", so the
+   * savings sit on their own tab and the design trade-offs go this view's way.
    */
-  const headOfTeamView = (
-    <>
-      <BlockGroup title="What needs doing">
-        <StuckNow stuck={data.stuck} period={period} onOpenRun={id => navigate('workflow-library', id)} />
-        <Reliability rows={data.reliability.rows} wastedHours={data.reliability.wastedHours} period={period} />
-        <NeverTested coverage={data.coverage} period={period} />
-      </BlockGroup>
-
-      <BlockGroup title="How the testing is going">
-        <SamplingOutcomes sampling={data.sampling} period={period} />
-        <CcmCoverage ccm={data.ccm} period={period} />
-        <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
-      </BlockGroup>
-
-      <BlockGroup title="What the team caught">
-        {exceptionsBlock}
-        <FindingsAgeing
-          ageing={data.ageing}
-          subject={scope.subject}
-          onOpenException={id => navigate('engagements', id)}
-        />
-        <FindingQuality quality={data.quality} period={period} />
-      </BlockGroup>
-
-      <BlockGroup title="What the team did">
-        <TeamWork people={data.people} period={period} team={myTeam ?? 'your team'} />
-        <CreatedThisPeriod created={data.created} period={period} />
-        {smartLearnBlock}
+  const headOfTeamTabs: Record<TabId, ReactNode> = {
+    value: (
+      <BlockGroup title="What the team's work was worth">
         <HeadlineValue
           value={data.value}
           prior={data.prior}
@@ -361,34 +484,97 @@ export default function PlatformUsageView() {
           settings={settings}
           showMoney={showMoney}
         />
+        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={showMoney} />
       </BlockGroup>
-    </>
-  );
+    ),
+
+    coverage: (
+      <>
+        <BlockGroup title="How the testing is going">
+          <NeverTested coverage={data.coverage} period={period} />
+          <SamplingOutcomes sampling={data.sampling} period={period} />
+          <CcmCoverage ccm={data.ccm} period={period} />
+          <RiskPicture risks={data.risks} scope={scope} onOpenRisks={() => navigate('audit-risk-register')} />
+        </BlockGroup>
+
+        <BlockGroup title="What the team caught">
+          {exceptionsBlock}
+          <FindingsAgeing
+            ageing={data.ageing}
+            subject={scope.subject}
+            onOpenException={id => navigate('engagements', id)}
+          />
+          <FindingQuality quality={data.quality} period={period} />
+        </BlockGroup>
+      </>
+    ),
+
+    activity: (
+      <>
+        <BlockGroup title="What needs doing">
+          <StuckNow stuck={data.stuck} period={period} onOpenRun={id => navigate('workflow-library', id)} />
+          <Reliability rows={data.reliability.rows} wastedHours={data.reliability.wastedHours} period={period} />
+        </BlockGroup>
+
+        <BlockGroup title="What the team did">
+          <TeamWork people={data.people} period={period} team={myTeam ?? 'your team'} />
+          <CreatedThisPeriod created={data.created} period={period} />
+          {smartLearnBlock}
+        </BlockGroup>
+      </>
+    ),
+  };
 
   /*
-   * Internal Auditor. Their queue first, overdue first, each item one click
-   * from the thing that needs doing. Then their own numbers, in hours and never
-   * in rupees, and no other person appears anywhere on this view: no average,
-   * no percentile, no comparison of any kind.
+   * Internal Auditor. Activity opens first on their queue, overdue first, each
+   * item one click from the thing that needs doing. Their own numbers are in
+   * hours and never in rupees, and no other person appears anywhere on this
+   * view: no average, no percentile, no comparison of any kind.
    */
-  const auditorView = (
-    <>
-      <BlockGroup title="What needs you">
-        <MyQueue queue={data.queue} onOpen={onOpenQueueItem} />
-      </BlockGroup>
-
+  const auditorTabs: Record<TabId, ReactNode> = {
+    value: (
       <BlockGroup title="Your own work">
         <MyWork value={data.value} exceptions={data.exceptions} period={period} settings={settings} />
-        {exceptionsBlock}
         <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={false} />
       </BlockGroup>
+    ),
 
-      <BlockGroup title="What the assistant knows">{smartLearnBlock}</BlockGroup>
-    </>
-  );
+    coverage: (
+      <BlockGroup title="What you caught">
+        {exceptionsBlock}
+        <FindingsAgeing
+          ageing={data.ageing}
+          subject={scope.subject}
+          onOpenException={id => navigate('engagements', id)}
+        />
+        <SamplingOutcomes sampling={data.sampling} period={period} />
+      </BlockGroup>
+    ),
+
+    activity: (
+      <>
+        <BlockGroup title="What needs you">
+          <MyQueue queue={data.queue} onOpen={onOpenQueueItem} />
+        </BlockGroup>
+
+        <BlockGroup title="What the assistant knows">{smartLearnBlock}</BlockGroup>
+      </>
+    ),
+  };
+
+  const tabs = persona === 'cfo' ? cfoTabs : persona === 'head_of_team' ? headOfTeamTabs : auditorTabs;
 
   /* ── The page ───────────────────────────────────────────────────────────── */
 
+  /*
+   * The whole sentence, even though the switch and the window pills each carry
+   * part of it.
+   *
+   * It reads as a repetition on screen and it is not one: this line is what
+   * travels. A screenshot of this page lands in a board pack with no switch and
+   * no pills beside it, and a figure whose scope and window cannot be read off
+   * the same image is a figure nobody can defend six weeks later.
+   */
   const scopeLine = [
     `Viewing as ${PERSONA_TITLE[persona]}`,
     PERSONA_SCOPE_LABEL[persona] + (persona === 'head_of_team' && myTeam ? ` · ${myTeam}` : ''),
@@ -400,24 +586,12 @@ export default function PlatformUsageView() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
-      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
-        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 pb-5 border-b border-canvas-border relative overflow-hidden">
-          <FloatingLines
-            enabledWaves={['top', 'bottom']}
-            lineCount={3}
-            lineDistance={10}
-            bendRadius={5}
-            bendStrength={-0.3}
-            interactive
-            parallax
-            color="#6a12cd"
-            opacity={0.05}
-          />
-
+      <div className="shrink-0">
+        <div className="bg-canvas-elevated px-6 lg:px-12 xl:px-[124px] pt-8 border-b border-canvas-border">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Platform Usage</h1>
-              <p className="mt-2 text-[1rem] text-ink-500 leading-relaxed max-w-2xl">{PERSONA_QUESTION[persona]}</p>
+              <h1 className="text-[2.5rem] font-semibold tracking-tight text-ink-900 leading-[1.1]">Platform Usage</h1>
+              <p className="mt-1.5 text-[0.875rem] text-ink-500 leading-relaxed max-w-2xl">{PERSONA_QUESTION[persona]}</p>
             </div>
 
             {/*
@@ -448,7 +622,7 @@ export default function PlatformUsageView() {
             )}
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-[0.75rem] text-ink-500 tabular-nums">{scopeLine}</p>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -478,20 +652,12 @@ export default function PlatformUsageView() {
 
               {canExport && (
                 <>
-                  <button
-                    type="button"
-                    onClick={onExportCsv}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:text-brand-700"
-                  >
-                    <Download size={13} /> CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onExportPdf}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:text-brand-700"
-                  >
-                    <FileText size={13} /> PDF
-                  </button>
+                  <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={onExportCsv}>
+                    CSV
+                  </Button>
+                  <Button variant="primary" size="sm" leftIcon={<FileText size={14} />} onClick={onExportPdf}>
+                    PDF
+                  </Button>
                 </>
               )}
             </div>
@@ -540,19 +706,36 @@ export default function PlatformUsageView() {
               </p>
             </div>
           )}
+
+          {/* The tabs sit on the strip's own border, which is their underline
+              track, so the page grows one control rather than one more box. */}
+          <div className="mt-5 -mb-px">
+            <UsageTabs tabs={TABS} active={tab} onChange={chooseTab} />
+          </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-6 lg:px-12 xl:px-[124px] py-8 space-y-8 max-w-[1400px]">
+        <div className="px-6 lg:px-12 xl:px-[124px] py-6 space-y-6 max-w-[1400px]">
+          {/* The attention strip sits above the tabs' content rather than on a
+              tab, because at most three cards are the one thing every reader
+              must see whichever tab they are standing on. */}
           <section aria-label="Needs your attention">
-            <h2 className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-400 mb-3">
-              Needs your attention
-            </h2>
             <AttentionStrip cards={data.attention} onAct={onAct} />
           </section>
 
-          {persona === 'cfo' ? cfoView : persona === 'head_of_team' ? headOfTeamView : auditorView}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+              className="space-y-8"
+            >
+              {tabs[tab]}
+            </motion.div>
+          </AnimatePresence>
 
           <p className="text-[0.75rem] text-ink-500 max-w-[80ch] leading-relaxed border-t border-canvas-border pt-4">
             {COVERAGE_NOTE}

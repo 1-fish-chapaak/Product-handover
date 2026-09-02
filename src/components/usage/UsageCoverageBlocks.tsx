@@ -9,7 +9,7 @@
 
 import { formatDate } from '../../data/platform-usage';
 import {
-  fmtInt, fmtOneDp, fmtPct, openLabel,
+  fmtInt, fmtOneDp, fmtPct, openLabel, plural,
   type CoverageFigures, type ExceptionFigures, type Period, type RiskFigures, type Scope,
 } from '../../data/platform-usage-metrics';
 import { Block, Bars, DataTable, Drill, Empty, Fig, MadeList, MadeRow, Meter, Stat, StatRow } from './usageKit';
@@ -35,10 +35,31 @@ export function ControlCoverage({
 
   const multiple = coveredRows > 0 ? checksPerformed / coveredRows : 0;
 
+  /*
+   * "4 never tested in this window" and "4 controls have never been exercised"
+   * are two different facts that print the same number, and side by side they
+   * read as the page saying one thing twice. So this tile says how many of its
+   * own controls are in the harder list, which is the only thing that separates
+   * them.
+   */
+  const neverEverIds = new Set(coverage.neverExercised.map(c => c.id));
+  const quietAndNeverEver = coverage.neverTested.filter(c => neverEverIds.has(c.id)).length;
+  const untestedSub = coverage.neverTested.length === 0
+    ? undefined
+    : quietAndNeverEver === coverage.neverTested.length
+      ? 'and none of them has ever been tested'
+      : quietAndNeverEver > 0
+        ? `${fmtInt(quietAndNeverEver)} of them never tested at all`
+        : 'all of them tested at some point before';
+
   return (
     <Block
       id="coverage"
       title="Control coverage"
+      code="COV-CONTROLS"
+      figure={fmtInt(coverage.tested.length)}
+      of={fmtInt(coverage.controlsInLibrary)}
+      context={<>controls exercised {period.phrase}, over {fmtInt(coverage.populations.length)} populations</>}
       lede={
         <>
           <Fig>{fmtInt(coverage.tested.length)}</Fig> of{' '}
@@ -67,10 +88,13 @@ export function ControlCoverage({
     >
       <div className="mb-4">
         <StatRow>
-          <Stat value={fmtInt(coverage.tested.length)} label="controls exercised" />
-          <Stat value={fmtInt(coverage.neverTested.length)} label="never tested in this window" />
+          {/* The head carries how many controls were exercised, so this row
+              keeps what it alone can say: what was under test, how much of it,
+              and how often it was re-read. */}
           <Stat value={fmtInt(coverage.populations.length)} label="populations under test" />
+          <Stat value={fmtInt(coveredRows)} label="records covered" sub="each list counted once" />
           <Stat value={fmtInt(checksPerformed)} label="checks performed" sub="repeats included" />
+          <Stat value={fmtInt(coverage.neverTested.length)} label="not exercised in this window" sub={untestedSub} />
         </StatRow>
       </div>
       {coverage.tested.length > 0 && (
@@ -94,29 +118,56 @@ export function NeverTested({ coverage, period }: { coverage: CoverageFigures; p
   const { neverExercised, workflowsNeverRun } = coverage;
   const nothingMissed = neverExercised.length === 0 && workflowsNeverRun.length === 0;
 
+  /*
+   * The window figure sits on the coverage block above with the same value on
+   * it more often than not. Saying "separately, 4 controls" under a list of the
+   * same 4 controls is the page repeating itself in a voice that sounds like a
+   * second finding, so when the two lists are the same list the footer says so.
+   */
+  const neverEverIds = new Set(neverExercised.map(c => c.id));
+  const sameList = coverage.neverTested.length > 0
+    && coverage.neverTested.length === neverExercised.length
+    && coverage.neverTested.every(c => neverEverIds.has(c.id));
+  const windowFooter = coverage.neverTested.length === 0
+    ? undefined
+    : sameList
+      ? `The ${plural(coverage.neverTested.length, 'control', 'controls')} not exercised ${period.phrase} `
+        + `${coverage.neverTested.length === 1 ? 'is that same one' : 'are those same ones'}, so nothing that was tested before has gone quiet since.`
+      : `Separately, ${plural(coverage.neverTested.length, 'control was', 'controls were')} not exercised ${period.phrase}, `
+        + 'counting the ones above and the ones that were tested before and have gone quiet. That figure moves with the window; the lists above do not.';
+
   return (
     <Block
       id="never"
       title="Never exercised"
-      hint="This block ignores the window. Never means never, over the whole history, which is the one coverage figure with no setting behind it to argue with."
+      code="COV-NEVER"
+      figure={fmtInt(coverage.neverExercised.length)}
+      tone={coverage.neverExercised.length > 0 ? 'risk' : 'plain'}
+      context="controls with no test on record, in any window"
+      hint="This block ignores the window. Never means never, over the whole history, which is the one coverage figure with no setting behind it to argue with. You cannot rely on a control nobody has ever tested, whatever the coverage percentage says."
       lede={
         nothingMissed
           ? <>Every control in the library and every check in the library has run at least once.</>
           : (
             <>
-              <Fig>{fmtInt(neverExercised.length)}</Fig>{' '}
-              {neverExercised.length === 1 ? 'control has' : 'controls have'} never been exercised,
-              and <Fig>{fmtInt(workflowsNeverRun.length)}</Fig>{' '}
-              {workflowsNeverRun.length === 1 ? 'check has' : 'checks have'} never run. You cannot
-              rely on a control nobody has ever tested, whatever the coverage percentage says.
+              {neverExercised.length > 0 && (
+                <>
+                  <Fig>{fmtInt(neverExercised.length)}</Fig>{' '}
+                  {neverExercised.length === 1 ? 'control has' : 'controls have'} never been exercised
+                  {workflowsNeverRun.length > 0 ? ', and ' : '. Every check in the library has run at least once.'}
+                </>
+              )}
+              {workflowsNeverRun.length > 0 && (
+                <>
+                  <Fig>{fmtInt(workflowsNeverRun.length)}</Fig>{' '}
+                  {workflowsNeverRun.length === 1 ? 'check has' : 'checks have'} never run.
+                  {neverExercised.length === 0 && <> Every control in the library has been exercised at least once.</>}
+                </>
+              )}
             </>
           )
       }
-      footer={
-        coverage.neverTested.length > 0
-          ? `Separately, ${fmtInt(coverage.neverTested.length)} ${coverage.neverTested.length === 1 ? 'control was' : 'controls were'} not exercised ${period.phrase}. That one moves with the window; the lists above do not.`
-          : undefined
-      }
+      footer={windowFooter}
     >
       {nothingMissed
         ? <Empty kind="quiet" title="Nothing was missed." />
@@ -157,10 +208,30 @@ export function RiskPicture({ risks, scope, onOpenRisks }: { risks: RiskFigures;
     );
   }
 
+  /*
+   * The bars count what the head counts.
+   *
+   * They used to draw every risk on the register by priority while the figure
+   * above them said how many had no control. Critical read as 5 under a head
+   * that said 1, and a reader with no reason to doubt the chart took the louder
+   * number away with them. So the bars are the uncovered risks, split the same
+   * way, and the register total stays where it already was: on the right of the
+   * figure, and in the sentence.
+   */
+  const uncoveredByPriority = risks.byPriority.map(row => ({
+    label: row.label,
+    value: risks.unmapped.filter(r => r.priority === row.label).length,
+  }));
+
   return (
     <Block
       id="risks"
       title="The risk picture"
+      code="RISK-UNCOVERED"
+      figure={fmtInt(risks.unmapped.length)}
+      of={fmtInt(risks.total)}
+      tone={risks.criticalUnmapped.length > 0 ? 'risk' : 'plain'}
+      context="risks on the register with no control against them"
       lede={
         risks.criticalUnmapped.length > 0
           ? (
@@ -185,9 +256,28 @@ export function RiskPicture({ risks, scope, onOpenRisks }: { risks: RiskFigures;
           Open the register
         </button>
       }
-      chart={<Bars rows={risks.byPriority} tone={risks.criticalUnmapped.length > 0 ? 'risk' : 'brand'} />}
-      table={<DataTable head={['Priority', 'Risks']} rows={risks.byPriority.map(r => [r.label, fmtInt(r.value)])} />}
-      footer={<><Fig>{fmtInt(risks.raisedByAi)}</Fig> of these were proposed by the assistant rather than raised by a person.</>}
+      chart={
+        <Bars
+          rows={uncoveredByPriority}
+          tone={risks.criticalUnmapped.length > 0 ? 'risk' : 'brand'}
+          caption={
+            <>
+              The {plural(risks.unmapped.length, 'risk', 'risks')} with no control, by priority.
+              {risks.total > risks.unmapped.length && (
+                <> The other {plural(risks.total - risks.unmapped.length, 'risk on the register has', 'risks on the register have')} one.</>
+              )}
+            </>
+          }
+        />
+      }
+      table={
+        <DataTable
+          head={['Priority', 'With no control', 'On the register']}
+          numericFrom={1}
+          rows={uncoveredByPriority.map((r, i) => [r.label, fmtInt(r.value), fmtInt(risks.byPriority[i].value)])}
+        />
+      }
+      footer={<><Fig>{fmtInt(risks.raisedByAi)}</Fig> of the <Fig>{fmtInt(risks.total)}</Fig> risks on the register were proposed by the assistant rather than raised by a person.</>}
     >
       {risks.unmapped.length > 0 && (
         <div className="mb-4">
@@ -228,16 +318,27 @@ export function ExceptionsCaught({
     <Block
       id="caught"
       title="What was caught"
+      code="EXC-RAISED"
+      figure={fmtInt(exceptions.total)}
+      context={<>exceptions raised {period.phrase}, {fmtInt(exceptions.open)} still open</>}
       lede={
         <>
           <Fig>{fmtInt(exceptions.total)}</Fig>{' '}
           {exceptions.total === 1 ? 'exception was' : 'exceptions were'} raised across{' '}
           {subject === 'you' ? 'your own work' : subject} {period.phrase},{' '}
-          <Fig>{fmtInt(exceptions.open)}</Fig> of them still open
+          <Fig>{fmtInt(exceptions.open)}</Fig> of those still open
           {worst && <> and <Fig>{fmtInt(worst.value)}</Fig> at {worst.label.toLowerCase()} severity</>}.
         </>
       }
-      chart={<Bars rows={exceptions.bySeverity.map(s => ({ label: s.label, value: s.value }))} tone="risk" />}
+      chart={
+        <Bars
+          rows={exceptions.bySeverity.map(s => ({ label: s.label, value: s.value }))}
+          tone="risk"
+          caption={exceptions.total === 1
+            ? <>The one raised, by severity.</>
+            : <>All {fmtInt(exceptions.total)} of them, by severity, open and resolved together.</>}
+        />
+      }
       table={<DataTable head={['Severity', 'Exceptions']} rows={exceptions.bySeverity.map(s => [s.label, fmtInt(s.value)])} />}
       footer={<DeduplicationLimits beforeDeduplication={exceptions.beforeDeduplication} />}
     >

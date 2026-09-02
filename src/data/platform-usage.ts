@@ -775,12 +775,6 @@ function buildConcierge(): ConciergeJob[] {
 
 export const CONCIERGE_JOBS: ConciergeJob[] = buildConcierge();
 
-/** Said next to the Concierge figures, because the guide flags it as unconfirmed. */
-export const CONCIERGE_WIRING_NOTE =
-  'We suspect a wiring gap on the Concierge cost column: the figure may be written for some '
-  + 'pipelines and not others. Once somebody confirms it, it is a one-line fix per pipeline. '
-  + 'Confirming it is our job.';
-
 export interface SopJob {
   id: string;
   actor: Actor;

@@ -38,7 +38,7 @@ import {
   LOOKUP_CALLS, MANUAL_CONTROL_TESTS, MANUAL_REVIEWS, PAID_LOOKUPS, POPULATIONS, PRODUCT_EVENTS, SOP_JOBS,
   QUEUE_ITEMS, REPORT_TRAIL, RISK_ROWS, RUNS, SAMPLE_VALIDATIONS, TRACED_EXCEPTIONS,
   formatDate, formatDayMonth, formatShortMonth, populationOf, priceAt,
-  type Actor, type AiInsight, type ContractPrice, type EngagementRow, type QueueItem, type RiskRow,
+  type Actor, type AiInsight, type ContractPrice, type EngagementRow, type Population, type QueueItem, type RiskRow,
   type Run, type SampleOutcome, type SampleValidation, type Severity, type TracedException,
 } from './platform-usage';
 
@@ -340,13 +340,29 @@ const change = (now: number, before: number): number | null => {
 
 export type SettingSource = 'starting-value' | 'measured' | 'default';
 
+/**
+ * Said the way a person would say it.
+ *
+ * "default" and "starting value" are our words for our own machinery and they
+ * tell a reader nothing about whether they can trust the number. These three
+ * say where it came from instead.
+ */
 export const SOURCE_LABEL: Record<SettingSource, string> = {
-  'starting-value': 'starting value',
-  measured: "based on your team's measured pace",
-  default: 'default',
+  measured: 'from your records',
+  'starting-value': 'our number, until yours is on record',
+  default: 'our number, nothing measures it',
 };
 
 export type NumericSetting = 'manualReviewRate' | 'manualControlTestHours' | 'hourlyRate' | 'hoursPerPersonPerMonth';
+
+/**
+ * The four assumptions, in the order they are read in: the two that measure
+ * themselves first, then the two that never can. The page, the CSV and the PDF
+ * all walk this one list, so none of them can quietly show a different four.
+ */
+export const ASSUMPTIONS: NumericSetting[] = [
+  'manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth',
+];
 
 export const SETTING_LABEL: Record<NumericSetting, string> = {
   manualReviewRate: 'rows a person checks by hand in an hour',
@@ -381,12 +397,51 @@ export interface UsageSettings {
   note: Record<NumericSetting, string>;
   /** Whether a self-measuring setting can ever become measured. */
   measurable: Record<NumericSetting, boolean>;
+  /**
+   * What the customer's own records say so far, where the guard has not passed
+   * yet. Null when nothing is on record, or when the value is already measured.
+   */
+  observed: Partial<Record<NumericSetting, number | null>>;
   changes: SettingChange[];
 }
 
+/**
+ * Where the by-hand rate comes from, in the open.
+ *
+ * "200 records an hour" on its own is a number somebody made up, and the first
+ * person to ask "who said 200?" is right to stop believing the page. So it is
+ * not a number: it is a short sum anybody can argue with, made of three things
+ * a working auditor can check against their own day.
+ *
+ * A nine hour shift is not nine hours of checking. Take out the standup, the
+ * review calls, lunch and the walking about, and roughly six hours of it is
+ * somebody actually working through a list. Eighteen seconds a record is the
+ * pace of reading one line, comparing it against the rule and moving on, for
+ * the kind of records these checks run over.
+ *
+ * Six hours at eighteen seconds is 1,200 records in a day, which is 200 an
+ * hour. Change any of the three and the page changes with it, which is the
+ * point: it is an estimate that argues rather than a figure that asserts.
+ */
+export const RATE_BASIS = {
+  shiftHours: 9,
+  checkingHours: 6,
+  secondsPerRecord: 18,
+};
+
+/** 200 an hour, worked out rather than picked. */
+export const RATE_PER_HOUR = Math.round(3600 / RATE_BASIS.secondsPerRecord);
+export const RATE_PER_DAY = RATE_PER_HOUR * RATE_BASIS.checkingHours;
+
+/** The sum said in one line, wherever the rate appears. */
+export const RATE_BASIS_LINE =
+  `a ${RATE_BASIS.shiftHours} hour shift, of which about ${RATE_BASIS.checkingHours} hours is actual `
+  + `checking, at about ${RATE_BASIS.secondsPerRecord} seconds a record: ${RATE_PER_HOUR} an hour, `
+  + `or ${RATE_PER_DAY} in a day`;
+
 /** The shipped starting point. Nothing here was ever typed by a customer. */
 const BASE: Omit<UsageSettings, 'changes'> = {
-  manualReviewRate: 200,
+  manualReviewRate: RATE_PER_HOUR,
   manualControlTestHours: 4,
   hourlyRate: 1_200,
   hoursPerPersonPerMonth: 160,
@@ -398,12 +453,15 @@ const BASE: Omit<UsageSettings, 'changes'> = {
   },
   note: {
     manualReviewRate:
-      'A starting number we picked. Nobody measured it and it is not an industry benchmark. '
-      + "Your team's own pace replaces it once there is enough recorded history.",
+      `Worked out rather than picked: ${RATE_BASIS_LINE}. Nobody measured it and it is not an `
+      + "industry benchmark, so argue with any of the three and the page moves with you. Your "
+      + "team's own pace replaces it once there is enough recorded history.",
     manualControlTestHours:
       'A starting number we picked. It replaces itself once manual tests carry start and finish times.',
-    hourlyRate: 'No software can see salaries, so this stays a business number.',
-    hoursPerPersonPerMonth: '160 hours a month is an HR standard, not a measurement.',
+    hourlyRate:
+      'A stand-in rate. Nothing in the product records what anybody is paid, so this one comes from '
+      + 'us rather than from your records. Your finance team is the only place a real figure can come from.',
+    hoursPerPersonPerMonth: '8 hours a day across 20 working days. An HR convention, not a measurement.',
   },
   measurable: {
     manualReviewRate: true,
@@ -411,6 +469,7 @@ const BASE: Omit<UsageSettings, 'changes'> = {
     hourlyRate: false,
     hoursPerPersonPerMonth: false,
   },
+  observed: {},
 };
 
 /** Both guards. Ninety days of history, and enough of it to mean something. */
@@ -441,6 +500,7 @@ export function calibrate(): UsageSettings {
     source: { ...BASE.source },
     note: { ...BASE.note },
     measurable: { ...BASE.measurable },
+    observed: { ...BASE.observed },
     changes,
   };
 
@@ -463,9 +523,24 @@ export function calibrate(): UsageSettings {
       by: 'measured automatically', note: "Replaced the starting value with your team's own pace.",
     });
   } else {
-    next.note.manualReviewRate =
-      `${BASE.note.manualReviewRate} So far ${fmtInt(usableReviews.length)} timed reviews are on record over `
-      + `${fmtInt(reviewSpanDays)} days. We wait for ${MIN_REVIEW_SAMPLE} of them over ${MIN_HISTORY_DAYS} days before replacing anything.`;
+    /*
+     * The guard has not passed, but the customer's own reviews already say
+     * something. Printing that number next to ours is the difference between
+     * "a figure we picked" and "a figure we picked, and here is what your own
+     * records show against it".
+     */
+    const observed = usableReviews.length
+      ? Math.round(
+        usableReviews.reduce((s, r) => s + r.rowsCovered / ((r.resolvedAt - r.assignedAt) / HOUR_MS), 0) / usableReviews.length,
+      )
+      : null;
+
+    next.note.manualReviewRate = observed === null
+      ? `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. Nothing is on record yet to replace it with.`
+      : `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. Your own ${fmtInt(usableReviews.length)} timed `
+        + `reviews so far work out at about ${fmtInt(observed)} records an hour over ${fmtInt(reviewSpanDays)} days, and `
+        + `the page switches to your number once there are ${MIN_REVIEW_SAMPLE} of them over ${MIN_HISTORY_DAYS} days.`;
+    next.observed.manualReviewRate = observed;
   }
 
   /* Hours one manual control test takes, measured from start and finish times. */
@@ -510,6 +585,13 @@ export interface Sensitivity {
 }
 
 export function sensitivity(coveredRows: number, settings: UsageSettings): Sensitivity[] {
+  /*
+   * The by-hand hours at three paces, and what each is worth. The machine time
+   * is deliberately not taken off here: this block answers "how much does the
+   * assumed pace move the figure", and the guide's worked example is the
+   * by-hand hours at each pace. Subtracting the 8.5 machine hours changed
+   * 21.4 lakh into 21.3 and put the page out of step with its own spec.
+   */
   return [100, settings.manualReviewRate, 800].map(rate => ({
     rate,
     hours: coveredRows / rate,
@@ -548,9 +630,24 @@ export interface ValueFigures {
   machineHours: number;
   manualHours: number;
   hoursSaved: number;
-  /** What the same work would have cost at the assumed rate. */
+  /**
+   * What the time saved is worth at the assumed rate.
+   *
+   * Priced on the saving rather than on the hours by hand, so the money can
+   * never say more than the hours printed above it. Pricing the full manual
+   * figure would quietly hand back the machine time the hours line had just
+   * given up, and a page that rounds its hours down and its rupees up is a page
+   * nobody should believe.
+   */
   rupees: number;
+  /** The saving as a headcount, on the same saved hours the money uses. */
   people: number;
+  /**
+   * The lists behind the record count, biggest first. "1,428,000 records" means
+   * nothing on its own; "486,000 journal entries and 312,000 purchase invoices"
+   * is a thing an auditor recognises as their own work.
+   */
+  lists: { name: string; size: number }[];
 }
 
 function valueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures {
@@ -564,18 +661,24 @@ function valueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures 
   // Rows go through the assumed pace. A run that tested a control without
   // producing rows takes the other branch: one manual test, less machine time.
   const manualHours = coveredRows / settings.manualReviewRate + zeroRowRuns * settings.manualControlTestHours;
+  const hoursSaved = Math.max(0, manualHours - machineHours);
 
   return {
     runs: passed.length,
     coveredRows,
     populations: populationIds.size,
+    lists: [...populationIds]
+      .map(id => populationOf(id))
+      .filter((pop): pop is Population => Boolean(pop))
+      .map(pop => ({ name: pop.name, size: pop.size }))
+      .sort((a, b) => b.size - a.size),
     checksPerformed,
     zeroRowRuns,
     machineHours,
     manualHours,
-    hoursSaved: Math.max(0, manualHours - machineHours),
-    rupees: manualHours * settings.hourlyRate,
-    people: manualHours / (settings.hoursPerPersonPerMonth * Math.max(p.months, 0.03)),
+    hoursSaved,
+    rupees: hoursSaved * settings.hourlyRate,
+    people: hoursSaved / (settings.hoursPerPersonPerMonth * Math.max(p.months, 0.03)),
   };
 }
 
@@ -614,6 +717,15 @@ export interface CostLine {
 export interface CostFigures {
   lines: CostLine[];
   totalPaise: number;
+  /**
+   * Lookups that went out and came back with nothing.
+   *
+   * The contract charges for answers, so these are charged nothing. They are
+   * named here because the activity tab counts every attempt, and two call
+   * counts on one page with no line between them is the kind of gap a reader
+   * has to guess at.
+   */
+  failedCalls: number;
   /** Lookups the contract does not price yet. Counted, named, charged nothing. */
   unpriced: CostLine[];
   /** What the Concierge recorded for itself, in its own currency, added to nothing. */
@@ -640,7 +752,9 @@ export interface CostFigures {
 }
 
 function costOf(p: Period, scope: Scope): CostFigures {
-  const calls = LOOKUP_CALLS.filter(c => inWindow(c.at, p) && c.ok && mine(scope, c.actor, c.actor.team));
+  const attempts = LOOKUP_CALLS.filter(c => inWindow(c.at, p) && mine(scope, c.actor, c.actor.team));
+  const calls = attempts.filter(c => c.ok);
+  const failedCalls = attempts.length - calls.length;
 
   const lines: CostLine[] = PAID_LOOKUPS.map(lookup => {
     const own = calls.filter(c => c.lookupId === lookup.id);
@@ -680,6 +794,7 @@ function costOf(p: Period, scope: Scope): CostFigures {
   return {
     lines: lines.filter(l => l.priced),
     totalPaise: lines.reduce((s, l) => s + l.paise, 0),
+    failedCalls,
     unpriced: lines.filter(l => !l.priced),
     conciergePaise: concierge.reduce((s, j) => s + (j.costPaise ?? 0), 0),
     conciergeJobsPriced: concierge.filter(j => j.costPaise !== null).length,
@@ -1021,6 +1136,8 @@ export interface VolumeFigures {
   sopJobs: number;
   sopCacheHits: number;
   lookupCalls: number;
+  /** Attempts that came back with nothing. Never charged, always counted. */
+  lookupCallsFailed: number;
 }
 
 export interface CreatedFigures {
@@ -1143,6 +1260,12 @@ export interface AiUsageRow {
   surface: string;
   count: number;
   countLabel: string;
+  /**
+   * Why this count is not the count the cost block shows, said on the same
+   * screen as both figures. A reader who finds two numbers for one thing and
+   * no reason stops believing whichever one is inconvenient.
+   */
+  note?: string;
   /** What the page can honestly say about money for this surface. */
   money: string;
   measured: boolean;
@@ -1422,11 +1545,13 @@ export interface Bucket {
   runs: number;
   /** Rows this bucket covered that no earlier bucket in the window had. */
   newRows: number;
-  /** Hours of hand-checking those new rows avoided. */
+  /** Hours of hand-checking those new rows avoided, less the machine time spent. */
   hours: number;
   rupees: number;
   /** Row checks performed in the bucket, repeats included. */
   checks: number;
+  /** Machine time the bucket spent, repeats included. */
+  machineHours: number;
 }
 
 /**
@@ -1442,7 +1567,7 @@ export interface Bucket {
  * the time axis instead of the total. So the buckets add up to the headline, and
  * what varies week to week is effort rather than coverage.
  */
-export function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
+function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
   const span = p.to - p.from;
   const step = span <= 40 * DAY_MS ? DAY_MS : span <= 130 * DAY_MS ? 7 * DAY_MS : 30 * DAY_MS;
   const out: Bucket[] = [];
@@ -1459,7 +1584,11 @@ export function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucke
       newRows += populationOf(r.populationId)?.size ?? 0;
     });
 
-    const hours = newRows / settings.manualReviewRate;
+    // Priced the same way the headline is: hand-checking avoided, less the
+    // machine time it took, so the column adds up to the figure on the hero
+    // rather than to a slightly larger one.
+    const machineHours = slice.reduce((sum, r) => sum + (r.completedAt - r.startedAt), 0) / HOUR_MS;
+    const hours = Math.max(0, newRows / settings.manualReviewRate - machineHours);
     out.push({
       label: step === 30 * DAY_MS ? formatShortMonth(from) : formatDayMonth(from),
       from,
@@ -1469,6 +1598,7 @@ export function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucke
       hours,
       rupees: hours * settings.hourlyRate,
       checks: slice.reduce((sum, r) => sum + r.rowsProcessed, 0),
+      machineHours,
     });
   }
 
@@ -1554,6 +1684,7 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
     sopJobs: sop.length,
     sopCacheHits: sop.filter(j => j.servedFromCache).length,
     lookupCalls: lookups.length,
+    lookupCallsFailed: lookups.filter(c => !c.ok).length,
   };
 
   cost.sopJobs = volume.sopJobs;
@@ -1603,11 +1734,38 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
    * third is estimated and was never built for billing, and the fourth records
    * nothing at all. One shared label over all four would be wrong about three.
    */
+  /*
+   * This surface counts every call attempted and the cost block counts the ones
+   * the contract charges for, so the two differ by exactly two things: calls on
+   * a lookup our operations team has not priced yet, and calls that never came
+   * back. Both are named with their number, because two counts of one thing and
+   * no reason between them costs the page its reader.
+   */
+  const lookupCallsPriced = cost.lines.reduce((sum, line) => sum + line.calls, 0);
+  const lookupCallsUnpriced = cost.unpriced.reduce((sum, line) => sum + line.calls, 0);
+  const lookupCallsNote = (() => {
+    // Nothing to reconcile when nothing was called, and a sentence about a
+    // count of nought reads as machinery talking to itself.
+    if (volume.lookupCalls === 0) return undefined;
+    const rest: string[] = [];
+    if (lookupCallsUnpriced > 0) {
+      rest.push(`${fmtInt(lookupCallsUnpriced)} ran on a lookup nobody has priced yet`);
+    }
+    if (cost.failedCalls > 0) rest.push(`${fmtInt(cost.failedCalls)} never came back`);
+    if (rest.length === 0) {
+      return 'Every one of them is on a contract price, so this is also the count behind the cost.';
+    }
+    const tail = rest.length > 1 ? 'so neither is charged' : 'so it is counted and charged nothing';
+    return `${fmtInt(lookupCallsPriced)} of them are on a contract price. `
+      + `Another ${rest.join(', and ')}, ${tail}.`;
+  })();
+
   const aiUsage: AiUsageRow[] = [
     {
       surface: 'Paid verification lookups',
       count: volume.lookupCalls,
       countLabel: 'calls',
+      note: lookupCallsNote,
       money: cost.totalPaise > 0
         ? `Priced at ${fmtMoneyExact(cost.totalPaise / 100)}, as per your contract.`
         : 'Counted, but the contract does not price these yet.',
@@ -1693,7 +1851,7 @@ function sopJobsIn(p: Period, scope: Scope) {
  * configure. It is the page answering before it is asked, and when there is
  * nothing to say it says so once and gets out of the way.
  */
-export function attentionCards(
+function attentionCards(
   scope: Scope,
   data: {
     stuck: StuckRun[];

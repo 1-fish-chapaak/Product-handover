@@ -19,11 +19,11 @@
  */
 
 import {
-  fmtInt, fmtOneDp, openLabel,
+  fmtInt, fmtPct, fmtOneDp, openLabel, plural,
   type AgeingFigures, type InsightFigures, type Period, type QualityFigures,
 } from '../../data/platform-usage-metrics';
 import { formatDate } from '../../data/platform-usage';
-import { Bars, Block, DataTable, Drill, Empty, Fig, MadeList, MadeRow } from './usageKit';
+import { Bars, Block, DataTable, Drill, Empty, Fig, Fold, MadeList, MadeRow } from './usageKit';
 
 /* ── PU-25 · AI insights ─────────────────────────────────────────────────── */
 
@@ -40,9 +40,35 @@ export function AiInsights({ insights, period }: { insights: InsightFigures; per
     );
   }
 
-  const severity = insights.bySeverity.filter(row => row.value > 0);
   const perRun = insights.rows.filter(i => i.kind === 'per-run');
   const consolidated = insights.rows.filter(i => i.kind === 'consolidated');
+
+  /*
+   * The bars are split by kind, the way the block's own rule asks.
+   *
+   * One severity chart across both kinds put four bars adding to 38 under a
+   * head that said 31, which reads as the head being wrong. It is not: a
+   * consolidated insight summarises the per-run ones it was written over, so
+   * the two kinds are never added. Splitting the chart is the only way to draw
+   * this without printing a total the page refuses to stand behind.
+   */
+  const splitBySeverity = (rows: typeof insights.rows) => insights.bySeverity
+    .map(row => ({ label: row.label, value: rows.filter(i => i.severity === row.label).length }))
+    .filter(row => row.value > 0);
+
+  const splitByCategory = (rows: typeof insights.rows) => insights.byCategory
+    .map(row => ({ label: row.label, value: rows.filter(i => i.category === row.label).length }))
+    .filter(row => row.value > 0);
+
+  // A window can hold one kind and not the other, so the kind that is actually
+  // there leads and the other one folds under it. Neither chart is ever drawn
+  // over an empty set with a caption saying "the 0 written".
+  const leadIsPerRun = perRun.length > 0;
+  const leadRows = leadIsPerRun ? perRun : consolidated;
+  const foldRows = leadIsPerRun ? consolidated : [];
+  const leadSeverity = splitBySeverity(leadRows);
+  const foldSeverity = splitBySeverity(foldRows);
+  const leadCategory = splitByCategory(leadRows);
 
   const list = (rows: typeof insights.rows) => (
     <MadeList>
@@ -61,6 +87,9 @@ export function AiInsights({ insights, period }: { insights: InsightFigures; per
     <Block
       id="insights"
       title="What the assistant noticed"
+      code="AI-INSIGHTS"
+      figure={fmtInt(insights.perRun)}
+      context={<>written inside a single check, and {fmtInt(insights.consolidated)} across a whole engagement</>}
       hint="Two kinds, counted apart. A consolidated insight summarises the per-run ones, so adding them together would count the same observation twice."
       lede={
         <>
@@ -71,16 +100,25 @@ export function AiInsights({ insights, period }: { insights: InsightFigures; per
         </>
       }
       chart={
-        <div className="space-y-5">
-          <div>
-            <p className="text-[0.75rem] text-ink-500 mb-2">By severity</p>
-            <Bars rows={severity} />
-          </div>
-          {insights.byCategory.length > 0 && (
-            <div>
-              <p className="text-[0.75rem] text-ink-500 mb-2">By category</p>
-              <Bars rows={insights.byCategory} />
-            </div>
+        <div>
+          <Bars
+            rows={leadSeverity}
+            caption={leadIsPerRun
+              ? <>The {plural(insights.perRun, 'insight', 'insights')} written inside a single check, by severity.</>
+              : <>The {plural(insights.consolidated, 'insight', 'insights')} written across a whole engagement, by severity.</>}
+          />
+          {leadCategory.length > 0 && (
+            <Fold label="Split by category">
+              <Bars rows={leadCategory} />
+            </Fold>
+          )}
+          {foldSeverity.length > 0 && (
+            <Fold label={`The ${plural(insights.consolidated, 'insight', 'insights')} written across a whole engagement`}>
+              <Bars
+                rows={foldSeverity}
+                caption="Kept apart from the bars above. Each of these reads a whole engagement, so adding the two together would count the same observation twice."
+              />
+            </Fold>
           )}
         </div>
       }
@@ -88,8 +126,12 @@ export function AiInsights({ insights, period }: { insights: InsightFigures; per
         <DataTable
           head={['Split', 'Insights']}
           rows={[
-            ...severity.map(row => [`${row.label} severity`, fmtInt(row.value)] as (string | number)[]),
-            ...insights.byCategory.map(row => [row.label, fmtInt(row.value)] as (string | number)[]),
+            ...splitBySeverity(perRun).map(row => [`Inside one check · ${row.label} severity`, fmtInt(row.value)] as (string | number)[]),
+            ...splitBySeverity(consolidated).map(row => [`Across an engagement · ${row.label} severity`, fmtInt(row.value)] as (string | number)[]),
+            ...splitByCategory(perRun).map(row => [`Inside one check · ${row.label}`, fmtInt(row.value)] as (string | number)[]),
+            ...(perRun.length === 0
+              ? splitByCategory(consolidated).map(row => [`Across an engagement · ${row.label}`, fmtInt(row.value)] as (string | number)[])
+              : []),
           ]}
         />
       }
@@ -136,24 +178,44 @@ export function FindingsAgeing({
     <Block
       id="ageing"
       title="How long findings have been open"
-      hint="Age runs from the day a finding was first raised. A repeat occurrence never created a second row, so this really is how long it has been sitting there."
+      code="FIND-AGEING"
+      figure={fmtInt(ageing.overThirty)}
+      of={fmtInt(ageing.open)}
+      tone={ageing.overThirty > 0 ? 'risk' : 'plain'}
+      /* The caveat about the window belongs in the fold, not in the one line a
+         reader gets for free. It was a 30 word disclaimer wrapped around a
+         seven word fact, and the fact was the part being lost. */
+      context="open more than 30 days, of everything still open today"
+      hint="Age runs from the day a finding was first raised. A repeat occurrence never created a second row, so this really is how long it has been sitting there. This block ignores the window: it counts every finding nobody has closed, whenever it was raised, so it can be larger or smaller than the open figure in the block above."
       lede={
         ageing.overThirty > 0
           ? (
             <>
               <Fig>{fmtInt(ageing.overThirty)}</Fig>{' '}
               {ageing.overThirty === 1 ? 'finding has' : 'findings have'} been open more than 30 days,
-              out of <Fig>{fmtInt(ageing.open)}</Fig> open in total.
+              out of <Fig>{fmtInt(ageing.open)}</Fig> open in all. That count ignores the window: it
+              is every finding nobody has closed, whenever it was raised, so it will not match the
+              open figure in the block above.
             </>
           )
           : (
             <>
               All <Fig>{fmtInt(ageing.open)}</Fig> open{' '}
-              {ageing.open === 1 ? 'finding is' : 'findings are'} less than a month old.
+              {ageing.open === 1 ? 'finding is' : 'findings are'} less than a month old. That counts
+              every finding nobody has closed, whenever it was raised, so it will not match the open
+              figure in the block above.
             </>
           )
       }
-      chart={<Bars rows={ageing.buckets.map(b => ({ label: b.label, value: b.value }))} tone="risk" />}
+      chart={
+        <Bars
+          rows={ageing.buckets.map(b => ({ label: b.label, value: b.value }))}
+          tone="risk"
+          caption={ageing.open === 1
+            ? <>The one open finding, by age, whenever it was raised, so this ignores the window at the top of the page.</>
+            : <>All {fmtInt(ageing.open)} open findings by age, whenever they were raised, so this ignores the window at the top of the page.</>}
+        />
+      }
       table={
         <DataTable
           head={['Age', 'Findings']}
@@ -225,6 +287,11 @@ export function FindingQuality({ quality, period }: { quality: QualityFigures; p
     <Block
       id="quality"
       title="Whether the findings were real"
+      code="FIND-QUALITY"
+      figure={quality.falsePositiveRatePct !== null ? fmtPct(quality.falsePositiveRatePct) : '—'}
+      context={quality.falsePositiveRatePct !== null
+        ? <>of the {fmtInt(quality.classified)} a risk owner classified turned out to be the rule firing on something fine</>
+        : <>nobody has classified a finding yet, so there is no rate</>}
       hint="The rate is out of findings somebody has actually classified. The ones nobody has looked at are shown as their own bar and never join the denominator."
       lede={
         <>
@@ -237,22 +304,27 @@ export function FindingQuality({ quality, period }: { quality: QualityFigures; p
         </>
       }
       chart={
-        <div className="space-y-5">
-          <Bars rows={split} />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div>
-              <p className="text-[0.75rem] text-ink-500 mb-2">Why the real ones happened</p>
-              {quality.byRootCause.length > 0
-                ? <Bars rows={quality.byRootCause} />
-                : <Empty kind="quiet" title="No root cause has been recorded yet." />}
+        <div>
+          <Bars
+            rows={split}
+            caption={<>All {fmtInt(quality.classified + quality.unclassified)} findings raised {period.phrase}. The rate above is out of the {fmtInt(quality.classified)} somebody has classified, so the last bar is not in it.</>}
+          />
+          <Fold label="Why they happened, and why the rule fired anyway">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div>
+                <p className="text-[0.75rem] text-ink-500 mb-2">Why the real ones happened</p>
+                {quality.byRootCause.length > 0
+                  ? <Bars rows={quality.byRootCause} />
+                  : <Empty kind="quiet" title="No root cause has been recorded yet." />}
+              </div>
+              <div>
+                <p className="text-[0.75rem] text-ink-500 mb-2">Why the rule fired anyway</p>
+                {quality.byFalsePositiveReason.length > 0
+                  ? <Bars rows={quality.byFalsePositiveReason} tone="risk" />
+                  : <Empty kind="quiet" title="No false alarm has been recorded in this window." />}
+              </div>
             </div>
-            <div>
-              <p className="text-[0.75rem] text-ink-500 mb-2">Why the rule fired anyway</p>
-              {quality.byFalsePositiveReason.length > 0
-                ? <Bars rows={quality.byFalsePositiveReason} tone="risk" />
-                : <Empty kind="quiet" title="No false alarm has been recorded in this window." />}
-            </div>
-          </div>
+          </Fold>
         </div>
       }
       table={
