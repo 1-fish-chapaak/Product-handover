@@ -15,8 +15,8 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  ASSUMPTIONS, REVIEW_PROXY_NOTE, SCOPE_LABEL, SETTING_SHORT, SOURCE_LABEL,
-  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, usageFileName,
+  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
 
@@ -92,13 +92,13 @@ export function usagePdfDefinition(data: UsageSnapshot) {
   const content: Content[] = [
     { text: 'Platform Usage', fontSize: 20, bold: true, color: INK },
     {
-      text: `${SCOPE_LABEL[scope.level]}${scope.team ? ` · ${scope.team}` : ''}`,
+      text: `${PERSONA_TITLE[scope.persona]} view · ${PERSONA_SCOPE_LABEL[scope.persona]}${scope.team ? ` · ${scope.team}` : ''}`,
       fontSize: 10,
       color: BRAND,
       margin: [0, 4, 0, 0],
     },
     {
-      text: `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)} · ${dataAsOfLabel()}`,
+      text: `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)} · compared with ${priorLabel(period)} · ${dataAsOfLabel()}`,
       fontSize: 9,
       color: MUTED,
       margin: [0, 3, 0, 10],
@@ -116,7 +116,7 @@ export function usagePdfDefinition(data: UsageSnapshot) {
     ),
     note(REVIEW_PROXY_NOTE),
 
-    heading('What the platform did'),
+    heading('What it was worth'),
     table(
       ['Figure', 'Value', 'How it is known'],
       [
@@ -126,12 +126,20 @@ export function usagePdfDefinition(data: UsageSnapshot) {
         ['Machine time', fmtDuration(value.machineHours), 'measured'],
         ['Hours if done by hand', fmtHours(value.manualHours), 'estimated'],
         ['Hours saved', fmtHours(value.hoursSaved), 'estimated'],
+        ['What the hours saved are worth, INR', fmtInt(value.rupees), 'estimated'],
         ['People freed, full time', fmtPeople(value.people), 'estimated'],
         ['Charged by the contract, INR', fmtInt(cost.totalPaise / 100), 'measured'],
+        ['Net value, INR', fmtInt(data.netRupees), 'estimated'],
         ['Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'],
       ],
     ),
     note('Failed runs are excluded from every saving above and reported on their own line. Rows covered counts each population once however often it was re-tested, and the repeats appear on the checks-performed line.'),
+
+    heading('How much the pace matters'),
+    table(
+      ['Rows checked by hand per hour', 'Hours by hand', 'The same work in money, INR'],
+      data.sensitivity.map(s => [fmtInt(s.rate), fmtHours(s.hours), fmtInt(s.rupees)]),
+    ),
 
     heading('Control coverage'),
     table(
@@ -256,7 +264,7 @@ export function usagePdfDefinition(data: UsageSnapshot) {
     footer: (current: number, total: number) => ({
       margin: [44, 0, 44, 0],
       columns: [
-        { text: `Platform Usage · ${SCOPE_LABEL[scope.level]} · ${period.label}`, fontSize: 7.5, color: MUTED },
+        { text: `Platform Usage · ${PERSONA_TITLE[scope.persona]} view · ${period.label}`, fontSize: 7.5, color: MUTED },
         { text: `${current} of ${total}`, fontSize: 7.5, color: MUTED, alignment: 'right' },
       ],
     }),

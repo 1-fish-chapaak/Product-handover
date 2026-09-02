@@ -8,7 +8,7 @@
 
 import { formatDate } from '../../data/platform-usage';
 import {
-  fmtDuration, fmtInt, fmtPct, openLabel, opening,
+  fmtInt, fmtPct, openLabel, opening,
   type CreatedFigures, type Period, type PortfolioFigures, type ProductFigures,
   type ReportFigures, type VolumeFigures,
 } from '../../data/platform-usage-metrics';
@@ -36,17 +36,9 @@ function CountOrLine({
 /* ── Work volume ─────────────────────────────────────────────────────────── */
 
 export function WorkVolume({
-  volume, machineHours, period, subject, onOpenRuns,
+  volume, period, subject, onOpenRuns,
 }: {
   volume: VolumeFigures;
-  /**
-   * Machine time, which had no home once the net value hero went.
-   *
-   * It is a recorded figure: every successful run's own start and finish,
-   * added up. It belongs beside the runs that spent it rather than beside a
-   * saving worked out from it.
-   */
-  machineHours: number;
   period: Period;
   subject: string;
   onOpenRuns: () => void;
@@ -124,9 +116,9 @@ export function WorkVolume({
               the figures it has not got: the rate, and the three surfaces that
               are not workflow runs at all. */}
           <Stat value={fmtPct(volume.runs ? (volume.passed / volume.runs) * 100 : 0)} label="pass rate" />
-          <Stat value={fmtDuration(machineHours)} label="of machine time" sub="every successful run, start to finish" />
           <Stat value={fmtInt(volume.chat)} label="questions asked in chat" />
           <Stat value={fmtInt(volume.concierge)} label="concierge jobs" />
+          <Stat value={fmtInt(volume.lookupCalls)} label="paid lookup calls" />
         </StatRow>
       </div>
     </Block>

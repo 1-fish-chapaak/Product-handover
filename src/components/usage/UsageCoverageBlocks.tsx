@@ -203,7 +203,7 @@ export function RiskPicture({ risks, scope, onOpenRisks }: { risks: RiskFigures;
   if (risks.total === 0) {
     return (
       <Block id="risks" title="The risk picture" lede={null}>
-        <Empty kind="quiet" title={scope.level === 'team' ? 'No risks are recorded against your team.' : 'The risk register is empty.'} />
+        <Empty kind="quiet" title={scope.persona === 'head_of_team' ? 'No risks are recorded against your team.' : 'The risk register is empty.'} />
       </Block>
     );
   }

@@ -2,9 +2,8 @@
  * Platform Usage. The figures.
  *
  * The records live next door in `platform-usage.ts`. This module turns them
- * into the numbers one reader, the audit lead, reads over two windows, and it
- * holds the rules that stop those numbers being wrong in the ways the guide
- * warns about.
+ * into the numbers each of the guide's three views reads, and it holds the
+ * rules that stop those numbers being wrong in the ways the guide warns about.
  *
  * ## The rules that live here rather than in a component
  *
@@ -14,21 +13,16 @@
  * page. So coverage counts the population, and the repeats are counted
  * separately and called checks performed.
  *
- * **Failed runs are excluded from every hours figure.** They are reported on
- * their own as wasted machine time. Most honest, least flattering.
+ * **Failed runs are excluded from every saving.** They are reported on their
+ * own as wasted machine time. Most honest, least flattering.
  *
  * **Nothing is presented as fact that is not recorded.** A measured number
  * states its source and its sample. An assumed one carries the word estimated
  * and its label, on the same screen as the figure it produces.
  *
- * **Nothing on this page is money we worked out.** The one rupee figure is the
- * charge the contract makes for recorded volume. Every saving, and the rate for
- * an auditor hour that produced it, is gone: nothing in a customer tenant
- * records what anybody is paid, so that figure was ours rather than theirs.
- *
- * **Scope narrows and never widens.** How far a reader may look comes from the
- * role, the filter only ever offers what they are already entitled to, and it
- * never reaches sideways into somebody else's team.
+ * **The view comes from the role.** The server decides; the reader does not
+ * pick. Asking for a view above your rights returns a refusal, never a blank
+ * page, because a blank page hides a permission bug.
  *
  * **Nothing ranks people.** There is one per-person table, it is alphabetical,
  * and nothing re-sorts it, by click or by URL.
@@ -49,7 +43,6 @@ import {
 } from './platform-usage';
 
 export type { AiInsight, EngagementRow, QueueItem, Run, TracedException, SampleValidation };
-import { pack as coveragePack, type CoveragePack } from './audit-coverage';
 import { pendingMemories, liveMemories } from './memorySession';
 import { RECALLS_THIS_WEEK } from './memoryStore';
 import type { PlatformMemory } from './memoryStore';
@@ -91,7 +84,7 @@ export const opening = (subject: string): string => subject.charAt(0).toUpperCas
 /**
  * Hours, rounded down.
  *
- * An hours figure is always rounded towards zero. Rounding a benefit up, even by half
+ * A saving is always rounded towards zero. Rounding a benefit up, even by half
  * an hour, is the kind of small dishonesty that costs a page its reader.
  */
 export const fmtHours = (h: number): string => (h < 10 ? fmtOneDp(h) : fmtInt(Math.floor(h)));
@@ -114,6 +107,14 @@ export function fmtDuration(hours: number): string {
   return `${fmtInt(seconds)} ${seconds === 1 ? 'second' : 'seconds'}`;
 }
 
+/** Money the way an Indian CFO reads it: lakh and crore, not millions. */
+export function fmtMoney(rupees: number): string {
+  const n = Math.abs(rupees);
+  if (n >= 10_000_000) return `₹${fmtOneDp(rupees / 10_000_000)} cr`;
+  if (n >= 100_000) return `₹${fmtOneDp(rupees / 100_000)} lakh`;
+  return `₹${INDIAN.format(Math.round(rupees))}`;
+}
+
 /** Money to the rupee, for a cost line somebody will reconcile against a bill. */
 export const fmtMoneyExact = (rupees: number): string => `₹${INDIAN.format(Math.round(rupees))}`;
 
@@ -130,25 +131,32 @@ export const fmtPrice = (rupees: number): string =>
   (Number.isInteger(rupees) ? `₹${INDIAN.format(rupees)}` : `₹${PAISE.format(rupees)}`);
 
 /* ──────────────────────────────────────────────────────────────────────────
- * How far the reader is looking
+ * Who is reading
  * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * There is one reader, the audit lead, and there is no switch that pretends
- * otherwise. What survives is how far they are looking: the whole company, one
- * team, or their own work. It narrows, it never widens, and it never reaches
- * sideways into somebody else's team.
- */
-export type ScopeLevel = 'company' | 'team' | 'person';
+export type Persona = 'cfo' | 'head_of_team' | 'auditor';
 
-export const SCOPE_LABEL: Record<ScopeLevel, string> = {
-  company: 'Whole company',
-  team: 'Your team only',
-  person: 'Your own work only',
+export const PERSONA_TITLE: Record<Persona, string> = {
+  cfo: 'CFO',
+  head_of_team: 'Head of Team',
+  auditor: 'Internal Auditor',
+};
+
+/** The question the view exists to answer, said in the reader's own words. */
+export const PERSONA_QUESTION: Record<Persona, string> = {
+  cfo: 'Is this paying for itself?',
+  head_of_team: 'Is anything stuck?',
+  auditor: 'What is waiting on me?',
+};
+
+export const PERSONA_SCOPE_LABEL: Record<Persona, string> = {
+  cfo: 'Whole company',
+  head_of_team: 'Your team only',
+  auditor: 'Your own work only',
 };
 
 export interface Scope {
-  level: ScopeLevel;
+  persona: Persona;
   /** Said inside a sentence: "the company", "SOX Audit", "you". */
   subject: string;
   team?: string;
@@ -157,84 +165,87 @@ export interface Scope {
 }
 
 /**
- * The widest the reader may look.
+ * The highest view a role may read.
  *
- * `ad_usage` is the whole company; `ad_usage_people` without it is that
- * person's own team; everybody else gets themselves. A team lead with no team
- * on their record falls back to their own work rather than being shown an
- * empty team.
+ * `ad_usage` is the whole company and the only view that carries money;
+ * `ad_usage_people` without it is that person's own team; everybody else gets
+ * themselves. A team lead with no team on their record falls back to their own
+ * view rather than being shown an empty team.
  *
  * There is no null case. Every signed-in person can read their own work with no
  * request and no approval, which was decided early on: this page is self-serve.
- * The permissions decide how far out somebody can see, not whether they may
- * open the page at all.
+ * The permissions decide how far up somebody can see, not whether they may open
+ * the page at all.
  */
-export function scopeCeiling(
+export function personaFor(
   holds: { usage: boolean; people: boolean; self: boolean },
   team: string | null,
-): ScopeLevel {
-  if (holds.usage) return 'company';
-  if (holds.people && team) return 'team';
-  return 'person';
+): Persona {
+  if (holds.usage) return 'cfo';
+  if (holds.people && team) return 'head_of_team';
+  return 'auditor';
 }
 
 /**
- * What the scope filter may offer.
+ * Which views the switch may offer.
  *
- * It never shows anybody data they could not otherwise see, and it only ever
- * narrows: somebody who may read the whole company can look at one team or at
- * their own work, and nobody can look sideways into somebody else's team. A
- * scope the reader is not entitled to is not offered at all, so the filter
- * cannot be used to ask for one.
+ * A lens, not a key. It never shows anybody data they could not otherwise see,
+ * and it only ever narrows down the reader's own line: a CFO can look at one
+ * team or at one person's queue shape, a team lead can look at their own work,
+ * and nobody can ever look sideways into somebody else's team. A view the
+ * reader is not entitled to is not offered at all, so the switch cannot be used
+ * to ask for one.
  */
-export function scopeOptions(ceiling: ScopeLevel, team: string | null): ScopeLevel[] {
-  if (ceiling === 'company') return team ? ['company', 'team', 'person'] : ['company', 'person'];
-  if (ceiling === 'team') return ['team', 'person'];
-  return ['person'];
+export function entitledViews(ceiling: Persona, team: string | null): Persona[] {
+  if (ceiling === 'cfo') return team ? ['cfo', 'head_of_team', 'auditor'] : ['cfo', 'auditor'];
+  if (ceiling === 'head_of_team') return ['head_of_team', 'auditor'];
+  return ['auditor'];
 }
+
+/**
+ * What somebody asking for a view above their entitlement is told.
+ *
+ * The switch never offers one, so this is reached by a stale link rather than
+ * by a click. It is a refusal and never an empty page: an empty page reads as
+ * "no data" and would hide a permissions bug.
+ */
+export const REFUSAL =
+  'That view is above what your role may read. Every signed-in person can read their own work here; '
+  + 'ask an administrator if you need the team or company view.';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * The window
  * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Two windows, read side by side.
- *
- * A committee reads the quarter against the year to date, so those are the two
- * the page holds and there is no third. The five named periods that were here
- * before included one, `this-year`, that resolved to 1 January and therefore
- * printed the same figures as the quarter on an anchor of 31 March.
- */
-export type WindowId = 'quarter' | 'fy-ytd';
+export type PeriodId = 'this-month' | 'this-quarter' | 'this-year' | 'since-start' | 'custom';
+
+export interface CustomRange { from: number; to: number }
 
 export interface Period {
-  id: WindowId;
+  id: PeriodId;
   /** How it reads on a control: "This quarter". */
   label: string;
   /** How it reads inside a sentence: "this quarter". */
   phrase: string;
   from: number;
   to: number;
+  /** The window of the same length immediately before this one. */
+  priorFrom: number;
+  priorTo: number;
   /** Fractional months, so a people-equivalent is right on a part month. */
   months: number;
   days: number;
 }
 
+const startOfMonth = (ms: number) => {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+};
 const startOfQuarter = (ms: number) => {
   const d = new Date(ms);
   return Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3, 1);
 };
-/**
- * 1 April, the start of the Indian financial year the moment falls in.
- *
- * The anchor is 31 March 2026, which is the last day of that year, so the year
- * to date runs the full twelve months from 1 April 2025.
- */
-const startOfFinancialYear = (ms: number) => {
-  const d = new Date(ms);
-  const year = d.getUTCMonth() >= 3 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
-  return Date.UTC(year, 3, 1);
-};
+const startOfYear = (ms: number) => Date.UTC(new Date(ms).getUTCFullYear(), 0, 1);
 
 /**
  * How many person-months a window is worth.
@@ -266,48 +277,62 @@ function monthsCovered(from: number, to: number): number {
   return months;
 }
 
-function make(id: WindowId, label: string, phrase: string, from: number, to: number): Period {
-  const days = Math.max(1, Math.round((to - from) / DAY_MS));
-  return { id, label, phrase, from, to, months: monthsCovered(from, to), days };
-}
-
-/** Both windows, built together, because the page reads them together. */
-export function windows(): { quarter: Period; ytd: Period } {
+function make(id: PeriodId, label: string, phrase: string, from: number, to: number): Period {
+  const span = to - from;
+  const days = Math.max(1, Math.round(span / DAY_MS));
   return {
-    quarter: make('quarter', 'This quarter', 'this quarter', startOfQuarter(ANCHOR), ANCHOR),
-    ytd: make('fy-ytd', 'Year to date', 'the year to date', startOfFinancialYear(ANCHOR), ANCHOR),
+    id, label, phrase, from, to,
+    priorFrom: from - span - 1,
+    priorTo: from - 1,
+    months: monthsCovered(from, to),
+    days,
   };
 }
 
-/** One of the two, by name. */
-export function windowOf(id: WindowId): Period {
-  const both = windows();
-  return id === 'fy-ytd' ? both.ytd : both.quarter;
+export function period(id: PeriodId, custom?: CustomRange | null): Period {
+  switch (id) {
+    case 'this-month':
+      return make('this-month', 'This month', 'this month', startOfMonth(ANCHOR), ANCHOR);
+    case 'this-year':
+      return make('this-year', 'This year', 'this year', startOfYear(ANCHOR), ANCHOR);
+    case 'since-start':
+      return make('since-start', 'Since you started', 'since you started', HISTORY_START, ANCHOR);
+    case 'custom':
+      return custom
+        ? make('custom', 'Custom range', `${formatDate(custom.from)} to ${formatDate(custom.to)}`, custom.from, custom.to)
+        : period('this-quarter');
+    default:
+      return make('this-quarter', 'This quarter', 'this quarter', startOfQuarter(ANCHOR), ANCHOR);
+  }
 }
 
-export const windowOptions: { id: WindowId; label: string }[] = [
-  { id: 'quarter', label: 'This quarter' },
-  { id: 'fy-ytd', label: 'Year to date' },
+export const periodOptions: { id: PeriodId; label: string }[] = [
+  { id: 'this-month', label: 'This month' },
+  { id: 'this-quarter', label: 'This quarter' },
+  { id: 'this-year', label: 'This year' },
+  { id: 'since-start', label: 'Since you started' },
+  { id: 'custom', label: 'Custom' },
 ];
 
-/** The page opens on the quarter, because that is what the committee asks about. */
-export const DEFAULT_WINDOW: WindowId = 'quarter';
+/** The default window per view: a CFO reads a quarter, everyone else a month. */
+export const DEFAULT_PERIOD: Record<Persona, PeriodId> = {
+  cfo: 'this-quarter',
+  head_of_team: 'this-month',
+  auditor: 'this-month',
+};
 
-/**
- * How a window is headed in the pack: "Q4 FY26", "FY26 to date".
- *
- * The Indian financial year starts on 1 April, so the quarter that ends on the
- * anchor is Q4 and the year it sits in is FY26. Worked out from the dates
- * rather than written down, so the label can never drift from the window.
- */
-export function windowShort(p: Period): string {
-  const d = new Date(p.from);
-  const fy = new Date(p.to);
-  const year = (fy.getUTCMonth() >= 3 ? fy.getUTCFullYear() + 1 : fy.getUTCFullYear()) % 100;
-  if (p.id === 'fy-ytd') return `FY${year} to date`;
-  const q = Math.floor((((d.getUTCMonth() - 3) + 12) % 12) / 3) + 1;
-  return `Q${q} FY${year}`;
+/** What the comparison is against, said by its real length rather than "last period". */
+export function priorLabel(p: Period): string {
+  if (p.id === 'this-month') return 'the month before';
+  if (p.id === 'this-quarter') return 'the quarter before';
+  if (p.id === 'this-year') return 'the year before';
+  return `the ${p.days} days before`;
 }
+
+const change = (now: number, before: number): number | null => {
+  if (before <= 0) return null;
+  return ((now - before) / before) * 100;
+};
 
 /* ──────────────────────────────────────────────────────────────────────────
  * The four assumptions, and how two of them fix themselves
@@ -328,31 +353,28 @@ export const SOURCE_LABEL: Record<SettingSource, string> = {
   default: 'our number, nothing measures it',
 };
 
-export type NumericSetting = 'manualReviewRate' | 'manualControlTestHours' | 'hoursPerPersonPerMonth';
+export type NumericSetting = 'manualReviewRate' | 'manualControlTestHours' | 'hourlyRate' | 'hoursPerPersonPerMonth';
 
 /**
- * The three assumptions left, in the order they are read in: the two that
- * measure themselves first, then the one that never can. The page, the CSV and
- * the PDF all walk this one list, so none of them can quietly show a different
- * three.
- *
- * The cost of an auditor hour used to be a fourth. Nothing in a customer tenant
- * records what anybody is paid, so it was ours rather than theirs, and every
- * rupee on the page rested on it. It is gone, and so is every figure it made.
+ * The four assumptions, in the order they are read in: the two that measure
+ * themselves first, then the two that never can. The page, the CSV and the PDF
+ * all walk this one list, so none of them can quietly show a different four.
  */
 export const ASSUMPTIONS: NumericSetting[] = [
-  'manualReviewRate', 'manualControlTestHours', 'hoursPerPersonPerMonth',
+  'manualReviewRate', 'manualControlTestHours', 'hourlyRate', 'hoursPerPersonPerMonth',
 ];
 
 export const SETTING_LABEL: Record<NumericSetting, string> = {
   manualReviewRate: 'rows a person checks by hand in an hour',
   manualControlTestHours: 'hours one manual control test takes',
+  hourlyRate: 'the blended cost of an auditor hour',
   hoursPerPersonPerMonth: 'working hours per person per month',
 };
 
 export const SETTING_SHORT: Record<NumericSetting, string> = {
   manualReviewRate: 'Rows checked by hand per hour',
   manualControlTestHours: 'Hours per manual control test',
+  hourlyRate: 'Cost of an auditor hour',
   hoursPerPersonPerMonth: 'Working hours per person per month',
 };
 
@@ -368,6 +390,7 @@ export interface SettingChange {
 export interface UsageSettings {
   manualReviewRate: number;
   manualControlTestHours: number;
+  hourlyRate: number;
   hoursPerPersonPerMonth: number;
   source: Record<NumericSetting, SettingSource>;
   /** Why the value is what it is: the sample behind it, or the guard it failed. */
@@ -420,10 +443,12 @@ export const RATE_BASIS_LINE =
 const BASE: Omit<UsageSettings, 'changes'> = {
   manualReviewRate: RATE_PER_HOUR,
   manualControlTestHours: 4,
+  hourlyRate: 1_200,
   hoursPerPersonPerMonth: 160,
   source: {
     manualReviewRate: 'starting-value',
     manualControlTestHours: 'starting-value',
+    hourlyRate: 'default',
     hoursPerPersonPerMonth: 'default',
   },
   note: {
@@ -433,11 +458,15 @@ const BASE: Omit<UsageSettings, 'changes'> = {
       + "team's own pace replaces it once there is enough recorded history.",
     manualControlTestHours:
       'A starting number we picked. It replaces itself once manual tests carry start and finish times.',
+    hourlyRate:
+      'A stand-in rate. Nothing in the product records what anybody is paid, so this one comes from '
+      + 'us rather than from your records. Your finance team is the only place a real figure can come from.',
     hoursPerPersonPerMonth: '8 hours a day across 20 working days. An HR convention, not a measurement.',
   },
   measurable: {
     manualReviewRate: true,
     manualControlTestHours: true,
+    hourlyRate: false,
     hoursPerPersonPerMonth: false,
   },
   observed: {},
@@ -542,6 +571,34 @@ export const REVIEW_PROXY_NOTE =
   'Reviewing an exception is close to checking rows by hand, though it is not the same work. '
   + 'We use it because it is recorded, and a guess would not be.';
 
+/**
+ * What the whole page rests on, given as a number rather than a warning.
+ *
+ * One assumption moves every figure above it, so the page prints the range
+ * instead of describing it. Halve the pace and the saving doubles. Quadruple it
+ * and the saving falls to a quarter.
+ */
+export interface Sensitivity {
+  rate: number;
+  hours: number;
+  rupees: number;
+}
+
+export function sensitivity(coveredRows: number, settings: UsageSettings): Sensitivity[] {
+  /*
+   * The by-hand hours at three paces, and what each is worth. The machine time
+   * is deliberately not taken off here: this block answers "how much does the
+   * assumed pace move the figure", and the guide's worked example is the
+   * by-hand hours at each pace. Subtracting the 8.5 machine hours changed
+   * 21.4 lakh into 21.3 and put the page out of step with its own spec.
+   */
+  return [100, settings.manualReviewRate, 800].map(rate => ({
+    rate,
+    hours: coveredRows / rate,
+    rupees: (coveredRows / rate) * settings.hourlyRate,
+  }));
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Scoping a record to the reader
  * ────────────────────────────────────────────────────────────────────────── */
@@ -549,15 +606,15 @@ export const REVIEW_PROXY_NOTE =
 const inWindow = (ms: number, p: Period) => ms >= p.from && ms <= p.to;
 
 function mine(scope: Scope, actor: Actor | null, team: string | null): boolean {
-  if (scope.level === 'company') return true;
-  if (scope.level === 'team') return team === scope.team;
+  if (scope.persona === 'cfo') return true;
+  if (scope.persona === 'head_of_team') return team === scope.team;
   return actor?.email === scope.userEmail;
 }
 
 const scopedRuns = (scope: Scope) => RUNS.filter(r => mine(scope, r.actor, r.team));
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Value: hours and people, never rupees
+ * Value: hours, rupees, people
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface ValueFigures {
@@ -573,7 +630,17 @@ export interface ValueFigures {
   machineHours: number;
   manualHours: number;
   hoursSaved: number;
-  /** The saving as a headcount, on the same saved hours. */
+  /**
+   * What the time saved is worth at the assumed rate.
+   *
+   * Priced on the saving rather than on the hours by hand, so the money can
+   * never say more than the hours printed above it. Pricing the full manual
+   * figure would quietly hand back the machine time the hours line had just
+   * given up, and a page that rounds its hours down and its rupees up is a page
+   * nobody should believe.
+   */
+  rupees: number;
+  /** The saving as a headcount, on the same saved hours the money uses. */
   people: number;
   /**
    * The lists behind the record count, biggest first. "1,428,000 records" means
@@ -610,8 +677,21 @@ function valueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures 
     machineHours,
     manualHours,
     hoursSaved,
+    rupees: hoursSaved * settings.hourlyRate,
     people: hoursSaved / (settings.hoursPerPersonPerMonth * Math.max(p.months, 0.03)),
   };
+}
+
+/** The same calculation over the window immediately before this one. */
+function priorValueOf(runs: Run[], p: Period, settings: UsageSettings): ValueFigures {
+  const shifted: Period = { ...p, from: p.priorFrom, to: p.priorTo };
+  return valueOf(runs, shifted, settings);
+}
+
+export interface ValueChange {
+  hours: number | null;
+  rupees: number | null;
+  people: number | null;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -738,7 +818,7 @@ export interface CoverageFigures {
   controlsInLibrary: number;
   tested: { id: string; name: string; runs: number; lastTested: number }[];
   /** Not exercised inside the window. A period fact, and labelled as one. */
-  neverTested: { id: string; name: string; process: string; owner: string; addedAt: number }[];
+  neverTested: { id: string; name: string; process: string; owner: string }[];
   /**
    * Never exercised at all, in the whole history.
    *
@@ -746,7 +826,7 @@ export interface CoverageFigures {
    * change nothing here. "Never" needs no setting behind it, which is what
    * makes it the one coverage figure nobody can argue with.
    */
-  neverExercised: { id: string; name: string; process: string; owner: string; addedAt: number }[];
+  neverExercised: { id: string; name: string; process: string; owner: string }[];
   /** Workflows that have never run once, on the same never-ever basis. */
   workflowsNeverRun: { id: string; name: string }[];
   pctTested: number;
@@ -763,14 +843,14 @@ export interface CoverageFigures {
  * empty and permanently reassuring.
  */
 function controlsInScope(scope: Scope) {
-  if (scope.level === 'company') return CONTROLS;
+  if (scope.persona === 'cfo') return CONTROLS;
   const owners = new Set(ACTORS
-    .filter(a => (scope.level === 'team' ? a.team === scope.team : a.email === scope.userEmail))
+    .filter(a => (scope.persona === 'head_of_team' ? a.team === scope.team : a.email === scope.userEmail))
     .map(a => a.name));
   return CONTROLS.filter(c =>
     owners.has(c.owner)
     || POPULATIONS.some(pop => pop.controlId === c.id
-      && (scope.level === 'team' ? pop.team === scope.team : true)));
+      && (scope.persona === 'head_of_team' ? pop.team === scope.team : true)));
 }
 
 function coverageOf(runs: Run[], samples: SampleValidation[], p: Period, scope: Scope): CoverageFigures {
@@ -794,13 +874,9 @@ function coverageOf(runs: Run[], samples: SampleValidation[], p: Period, scope: 
     .map(c => ({ id: c.id, name: c.name, runs: touched.get(c.id)!.runs, lastTested: touched.get(c.id)!.last }))
     .sort((a, b) => b.lastTested - a.lastTested);
 
-  // The day the control was written down, so a list of controls nobody has
-  // exercised can be read in the order they were promised rather than by name.
-  const addedAt = (id: string) => CONTROL_CREATIONS.find(c => c.id === id)?.at ?? HISTORY_START;
-
   const neverTested = inScopeControls
     .filter(c => !touched.has(c.id))
-    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner, addedAt: addedAt(c.id) }));
+    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner }));
 
   // Never means never, over the whole history, with the window taken off. A
   // control that has never once been exercised is a different and much harder
@@ -811,18 +887,18 @@ function coverageOf(runs: Run[], samples: SampleValidation[], p: Period, scope: 
 
   const neverExercised = inScopeControls
     .filter(c => !everTouched.has(c.id))
-    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner, addedAt: addedAt(c.id) }));
+    .map(c => ({ id: c.id, name: c.name, process: c.process, owner: c.owner }));
 
   const ranWorkflows = new Set(runs.map(r => r.workflowId));
   const workflowsNeverRun = [...new Map(POPULATIONS
-    .filter(pop => scope.level !== 'team' || pop.team === scope.team)
+    .filter(pop => scope.persona !== 'head_of_team' || pop.team === scope.team)
     .filter(pop => !ranWorkflows.has(pop.workflowId))
     .map(pop => [pop.workflowId, { id: pop.workflowId, name: pop.workflowName }]))
     .values()]
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const populations = POPULATIONS
-    .filter(pop => scope.level !== 'team' || pop.team === scope.team)
+    .filter(pop => scope.persona !== 'head_of_team' || pop.team === scope.team)
     .map(pop => ({
       id: pop.id,
       name: pop.name,
@@ -853,7 +929,7 @@ export interface RiskFigures {
 }
 
 function risksOf(scope: Scope): RiskFigures {
-  const rows = RISK_ROWS.filter(r => scope.level !== 'team' || r.team === scope.team);
+  const rows = RISK_ROWS.filter(r => scope.persona !== 'head_of_team' || r.team === scope.team);
   const unmapped = rows.filter(r => !r.mapped);
   const order: RiskRow['priority'][] = ['Critical', 'High', 'Medium', 'Low'];
   return {
@@ -995,7 +1071,7 @@ export interface SamplingFigures {
 
 function samplingOf(p: Period, scope: Scope): SamplingFigures {
   const rows = SAMPLE_VALIDATIONS.filter(s => inWindow(s.at, p)
-    && (scope.level === 'company' || (scope.level === 'team' ? s.team === scope.team : s.actor.email === scope.userEmail)));
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? s.team === scope.team : s.actor.email === scope.userEmail)));
   const order: SampleOutcome[] = ['passed', 'failed', 'errored', 'running', 'queued'];
   const settled = rows.filter(s => s.outcome === 'passed' || s.outcome === 'failed').length;
   return {
@@ -1017,7 +1093,7 @@ export interface CcmFigures {
 
 function ccmOf(p: Period, scope: Scope, sampling: SamplingFigures, exceptions: ExceptionFigures): CcmFigures {
   const rows = CCM_ROWS
-    .filter(r => scope.level !== 'team' || r.team === scope.team)
+    .filter(r => scope.persona !== 'head_of_team' || r.team === scope.team)
     .map(r => {
       const own = sampling.rows.filter(s => s.engagementId === r.engagementId
         && (s.outcome === 'passed' || s.outcome === 'failed'));
@@ -1031,7 +1107,7 @@ function ccmOf(p: Period, scope: Scope, sampling: SamplingFigures, exceptions: E
       };
     });
 
-  const engagements = ENGAGEMENT_ROWS.filter(e => scope.level !== 'team' || e.team === scope.team);
+  const engagements = ENGAGEMENT_ROWS.filter(e => scope.persona !== 'head_of_team' || e.team === scope.team);
 
   return {
     rows,
@@ -1112,11 +1188,8 @@ export interface PersonRow {
  * table however it is labelled.
  */
 function peopleOf(p: Period, scope: Scope): PersonRow[] {
-  // It follows the scope filter rather than one level of it. The table used to
-  // exist on the head of team view alone, so it returned nothing at every other
-  // scope, and a reader entitled to the whole company saw an empty table rather
-  // than the company.
-  const names = [...new Set(RUNS.filter(r => mine(scope, r.actor, r.team)).map(r => r.actor.name))];
+  if (scope.persona !== 'head_of_team' || !scope.team) return [];
+  const names = [...new Set(RUNS.filter(r => r.team === scope.team).map(r => r.actor.name))];
   return names
     .map(name => {
       const runs = RUNS.filter(r => r.actor.name === name && inWindow(r.completedAt, p));
@@ -1167,14 +1240,14 @@ export interface LearnFigures {
 function learnOf(scope: Scope): LearnFigures {
   const live = liveMemories();
   const pending = pendingMemories();
-  const forMe = (m: PlatformMemory) => scope.level !== 'person' || m.scope === 'personal';
+  const forMe = (m: PlatformMemory) => scope.persona !== 'auditor' || m.scope === 'personal';
   const mineLive = live.filter(forMe);
 
   return {
     active: mineLive.filter(m => m.status === 'active'),
     pending: pending.filter(forMe),
     dueReview: mineLive.filter(m => m.renewDue).length,
-    recallsThisWeek: scope.level === 'company' ? RECALLS_THIS_WEEK : null,
+    recallsThisWeek: scope.persona === 'cfo' ? RECALLS_THIS_WEEK : null,
     recallsAllTime: mineLive.reduce((s, m) => s + (m.recallCount ?? 0), 0),
   };
 }
@@ -1380,7 +1453,7 @@ function portfolioOf(
   runs: Run[],
   sampling: SamplingFigures,
 ): PortfolioFigures {
-  const rows = ENGAGEMENT_ROWS.filter(e => scope.level !== 'team' || e.team === scope.team);
+  const rows = ENGAGEMENT_ROWS.filter(e => scope.persona !== 'head_of_team' || e.team === scope.team);
   const statuses = [...new Set(rows.map(e => e.status))].sort();
   const open = rows.filter(e => e.actualEnd === null);
 
@@ -1453,8 +1526,8 @@ export interface QueueFigures {
 
 function queueOf(scope: Scope): QueueFigures {
   const items = QUEUE_ITEMS
-    .filter(item => scope.level === 'company'
-      || (scope.level === 'team' ? item.assignee.team === scope.team : item.assignee.email === scope.userEmail))
+    .filter(item => scope.persona === 'cfo'
+      || (scope.persona === 'head_of_team' ? item.assignee.team === scope.team : item.assignee.email === scope.userEmail))
     .map(item => ({ ...item, overdue: item.dueAt < ANCHOR }))
     // Overdue first, then by how soon. One click from the thing that needs doing.
     .sort((a, b) => (a.overdue === b.overdue ? a.dueAt - b.dueAt : a.overdue ? -1 : 1));
@@ -1474,6 +1547,7 @@ export interface Bucket {
   newRows: number;
   /** Hours of hand-checking those new rows avoided, less the machine time spent. */
   hours: number;
+  rupees: number;
   /** Row checks performed in the bucket, repeats included. */
   checks: number;
   /** Machine time the bucket spent, repeats included. */
@@ -1510,9 +1584,9 @@ function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
       newRows += populationOf(r.populationId)?.size ?? 0;
     });
 
-    // Counted the same way the total is: hand-checking avoided, less the
-    // machine time it took, so the column adds up to the figure above it rather
-    // than to a slightly larger one.
+    // Priced the same way the headline is: hand-checking avoided, less the
+    // machine time it took, so the column adds up to the figure on the hero
+    // rather than to a slightly larger one.
     const machineHours = slice.reduce((sum, r) => sum + (r.completedAt - r.startedAt), 0) / HOUR_MS;
     const hours = Math.max(0, newRows / settings.manualReviewRate - machineHours);
     out.push({
@@ -1522,6 +1596,7 @@ function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
       runs: slice.length,
       newRows,
       hours,
+      rupees: hours * settings.hourlyRate,
       checks: slice.reduce((sum, r) => sum + r.rowsProcessed, 0),
       machineHours,
     });
@@ -1537,17 +1612,14 @@ function overTime(runs: Run[], p: Period, settings: UsageSettings): Bucket[] {
 export interface UsageSnapshot {
   scope: Scope;
   period: Period;
-  /**
-   * The six lines the pack reads, on this window and this scope.
-   *
-   * They live next door in `audit-coverage.ts` because they are the committee's
-   * own questions rather than the platform's, but they come out of here so the
-   * page and both exports still read one object and cannot diverge.
-   */
-  committee: CoveragePack;
   settings: UsageSettings;
   value: ValueFigures;
+  prior: ValueFigures;
+  change: ValueChange;
   cost: CostFigures;
+  /** What the work was worth less what the contract charged. */
+  netRupees: number;
+  sensitivity: Sensitivity[];
   coverage: CoverageFigures;
   risks: RiskFigures;
   exceptions: ExceptionFigures;
@@ -1575,11 +1647,12 @@ export interface UsageSnapshot {
 export function snapshot(scope: Scope, p: Period, settings: UsageSettings): UsageSnapshot {
   const runs = scopedRuns(scope);
   const value = valueOf(runs, p, settings);
+  const prior = priorValueOf(runs, p, settings);
   const cost = costOf(p, scope);
   const sampling = samplingOf(p, scope);
   const exceptions = exceptionsOf(p, scope);
   const coverage = coverageOf(runs, SAMPLE_VALIDATIONS.filter(s =>
-    scope.level === 'company' || (scope.level === 'team' ? s.team === scope.team : s.actor.email === scope.userEmail)), p, scope);
+    scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? s.team === scope.team : s.actor.email === scope.userEmail)), p, scope);
   const risks = risksOf(scope);
   const ccm = ccmOf(p, scope, sampling, exceptions);
   const stuck = stuckOf(runs, p);
@@ -1618,7 +1691,7 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
   cost.sopCacheHits = volume.sopCacheHits;
 
   const events = PRODUCT_EVENTS.filter(e => inWindow(e.at, p)
-    && (scope.level === 'company' || (scope.level === 'team' ? e.team === scope.team : e.actor?.email === scope.userEmail)));
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? e.team === scope.team : e.actor?.email === scope.userEmail)));
 
   const product: ProductFigures = {
     dashboardsBuilt: events.filter(e => e.kind === 'dashboard-created').map(e => asMade(e.name, e.actor?.name ?? null, e.at)),
@@ -1630,7 +1703,7 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
   };
 
   const trail = REPORT_TRAIL.filter(e => inWindow(e.at, p)
-    && (scope.level === 'company' || (scope.level === 'team' ? e.team === scope.team : e.actor.email === scope.userEmail)));
+    && (scope.persona === 'cfo' || (scope.persona === 'head_of_team' ? e.team === scope.team : e.actor.email === scope.userEmail)));
 
   const reports: ReportFigures = {
     made: trail.filter(e => e.action === 'created').map(e => asMade(e.reportName, e.actor.name, e.at)),
@@ -1639,16 +1712,16 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
     downloads: trail.filter(e => e.action === 'downloaded').length,
   };
 
-  const engagements = ENGAGEMENT_ROWS.filter(e => scope.level !== 'team' || e.team === scope.team);
+  const engagements = ENGAGEMENT_ROWS.filter(e => scope.persona !== 'head_of_team' || e.team === scope.team);
 
   const created: CreatedFigures = {
     engagements: engagements.filter(e => inWindow(e.createdAt, p)).map(e => asMade(e.name, e.owner, e.createdAt, e.code)),
     controls: CONTROL_CREATIONS
-      .filter(c => inWindow(c.at, p) && (scope.level !== 'team' || c.team === scope.team))
+      .filter(c => inWindow(c.at, p) && (scope.persona !== 'head_of_team' || c.team === scope.team))
       .map(c => asMade(c.name, c.raisedByAi ? null : c.owner, c.at, c.raisedByAi ? 'proposed from an SOP' : undefined)),
     dashboards: product.dashboardsBuilt,
     reports: reports.made,
-    risks: RISK_ROWS.filter(r => inWindow(r.createdAt, p) && (scope.level !== 'team' || r.team === scope.team))
+    risks: RISK_ROWS.filter(r => inWindow(r.createdAt, p) && (scope.persona !== 'head_of_team' || r.team === scope.team))
       .map(r => asMade(r.name, r.raisedByAi ? null : r.owner, r.createdAt, r.raisedByAi ? 'proposed by the assistant' : undefined)),
   };
 
@@ -1731,10 +1804,17 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
   return {
     scope,
     period: p,
-    committee: coveragePack(p, scope),
     settings,
     value,
+    prior,
+    change: {
+      hours: change(value.hoursSaved, prior.hoursSaved),
+      rupees: change(value.rupees, prior.rupees),
+      people: change(value.people, prior.people),
+    },
     cost,
+    netRupees: value.rupees - cost.totalPaise / 100,
+    sensitivity: sensitivity(value.coveredRows, settings),
     coverage,
     risks,
     exceptions,
@@ -1792,7 +1872,7 @@ function attentionCards(
    * quiet start of a page that tells everybody about everybody, which is the
    * thing this view exists not to do.
    */
-  if (scope.level === 'person') {
+  if (scope.persona === 'auditor') {
     if (data.queue.items.length > 0) {
       cards.push({
         id: 'queue',
@@ -1889,7 +1969,7 @@ function attentionCards(
 
 /** Used by the exports and the acceptance tests, so the file name is one string. */
 export function usageFileName(scope: Scope, p: Period, extension: string): string {
-  const who = SCOPE_LABEL[scope.level].toLowerCase().replace(/\s+/g, '-');
+  const who = PERSONA_TITLE[scope.persona].toLowerCase().replace(/\s+/g, '-');
   return `platform-usage-${who}-${p.label.toLowerCase().replace(/\s+/g, '-')}.${extension}`;
 }
 

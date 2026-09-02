@@ -23,10 +23,10 @@
 
 import { createContext, useContext, useState, type ElementType, type ReactNode } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, ArrowRight, BarChart3, ChevronDown, ChevronRight, Table2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BarChart3, ChevronDown, ChevronRight, Table2, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatDate } from '../../data/platform-usage';
 import {
-  SETTING_LABEL, SOURCE_LABEL, fmtInt, fmtOneDp,
+  SETTING_LABEL, SOURCE_LABEL, fmtInt, fmtMoneyExact, fmtOneDp,
   type AttentionCard, type NumericSetting, type UsageSettings,
 } from '../../data/platform-usage-metrics';
 
@@ -416,21 +416,24 @@ export function Estimated() {
 /**
  * One stat.
  *
- * There is no comparison against an earlier window here, and there was one.
- * The year to date's own prior window starts before the records do, so a delta
- * on it printed a hundred per cent fall that never happened. The two windows
- * the page reads are the only context a figure gets.
+ * The change is the same calculation over the window immediately before this
+ * one, labelled by that window's real length. With no comparable window it
+ * renders nothing, because an invented baseline would be worse than no baseline.
  */
 export function Stat({
   value,
   label,
   sub,
+  delta,
+  deltaLabel,
   size = 'md',
   long = false,
 }: {
   value: ReactNode;
   label: string;
   sub?: ReactNode;
+  delta?: number | null;
+  deltaLabel?: string | null;
   size?: 'sm' | 'md' | 'lg';
   /**
    * A rupee figure in lakh or crore is long enough to wrap mid-word at 40px,
@@ -453,6 +456,13 @@ export function Stat({
         <div className={`${cls} font-semibold text-ink-900 leading-none tabular-nums whitespace-nowrap`}>{value}</div>
         <div className="mt-2 text-[0.875rem] text-ink-600">{label}</div>
         {sub && <div className="mt-1 text-[0.75rem] text-ink-500">{sub}</div>}
+        {delta !== null && delta !== undefined && (
+          <div className="mt-1.5 text-[0.75rem] text-ink-500 tabular-nums">
+            {Math.abs(delta) < 0.5
+              ? `About the same as ${deltaLabel ?? 'the window before'}`
+              : `${delta > 0 ? 'Up' : 'Down'} ${fmtOneDp(Math.abs(delta))}% on ${deltaLabel ?? 'the window before'}`}
+          </div>
+        )}
       </div>
     );
   }
@@ -464,6 +474,31 @@ export function Stat({
       <div className="text-[0.75rem] font-medium uppercase tracking-[0.06em] text-ink-500">{label}</div>
       <div className={`mt-2 ${cls} font-semibold text-ink-900 leading-none tabular-nums whitespace-nowrap`}>{value}</div>
       {sub && <div className="mt-1.5 text-[0.75rem] text-ink-600">{sub}</div>}
+      {delta !== null && delta !== undefined && (
+        /*
+         * A change, said as a sentence.
+         *
+         * Under half a per cent there is no arrow at all. An arrow pointing down
+         * beside the word "level" is two claims that contradict each other, and
+         * a reader who has to work out which one to believe stops believing
+         * either. Either something moved and the arrow says which way, or
+         * nothing moved and the line says so in words.
+         */
+        <div className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] text-ink-600 tabular-nums">
+          {Math.abs(delta) < 0.5
+            ? <span>About the same as {deltaLabel ?? 'the window before'}</span>
+            : (
+              <>
+                {delta > 0
+                  ? <TrendingUp size={13} className="text-compliant-700" />
+                  : <TrendingDown size={13} className="text-risk-700" />}
+                <span>
+                  {delta > 0 ? 'Up' : 'Down'} {fmtOneDp(Math.abs(delta))}% on {deltaLabel ?? 'the window before'}
+                </span>
+              </>
+            )}
+        </div>
+      )}
     </div>
   );
 }
@@ -877,7 +912,9 @@ export function CountWithList({
 /* ── The assumptions, said next to the numbers they produce ──────────────── */
 
 const settingValue = (settings: UsageSettings, key: NumericSetting): string =>
-  (key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : fmtInt(settings[key]));
+  key === 'hourlyRate' ? fmtMoneyExact(settings[key])
+    : key === 'manualControlTestHours' ? fmtOneDp(settings[key])
+      : fmtInt(settings[key]);
 
 /**
  * What a figure rests on, on the same screen as the figure.
