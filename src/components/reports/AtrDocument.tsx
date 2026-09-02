@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  Calendar, Lightbulb, PenLine, Eye, Trash2,
+  Calendar, Lightbulb, Trash2,
   ClipboardList, AlertTriangle, ListChecks, CircleDot, CheckCircle2, Clock,
 } from 'lucide-react';
 import type {
@@ -41,7 +41,6 @@ const SECTION_ID: Record<AtrSectionKey, string> = {
   process: 'section-atr-obs-summary',
   details: 'section-atr-obs-details',
   insights: 'section-atr-insights',
-  signoff: 'section-atr-signoff',
 };
 
 function fmt(iso?: string): string {
@@ -78,6 +77,20 @@ function EditableText({ value, onCommit, editable, className = '', placeholder, 
 }
 
 /** Editable metadata cell (edit mode only) — mirrors ReportMetaPanel's read-only look. */
+/** Read-only key-fact: uppercase label + value with a brand accent bar (matches
+ *  the shared ReportMetaCell, but wraps long values instead of truncating). */
+function MetaFact({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="min-w-0">
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
+      <div className="border-l-[3px] border-brand-500 pl-3">
+        <div className="text-[0.8125rem] font-bold text-ink-900 break-words">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 function MetaCell({ label, value, onCommit }: { label: string; value?: string; onCommit?: (v: string) => void }) {
   return (
     <div>
@@ -108,7 +121,7 @@ export default function AtrDocument({
   meta, observations, insights = [], headerActions, maxWidthClass = 'max-w-[840px]',
   editable, onMetaChange, onObservationsChange, onInsightsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
-  renderObservationActions, version, onDeleteSection,
+  renderObservationActions, onDeleteSection,
 }: {
   meta: AtrMeta;
   observations: AtrObservation[];
@@ -169,7 +182,7 @@ export default function AtrDocument({
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
     summary: n => (
       <>
-        <ReportNumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
+        <ReportNumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and action plan rollup" />
         {/* KPI tiles — the single shared ReportKpiTiles, so the ATR exec summary
             stays identical to every other report type by construction. */}
         <ReportKpiTiles
@@ -179,14 +192,14 @@ export default function AtrDocument({
     ),
     process: n => (
       <>
-        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
+        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, action plans and status — per observation" />
         <div className="overflow-hidden rounded-lg border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="bg-brand-50/60 text-ink-700 text-left">
                 <th className="px-4 py-2.5 font-semibold">Observation</th>
                 <th className="px-3 py-2.5 font-semibold text-center">Exceptions</th>
-                <th className="px-3 py-2.5 font-semibold text-center">Management Action Plans</th>
+                <th className="px-3 py-2.5 font-semibold text-center">Action Plans</th>
                 <th className="px-3 py-2.5 font-semibold text-center">Status</th>
               </tr>
             </thead>
@@ -221,7 +234,7 @@ export default function AtrDocument({
     ),
     details: n => (
       <>
-        <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
+        <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, action plan and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
             <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} />
@@ -256,34 +269,6 @@ export default function AtrDocument({
         </div>
       </>
     ),
-    signoff: n => (
-      <>
-        <ReportNumberedHeading n={n} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
-            { Icon: Eye, role: 'Reviewed by', name: meta.reviewedBy ?? '' },
-          ].map(c => (
-            <div key={c.role} className="rounded-lg border border-canvas-border p-5">
-              <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
-                <c.Icon size={12} /> {c.role}
-              </div>
-              {c.name ? (
-                <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight mb-5">{c.name}</div>
-              ) : (
-                <div className="h-5 mb-5" />
-              )}
-              <div className="border-t border-dashed border-canvas-border pt-2.5">
-                <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
-              </div>
-            </div>
-          ))}
-        </div>
-        {meta.generatedOn && (
-          <div className="text-center text-[0.75rem] text-ink-500 mt-5">Date of Sign-Off: <span className="font-semibold text-ink-700">{meta.generatedOn}</span></div>
-        )}
-      </>
-    ),
   };
 
   // Insights auto-skip when empty (preserves the original conditional behaviour).
@@ -294,53 +279,39 @@ export default function AtrDocument({
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
       {editable && <style>{`.atr-ed:empty:before{content:attr(data-ph);color:#C2B9CB;}`}</style>}
 
-      {/* Purple letterhead — the shared ReportBrandBanner so the ATR matches
-          every other report exactly: eyebrow ID · title · description · a
-          who/when/scope byline, over the same subtle woven line art. */}
+      {/* Purple letterhead — just the report title. Every fact (report ID,
+          entity, period, prepared-by, generated-on) lives in the segregated
+          key-facts grid below, so the banner is a clean title-only hero with
+          compact padding. */}
       <ReportBrandBanner
         title="Action Taken Report"
-        eyebrow={meta.reportId && (
-          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{meta.reportId.toUpperCase()}</span>
-        )}
         actions={headerActions}
-        footer={(() => {
-          const parts = [
-            meta.preparedBy,
-            meta.generatedOn,
-            version != null ? `v${version}` : null,
-            `${ex.totalObservations} ${ex.totalObservations === 1 ? 'observation' : 'observations'}`,
-          ].filter(Boolean);
-          if (parts.length === 0) return null;
-          return (
-            <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
-              {parts.map((p, i) => (
-                <span key={i} className="inline-flex items-center gap-2.5">
-                  {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
-                  <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
-                </span>
-              ))}
-            </div>
-          );
-        })()}
-      >
-        {(meta.auditEntity || meta.auditPeriod) && (
-          <p className="text-[0.8125rem] text-white/70">
-            {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
-          </p>
-        )}
-      </ReportBrandBanner>
+        className="!py-7"
+      />
 
-      {/* Metadata — editable grid in edit mode only. The read-only report carries
-          the key facts in the banner (eyebrow ID + who/when byline), so no panel. */}
-      {editable && (
+      {/* Metadata — segregated key-facts grid below the title. Edit mode keeps the
+          inline-editable cells; the read-only report shows the same six facts as
+          labelled fields with a brand accent bar (matches every other report). */}
+      {editable ? (
         <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
             <MetaCell label="Report ID" value={meta.reportId} onCommit={v => setMeta('reportId', v)} />
             <MetaCell label="Audit Title" value={meta.auditTitle} onCommit={v => setMeta('auditTitle', v)} />
-            <MetaCell label="Audit Entity" value={meta.auditEntity} onCommit={v => setMeta('auditEntity', v)} />
             <MetaCell label="Audit Period" value={meta.auditPeriod} onCommit={v => setMeta('auditPeriod', v)} />
             <MetaCell label="Prepared By" value={meta.preparedBy} onCommit={v => setMeta('preparedBy', v)} />
             <MetaCell label="Generated On" value={meta.generatedOn} onCommit={v => setMeta('generatedOn', v)} />
+            <MetaCell label="Audit Entity" value={meta.auditEntity} onCommit={v => setMeta('auditEntity', v)} />
+          </div>
+        </div>
+      ) : (meta.reportId || meta.auditTitle || meta.auditPeriod || meta.preparedBy || meta.generatedOn || meta.auditEntity) && (
+        <div className="px-9 py-6 border-b border-canvas-border">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+            <MetaFact label="Report ID" value={meta.reportId} />
+            <MetaFact label="Audit Title" value={meta.auditTitle} />
+            <MetaFact label="Audit Period" value={meta.auditPeriod} />
+            <MetaFact label="Prepared By" value={meta.preparedBy} />
+            <MetaFact label="Generated On" value={meta.generatedOn} />
+            <MetaFact label="Audit Entity" value={meta.auditEntity} />
           </div>
         </div>
       )}
@@ -441,7 +412,7 @@ function ActionPlanCard({ index, plan, classification, editable, onChange }: { i
   return (
     <div>
       <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
-        <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Management Action Plan {index}</span>
+        <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Action Plan {index}</span>
         {(plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
       </div>
 
@@ -461,11 +432,10 @@ function ActionPlanCard({ index, plan, classification, editable, onChange }: { i
         </div>
       </div>
 
-      {(plan.text || plan.actionTaken || plan.evidence || plan.verification || editable) && (
+      {(plan.text || plan.actionTaken || plan.verification || editable) && (
         <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-canvas-border pt-3.5">
-          <FieldRow label="MAP Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />
+          <FieldRow label="Action Plan Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />
           <FieldRow label="Action Taken" value={plan.actionTaken} editable={editable} onCommit={v => onChange?.({ ...plan, actionTaken: v })} />
-          <FieldRow label="Evidence" value={plan.evidence} editable={editable} italic onCommit={v => onChange?.({ ...plan, evidence: v })} />
           <FieldRow label="Auditor Verification" value={plan.verification} editable={editable} onCommit={v => onChange?.({ ...plan, verification: v })} />
         </div>
       )}

@@ -16,7 +16,7 @@ import {
   LayoutDashboard, ListChecks, FileCode,
   Trash2, Zap, RefreshCw,
 } from 'lucide-react';
-import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
+import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
@@ -45,6 +45,8 @@ import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
+import SmartQueriesModal, { SmartQueriesBanner } from './SmartQueriesModal';
+import { describeAnalyzedData } from './smartQueries';
 import { type ComposerContext, type ComposerIconKey, type ComposerTone, editPlanContext } from './composerContext';
 
 // Tone palette + icon map for the composer "context mode" banner and the
@@ -5633,6 +5635,36 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // empty state (integrated DB sources are connected, so Ira can draft a plan).
   const [showOneClickAudit, setShowOneClickAudit] = useState(false);
 
+  // Smart queries — Ira "profiles" the attached data (or the connected sources
+  // when nothing is attached yet) and offers ready-to-ask questions per
+  // business process. The banner reads as generating on open and re-profiles
+  // whenever the attachment set changes.
+  const [showSmartQueries, setShowSmartQueries] = useState(false);
+  // Category to land on when the modal opens from a process pill.
+  const [smartQueriesInitialCat, setSmartQueriesInitialCat] = useState<string | undefined>(undefined);
+  const openSmartQueries = (categoryId?: string) => {
+    setSmartQueriesInitialCat(categoryId);
+    setShowSmartQueries(true);
+  };
+  const [smartQueriesGenerating, setSmartQueriesGenerating] = useState(true);
+  useEffect(() => {
+    setSmartQueriesGenerating(true);
+    const t = setTimeout(() => setSmartQueriesGenerating(false), 4200);
+    return () => clearTimeout(t);
+  }, [files, attachedSources]);
+  const smartQueriesData = describeAnalyzedData(
+    files.map(f => f.name),
+    attachedSources.map(s => s.name),
+  );
+  const pickSmartQuery = (question: string) => {
+    setShowSmartQueries(false);
+    // The dialog restores focus to the banner when it unmounts — which happens
+    // AFTER its 180ms exit animation. Load the composer past that point so the
+    // question lands focused and ready to edit.
+    setInput(question);
+    setTimeout(() => loadFollowUpIntoComposer(question), 280);
+  };
+
   // Memoize the FloatingLines element so its canvas animation doesn't
   // re-init on every parent re-render. Without this, the typewriter
   // placeholder's ~50ms state updates trigger ChatView re-renders, and
@@ -6252,62 +6284,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                     requestAnimationFrame(() => handleTextareaInput());
                   }}
                 />
-              ) : (() => {
-                // 5 content-sized chips in a centered 3+2 layout, each with a
-                // contextual icon derived from its label keywords.
-                const workflowSuggestions: string[] = WORKFLOWS.slice(0, 5).map(w => w.name);
-                const queryFallback: string[] = [
-                  'Duplicate Invoice Check',
-                  'Vendor Spend Analysis',
-                  'After-Hours GL Postings',
-                  'Unbacked Approval Review',
-                  'Vendor Master Changes',
-                ];
-                const recentChats: string[] | null = CHAT_HISTORY.length > 0
-                  ? [...CHAT_HISTORY.slice(0, 5).map(c => c.title), ...queryFallback].slice(0, 5)
-                  : null;
-                const suggestions = buildWorkflowMode
-                  ? workflowSuggestions
-                  : (recentChats ?? queryFallback);
-                const ModeIcon: LucideIcon = buildWorkflowMode ? Workflow : MessageSquare;
-                return (
-                  // Match workflow-mode treatment in both modes:
-                  // content-sized chips, centered container + rows.
-                  // No w-[...] lock, no items-start (per the empty-state
-                  // chip layout feedback memory).
-                  <div className="mx-auto flex flex-col items-center content-start gap-2.5">
-                    {[suggestions.slice(0, 2), suggestions.slice(2, 5)].map((row, rowIdx) => (
-                      <div key={rowIdx} className="flex items-center justify-center gap-2.5">
-                        {row.map((label, i) => {
-                          const globalI = rowIdx === 0 ? i : 2 + i;
-                          return (
-                            <motion.button
-                              key={`empty-starter-${globalI}-${label}`}
-                              type="button"
-                              title={label}
-                              initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.96 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              transition={prefersReducedMotion
-                                ? { duration: 0 }
-                                : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + globalI * 0.05 }
-                              }
-                              onClick={() => {
-                                setInput(label);
-                                textareaRef.current?.focus();
-                                requestAnimationFrame(() => handleTextareaInput());
-                              }}
-                              className="group inline-flex items-center gap-2 h-10 px-5 rounded-full border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium tracking-[-0.005em] text-ink-800 shadow-[0_1px_2px_rgba(15,8,30,0.025)] hover:border-brand-300/60 hover:text-brand-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(106,18,205,0.07)] transition-all duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                            >
-                              <ModeIcon size={14} strokeWidth={1.75} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-200" />
-                              <span className="whitespace-nowrap">{label}</span>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+              ) : (
+                /* Smart-queries banner — replaces the old starter chips:
+                   Ira profiles the attached data (running BorderGlow while
+                   generating), then previews the detected processes as
+                   pills. A pill opens the modal on that category; the main
+                   area and Explore open it on the first. Query mode only:
+                   the bank holds data questions, not workflow prompts. */
+                <motion.div
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
+                >
+                  <SmartQueriesBanner
+                    generating={smartQueriesGenerating}
+                    onOpen={openSmartQueries}
+                  />
+                </motion.div>
+              )}
               </div>
             </div>
           </div>
@@ -6325,6 +6319,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
         <AnimatePresence>
           {showOneClickAudit && <OneClickAuditModal onClose={() => setShowOneClickAudit(false)} />}
         </AnimatePresence>
+        <SmartQueriesModal
+          open={showSmartQueries}
+          loading={smartQueriesGenerating}
+          datasetLabel={smartQueriesData.label}
+          initialCategoryId={smartQueriesInitialCat}
+          onClose={() => setShowSmartQueries(false)}
+          onPick={pickSmartQuery}
+        />
       </>
     );
   }

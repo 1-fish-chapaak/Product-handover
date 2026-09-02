@@ -8,7 +8,7 @@ const ATR_INCLUDES = [
   'Observation title & description',
   'Risk significance rating',
   'Classification & status',
-  'Management action plan',
+  'Action plan',
   'Action owner & target date',
   'Linked annexures (exception rows)',
   'Executive summary & KPIs',
